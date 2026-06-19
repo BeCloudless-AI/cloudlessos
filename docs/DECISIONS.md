@@ -71,6 +71,20 @@ and curated catalog (L3). The headless Chromium kiosk is just presentation.
 
 ---
 
+## D6 — Orchestrator is Go, stdlib-only, Docker via CLI behind an interface
+**Date:** 2026-06-19 · **Status:** Accepted
+
+The orchestrator daemon is written in **Go** (chosen over Python/Rust/TS). Phase 0
+implementation is **stdlib-only** (no external deps — builds offline) and drives Docker
+by **shelling out to the `docker` CLI** behind an `engine.Engine` interface.
+
+**Why Go:** single static binary to ship in an OS image, no runtime to install,
+first-class container ecosystem. **Why CLI not SDK (yet):** zero dependencies and fastest
+path to the magic moment; the `Engine` interface keeps the Docker SDK or Podman as
+drop-in swaps. **Verified:** end-to-end Ollama install/run/stop/remove with GPU attached.
+
+---
+
 ## Open questions (not yet decided)
 
 - **Open-source CloudlessOS?** Leaning yes (trust/community for a privacy brand, like

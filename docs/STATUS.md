@@ -7,38 +7,41 @@
 
 ## Where we are
 
-In **Phase 0 (orchestrator prototype)**. The dev environment is fully set up and the
-core capability is verified: a Docker container can see the GPU (WSL2 → Docker →
-NVIDIA Container Toolkit → RTX 5090). No application code exists yet — next is choosing
-the orchestrator stack and scaffolding it.
+In **Phase 0 (orchestrator prototype)** with a working thin slice. The Go daemon in
+`orchestrator/` installs/runs/stops AI apps as GPU containers and serves a web UI. Verified
+end-to-end: Ollama pulled, ran as a GPU container, and was stopped + removed via the API.
 
 ## Done
 
 - Defined vision, architecture (3 layers + thin kiosk shell), roadmap, and decisions.
 - Initialized git repo at `D:\Cloudless` with documentation structure.
-- Confirmed primary dev box: Windows 11 + RTX 5090 (32 GB), driver 595.79, CUDA 13.2.
-- Installed Ubuntu 24.04 in WSL2 (systemd active, user `ledomaine`); `nvidia-smi` works
-  inside WSL and sees the RTX 5090.
-- Decided Docker Engine for Phase 0 (D1); wrote `scripts/setup-wsl-docker.sh`.
-- Installed Docker 29.6.0 + NVIDIA Container Toolkit 1.19.1 in WSL Ubuntu.
-- **Verified container GPU access** — `docker run --gpus all` sees the RTX 5090.
+- Dev box fully set up: Windows 11 + RTX 5090, WSL2 + Ubuntu 24.04, Docker 29.6.0 +
+  NVIDIA Container Toolkit 1.19.1, Go 1.26.4. Container GPU access verified.
+- Chose Go for the orchestrator (D6); stdlib-only, Docker via CLI behind an interface.
+- Built the orchestrator (`cloudlessd`): engine abstraction + Docker impl, catalog
+  (Ollama/Open WebUI/ComfyUI), HTTP API, embedded web UI. Builds + vets clean.
+- **Smoke test passed** (`scripts/smoke-test.sh`): full Ollama lifecycle on GPU.
 
 ## In progress
 
-- Choosing the orchestrator stack (language for the daemon + web UI approach), then
-  scaffolding it. (Open decision in `DECISIONS.md`.)
+- Nothing actively mid-change. Ready to pick the next Phase 0 increment.
 
-## Next steps (in order)
+## Next steps (candidates, roughly prioritized)
 
-1. Decide orchestrator language/stack.
-2. Scaffold the orchestrator daemon + minimal web UI in `D:\Cloudless`.
-3. Run ComfyUI manually in a GPU container (manual baseline) and turn it into the first
-   catalog recipe the daemon can install/launch/stop/uninstall.
+1. **Async install jobs + progress streaming** — replace the blocking synchronous pull
+   so the UI shows live download/extract progress (the biggest UX gap right now).
+2. **ComfyUI recipe** — pin a validated image so the image-gen app actually works.
+3. **Model manager v0** — download models + "fits your VRAM" recommendations.
+4. **State persistence** — track installed apps beyond `docker ps`.
+5. **UI polish + onboarding** — first-run flow.
 
-Note: docker-group membership for `ledomaine` is set but needs a `wsl --shutdown` +
-reopen to take effect; until then run docker with sudo.
+## Known limitations (see orchestrator/README.md)
 
-See `DEV_ENVIRONMENT.md` for the setup checklist and commands.
+- `start` pulls synchronously (blocks minutes on first run).
+- App state derived from `docker ps`; no separate persistence yet.
+- ComfyUI recipe is a placeholder pending a validated image.
+
+See `DEV_ENVIRONMENT.md` for setup/runbook and WSL gotchas.
 
 ## Decisions pending input
 

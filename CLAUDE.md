@@ -45,13 +45,18 @@ See `docs/DECISIONS.md` for full rationale. Summary:
 
 ## Current phase
 
-**Phase 0 — Orchestrator prototype.** Goal: the "magic moment" — click ComfyUI in a
-web UI, it installs and runs on the GPU, with working uninstall. See `docs/ROADMAP.md`.
+**Phase 0 — Orchestrator prototype.** Goal: the "magic moment" — click an app in a web
+UI, it installs and runs on the GPU, with working uninstall. See `docs/ROADMAP.md`.
+
+A working thin slice exists: the `orchestrator/` Go daemon installs/runs/stops AI apps as
+GPU containers and serves a web UI. End-to-end verified with Ollama (pull → GPU container
+→ stop → remove). See `orchestrator/README.md`.
 
 ## Dev environment
 
 - **Primary dev box (this machine):** Windows 11, RTX 5090 (32 GB), driver 595.79,
-  CUDA 13.2. WSL2 enabled (v2 default). Installing Ubuntu 24.04 into WSL2.
+  CUDA 13.2. WSL2 + Ubuntu 24.04, Docker + NVIDIA Container Toolkit, Go 1.26.4 — all
+  verified (a GPU container runs and Ollama launched through the orchestrator).
 - **Secondary box:** native Ubuntu, 3× NVIDIA GPUs, currently saturated — leave alone for now.
 - Full setup + live status: `docs/DEV_ENVIRONMENT.md`.
 
@@ -63,6 +68,16 @@ web UI, it installs and runs on the GPU, with working uninstall. See `docs/ROADM
 - `docs/DECISIONS.md` — decision log (ADR-style) with rationale and open questions.
 - `docs/DEV_ENVIRONMENT.md` — hardware, WSL2 setup steps, and current setup status.
 - `docs/STATUS.md` — **living** state: what's done, what's in progress, what's next.
+- `orchestrator/README.md` — the Go daemon: layout, how to run, API, known limitations.
+
+## WSL dev gotchas (learned the hard way)
+
+- Run scripts from FILES via `wsl ... bash -lc 'bash /mnt/d/.../foo.sh'`, not complex
+  inline commands — Git Bash↔wsl.exe mangles `://`, quotes, and `Program Files (x86)`
+  in inherited PATH. Bare `/mnt/...` args get path-converted, so keep them inside `-lc '…'`.
+- Go builds on /mnt/d need `GOFLAGS=-buildvcs=false` (git "dubious ownership" on the
+  Windows FS). `docker` needs the `docker` group — use `sg docker -c '…'` until a
+  `wsl --shutdown` refreshes the login session.
 
 ## Working agreement
 

@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Cloudless</title>
+<style>
+  :root {
+    --bg: #0c0f14; --panel: #151a22; --panel2: #1c232e;
+    --text: #e7edf5; --muted: #8a97a8; --accent: #4f8cff; --ok: #36c98b; --warn: #e0b341;
+    --border: #232c38;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  }
+  header {
+    padding: 20px 28px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 14px;
+  }
+  header h1 { font-size: 20px; margin: 0; letter-spacing: .3px; }
+  header .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
+  header .dot.ok { background: var(--ok); }
+  main { max-width: 980px; margin: 0 auto; padding: 24px 28px 60px; }
+  .gpu {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px 18px; margin-bottom: 28px; font-size: 14px; color: var(--muted);
+  }
+  .gpu b { color: var(--text); }
+  h2 { font-size: 14px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); margin: 0 0 14px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 18px; display: flex; flex-direction: column; gap: 10px;
+  }
+  .card h3 { margin: 0; font-size: 17px; display: flex; align-items: center; gap: 8px; }
+  .card p { margin: 0; color: var(--muted); font-size: 13.5px; flex: 1; }
+  .badges { display: flex; gap: 6px; flex-wrap: wrap; }
+  .badge {
+    font-size: 11px; padding: 2px 8px; border-radius: 999px;
+    background: var(--panel2); color: var(--muted); border: 1px solid var(--border);
+  }
+  .badge.ok { color: var(--ok); border-color: #1f4a3a; }
+  .badge.run { color: var(--accent); border-color: #284a7a; }
+  .row { display: flex; gap: 8px; margin-top: 4px; }
+  button {
+    font: inherit; font-size: 13.5px; padding: 8px 14px; border-radius: 8px;
+    border: 1px solid var(--border); background: var(--panel2); color: var(--text);
+    cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: .5; cursor: default; }
+  a.open { text-decoration: none; }
+  .empty { color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+<header>
+  <span class="dot" id="health-dot"></span>
+  <h1>Cloudless</h1>
+</header>
+<main>
+  <div class="gpu" id="gpu">Checking GPU…</div>
+  <h2>AI Apps</h2>
+  <div class="grid" id="catalog"></div>
+</main>
+
+<script>
+const api = (p, opts) => fetch(p, opts).then(r => r.json());
+
+async function refreshHealth() {
+  try {
+    const h = await api('/api/health');
+    document.getElementById('health-dot').classList.toggle('ok', !!h.dockerOK);
+  } catch { /* daemon down */ }
+}
+
+async function refreshGPU() {
+  const el = document.getElementById('gpu');
+  try {
+    const g = await api('/api/gpu');
+    if (!g.available) { el.innerHTML = 'GPU: <b>not detected</b>'; return; }
+    // raw: "name, mem.used, mem.total, util, driver"
+    const [name, used, total, util, driver] = g.raw.split(',').map(s => s.trim());
+    el.innerHTML = `GPU: <b>${name}</b> &nbsp;·&nbsp; ${used} / ${total} MiB used ` +
+                   `&nbsp;·&nbsp; ${util}% util &nbsp;·&nbsp; driver ${driver}`;
+  } catch { el.textContent = 'GPU: unavailable'; }
+}
+
+async function render() {
+  const [catalog, apps] = await Promise.all([api('/api/catalog'), api('/api/apps')]);
+  const running = {};
+  apps.forEach(c => {
+    const id = c.name.replace(/^cloudless-/, '');
+    running[id] = c.state;
+  });
+
+  const grid = document.getElementById('catalog');
+  grid.innerHTML = '';
+  catalog.forEach(app => {
+    const state = running[app.id];
+    const isRunning = state === 'running';
+    const card = document.createElement('div');
+    card.className = 'card';
+
+    const badges = [];
+    if (app.verified) badges.push('<span class="badge ok">verified</span>');
+    if (app.minVramGB > 0) badges.push(`<span class="badge">${app.minVramGB} GB+ VRAM</span>`);
+    if (isRunning) badges.push('<span class="badge run">running</span>');
+    const disabled = app.image ? '' : 'disabled title="recipe coming soon"';
+
+    let actions;
+    if (isRunning) {
+      const url = `http://localhost:${app.ports ? Object.keys(app.ports)[0] : ''}${app.openPath || '/'}`;
+      actions = `<a class="open" href="${url}" target="_blank"><button class="primary">Open</button></a>
+                 <button data-act="stop" data-id="${app.id}">Stop</button>`;
+    } else {
+      actions = `<button class="primary" data-act="start" data-id="${app.id}" ${disabled}>Install &amp; Start</button>`;
+    }
+
+    card.innerHTML = `
+      <h3>${app.name}</h3>
+      <div class="badges">${badges.join('')}</div>
+      <p>${app.description}</p>
+      <div class="row">${actions}</div>`;
+    grid.appendChild(card);
+  });
+
+  grid.querySelectorAll('button[data-act]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const { act, id } = btn.dataset;
+      btn.disabled = true;
+      btn.textContent = act === 'start' ? 'Working… (first run pulls the image)' : 'Stopping…';
+      try {
+        await api(`/api/apps/${id}/${act}`, { method: 'POST' });
+      } catch { /* surfaced on refresh */ }
+      await render();
+    });
+  });
+}
+
+async function tick() { await Promise.all([refreshHealth(), refreshGPU()]); }
+tick(); render();
+setInterval(tick, 5000);
+setInterval(render, 8000);
+</script>
+</body>
+</html>

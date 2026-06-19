@@ -52,10 +52,23 @@ driver; you only install the CUDA toolkit / container toolkit inside Ubuntu.
 - [x] `nvidia-smi` verified inside WSL2 (sees RTX 5090)
 - [x] Docker Engine (29.6.0) + NVIDIA Container Toolkit (1.19.1) installed via `scripts/setup-wsl-docker.sh`
 - [x] Container GPU access verified (`docker run --gpus all ... nvidia-smi` sees the RTX 5090)
-- [ ] ComfyUI runs manually in a GPU container
+- [x] Go 1.26.4 installed (`scripts/install-go.sh`)
+- [x] Orchestrator builds + vets clean (`scripts/build-orchestrator.sh`)
+- [x] End-to-end smoke test passed (`scripts/smoke-test.sh`): Ollama install/run/stop/remove on GPU
 
 ## Notes / gotchas
 
 - WSL2 networking and systemd differ from bare metal; don't bake kernel/init assumptions
   into the orchestrator (see decision D4).
 - Never commit model weights — `.gitignore` excludes common weight formats and `models/`.
+- **Running WSL commands from the Windows side:** put scripts in files and invoke as
+  `wsl.exe -d Ubuntu-24.04 -- bash -lc 'bash /mnt/d/Cloudless/scripts/<x>.sh'`. Complex
+  inline scripts get mangled by the Git Bash ↔ wsl.exe layer (breaks on `://`, nested
+  quotes, and `Program Files (x86)` in the inherited PATH); bare `/mnt/...` args get
+  path-converted unless kept inside the `-lc '…'` string.
+- **Go on /mnt/d:** export `GOFLAGS=-buildvcs=false` (git reports "dubious ownership" on
+  the Windows filesystem, which breaks VCS stamping).
+- **docker without sudo:** `ledomaine` is in the `docker` group but the session needs a
+  refresh. Either `wsl --shutdown` + reopen, or run via `sg docker -c '…'` for now.
+- Go is on PATH for interactive shells via `~/.bashrc`; non-interactive `bash -lc` needs
+  `export PATH=/usr/local/go/bin:$PATH` (the build/smoke scripts do this).

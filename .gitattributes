@@ -1,0 +1,16 @@
+# Cloudless targets Linux; keep LF line endings in the repo and on checkout so
+# shell scripts and Go files work in WSL/Linux regardless of host autocrlf.
+* text=auto eol=lf
+
+*.sh   text eol=lf
+*.go   text eol=lf
+*.mod  text eol=lf
+*.md   text eol=lf
+*.html text eol=lf
+
+# Binary artifacts (never normalize)
+*.iso  binary
+*.img  binary
+*.png  binary
+*.jpg  binary
+*.gguf binary

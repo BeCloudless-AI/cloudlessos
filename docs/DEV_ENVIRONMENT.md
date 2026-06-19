@@ -50,8 +50,8 @@ driver; you only install the CUDA toolkit / container toolkit inside Ubuntu.
 - [x] Windows NVIDIA driver present (595.79, RTX 5090 visible via `nvidia-smi`)
 - [x] Ubuntu 24.04 installed in WSL2 (systemd active)
 - [x] `nvidia-smi` verified inside WSL2 (sees RTX 5090)
-- [ ] Docker Engine + NVIDIA Container Toolkit installed (`scripts/setup-wsl-docker.sh`)
-- [ ] Container GPU access verified
+- [x] Docker Engine (29.6.0) + NVIDIA Container Toolkit (1.19.1) installed via `scripts/setup-wsl-docker.sh`
+- [x] Container GPU access verified (`docker run --gpus all ... nvidia-smi` sees the RTX 5090)
 - [ ] ComfyUI runs manually in a GPU container
 
 ## Notes / gotchas

@@ -7,9 +7,10 @@
 
 ## Where we are
 
-In **Phase 0 (orchestrator prototype)**, dev-environment setup step. Ubuntu 24.04 is
-installed in WSL2 with working GPU passthrough. Next is installing Docker + the NVIDIA
-Container Toolkit. No application code exists yet.
+In **Phase 0 (orchestrator prototype)**. The dev environment is fully set up and the
+core capability is verified: a Docker container can see the GPU (WSL2 → Docker →
+NVIDIA Container Toolkit → RTX 5090). No application code exists yet — next is choosing
+the orchestrator stack and scaffolding it.
 
 ## Done
 
@@ -19,18 +20,23 @@ Container Toolkit. No application code exists yet.
 - Installed Ubuntu 24.04 in WSL2 (systemd active, user `ledomaine`); `nvidia-smi` works
   inside WSL and sees the RTX 5090.
 - Decided Docker Engine for Phase 0 (D1); wrote `scripts/setup-wsl-docker.sh`.
+- Installed Docker 29.6.0 + NVIDIA Container Toolkit 1.19.1 in WSL Ubuntu.
+- **Verified container GPU access** — `docker run --gpus all` sees the RTX 5090.
 
 ## In progress
 
-- User to run `scripts/setup-wsl-docker.sh` in WSL (installs Docker + NVIDIA Container
-  Toolkit), then `wsl --shutdown` to apply docker-group membership.
+- Choosing the orchestrator stack (language for the daemon + web UI approach), then
+  scaffolding it. (Open decision in `DECISIONS.md`.)
 
 ## Next steps (in order)
 
-1. Run `scripts/setup-wsl-docker.sh`; then `wsl --shutdown` and reopen Ubuntu.
-2. Verify container GPU access: `docker run --rm --gpus all nvidia/cuda:...-base nvidia-smi`.
-3. Run ComfyUI manually in a GPU container (the manual baseline).
-4. Scaffold the orchestrator daemon + minimal web UI in `D:\Cloudless`.
+1. Decide orchestrator language/stack.
+2. Scaffold the orchestrator daemon + minimal web UI in `D:\Cloudless`.
+3. Run ComfyUI manually in a GPU container (manual baseline) and turn it into the first
+   catalog recipe the daemon can install/launch/stop/uninstall.
+
+Note: docker-group membership for `ledomaine` is set but needs a `wsl --shutdown` +
+reopen to take effect; until then run docker with sudo.
 
 See `DEV_ENVIRONMENT.md` for the setup checklist and commands.
 

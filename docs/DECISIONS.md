@@ -90,12 +90,27 @@ drop-in swaps. **Verified:** end-to-end Ollama install/run/stop/remove with GPU 
 
 The web UI ships as static assets embedded in the daemon binary (`go:embed all:web`).
 Third-party libraries are **vendored locally** (Three.js at `internal/api/web/vendor/`),
-never loaded from a CDN. First-run onboarding state is stored client-side in
-`localStorage` (`cloudless.onboarded`) for now.
+never loaded from a CDN.
 
 **Why:** An OS/appliance must work fully offline — no runtime network dependency for the
-UI. Embedding in the binary keeps deployment to a single artifact. **Later:** onboarding
-and app state should move server-side once persistence exists (see open questions).
+UI. Embedding in the binary keeps deployment to a single artifact.
+
+---
+
+## D8 — First-run / onboarding state is server-side and per-user
+**Date:** 2026-06-19 · **Status:** Accepted
+
+The daemon owns first-run state in a JSON file via `internal/state` (atomic temp+rename).
+"First launch" = the daemon found no prior state file at startup. The path is per-user by
+default (`CLOUDLESS_STATE_DIR` → `$XDG_STATE_HOME/cloudless` → `~/.local/state/cloudless`);
+point `CLOUDLESS_STATE_DIR` at a system path (e.g. `/var/lib/cloudless`) for install-wide.
+API: `GET /api/onboarding` (`completed`, `firstLaunch`), `POST /api/onboarding/complete`.
+
+**Why:** Browser `localStorage` (the earlier approach) meant "first time" really meant
+"this browser profile" — it broke on cache clears, incognito, and different browsers, and
+the server had no idea. Server-side state makes "first time this install/user started"
+authoritative, surviving browser resets and working in kiosk mode. First store to need
+persistence — app/job persistence will likely extend the same package.
 
 ---
 

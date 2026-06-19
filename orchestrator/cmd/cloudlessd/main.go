@@ -14,13 +14,21 @@ import (
 
 	"github.com/cloudless/orchestrator/internal/api"
 	"github.com/cloudless/orchestrator/internal/engine"
+	"github.com/cloudless/orchestrator/internal/state"
 )
 
 func main() {
 	addr := envOr("CLOUDLESS_ADDR", "127.0.0.1:8765")
 
 	eng := engine.NewDocker()
-	srv := api.NewServer(eng)
+
+	st, err := state.Open(state.DefaultDir())
+	if err != nil {
+		log.Printf("state store unavailable (%v); onboarding will not persist", err)
+	}
+	log.Printf("state: %s (first launch: %v, onboarded: %v)", st.Path(), st.FirstRun(), st.Get().Onboarded)
+
+	srv := api.NewServer(eng, st)
 
 	httpServer := &http.Server{
 		Addr:              addr,

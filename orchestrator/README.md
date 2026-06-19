@@ -40,6 +40,12 @@ The daemon binds `127.0.0.1:8765` by default (override with `CLOUDLESS_ADDR`).
 | POST   | /api/apps/{id}/remove     | force-remove container                   |
 | GET    | /api/jobs/{id}            | install job state snapshot               |
 | GET    | /api/jobs/{id}/events     | install job progress (Server-Sent Events)|
+| GET    | /api/onboarding           | first-run state (`completed`,`firstLaunch`)|
+| POST   | /api/onboarding/complete  | mark first-run onboarding done           |
+
+First-run state is owned by the daemon (`internal/state`), persisted to a per-user JSON
+file (`CLOUDLESS_STATE_DIR` → `$XDG_STATE_HOME/cloudless` → `~/.local/state/cloudless`).
+"First launch" = no prior state file at startup. See docs/DECISIONS.md D8.
 
 Install is asynchronous: `start` returns a `jobId` immediately and the daemon pulls +
 runs in the background, streaming progress (per-layer pull counts, then start/running) to

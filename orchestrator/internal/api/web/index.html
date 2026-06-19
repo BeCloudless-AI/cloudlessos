@@ -446,7 +446,7 @@ function showOnboarding() {
 }
 
 function finishOnboarding(pendingId) {
-  try { localStorage.setItem('cloudless.onboarded', '1'); } catch {}
+  api('/api/onboarding/complete', { method: 'POST' }).catch(() => {});
   const ov = document.getElementById('onboarding');
   ov.classList.add('fade-out');
   setTimeout(() => { ov.classList.add('hidden'); ov.classList.remove('fade-out'); }, 400);
@@ -465,9 +465,11 @@ tick(); render();
 setInterval(tick, 5000);
 setInterval(() => { if (installing === 0) render(); }, 8000);
 
-let onboarded = false;
-try { onboarded = !!localStorage.getItem('cloudless.onboarded'); } catch {}
-if (!onboarded) render().then(showOnboarding);
+// The daemon is the source of truth for first-run state (per install/user),
+// so onboarding survives browser resets and works in kiosk mode.
+api('/api/onboarding').then(o => {
+  if (!o || !o.completed) render().then(showOnboarding);
+}).catch(() => {});
 </script>
 </body>
 </html>

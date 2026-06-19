@@ -15,20 +15,22 @@ import (
 	"github.com/cloudless/orchestrator/internal/catalog"
 	"github.com/cloudless/orchestrator/internal/engine"
 	"github.com/cloudless/orchestrator/internal/jobs"
+	"github.com/cloudless/orchestrator/internal/state"
 )
 
 //go:embed all:web
 var webFS embed.FS
 
-// Server wires the container engine and job manager to HTTP handlers.
+// Server wires the container engine, job manager, and state store to HTTP handlers.
 type Server struct {
-	eng  engine.Engine
-	jobs *jobs.Manager
+	eng   engine.Engine
+	jobs  *jobs.Manager
+	state *state.Store
 }
 
-// NewServer constructs a Server backed by the given engine.
-func NewServer(eng engine.Engine) *Server {
-	return &Server{eng: eng, jobs: jobs.NewManager()}
+// NewServer constructs a Server backed by the given engine and state store.
+func NewServer(eng engine.Engine, st *state.Store) *Server {
+	return &Server{eng: eng, jobs: jobs.NewManager(), state: st}
 }
 
 // Routes returns the configured HTTP handler.
@@ -43,6 +45,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/apps/{id}/remove", s.remove)
 	mux.HandleFunc("GET /api/jobs/{id}", s.jobState)
 	mux.HandleFunc("GET /api/jobs/{id}/events", s.jobEvents)
+	mux.HandleFunc("GET /api/onboarding", s.onboardingGet)
+	mux.HandleFunc("POST /api/onboarding/complete", s.onboardingComplete)
 
 	sub, err := fs.Sub(webFS, "web")
 	if err != nil {
@@ -79,6 +83,26 @@ func (s *Server) gpu(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) catalog(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, catalog.All())
+}
+
+// onboardingGet reports whether first-run onboarding has been completed for this
+// install/user. `firstLaunch` is true when the daemon found no prior state file.
+func (s *Server) onboardingGet(w http.ResponseWriter, r *http.Request) {
+	st := s.state.Get()
+	writeJSON(w, http.StatusOK, map[string]any{
+		"completed":   st.Onboarded,
+		"firstLaunch": s.state.FirstRun(),
+		"firstSeen":   st.FirstSeen,
+	})
+}
+
+// onboardingComplete marks first-run onboarding done and persists it.
+func (s *Server) onboardingComplete(w http.ResponseWriter, r *http.Request) {
+	if err := s.state.SetOnboarded(true); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"completed": true})
 }
 
 func (s *Server) apps(w http.ResponseWriter, r *http.Request) {

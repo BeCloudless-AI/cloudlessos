@@ -35,14 +35,20 @@ The daemon binds `127.0.0.1:8765` by default (override with `CLOUDLESS_ADDR`).
 | GET    | /api/gpu                  | nvidia-smi summary                       |
 | GET    | /api/catalog              | available app recipes                    |
 | GET    | /api/apps                 | orchestrator-managed containers          |
-| POST   | /api/apps/{id}/start      | pull image + run container               |
+| POST   | /api/apps/{id}/start      | start async install job; returns `jobId` |
 | POST   | /api/apps/{id}/stop       | stop container                           |
 | POST   | /api/apps/{id}/remove     | force-remove container                   |
+| GET    | /api/jobs/{id}            | install job state snapshot               |
+| GET    | /api/jobs/{id}/events     | install job progress (Server-Sent Events)|
+
+Install is asynchronous: `start` returns a `jobId` immediately and the daemon pulls +
+runs in the background, streaming progress (per-layer pull counts, then start/running) to
+`/api/jobs/{id}/events`. The web UI consumes this via `EventSource`.
 
 ## Known Phase 0 limitations (intentional)
 
-- `start` pulls the image synchronously, so the first launch blocks for minutes.
-  Next iteration: async install jobs with streamed progress.
-- App state is derived from `docker ps` (no separate persistence yet).
+- Pull progress is layer-level (N/total layers), not byte-level percentages — docker's
+  non-TTY output reports discrete per-layer status, not continuous bytes.
+- Job + app state is in-memory / derived from `docker ps`; no persistence across restarts.
 - ComfyUI recipe is a placeholder (`Image: ""`) pending a validated image.
 - Containers are managed by name (`cloudless-<id>`); one instance per app.

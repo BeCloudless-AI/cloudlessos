@@ -33,6 +33,8 @@ type Engine interface {
 	GPUInfo(ctx context.Context) (string, error)
 	// Pull fetches an image.
 	Pull(ctx context.Context, image string) error
+	// PullStream fetches an image, invoking onLine for each line of pull output.
+	PullStream(ctx context.Context, image string, onLine func(string)) error
 	// Run starts a detached container and returns its ID.
 	Run(ctx context.Context, spec RunSpec) (string, error)
 	// Stop stops a running container by name.

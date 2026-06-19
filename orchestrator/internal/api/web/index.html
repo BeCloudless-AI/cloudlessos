@@ -69,6 +69,37 @@
 
 <script>
 const api = (p, opts) => fetch(p, opts).then(r => r.json());
+let installing = 0; // pause periodic re-render while installs are in flight
+
+function trackJob(jobId, btn) {
+  installing++;
+  const es = new EventSource(`/api/jobs/${jobId}/events`);
+  let ended = false;
+  const finish = (doRender) => {
+    if (ended) return;
+    ended = true;
+    es.close();
+    installing--;
+    if (doRender) render();
+  };
+  es.onmessage = (e) => {
+    const u = JSON.parse(e.data);
+    if (u.phase === 'pulling') {
+      btn.textContent = u.layersTotal > 0
+        ? `Downloading ${u.layersDone}/${u.layersTotal} layers…`
+        : (u.message || 'Pulling…');
+    } else if (u.phase === 'starting') {
+      btn.textContent = 'Starting…';
+    } else if (u.phase === 'error') {
+      btn.disabled = false;
+      btn.textContent = 'Failed — retry';
+      alert('Install failed: ' + (u.error || 'unknown error'));
+      return finish(false);
+    }
+    if (u.done) finish(u.phase === 'running');
+  };
+  es.onerror = () => finish(true);
+}
 
 async function refreshHealth() {
   try {
@@ -132,7 +163,15 @@ async function render() {
     btn.addEventListener('click', async () => {
       const { act, id } = btn.dataset;
       btn.disabled = true;
-      btn.textContent = act === 'start' ? 'Working… (first run pulls the image)' : 'Stopping…';
+      if (act === 'start') {
+        btn.textContent = 'Preparing…';
+        try {
+          const res = await api(`/api/apps/${id}/start`, { method: 'POST' });
+          if (res.jobId) { trackJob(res.jobId, btn); return; }
+        } catch { /* fall through to refresh */ }
+        return render();
+      }
+      btn.textContent = act === 'stop' ? 'Stopping…' : 'Removing…';
       try {
         await api(`/api/apps/${id}/${act}`, { method: 'POST' });
       } catch { /* surfaced on refresh */ }
@@ -144,7 +183,7 @@ async function render() {
 async function tick() { await Promise.all([refreshHealth(), refreshGPU()]); }
 tick(); render();
 setInterval(tick, 5000);
-setInterval(render, 8000);
+setInterval(() => { if (installing === 0) render(); }, 8000);
 </script>
 </body>
 </html>

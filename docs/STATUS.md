@@ -7,9 +7,11 @@
 
 ## Where we are
 
-In **Phase 0 (orchestrator prototype)** with a working thin slice. The Go daemon in
-`orchestrator/` installs/runs/stops AI apps as GPU containers and serves a web UI. Verified
-end-to-end: Ollama pulled, ran as a GPU container, and was stopped + removed via the API.
+In **Phase 0 (orchestrator prototype)** with a working, progressively-improving slice. The
+Go daemon in `orchestrator/` installs/runs/stops AI apps as GPU containers and serves a web
+UI. Installs are **asynchronous with live progress** (Server-Sent Events). Verified
+end-to-end: Ollama pulled with streamed layer progress, ran as a GPU container, stopped +
+removed via the API.
 
 ## Done
 
@@ -20,7 +22,10 @@ end-to-end: Ollama pulled, ran as a GPU container, and was stopped + removed via
 - Chose Go for the orchestrator (D6); stdlib-only, Docker via CLI behind an interface.
 - Built the orchestrator (`cloudlessd`): engine abstraction + Docker impl, catalog
   (Ollama/Open WebUI/ComfyUI), HTTP API, embedded web UI. Builds + vets clean.
-- **Smoke test passed** (`scripts/smoke-test.sh`): full Ollama lifecycle on GPU.
+- Smoke test passed (`scripts/smoke-test.sh`): full Ollama lifecycle on GPU.
+- **Async install jobs + SSE progress streaming** (`internal/jobs`, `/api/jobs/...`):
+  `start` returns a jobId immediately; UI streams live per-layer pull progress. Verified
+  with a real (uncached) Ollama pull showing 0/4 → 4/4 → starting → running.
 
 ## In progress
 
@@ -28,17 +33,15 @@ end-to-end: Ollama pulled, ran as a GPU container, and was stopped + removed via
 
 ## Next steps (candidates, roughly prioritized)
 
-1. **Async install jobs + progress streaming** — replace the blocking synchronous pull
-   so the UI shows live download/extract progress (the biggest UX gap right now).
-2. **ComfyUI recipe** — pin a validated image so the image-gen app actually works.
-3. **Model manager v0** — download models + "fits your VRAM" recommendations.
-4. **State persistence** — track installed apps beyond `docker ps`.
-5. **UI polish + onboarding** — first-run flow.
+1. **ComfyUI recipe** — pin a validated image so the image-gen app actually works.
+2. **Model manager v0** — download models + "fits your VRAM" recommendations.
+3. **State persistence** — track installed apps/jobs beyond `docker ps` + in-memory.
+4. **UI polish + onboarding** — first-run flow, clearer error surfacing.
 
 ## Known limitations (see orchestrator/README.md)
 
-- `start` pulls synchronously (blocks minutes on first run).
-- App state derived from `docker ps`; no separate persistence yet.
+- Pull progress is layer-level, not byte-level percentages (docker non-TTY output).
+- Job + app state is in-memory / derived from `docker ps`; no persistence yet.
 - ComfyUI recipe is a placeholder pending a validated image.
 
 See `DEV_ENVIRONMENT.md` for setup/runbook and WSL gotchas.

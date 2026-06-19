@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os/exec"
 	"strings"
 )
@@ -52,6 +53,37 @@ func (d *Docker) Pull(ctx context.Context, image string) error {
 	_, errs, err := d.exec(ctx, "pull", image)
 	if err != nil {
 		return fmt.Errorf("pull %s: %v: %s", image, err, strings.TrimSpace(errs))
+	}
+	return nil
+}
+
+// PullStream runs `docker pull` and calls onLine for each output line. In
+// non-TTY mode docker emits discrete per-layer status lines (e.g. "<id>: Pull
+// complete"), which the caller can parse for progress.
+func (d *Docker) PullStream(ctx context.Context, image string, onLine func(string)) error {
+	cmd := exec.CommandContext(ctx, d.bin, "pull", image)
+	pr, pw := io.Pipe()
+	cmd.Stdout = pw
+	cmd.Stderr = pw
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("pull %s: %w", image, err)
+	}
+	done := make(chan error, 1)
+	go func() {
+		err := cmd.Wait()
+		_ = pw.Close() // unblocks the scanner with EOF
+		done <- err
+	}()
+
+	sc := bufio.NewScanner(pr)
+	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	for sc.Scan() {
+		if line := strings.TrimSpace(sc.Text()); line != "" {
+			onLine(line)
+		}
+	}
+	if err := <-done; err != nil {
+		return fmt.Errorf("pull %s: %w", image, err)
 	}
 	return nil
 }

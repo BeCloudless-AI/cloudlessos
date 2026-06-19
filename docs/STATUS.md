@@ -23,9 +23,12 @@ removed via the API.
 - Built the orchestrator (`cloudlessd`): engine abstraction + Docker impl, catalog
   (Ollama/Open WebUI/ComfyUI), HTTP API, embedded web UI. Builds + vets clean.
 - Smoke test passed (`scripts/smoke-test.sh`): full Ollama lifecycle on GPU.
-- **Async install jobs + SSE progress streaming** (`internal/jobs`, `/api/jobs/...`):
-  `start` returns a jobId immediately; UI streams live per-layer pull progress. Verified
-  with a real (uncached) Ollama pull showing 0/4 → 4/4 → starting → running.
+- Async install jobs + SSE progress streaming (`internal/jobs`, `/api/jobs/...`):
+  `start` returns a jobId immediately; UI streams live per-layer pull progress.
+- **UI redesign + first-run onboarding** (`internal/api/web/`): glassmorphism over a
+  Three.js particle background (vendored offline, D7), top-bar GPU/health status, time-based
+  greeting, redesigned app cards, and a 3-step welcome (Welcome → GPU detection → guided
+  first install). Verified served correctly (index + `/vendor/three.min.js` 200).
 
 ## In progress
 
@@ -35,8 +38,8 @@ removed via the API.
 
 1. **ComfyUI recipe** — pin a validated image so the image-gen app actually works.
 2. **Model manager v0** — download models + "fits your VRAM" recommendations.
-3. **State persistence** — track installed apps/jobs beyond `docker ps` + in-memory.
-4. **UI polish + onboarding** — first-run flow, clearer error surfacing.
+3. **State persistence** — track installed apps/jobs beyond `docker ps` + in-memory
+   (also lets onboarding state move server-side per D7).
 
 ## Known limitations (see orchestrator/README.md)
 

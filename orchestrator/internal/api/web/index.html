@@ -6,133 +6,297 @@
 <title>Cloudless</title>
 <style>
   :root {
-    --bg: #0c0f14; --panel: #151a22; --panel2: #1c232e;
-    --text: #e7edf5; --muted: #8a97a8; --accent: #4f8cff; --ok: #36c98b; --warn: #e0b341;
-    --border: #232c38;
+    --bg0: #070a10; --bg1: #0d1320;
+    --text: #eaf0f8; --muted: #93a1b5; --faint: #5f6c80;
+    --accent: #5b8cff; --accent2: #38d4c8; --ok: #3ad29a; --warn: #e7b84e; --err: #ff6b6b;
+    --glass: rgba(18, 24, 34, 0.55);
+    --glass-strong: rgba(16, 22, 32, 0.78);
+    --border: rgba(255, 255, 255, 0.09);
+    --shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
   }
   * { box-sizing: border-box; }
+  html, body { height: 100%; }
   body {
-    margin: 0; background: var(--bg); color: var(--text);
-    font: 15px/1.5 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    margin: 0; color: var(--text);
+    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, system-ui, sans-serif;
+    background: radial-gradient(1200px 800px at 70% -10%, #15233f 0%, var(--bg1) 45%, var(--bg0) 100%);
+    overflow-x: hidden;
   }
+  #bg { position: fixed; inset: 0; z-index: -1; display: block; }
+  ::selection { background: rgba(91,140,255,0.35); }
+
+  /* ---------- top bar ---------- */
   header {
-    padding: 20px 28px; border-bottom: 1px solid var(--border);
-    display: flex; align-items: center; gap: 14px;
+    position: sticky; top: 0; z-index: 10;
+    display: flex; align-items: center; gap: 16px;
+    padding: 14px 26px; backdrop-filter: blur(16px) saturate(140%);
+    background: linear-gradient(to bottom, rgba(10,14,22,0.75), rgba(10,14,22,0.25));
+    border-bottom: 1px solid var(--border);
   }
-  header h1 { font-size: 20px; margin: 0; letter-spacing: .3px; }
-  header .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); }
-  header .dot.ok { background: var(--ok); }
-  main { max-width: 980px; margin: 0 auto; padding: 24px 28px 60px; }
-  .gpu {
-    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
-    padding: 16px 18px; margin-bottom: 28px; font-size: 14px; color: var(--muted);
+  .brand { display: flex; align-items: center; gap: 11px; font-weight: 650; font-size: 18px; letter-spacing: .2px; }
+  .brand .mark {
+    width: 26px; height: 26px; border-radius: 8px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    box-shadow: 0 0 18px rgba(91,140,255,0.55); position: relative;
   }
-  .gpu b { color: var(--text); }
-  h2 { font-size: 14px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); margin: 0 0 14px; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+  .brand .mark::after {
+    content: ""; position: absolute; inset: 7px; border-radius: 50%;
+    background: var(--bg0); box-shadow: inset 0 0 0 2px rgba(255,255,255,0.85);
+  }
+  .brand b { background: linear-gradient(90deg, #fff, #b9c7e6); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .spacer { flex: 1; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 7px 13px; border-radius: 999px; font-size: 12.5px; color: var(--muted);
+    background: var(--glass); border: 1px solid var(--border); white-space: nowrap;
+  }
+  .pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); }
+  .pill .dot.ok { background: var(--ok); box-shadow: 0 0 10px var(--ok); }
+  .pill b { color: var(--text); font-weight: 600; }
+
+  /* ---------- main ---------- */
+  main { max-width: 1040px; margin: 0 auto; padding: 46px 26px 80px; }
+  .hero { margin-bottom: 34px; }
+  .hero h1 { margin: 0 0 6px; font-size: 34px; font-weight: 680; letter-spacing: -0.4px; }
+  .hero h1 .grad { background: linear-gradient(90deg, var(--accent2), var(--accent)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .hero p { margin: 0; color: var(--muted); font-size: 16px; }
+
+  .section-label { font-size: 12px; text-transform: uppercase; letter-spacing: 1.4px; color: var(--faint); margin: 0 0 16px; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 18px; }
   .card {
-    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
-    padding: 18px; display: flex; flex-direction: column; gap: 10px;
+    background: var(--glass); border: 1px solid var(--border); border-radius: 18px;
+    padding: 20px; display: flex; flex-direction: column; gap: 12px;
+    backdrop-filter: blur(18px) saturate(135%); box-shadow: var(--shadow);
+    transition: transform .25s ease, border-color .25s ease, box-shadow .25s ease;
   }
-  .card h3 { margin: 0; font-size: 17px; display: flex; align-items: center; gap: 8px; }
+  .card:hover { transform: translateY(-4px); border-color: rgba(91,140,255,0.45); box-shadow: 0 24px 60px rgba(0,0,0,0.5); }
+  .card .top { display: flex; align-items: center; gap: 13px; }
+  .icon {
+    width: 46px; height: 46px; border-radius: 13px; flex: none;
+    display: grid; place-items: center; font-size: 24px;
+    background: linear-gradient(140deg, rgba(91,140,255,0.22), rgba(56,212,200,0.14));
+    border: 1px solid var(--border);
+  }
+  .card h3 { margin: 0; font-size: 17.5px; font-weight: 620; }
   .card p { margin: 0; color: var(--muted); font-size: 13.5px; flex: 1; }
-  .badges { display: flex; gap: 6px; flex-wrap: wrap; }
+  .badges { display: flex; gap: 7px; flex-wrap: wrap; }
   .badge {
-    font-size: 11px; padding: 2px 8px; border-radius: 999px;
-    background: var(--panel2); color: var(--muted); border: 1px solid var(--border);
+    font-size: 11px; padding: 3px 9px; border-radius: 999px;
+    background: rgba(255,255,255,0.05); color: var(--muted); border: 1px solid var(--border);
   }
-  .badge.ok { color: var(--ok); border-color: #1f4a3a; }
-  .badge.run { color: var(--accent); border-color: #284a7a; }
-  .row { display: flex; gap: 8px; margin-top: 4px; }
+  .badge.ok { color: var(--ok); border-color: rgba(58,210,154,0.4); }
+  .badge.run { color: var(--accent); border-color: rgba(91,140,255,0.45); }
+  .row { display: flex; gap: 9px; margin-top: 2px; }
+
   button {
-    font: inherit; font-size: 13.5px; padding: 8px 14px; border-radius: 8px;
-    border: 1px solid var(--border); background: var(--panel2); color: var(--text);
-    cursor: pointer;
+    font: inherit; font-size: 13.5px; font-weight: 550; padding: 10px 16px; border-radius: 11px;
+    border: 1px solid var(--border); background: rgba(255,255,255,0.06); color: var(--text); cursor: pointer;
+    transition: filter .2s ease, transform .1s ease, border-color .2s ease;
   }
-  button:hover { border-color: var(--accent); }
-  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-  button:disabled { opacity: .5; cursor: default; }
+  button:hover { border-color: rgba(91,140,255,0.5); }
+  button:active { transform: scale(0.98); }
+  button.primary { background: linear-gradient(135deg, var(--accent), #6f6cff); border-color: transparent; color: #fff; box-shadow: 0 8px 22px rgba(91,140,255,0.35); }
+  button.primary:hover { filter: brightness(1.08); }
+  button:disabled { opacity: .6; cursor: default; transform: none; }
   a.open { text-decoration: none; }
-  .empty { color: var(--muted); font-size: 13px; }
+
+  /* ---------- onboarding overlay ---------- */
+  .overlay {
+    position: fixed; inset: 0; z-index: 50; display: grid; place-items: center;
+    background: rgba(5, 8, 14, 0.6); backdrop-filter: blur(10px);
+    animation: fadein .5s ease;
+  }
+  .overlay.hidden { display: none; }
+  .overlay.fade-out { animation: fadeout .4s ease forwards; }
+  @keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes fadeout { from { opacity: 1; } to { opacity: 0; } }
+  .ob-card {
+    width: min(560px, 92vw); background: var(--glass-strong); border: 1px solid var(--border);
+    border-radius: 22px; box-shadow: var(--shadow); backdrop-filter: blur(24px) saturate(140%);
+    padding: 38px 38px 26px; animation: rise .5s cubic-bezier(.2,.8,.2,1);
+  }
+  @keyframes rise { from { transform: translateY(18px) scale(.98); opacity: 0; } to { transform: none; opacity: 1; } }
+  .ob-body { min-height: 230px; }
+  .ob-logo {
+    width: 60px; height: 60px; border-radius: 16px; margin-bottom: 22px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    box-shadow: 0 0 30px rgba(91,140,255,0.6); position: relative;
+  }
+  .ob-logo::after { content: ""; position: absolute; inset: 16px; border-radius: 50%; background: var(--bg0); box-shadow: inset 0 0 0 3px rgba(255,255,255,0.9); }
+  .ob-body h2 { margin: 0 0 10px; font-size: 26px; font-weight: 680; letter-spacing: -0.3px; }
+  .ob-body .lead { color: var(--muted); font-size: 15.5px; margin: 0 0 18px; }
+  .hw {
+    display: flex; align-items: center; gap: 14px; padding: 16px 18px; border-radius: 14px;
+    background: rgba(255,255,255,0.04); border: 1px solid var(--border); margin-top: 6px;
+  }
+  .hw .hw-icon { font-size: 26px; }
+  .hw .hw-name { font-weight: 600; }
+  .hw .hw-sub { color: var(--muted); font-size: 13px; }
+  .hw .verdict { margin-left: auto; font-size: 13px; font-weight: 600; }
+  .verdict.ok { color: var(--ok); }
+  .verdict.warn { color: var(--warn); }
+  .pick { display: flex; flex-direction: column; gap: 10px; margin-top: 4px; }
+  .pick-item {
+    display: flex; align-items: center; gap: 13px; padding: 13px 15px; border-radius: 13px; cursor: pointer;
+    background: rgba(255,255,255,0.04); border: 1px solid var(--border); transition: border-color .2s, background .2s;
+  }
+  .pick-item:hover { border-color: rgba(91,140,255,0.4); }
+  .pick-item.selected { border-color: var(--accent); background: rgba(91,140,255,0.12); }
+  .pick-item .icon { width: 40px; height: 40px; font-size: 21px; border-radius: 11px; }
+  .pick-item .t { font-weight: 600; }
+  .pick-item .d { color: var(--muted); font-size: 12.5px; }
+  .pick-item .check { margin-left: auto; color: var(--accent); opacity: 0; font-weight: 700; }
+  .pick-item.selected .check { opacity: 1; }
+
+  .ob-footer { display: flex; align-items: center; margin-top: 26px; }
+  .ob-dots { display: flex; gap: 7px; }
+  .ob-dots span { width: 7px; height: 7px; border-radius: 50%; background: rgba(255,255,255,0.18); transition: background .3s, width .3s; }
+  .ob-dots span.active { background: var(--accent); width: 20px; border-radius: 999px; }
+  .ob-actions { margin-left: auto; display: flex; gap: 10px; }
+  .link-btn { background: none; border: none; color: var(--muted); padding: 10px 6px; }
+  .link-btn:hover { color: var(--text); border: none; }
 </style>
 </head>
 <body>
+<canvas id="bg"></canvas>
+
 <header>
-  <span class="dot" id="health-dot"></span>
-  <h1>Cloudless</h1>
+  <div class="brand"><span class="mark"></span> <b>Cloudless</b></div>
+  <div class="spacer"></div>
+  <div class="pill" id="gpu-pill"><span class="dot"></span> Detecting GPU…</div>
+  <div class="pill"><span class="dot" id="health-dot"></span> <span id="health-text">Connecting</span></div>
 </header>
+
 <main>
-  <div class="gpu" id="gpu">Checking GPU…</div>
-  <h2>AI Apps</h2>
+  <div class="hero">
+    <h1><span id="greeting">Welcome</span>. <span class="grad">Your local AI is ready.</span></h1>
+    <p>Install and run AI apps on your own machine — private, offline-capable, one click away.</p>
+  </div>
+  <p class="section-label">AI Apps</p>
   <div class="grid" id="catalog"></div>
 </main>
 
+<!-- first-run onboarding -->
+<div class="overlay hidden" id="onboarding">
+  <div class="ob-card">
+    <div class="ob-body" id="ob-body"></div>
+    <div class="ob-footer">
+      <div class="ob-dots" id="ob-dots"><span></span><span></span><span></span></div>
+      <div class="ob-actions" id="ob-actions"></div>
+    </div>
+  </div>
+</div>
+
+<script src="vendor/three.min.js"></script>
 <script>
 const api = (p, opts) => fetch(p, opts).then(r => r.json());
-let installing = 0; // pause periodic re-render while installs are in flight
+const ICONS = { ollama: '🦙', 'open-webui': '💬', comfyui: '🎨' };
+const iconFor = id => ICONS[id] || '⚙️';
+let installing = 0;       // pause periodic re-render while installs are in flight
+let catalogCache = [];
 
-function trackJob(jobId, btn) {
-  installing++;
-  const es = new EventSource(`/api/jobs/${jobId}/events`);
-  let ended = false;
-  const finish = (doRender) => {
-    if (ended) return;
-    ended = true;
-    es.close();
-    installing--;
-    if (doRender) render();
-  };
-  es.onmessage = (e) => {
-    const u = JSON.parse(e.data);
-    if (u.phase === 'pulling') {
-      btn.textContent = u.layersTotal > 0
-        ? `Downloading ${u.layersDone}/${u.layersTotal} layers…`
-        : (u.message || 'Pulling…');
-    } else if (u.phase === 'starting') {
-      btn.textContent = 'Starting…';
-    } else if (u.phase === 'error') {
-      btn.disabled = false;
-      btn.textContent = 'Failed — retry';
-      alert('Install failed: ' + (u.error || 'unknown error'));
-      return finish(false);
-    }
-    if (u.done) finish(u.phase === 'running');
-  };
-  es.onerror = () => finish(true);
+/* ---------------- Three.js ambient background ---------------- */
+function initBackground() {
+  if (!window.THREE) return;
+  let renderer;
+  try {
+    renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('bg'), antialias: true, alpha: true });
+  } catch (e) { return; } // WebGL unavailable — CSS gradient remains
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.1, 1000);
+  camera.position.z = 62;
+
+  // soft circular sprite
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const g = c.getContext('2d');
+  const grd = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  grd.addColorStop(0, 'rgba(255,255,255,1)');
+  grd.addColorStop(0.25, 'rgba(150,190,255,0.9)');
+  grd.addColorStop(1, 'rgba(80,140,255,0)');
+  g.fillStyle = grd; g.fillRect(0, 0, 64, 64);
+  const sprite = new THREE.CanvasTexture(c);
+
+  const COUNT = 750;
+  const pos = new Float32Array(COUNT * 3);
+  for (let i = 0; i < COUNT; i++) {
+    pos[i * 3]     = (Math.random() - 0.5) * 230;
+    pos[i * 3 + 1] = (Math.random() - 0.5) * 150;
+    pos[i * 3 + 2] = (Math.random() - 0.5) * 170;
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const points = new THREE.Points(geo, new THREE.PointsMaterial({
+    size: 1.7, map: sprite, transparent: true, depthWrite: false,
+    blending: THREE.AdditiveBlending, color: 0x76a8ff, opacity: 0.9,
+  }));
+  scene.add(points);
+
+  let mx = 0, my = 0, t = 0, running = true;
+  addEventListener('pointermove', e => { mx = e.clientX / innerWidth - 0.5; my = e.clientY / innerHeight - 0.5; });
+  function resize() {
+    camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight, false);
+  }
+  addEventListener('resize', resize); resize();
+  document.addEventListener('visibilitychange', () => { running = !document.hidden; if (running) loop(); });
+
+  function loop() {
+    if (!running) return;
+    t += 0.0014;
+    points.rotation.y = t; points.rotation.x = t * 0.42;
+    camera.position.x += (mx * 18 - camera.position.x) * 0.04;
+    camera.position.y += (-my * 12 - camera.position.y) * 0.04;
+    camera.lookAt(scene.position);
+    renderer.render(scene, camera);
+    requestAnimationFrame(loop);
+  }
+  loop();
 }
 
+/* ---------------- header status ---------------- */
+function greetingText() {
+  const h = new Date().getHours();
+  return h < 5 ? 'Good night' : h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
+}
+function parseGPU(raw) {
+  // "name, mem.used, mem.total, util, driver"
+  const [name, used, total, util, driver] = raw.split(',').map(s => s.trim());
+  return { name, used: +used, total: +total, util, driver, vramGB: Math.round(+total / 1024) };
+}
 async function refreshHealth() {
   try {
     const h = await api('/api/health');
     document.getElementById('health-dot').classList.toggle('ok', !!h.dockerOK);
-  } catch { /* daemon down */ }
+    document.getElementById('health-text').textContent = h.dockerOK ? 'System ready' : 'Docker offline';
+  } catch {
+    document.getElementById('health-text').textContent = 'Daemon offline';
+  }
 }
-
 async function refreshGPU() {
-  const el = document.getElementById('gpu');
+  const pill = document.getElementById('gpu-pill');
   try {
-    const g = await api('/api/gpu');
-    if (!g.available) { el.innerHTML = 'GPU: <b>not detected</b>'; return; }
-    // raw: "name, mem.used, mem.total, util, driver"
-    const [name, used, total, util, driver] = g.raw.split(',').map(s => s.trim());
-    el.innerHTML = `GPU: <b>${name}</b> &nbsp;·&nbsp; ${used} / ${total} MiB used ` +
-                   `&nbsp;·&nbsp; ${util}% util &nbsp;·&nbsp; driver ${driver}`;
-  } catch { el.textContent = 'GPU: unavailable'; }
+    const gp = await api('/api/gpu');
+    if (!gp.available) { pill.innerHTML = '<span class="dot"></span> No GPU detected'; return; }
+    const g = parseGPU(gp.raw);
+    pill.innerHTML = `<span class="dot ok"></span> <b>${g.name}</b> · ${g.vramGB} GB · ${g.util}%`;
+  } catch { pill.innerHTML = '<span class="dot"></span> GPU unavailable'; }
 }
+function tick() { refreshHealth(); refreshGPU(); }
 
+/* ---------------- catalog ---------------- */
 async function render() {
   const [catalog, apps] = await Promise.all([api('/api/catalog'), api('/api/apps')]);
+  catalogCache = catalog;
   const running = {};
-  apps.forEach(c => {
-    const id = c.name.replace(/^cloudless-/, '');
-    running[id] = c.state;
-  });
+  apps.forEach(c => { running[c.name.replace(/^cloudless-/, '')] = c.state; });
 
   const grid = document.getElementById('catalog');
   grid.innerHTML = '';
   catalog.forEach(app => {
-    const state = running[app.id];
-    const isRunning = state === 'running';
+    const isRunning = running[app.id] === 'running';
     const card = document.createElement('div');
     card.className = 'card';
 
@@ -144,7 +308,8 @@ async function render() {
 
     let actions;
     if (isRunning) {
-      const url = `http://localhost:${app.ports ? Object.keys(app.ports)[0] : ''}${app.openPath || '/'}`;
+      const port = app.ports ? Object.keys(app.ports)[0] : '';
+      const url = `http://localhost:${port}${app.openPath || '/'}`;
       actions = `<a class="open" href="${url}" target="_blank"><button class="primary">Open</button></a>
                  <button data-act="stop" data-id="${app.id}">Stop</button>`;
     } else {
@@ -152,7 +317,10 @@ async function render() {
     }
 
     card.innerHTML = `
-      <h3>${app.name}</h3>
+      <div class="top">
+        <div class="icon">${iconFor(app.id)}</div>
+        <h3>${app.name}</h3>
+      </div>
       <div class="badges">${badges.join('')}</div>
       <p>${app.description}</p>
       <div class="row">${actions}</div>`;
@@ -168,22 +336,138 @@ async function render() {
         try {
           const res = await api(`/api/apps/${id}/start`, { method: 'POST' });
           if (res.jobId) { trackJob(res.jobId, btn); return; }
-        } catch { /* fall through to refresh */ }
+        } catch { /* fall through */ }
         return render();
       }
       btn.textContent = act === 'stop' ? 'Stopping…' : 'Removing…';
-      try {
-        await api(`/api/apps/${id}/${act}`, { method: 'POST' });
-      } catch { /* surfaced on refresh */ }
+      try { await api(`/api/apps/${id}/${act}`, { method: 'POST' }); } catch {}
       await render();
     });
   });
 }
 
-async function tick() { await Promise.all([refreshHealth(), refreshGPU()]); }
+function trackJob(jobId, btn) {
+  installing++;
+  const es = new EventSource(`/api/jobs/${jobId}/events`);
+  let ended = false;
+  const finish = (doRender) => {
+    if (ended) return;
+    ended = true; es.close(); installing--;
+    if (doRender) render();
+  };
+  es.onmessage = (e) => {
+    const u = JSON.parse(e.data);
+    if (u.phase === 'pulling') {
+      btn.textContent = u.layersTotal > 0 ? `Downloading ${u.layersDone}/${u.layersTotal}…` : (u.message || 'Pulling…');
+    } else if (u.phase === 'starting') {
+      btn.textContent = 'Starting…';
+    } else if (u.phase === 'error') {
+      btn.disabled = false; btn.textContent = 'Failed — retry';
+      alert('Install failed: ' + (u.error || 'unknown error'));
+      return finish(false);
+    }
+    if (u.done) finish(u.phase === 'running');
+  };
+  es.onerror = () => finish(true);
+}
+
+/* ---------------- first-run onboarding ---------------- */
+function showOnboarding() {
+  const ov = document.getElementById('onboarding');
+  const body = document.getElementById('ob-body');
+  const dots = document.getElementById('ob-dots').children;
+  const actions = document.getElementById('ob-actions');
+  let selected = null;
+  ov.classList.remove('hidden');
+
+  function setDots(i) { for (let k = 0; k < dots.length; k++) dots[k].classList.toggle('active', k === i); }
+
+  async function step(i) {
+    setDots(i);
+    if (i === 0) {
+      body.innerHTML = `
+        <div class="ob-logo"></div>
+        <h2>Welcome to Cloudless</h2>
+        <p class="lead">Cloudless turns your machine into a private AI workstation. No cloud,
+        no accounts — your models and data stay with you. Let's get you set up in a few seconds.</p>`;
+      actions.innerHTML = `<button class="primary" id="ob-next">Get started</button>`;
+      document.getElementById('ob-next').onclick = () => step(1);
+    } else if (i === 1) {
+      body.innerHTML = `
+        <h2>Your machine</h2>
+        <p class="lead">Checking what your hardware can run…</p>
+        <div class="hw" id="ob-hw"><div class="hw-icon">🖥️</div>
+          <div><div class="hw-name">Detecting…</div><div class="hw-sub">reading GPU</div></div></div>`;
+      actions.innerHTML = `<button class="link-btn" id="ob-back">Back</button>
+                           <button class="primary" id="ob-next">Continue</button>`;
+      document.getElementById('ob-back').onclick = () => step(0);
+      document.getElementById('ob-next').onclick = () => step(2);
+      try {
+        const gp = await api('/api/gpu');
+        const hw = document.getElementById('ob-hw');
+        if (gp.available) {
+          const g = parseGPU(gp.raw);
+          hw.innerHTML = `<div class="hw-icon">⚡</div>
+            <div><div class="hw-name">${g.name}</div><div class="hw-sub">${g.vramGB} GB VRAM · driver ${g.driver}</div></div>
+            <div class="verdict ok">✓ Ready for local AI</div>`;
+        } else {
+          hw.innerHTML = `<div class="hw-icon">🖥️</div>
+            <div><div class="hw-name">No GPU detected</div><div class="hw-sub">apps will run on CPU (slower)</div></div>
+            <div class="verdict warn">limited</div>`;
+        }
+      } catch {}
+    } else {
+      const picks = catalogCache.filter(a => a.image).slice(0, 3);
+      body.innerHTML = `
+        <h2>Pick your first app</h2>
+        <p class="lead">Install one now, or explore the catalog yourself. You can add more anytime.</p>
+        <div class="pick">${picks.map(a => `
+          <div class="pick-item" data-id="${a.id}">
+            <div class="icon">${iconFor(a.id)}</div>
+            <div><div class="t">${a.name}${a.verified ? ' · recommended' : ''}</div><div class="d">${a.description}</div></div>
+            <div class="check">✓</div>
+          </div>`).join('')}</div>`;
+      actions.innerHTML = `<button class="link-btn" id="ob-back">Back</button>
+                           <button class="primary" id="ob-finish">Finish</button>`;
+      document.getElementById('ob-back').onclick = () => step(1);
+      document.getElementById('ob-finish').onclick = () => finishOnboarding(selected);
+      body.querySelectorAll('.pick-item').forEach(el => {
+        el.onclick = () => {
+          const already = el.classList.contains('selected');
+          body.querySelectorAll('.pick-item').forEach(x => x.classList.remove('selected'));
+          selected = already ? null : el.dataset.id;
+          if (!already) el.classList.add('selected');
+          document.getElementById('ob-finish').textContent = selected ? 'Install & finish' : 'Finish';
+        };
+      });
+    }
+  }
+  step(0);
+}
+
+function finishOnboarding(pendingId) {
+  try { localStorage.setItem('cloudless.onboarded', '1'); } catch {}
+  const ov = document.getElementById('onboarding');
+  ov.classList.add('fade-out');
+  setTimeout(() => { ov.classList.add('hidden'); ov.classList.remove('fade-out'); }, 400);
+  if (pendingId) {
+    render().then(() => {
+      const btn = document.querySelector(`button[data-act="start"][data-id="${pendingId}"]`);
+      if (btn) btn.click();
+    });
+  }
+}
+
+/* ---------------- boot ---------------- */
+document.getElementById('greeting').textContent = greetingText();
+initBackground();
 tick(); render();
 setInterval(tick, 5000);
 setInterval(() => { if (installing === 0) render(); }, 8000);
+
+let onboarded = false;
+try { onboarded = !!localStorage.getItem('cloudless.onboarded'); } catch {}
+if (!onboarded) render().then(showOnboarding);
 </script>
 </body>
 </html>

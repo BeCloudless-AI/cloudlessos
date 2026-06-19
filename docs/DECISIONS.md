@@ -85,6 +85,20 @@ drop-in swaps. **Verified:** end-to-end Ollama install/run/stop/remove with GPU 
 
 ---
 
+## D7 — Web UI is server-embedded, offline-first; Three.js is vendored
+**Date:** 2026-06-19 · **Status:** Accepted
+
+The web UI ships as static assets embedded in the daemon binary (`go:embed all:web`).
+Third-party libraries are **vendored locally** (Three.js at `internal/api/web/vendor/`),
+never loaded from a CDN. First-run onboarding state is stored client-side in
+`localStorage` (`cloudless.onboarded`) for now.
+
+**Why:** An OS/appliance must work fully offline — no runtime network dependency for the
+UI. Embedding in the binary keeps deployment to a single artifact. **Later:** onboarding
+and app state should move server-side once persistence exists (see open questions).
+
+---
+
 ## Open questions (not yet decided)
 
 - **Open-source CloudlessOS?** Leaning yes (trust/community for a privacy brand, like

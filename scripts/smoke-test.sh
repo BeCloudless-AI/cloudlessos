@@ -15,8 +15,7 @@ run() { sg docker -c "$*"; }  # run a command with the docker group active
 
 echo "==> Starting daemon"
 sg docker -c "$BIN" &
-DPID=$!
-trap 'kill $DPID 2>/dev/null' EXIT
+trap 'pkill -x cloudlessd 2>/dev/null' EXIT  # sg orphans the child; kill by name
 
 for i in $(seq 1 20); do
   curl -sf localhost:8765/api/health >/dev/null 2>&1 && break

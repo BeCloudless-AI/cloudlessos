@@ -17,7 +17,7 @@ import (
 	"github.com/cloudless/orchestrator/internal/jobs"
 )
 
-//go:embed web/*
+//go:embed all:web
 var webFS embed.FS
 
 // Server wires the container engine and job manager to HTTP handlers.

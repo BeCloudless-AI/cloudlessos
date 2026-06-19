@@ -1,0 +1,45 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# Node
+node_modules/
+dist/
+build/
+*.log
+npm-debug.log*
+
+# Go
+/bin/
+*.exe
+*.test
+*.out
+
+# Models / large artifacts (never commit weights)
+models/
+*.gguf
+*.safetensors
+*.bin
+*.pt
+*.ckpt
+
+# Local env / secrets
+.env
+.env.*
+!.env.example
+
+# Build / image artifacts
+*.iso
+*.img
+*.qcow2

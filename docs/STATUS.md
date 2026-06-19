@@ -7,29 +7,30 @@
 
 ## Where we are
 
-Project just bootstrapped. Repo and documentation created. We are at the very start of
-**Phase 0 (orchestrator prototype)** — specifically the dev-environment setup step. No
-application code exists yet.
+In **Phase 0 (orchestrator prototype)**, dev-environment setup step. Ubuntu 24.04 is
+installed in WSL2 with working GPU passthrough. Next is installing Docker + the NVIDIA
+Container Toolkit. No application code exists yet.
 
 ## Done
 
 - Defined vision, architecture (3 layers + thin kiosk shell), roadmap, and decisions.
 - Initialized git repo at `D:\Cloudless` with documentation structure.
 - Confirmed primary dev box: Windows 11 + RTX 5090 (32 GB), driver 595.79, CUDA 13.2.
-- Confirmed WSL2 is enabled (v2 default) but no distro installed yet.
+- Installed Ubuntu 24.04 in WSL2 (systemd active, user `ledomaine`); `nvidia-smi` works
+  inside WSL and sees the RTX 5090.
+- Decided Docker Engine for Phase 0 (D1); wrote `scripts/setup-wsl-docker.sh`.
 
 ## In progress
 
-- Installing **Ubuntu 24.04 into WSL2** (`wsl --install -d Ubuntu-24.04`) — user runs this
-  interactively.
+- User to run `scripts/setup-wsl-docker.sh` in WSL (installs Docker + NVIDIA Container
+  Toolkit), then `wsl --shutdown` to apply docker-group membership.
 
 ## Next steps (in order)
 
-1. Finish Ubuntu 24.04 install in WSL2.
-2. Verify `nvidia-smi` works **inside** WSL2.
-3. Install Docker (or Podman) + NVIDIA Container Toolkit; verify container GPU access.
-4. Run ComfyUI manually in a GPU container (the manual baseline).
-5. Scaffold the orchestrator daemon + minimal web UI in `D:\Cloudless`.
+1. Run `scripts/setup-wsl-docker.sh`; then `wsl --shutdown` and reopen Ubuntu.
+2. Verify container GPU access: `docker run --rm --gpus all nvidia/cuda:...-base nvidia-smi`.
+3. Run ComfyUI manually in a GPU container (the manual baseline).
+4. Scaffold the orchestrator daemon + minimal web UI in `D:\Cloudless`.
 
 See `DEV_ENVIRONMENT.md` for the setup checklist and commands.
 

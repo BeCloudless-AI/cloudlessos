@@ -6,7 +6,9 @@
 - **OS:** Windows 11 Pro
 - **GPU:** NVIDIA GeForce RTX 5090, 32 GB VRAM
 - **Driver:** 595.79 · **CUDA (driver-reported):** 13.2
-- **WSL2:** enabled, version 2 is default. Distro: **installing Ubuntu 24.04** (see status).
+- **WSL2:** enabled, v2 default. Distro: **Ubuntu 24.04 installed**, systemd active,
+  kernel 6.6 WSL2, Linux user `ledomaine` (sudo requires password). `nvidia-smi` works
+  inside WSL (sees the RTX 5090).
 - Project repo lives at `D:\Cloudless` (Windows side).
 
 ### Secondary box — reserved for later (multi-GPU / native testing)
@@ -28,14 +30,13 @@ driver; you only install the CUDA toolkit / container toolkit inside Ubuntu.
    ```
    nvidia-smi          # should show the RTX 5090
    ```
-3. **Install container engine + NVIDIA Container Toolkit** (Docker shown; Podman is an
-   alternative under consideration):
+3. **Install Docker + NVIDIA Container Toolkit** — use the repo script (reproducible
+   runbook). Run inside the WSL Ubuntu shell; it prompts for your sudo password:
    ```
-   # Docker Engine (or Docker Desktop with WSL integration)
-   # then the NVIDIA Container Toolkit, then:
-   sudo nvidia-ctk runtime configure --runtime=docker
-   sudo systemctl restart docker   # note: WSL2 systemd may need enabling
+   bash /mnt/d/Cloudless/scripts/setup-wsl-docker.sh
    ```
+   Then apply docker-group membership: run `wsl --shutdown` from Windows and reopen Ubuntu.
+   (Decision D1: Docker Engine for Phase 0; Podman remains a later candidate.)
 4. **Verify container GPU access:**
    ```
    docker run --rm --gpus all nvidia/cuda:12.4.0-base-ubuntu22.04 nvidia-smi
@@ -43,16 +44,13 @@ driver; you only install the CUDA toolkit / container toolkit inside Ubuntu.
 5. **Manual ComfyUI baseline** — run ComfyUI in a GPU container by hand. This is the
    thing the orchestrator will automate.
 
-> Exact toolkit install commands depend on current NVIDIA docs — fill in verified
-> commands here once run, so this becomes a reproducible runbook.
-
 ## Setup status (update as you go)
 
 - [x] WSL2 enabled (v2 default) on Windows
 - [x] Windows NVIDIA driver present (595.79, RTX 5090 visible via `nvidia-smi`)
-- [ ] Ubuntu 24.04 installed in WSL2
-- [ ] `nvidia-smi` verified inside WSL2
-- [ ] Container engine + NVIDIA Container Toolkit installed
+- [x] Ubuntu 24.04 installed in WSL2 (systemd active)
+- [x] `nvidia-smi` verified inside WSL2 (sees RTX 5090)
+- [ ] Docker Engine + NVIDIA Container Toolkit installed (`scripts/setup-wsl-docker.sh`)
 - [ ] Container GPU access verified
 - [ ] ComfyUI runs manually in a GPU container
 

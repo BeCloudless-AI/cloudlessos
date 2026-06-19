@@ -5,6 +5,9 @@ Thumbs.db
 .idea/
 .vscode/
 
+# Obsidian (docs/ is opened as a vault; ignore its per-machine config/workspace)
+.obsidian/
+
 # Python
 __pycache__/
 *.py[cod]

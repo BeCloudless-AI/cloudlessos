@@ -70,8 +70,11 @@ removed via the API.
 1. **Validate ComfyUI on Blackwell (RTX 50xx)** — current image (mmartial/...) is pinned
    but unverified on sm_120; confirm or swap for a CUDA 12.8+/PyTorch-Blackwell build.
    (vLLM is already validated on Blackwell — D12.)
-2. **Model manager** — pick/switch the served model (one per engine instance today) and
-   show "fits your VRAM". (Engine switching itself is done — D15.)
+2. **Multi-GPU engines** — Cloudless PCs ship multiple GPUs (VISION): pin each engine to
+   its own GPU, keep both warm, make switching an instant alias move (D15 addendum).
+   Validate on the 3-GPU box (dev box is single-GPU).
+3. **Model manager** — pick/switch the served model (one per engine instance today) and
+   show "fits your VRAM".
 3. **Agent UX polish** — OpenClaw/Hermes install + run pre-wired (D14); next is exposing
    their UIs/setup (messaging platforms, allowlists) cleanly in the launcher.
 3. **State persistence for apps/jobs** — beyond `docker ps` + in-memory, likely extending

@@ -289,6 +289,16 @@ creation pointing straight at `cloudless-vllm:8000`, so switching engines would 
 round-trips; the selection survives a daemon restart with exactly one engine running; a
 completion works through `cloudless-ai` after switching. Both engines run on Blackwell (sm_120).
 
+**Multi-GPU (Cloudless PC) — planned:** Cloudless PCs ship with multiple GPUs (see VISION),
+which removes the switch downtime. With ≥2 GPUs, pin each engine to its own GPU
+(`--gpus '"device=N"'` / `CUDA_VISIBLE_DEVICES`), keep both **warm**, and make a switch just
+**move the `cloudless-ai` alias** between already-loaded engines — effectively instant, no
+model reload. Open items for that path: per-engine GPU assignment from `hardware.GPUs()`,
+how the daemon polls readiness when both publish :8000 (poll via the network/alias instead
+of host :8000), and an atomic alias move (add to target, remove from source). The current
+single-GPU stop-then-start is the graceful fallback. **Not yet built/verified** — the dev
+box has one GPU (RTX 5090); validate on the 3-GPU machine.
+
 ---
 
 ## Open questions (not yet decided)

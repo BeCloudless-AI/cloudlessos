@@ -72,11 +72,13 @@ removed via the API.
   editable model, applied by restarting the engine), Apps (per-app **Reset**/Uninstall —
   the "fix a mistake" button), System (replay welcome). Runtime-configurable model
   (`state.Model`). Verified: settings served, OpenClaw reset rebuilds + restarts cleanly.
-- **Per-app config** (D19/D21): config moved from baked-in to **mounted** editable files
-  (seeded from defaults). Settings → Apps → **Configure** is now an intuitive **form**
-  (inputs, password fields, toggles) — D21 — mapped to config via JSON dot-paths (OpenClaw)
-  and `.env` keys (Hermes), with a collapsible **Advanced — raw config**. Verified: form
-  saves write the right config and restart the app.
+- **Per-app config** (D19/D21): config moved from baked-in to **mounted** editable files;
+  edited via an intuitive **form** (inputs, password fields, toggles) mapped to JSON
+  dot-paths (OpenClaw) and `.env` keys (Hermes), plus a collapsible Advanced raw editor.
+- **Settings is a multi-page app** (D22): two-pane (sidebar + content) like macOS System
+  Settings — pages for Cloudless AI (engine + model), Hardware (GPU + folders), each App
+  (status/Open + form config + Advanced + Reset/Uninstall), and General. Verified: served,
+  markers present, JS passes `node --check`.
 
 - **Flat Swiss/instrument restyle** (D20, supersedes D10): adapted to a user reference —
   flat (no glass/blur/shadow), light-grey base with white hairline tiles, **monochrome +

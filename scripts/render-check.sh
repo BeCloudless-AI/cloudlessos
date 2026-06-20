@@ -14,5 +14,6 @@ for i in $(seq 1 40); do curl -sf localhost:8765/api/health >/dev/null 2>&1 && b
 
 echo "GET /     : $(curl -s -o /dev/null -w '%{http_code}' localhost:8765/)"
 echo "font woff2: $(curl -s -o /dev/null -w '%{http_code}' localhost:8765/vendor/fonts/red-hat-mono-latin-700-normal.woff2)"
-echo "markers   : $(curl -s localhost:8765/ | grep -oE 'big-clock|accent-dot|--blue:|#ff5a00|backdrop-filter' | sort | uniq -c | tr '\n' ' ')"
+echo "markers   : $(curl -s localhost:8765/ | grep -oE 'big-clock|--blue:|#ff5a00|backdrop-filter' | sort | uniq -c | tr '\n' ' ')"
+echo "settings  : $(curl -s localhost:8765/ | grep -oE 'set-sidebar|set-nav|nav-item|renderAppPage|renderAIPage|set-content' | sort -u | tr '\n' ' ')"
 echo "RENDER CHECK DONE"

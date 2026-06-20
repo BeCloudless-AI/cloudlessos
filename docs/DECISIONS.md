@@ -450,6 +450,25 @@ save to `.env`; text saves to the `openclaw.json` path; both restart cleanly; fo
 
 ---
 
+## D22 — Settings is a multi-page app (sidebar + content), not one sheet
+**Date:** 2026-06-20 · **Status:** Accepted (refines D18)
+
+The single scrolling settings sheet didn't feel OS-grade. Rebuilt as a two-pane **Settings
+app** (macOS System-Settings style): a left **sidebar** of grouped pages and a right
+**content pane** that swaps per page.
+
+- **Sidebar groups:** Cloudless (Cloudless AI, Hardware) · Apps (one entry per installed
+  app) · System (General). Active item highlighted in blue.
+- **Pages:** *Cloudless AI* (engine switch + model) · *Hardware* (per-GPU stats as chip
+  tiles + folder/places) · *each App* (running/stopped status + Open, the D21 form config,
+  collapsible Advanced raw config, Reset & Uninstall) · *General* (replay welcome tour, about).
+- Per-app config is now its **own page** (form), not an inline expander.
+
+Frontend-only — reuses existing endpoints. **Verified:** serves; sidebar/nav/page markers
+present; the page JavaScript passes `node --check`.
+
+---
+
 ## Open questions (not yet decided)
 
 - **Open-source CloudlessOS?** Leaning yes (trust/community for a privacy brand, like

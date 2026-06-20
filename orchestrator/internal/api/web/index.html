@@ -55,17 +55,32 @@
   .gear:hover { color: var(--blue); transform: rotate(40deg); }
 
   /* settings sheet */
-  .set { width: min(560px, 94vw); max-height: 86vh; display: flex; flex-direction: column;
+  .set { width: min(800px, 95vw); height: min(580px, 90vh); display: flex;
     background: var(--card); border: 1px solid var(--line-2); border-radius: var(--radius);
     box-shadow: 0 24px 60px rgba(0, 0, 0, 0.18); animation: rise 0.3s ease; overflow: hidden; }
-  .set-head { display: flex; align-items: center; padding: 16px 22px; border-bottom: 0.5px solid var(--hair); }
-  .set-title { font-weight: 700; font-size: 16px; }
-  .set-x { margin-left: auto; border: none; background: none; font-size: 15px; color: var(--muted); cursor: pointer; }
+  .set-sidebar { width: 200px; flex: none; background: var(--panel-2); border-right: 1px solid var(--line); padding: 14px 12px; overflow-y: auto; }
+  .set-brand { font-weight: 700; font-size: 14px; padding: 6px 10px 8px; }
+  .set-nav { display: flex; flex-direction: column; gap: 1px; }
+  .nav-group { font-size: 10px; text-transform: lowercase; letter-spacing: 0.6px; color: var(--faint); padding: 14px 10px 5px; }
+  .nav-item { display: flex; align-items: center; gap: 9px; padding: 7px 10px; border-radius: 8px; font-size: 13px; color: var(--ink); cursor: pointer; }
+  .nav-item:hover { background: rgba(0, 0, 0, 0.05); }
+  .nav-item.active { background: var(--blue); color: #fff; }
+  .nav-ic { width: 16px; text-align: center; font-size: 13px; }
+  .set-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .set-topbar { display: flex; align-items: center; padding: 15px 22px; border-bottom: 1px solid var(--line); flex: none; }
+  .set-page-title { font-weight: 700; font-size: 15px; }
+  .set-x { margin-left: auto; border: none; background: none; font-size: 14px; color: var(--muted); cursor: pointer; }
   .set-x:hover { color: var(--ink); }
-  .set-body { padding: 4px 22px 20px; overflow-y: auto; }
-  .set-section { padding: 16px 0; border-bottom: 0.5px solid var(--hair); }
-  .set-section:last-child { border-bottom: none; }
-  .set-section h3 { margin: 0 0 10px; font-size: 11px; text-transform: lowercase; letter-spacing: 0.5px; color: var(--muted); }
+  .set-content { padding: 18px 24px; overflow-y: auto; flex: 1; }
+  .set-block { padding-bottom: 18px; margin-bottom: 18px; border-bottom: 1px solid var(--line); }
+  .set-block:last-child { border-bottom: none; margin-bottom: 0; }
+  .set-block h3 { margin: 0 0 10px; font-size: 11px; text-transform: lowercase; letter-spacing: 0.5px; color: var(--muted); }
+  .app-head { display: flex; align-items: center; gap: 14px; padding-bottom: 16px; margin-bottom: 18px; border-bottom: 1px solid var(--line); }
+  .app-status { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
+  .app-status .led { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); }
+  .app-status .led.ok { background: var(--accent); }
+  .app-head a { margin-left: auto; }
+  .hw-card + .hw-card { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
   .set-row { display: flex; align-items: center; gap: 12px; padding: 7px 0; font-size: 13.5px; }
   .srow-label { width: 70px; color: var(--muted); flex: none; }
   .er-pills { display: flex; gap: 8px; }
@@ -275,8 +290,14 @@
 
 <div class="overlay hidden" id="settings">
   <div class="set">
-    <div class="set-head"><span class="set-title">Settings</span><button class="set-x" id="set-x">✕</button></div>
-    <div class="set-body" id="set-body"></div>
+    <aside class="set-sidebar">
+      <div class="set-brand">Settings</div>
+      <nav class="set-nav" id="set-nav"></nav>
+    </aside>
+    <main class="set-main">
+      <header class="set-topbar"><span class="set-page-title" id="set-page-title"></span><button class="set-x" id="set-x">✕</button></header>
+      <div class="set-content" id="set-content"></div>
+    </main>
   </div>
 </div>
 
@@ -532,61 +553,85 @@ function openSettings() { document.getElementById('settings').classList.remove('
 function closeSettings() { document.getElementById('settings').classList.add('hidden'); }
 function settingsOpen() { return !document.getElementById('settings').classList.contains('hidden'); }
 
+let setPage = 'ai';
 async function renderSettings() {
-  let settings, catalog, engine;
-  try { [settings, catalog, engine] = await Promise.all([api('/api/settings'), api('/api/catalog'), api('/api/engine')]); }
-  catch { return; }
-  const enginePills = (engine.engines || []).map(e =>
-    `<button class="er-pill ${e.active ? 'on' : ''}" data-eng="${e.id}" ${e.active || engineSwitching ? 'disabled' : ''}>${e.name.replace(' Engine', '')}</button>`).join('');
+  let catalog;
+  try { catalog = await api('/api/catalog'); catalogCache = catalog; } catch { catalog = catalogCache || []; }
   const apps = catalog.filter(a => !a.service);
-  document.getElementById('set-body').innerHTML = `
-    <div class="set-section">
-      <h3>Cloudless AI</h3>
-      <div class="set-row"><span class="srow-label">Engine</span><div class="er-pills">${enginePills}</div></div>
-      <div class="set-row"><span class="srow-label">Model</span>
-        <div class="model-edit"><input id="set-model" value="${settings.model}" spellcheck="false" />
-        <button class="btn" id="set-model-apply">Apply</button></div></div>
-      <div class="set-hint">A Hugging Face model id. Applying restarts the engine and may download weights.</div>
-    </div>
-    <div class="set-section">
-      <h3>Apps</h3>
-      ${apps.map(a => `<div class="set-row"><span>${glyph(a.id)}&nbsp; ${a.name}</span>
-        <span class="row-actions">
-          ${(a.config && a.config.length) ? `<button class="btn" data-config="${a.id}">Configure</button>` : ''}
-          <button class="btn" data-reset="${a.id}" ${a.image ? '' : 'disabled'}>Reset</button>
-          <button class="btn danger" data-uninstall="${a.id}" ${a.image ? '' : 'disabled'}>Uninstall</button>
-        </span></div>
-        <div class="cfg-editor hidden" id="cfg-${a.id}"></div>`).join('')}
-    </div>
-    <div class="set-section">
-      <h3>System</h3>
-      <div class="set-row"><span>Welcome tour</span><span class="row-actions"><button class="btn" id="set-replay">Replay</button></span></div>
-    </div>`;
+  if (setPage.startsWith('app:') && !apps.some(a => 'app:' + a.id === setPage)) setPage = 'ai';
 
-  document.querySelectorAll('#set-body .er-pill:not(.on)').forEach(b => b.onclick = () => { switchEngine(b.dataset.eng); toast('Switching engine…'); });
+  const groups = [
+    { label: 'cloudless', items: [{ id: 'ai', ic: '✦', label: 'Cloudless AI' }, { id: 'hardware', ic: '▤', label: 'Hardware' }] },
+    { label: 'apps', items: apps.map(a => ({ id: 'app:' + a.id, ic: glyph(a.id), label: a.name })) },
+    { label: 'system', items: [{ id: 'general', ic: '⦿', label: 'General' }] },
+  ];
+  document.getElementById('set-nav').innerHTML = groups.map(g =>
+    `<div class="nav-group">${g.label}</div>` + g.items.map(it =>
+      `<div class="nav-item ${it.id === setPage ? 'active' : ''}" data-page="${it.id}"><span class="nav-ic">${it.ic}</span>${it.label}</div>`).join('')).join('');
+  document.querySelectorAll('#set-nav .nav-item').forEach(n => n.onclick = () => { setPage = n.dataset.page; renderSettings(); });
+
+  let title = { ai: 'Cloudless AI', hardware: 'Hardware', general: 'General' }[setPage] || '';
+  if (setPage.startsWith('app:')) { const a = apps.find(x => 'app:' + x.id === setPage); title = a ? a.name : ''; }
+  document.getElementById('set-page-title').textContent = title;
+
+  const c = document.getElementById('set-content');
+  if (setPage === 'ai') renderAIPage(c);
+  else if (setPage === 'hardware') renderHardwarePage(c);
+  else if (setPage === 'general') renderGeneralPage(c);
+  else if (setPage.startsWith('app:')) renderAppPage(c, setPage.slice(4));
+}
+
+async function renderAIPage(c) {
+  c.innerHTML = '<div class="set-hint">Loading…</div>';
+  let settings, engine;
+  try { [settings, engine] = await Promise.all([api('/api/settings'), api('/api/engine')]); } catch { return; }
+  const pills = (engine.engines || []).map(e =>
+    `<button class="er-pill ${e.active ? 'on' : ''}" data-eng="${e.id}" ${e.active || engineSwitching ? 'disabled' : ''}>${e.name.replace(' Engine', '')}</button>`).join('');
+  c.innerHTML = `
+    <div class="set-block"><h3>inference engine</h3>
+      <div class="set-row"><div class="er-pills">${pills}</div><span class="er-state ${engine.ready ? 'ready' : ''}">${engineSwitching ? 'switching…' : (engine.ready ? 'ready' : '…')}</span></div>
+      <div class="fld-help">Switch the engine powering Cloudless AI. One runs at a time; switching reloads the model.</div>
+    </div>
+    <div class="set-block"><h3>model</h3>
+      <div class="fld"><span class="fld-label">Model</span><div class="model-edit"><input id="set-model" class="fld-input" value="${escapeAttr(settings.model)}" spellcheck="false"><button class="btn primary" id="set-model-apply">Apply</button></div></div>
+      <div class="fld-help">A Hugging Face model id. Applying restarts the engine and may download weights.</div>
+    </div>`;
+  c.querySelectorAll('.er-pill:not(.on)').forEach(b => b.onclick = () => { switchEngine(b.dataset.eng); toast('Switching engine…'); });
   document.getElementById('set-model-apply').onclick = () => {
-    const m = document.getElementById('set-model').value.trim();
-    if (!m) return;
+    const m = document.getElementById('set-model').value.trim(); if (!m) return;
     toast('Applying model… (may download)');
     api('/api/settings/model', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: m }) })
       .then(r => { if (r.jobId) trackJobToast(r.jobId, 'Model'); }).catch(() => toast('Failed', true));
   };
-  document.querySelectorAll('#set-body button[data-config]').forEach(b => b.onclick = () => openConfig(b.dataset.config));
-  document.querySelectorAll('#set-body button[data-reset]').forEach(b => b.onclick = () => {
-    const id = b.dataset.reset;
-    toast('Resetting ' + id + '…');
-    api(`/api/apps/${id}/reset`, { method: 'POST' }).then(r => { if (r.jobId) trackJobToast(r.jobId, 'Reset ' + id); }).catch(() => toast('Failed', true));
+}
+
+async function renderHardwarePage(c) {
+  c.innerHTML = '<div class="set-hint">Loading…</div>';
+  let gpu, folders;
+  try { [gpu, folders] = await Promise.all([api('/api/gpu'), api('/api/folders')]); } catch { return; }
+  const gpus = gpu.gpus || [];
+  const gpuHtml = gpus.length ? gpus.map(g =>
+    `<div class="hw-card"><div class="gpu-name">${g.name}<span class="idx">#${g.index}</span></div>
+      <div class="chips"><span>vram <b>${gb(g.memUsedMB)} / ${gb(g.memTotalMB)} gb</b></span><span>util <b>${g.utilPct}%</b></span><span>temp <b>${g.tempC}°c</b></span><span>power <b>${g.powerW >= 0 ? Math.round(g.powerW) + ' w' : 'n/a'}</b></span><span>driver <b>${g.driver}</b></span></div></div>`).join('')
+    : '<div class="set-hint">No NVIDIA GPU detected.</div>';
+  c.innerHTML = `<div class="set-block"><h3>graphics</h3>${gpuHtml}</div>
+    <div class="set-block"><h3>places</h3>${folders.map(p => `<button class="place" data-folder="${p.id}"><span class="pic">${PLACE_ICON[p.id] || '📁'}</span><span class="pl">${p.label}</span><span class="pp" title="${p.path}">${p.path}</span></button>`).join('')}</div>`;
+  c.querySelectorAll('[data-folder]').forEach(b => b.onclick = async () => {
+    try { const r = await api(`/api/folders/${b.dataset.folder}/open`, { method: 'POST' }); toast(r.opened ? 'Opened ' + b.querySelector('.pl').textContent : (r.error || 'Could not open folder'), !r.opened); } catch { toast('Could not open folder', true); }
   });
-  document.querySelectorAll('#set-body button[data-uninstall]').forEach(b => b.onclick = async () => {
-    const id = b.dataset.uninstall;
-    if (!confirm(`Uninstall ${id}? This removes its container and image.`)) return;
-    toast('Uninstalling ' + id + '…');
-    try { await api(`/api/apps/${id}/uninstall`, { method: 'POST' }); toast(id + ' uninstalled'); renderApps(); renderSettings(); }
-    catch { toast('Failed', true); }
-  });
-  document.getElementById('set-replay').onclick = () => {
-    api('/api/onboarding/reset', { method: 'POST' }).then(() => { closeSettings(); showOnboarding(); }).catch(() => toast('Failed', true));
-  };
+}
+
+function renderGeneralPage(c) {
+  c.innerHTML = `
+    <div class="set-block"><h3>welcome</h3>
+      <div class="set-row"><span>Replay the welcome tour</span><span class="row-actions"><button class="btn" id="gen-replay">Replay</button></span></div>
+    </div>
+    <div class="set-block"><h3>about</h3>
+      <div class="set-row"><span class="srow-label">system</span><span>CloudlessOS</span></div>
+      <div class="set-row"><span class="srow-label">engine</span><span id="gen-engine">—</span></div>
+    </div>`;
+  document.getElementById('gen-replay').onclick = () => { api('/api/onboarding/reset', { method: 'POST' }).then(() => { closeSettings(); showOnboarding(); }).catch(() => toast('Failed', true)); };
+  api('/api/engine').then(e => { const el = document.getElementById('gen-engine'); if (el) { const a = (e.engines || []).find(x => x.active); el.textContent = a ? a.name : 'none'; } }).catch(() => {});
 }
 
 const escapeHtml = s => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -605,51 +650,63 @@ function fieldControl(f) {
   return `<div class="fld"><span class="fld-label">${f.label}</span>
     <input class="fld-input" type="${t}" data-field="${f.key}" value="${escapeAttr(f.value)}" placeholder="${escapeAttr(f.default)}" spellcheck="false"></div>${help}`;
 }
-async function openConfig(id) {
-  const el = document.getElementById('cfg-' + id);
-  if (!el.classList.contains('hidden')) { el.classList.add('hidden'); el.innerHTML = ''; return; }
-  let st, cfg;
-  try { [st, cfg] = await Promise.all([api(`/api/apps/${id}/settings`), api(`/api/apps/${id}/config`)]); }
-  catch { return toast('Could not load settings', true); }
+async function renderAppPage(c, id) {
+  c.innerHTML = '<div class="set-hint">Loading…</div>';
+  let st, cfg, running = false, catalog;
+  try {
+    const [s, cf, appsList, cat] = await Promise.all([api(`/api/apps/${id}/settings`), api(`/api/apps/${id}/config`), api('/api/apps'), api('/api/catalog')]);
+    st = s; cfg = cf; catalog = cat;
+    running = appsList.some(x => x.name === 'cloudless-' + id && x.state === 'running');
+  } catch { return toast('Could not load app', true); }
+  const app = (catalog || []).find(a => a.id === id) || {};
+  const port = app.ports ? Object.keys(app.ports)[0] : '';
+  const openBtn = (running && port) ? `<a href="http://localhost:${port}${app.openPath || '/'}" target="_blank"><button class="btn primary">Open</button></a>` : '';
   const fields = st.fields || [];
   const form = fields.length
-    ? `<div class="fld-form">${fields.map(fieldControl).join('')}</div>
-       <div class="cfg-actions">
-         <button class="btn danger" data-fldreset="${id}">Reset</button>
-         <button class="btn primary" data-fldsave="${id}">Save &amp; apply</button>
-       </div>`
-    : '<div class="set-hint">No simple settings — use Advanced below.</div>';
-  const raw = `<button class="adv-toggle" data-adv="${id}">Advanced — raw config</button>
-    <div class="adv hidden" id="adv-${id}">
-      ${cfg.files.map(f => `<div class="cfg-file"><div class="cfg-name">${f.file}<span class="cfg-lang">${f.lang}</span></div>
-        <textarea class="cfg-area" data-file="${f.file}" spellcheck="false">${escapeHtml(f.content)}</textarea></div>`).join('')}
-      <div class="cfg-actions"><button class="btn" data-rawsave="${id}">Save raw &amp; apply</button></div>
+    ? `<div class="set-block"><h3>configuration</h3><div class="fld-form">${fields.map(fieldControl).join('')}</div>
+        <div class="cfg-actions"><button class="btn primary" data-fldsave>Save &amp; apply</button></div></div>`
+    : '';
+  const adv = (cfg.files && cfg.files.length)
+    ? `<div class="set-block"><button class="adv-toggle" data-adv>Advanced — raw config</button>
+        <div class="adv hidden" id="adv-box">
+          ${cfg.files.map(f => `<div class="cfg-file"><div class="cfg-name">${f.file}<span class="cfg-lang">${f.lang}</span></div>
+            <textarea class="cfg-area" data-file="${f.file}" spellcheck="false">${escapeHtml(f.content)}</textarea></div>`).join('')}
+          <div class="cfg-actions"><button class="btn" data-rawsave>Save raw &amp; apply</button></div>
+        </div></div>`
+    : '';
+  const manage = `<div class="set-block"><h3>manage</h3>
+      <div class="set-row"><span>Reset to defaults</span><span class="row-actions"><button class="btn" data-appreset>Reset</button></span></div>
+      <div class="set-row"><span>Uninstall</span><span class="row-actions"><button class="btn danger" data-appuninstall>Uninstall</button></span></div>
     </div>`;
-  el.innerHTML = form + raw;
-  el.classList.remove('hidden');
+  c.innerHTML = `<div class="app-head"><div class="app-status"><span class="led ${running ? 'ok' : ''}"></span>${running ? 'running' : 'stopped'}</div>${openBtn}</div>${form}${adv}${manage}`;
 
-  const save = el.querySelector('[data-fldsave]');
+  const save = c.querySelector('[data-fldsave]');
   if (save) save.onclick = () => {
     const values = {};
-    el.querySelectorAll('.fld-form [data-field]').forEach(c => { values[c.dataset.field] = c.type === 'checkbox' ? (c.checked ? 'true' : 'false') : c.value; });
+    c.querySelectorAll('.fld-form [data-field]').forEach(x => { values[x.dataset.field] = x.type === 'checkbox' ? (x.checked ? 'true' : 'false') : x.value; });
     toast('Saving ' + id + '…');
     api(`/api/apps/${id}/settings`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ values }) })
       .then(r => { if (r.jobId) trackJobToast(r.jobId, id); else toast('Saved (applies on install)'); }).catch(() => toast('Failed', true));
   };
-  const reset = el.querySelector('[data-fldreset]');
-  if (reset) reset.onclick = () => {
-    if (!confirm(`Reset ${id} settings to defaults?`)) return;
-    toast('Resetting ' + id + '…');
-    api(`/api/apps/${id}/config/reset`, { method: 'POST' })
-      .then(r => { el.classList.add('hidden'); el.innerHTML = ''; if (r.jobId) trackJobToast(r.jobId, id); else toast('Reset'); }).catch(() => toast('Failed', true));
-  };
-  el.querySelector('[data-adv]').onclick = () => document.getElementById('adv-' + id).classList.toggle('hidden');
-  el.querySelector('[data-rawsave]').onclick = () => {
+  const advBtn = c.querySelector('[data-adv]');
+  if (advBtn) advBtn.onclick = () => document.getElementById('adv-box').classList.toggle('hidden');
+  const rawSave = c.querySelector('[data-rawsave]');
+  if (rawSave) rawSave.onclick = () => {
     const files = {};
-    el.querySelectorAll('#adv-' + id + ' textarea[data-file]').forEach(t => files[t.dataset.file] = t.value);
+    c.querySelectorAll('#adv-box textarea[data-file]').forEach(t => files[t.dataset.file] = t.value);
     toast('Saving raw config…');
     api(`/api/apps/${id}/config`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ files }) })
       .then(r => { if (r.jobId) trackJobToast(r.jobId, id + ' config'); else toast('Saved'); }).catch(() => toast('Failed', true));
+  };
+  c.querySelector('[data-appreset]').onclick = () => {
+    if (!confirm(`Reset ${app.name || id} to defaults? This rebuilds it.`)) return;
+    toast('Resetting ' + id + '…');
+    api(`/api/apps/${id}/reset`, { method: 'POST' }).then(r => { if (r.jobId) trackJobToast(r.jobId, id); }).catch(() => toast('Failed', true));
+  };
+  c.querySelector('[data-appuninstall]').onclick = async () => {
+    if (!confirm(`Uninstall ${app.name || id}? Removes its container and image.`)) return;
+    toast('Uninstalling ' + id + '…');
+    try { await api(`/api/apps/${id}/uninstall`, { method: 'POST' }); toast(id + ' uninstalled'); renderApps(); setPage = 'ai'; renderSettings(); } catch { toast('Failed', true); }
   };
 }
 

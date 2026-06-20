@@ -302,7 +302,7 @@ async function renderApps() {
   const running = {}; apps.forEach(c => running[c.name.replace(/^cloudless-/, '')] = c.state);
   updateChat(running);
   const pad = document.getElementById('pad');
-  pad.innerHTML = catalog.map(app => {
+  pad.innerHTML = catalog.filter(app => !app.service).map(app => {
     const isRun = running[app.id] === 'running';
     const cls = 'tile' + (isRun ? ' running' : '') + (app.image ? '' : ' disabled');
     const meta = isRun ? '<span class="dot"></span>Running' : (app.image ? '' : 'Coming soon');
@@ -393,7 +393,7 @@ function showOnboarding() {
         } else { hw.innerHTML = `<div class="hi">🖥️</div><div><div class="hn">No GPU detected</div><div class="hs">apps run on CPU (slower)</div></div><div class="verdict warn">Limited</div>`; }
       } catch {}
     } else {
-      const picks = catalogCache.filter(a => a.image).slice(0, 3);
+      const picks = catalogCache.filter(a => a.image && !a.service).slice(0, 3);
       body.innerHTML = `<h2>Your first app</h2><p class="lead">Install one now, or explore Launchpad yourself.</p>
         <div class="pick">${picks.map(a => `<div class="pi" data-id="${a.id}">
           <span class="pic" style="background:${tileBg(a.id)}">${glyph(a.id)}</span>

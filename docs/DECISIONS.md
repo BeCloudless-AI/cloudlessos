@@ -155,7 +155,7 @@ and `places` backends from D9 are unchanged.
 ---
 
 ## D11 — Bundled apps are pre-installed on first boot; Open WebUI is "Cloudless AI"
-**Date:** 2026-06-20 · **Status:** Accepted
+**Date:** 2026-06-20 · **Status:** Accepted (engine/default-model choice superseded by D12)
 
 Ollama, Open WebUI, and ComfyUI ship **pre-installed**: `internal/provision` auto-pulls
 and runs them on daemon startup (background goroutine, best-effort, idempotent — skips
@@ -174,6 +174,39 @@ failure doesn't affect the rest.
 
 **Verified:** provisioner brings up Ollama + Open WebUI on the `cloudless` network with
 correct branding/wiring; Open WebUI reaches Ollama by DNS ("Ollama is running").
+
+---
+
+## D12 — Default inference engine is vLLM, not Ollama
+**Date:** 2026-06-20 · **Status:** Accepted (supersedes the Ollama default in D11)
+
+**Cloudless AI is backed by vLLM**, not Ollama. Ollama is a convenience wrapper over
+llama.cpp and isn't the performance choice; vLLM (PagedAttention + continuous batching,
+optimized CUDA kernels) gives far higher throughput/concurrency — the right default for
+the capable/multi-GPU machines Cloudless targets.
+
+Shape:
+- vLLM runs as a **Service** app (hidden from the launcher): OpenAI-compatible server on
+  `:8000`, image `vllm/vllm-openai:latest` (entrypoint `vllm serve`, so the model is the
+  **positional** arg). Serves the model under the name `cloudless`. Default model
+  `Qwen/Qwen2.5-1.5B-Instruct`, override via `CLOUDLESS_DEFAULT_MODEL` (any HF id). Model
+  cache persists in the `cloudless-hf` named volume. `--gpu-memory-utilization 0.5` leaves
+  headroom on a shared desktop GPU.
+- **Open WebUI repointed** to the OpenAI API: `ENABLE_OLLAMA_API=False`,
+  `OPENAI_API_BASE_URL=http://cloudless-vllm:8000/v1`, `OPENAI_API_KEY` placeholder.
+- **Ollama kept** as an optional, non-default Service app (some users may still want it).
+- Engine gained `RunSpec.Args` (container command); catalog gained `Command`, `Volumes`,
+  `Service`.
+
+**Validated on Blackwell (the open risk):** vLLM **0.23.0** runs on the **RTX 5090
+(sm_120)** — it served Qwen2.5-1.5B and returned a real completion; Open WebUI reaches it
+by container DNS and lists the `cloudless` model. So the Blackwell concern that applies to
+ComfyUI (D11) does **not** block vLLM.
+
+**Tradeoffs:** vLLM uses more VRAM, is GPU-only, and its model management is less turnkey
+than `ollama pull` (one model per server instance; switching = restart). A future model
+manager / engine-switching UI should address this. For single-user low-VRAM cases,
+llama.cpp remains the better fit and is a candidate second engine.
 
 ---
 

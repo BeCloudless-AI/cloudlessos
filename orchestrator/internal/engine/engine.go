@@ -11,9 +11,10 @@ type RunSpec struct {
 	Image   string            // image ref to run
 	Ports   map[int]int       // hostPort -> containerPort (bound to 127.0.0.1)
 	Env     map[string]string // environment variables
-	Volumes map[string]string // hostPath -> containerPath
+	Volumes map[string]string // hostPath-or-named-volume -> containerPath
 	GPUs    string            // "all", "0", ... or "" for no GPU
 	Network string            // docker network to join (container-name DNS), or ""
+	Args    []string          // extra args appended after the image (container command)
 }
 
 // Container is the orchestrator's view of a container.

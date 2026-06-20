@@ -124,6 +124,7 @@ func (d *Docker) Run(ctx context.Context, spec RunSpec) (string, error) {
 		args = append(args, "-v", fmt.Sprintf("%s:%s", host, cont))
 	}
 	args = append(args, spec.Image)
+	args = append(args, spec.Args...)
 
 	out, errs, err := d.exec(ctx, args...)
 	if err != nil {

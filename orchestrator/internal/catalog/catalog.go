@@ -3,7 +3,22 @@
 // docs/ARCHITECTURE.md, Layer 3).
 package catalog
 
-import "github.com/cloudless/orchestrator/internal/engine"
+import (
+	"os"
+
+	"github.com/cloudless/orchestrator/internal/engine"
+)
+
+// defaultLLM is the model vLLM serves as "Cloudless AI". Override with
+// CLOUDLESS_DEFAULT_MODEL (any Hugging Face model id vLLM supports).
+var defaultLLM = envOr("CLOUDLESS_DEFAULT_MODEL", "Qwen/Qwen2.5-1.5B-Instruct")
+
+func envOr(k, d string) string {
+	if v := os.Getenv(k); v != "" {
+		return v
+	}
+	return d
+}
 
 // App is a curated, installable AI application backed by a container image.
 type App struct {
@@ -18,7 +33,10 @@ type App struct {
 	MinVRAMGB   int               `json:"minVramGB"`  // rough VRAM floor for usefulness
 	Verified    bool              `json:"verified"`   // recipe validated on Cloudless dev hardware
 	Preinstall  bool              `json:"preinstall"` // provisioned automatically on first boot
+	Service     bool              `json:"service"`    // infrastructure (engine), hidden from the launcher
 	Network     string            `json:"-"`          // docker network to join (for inter-app DNS)
+	Command     []string          `json:"-"`          // container command/args
+	Volumes     map[string]string `json:"-"`          // host-or-named-volume -> containerPath
 }
 
 // ContainerName is the orchestrator-managed container name for this app.
@@ -41,6 +59,8 @@ func (a App) Spec() engine.RunSpec {
 		Env:     a.Env,
 		GPUs:    a.GPUs,
 		Network: a.Network,
+		Args:    a.Command,
+		Volumes: a.Volumes,
 	}
 }
 
@@ -63,28 +83,41 @@ const cloudlessNet = "cloudless"
 
 var apps = []App{
 	{
-		ID:          "ollama",
-		Name:        "Ollama",
-		Description: "Run local LLMs (Llama, Mistral, Qwen, …) behind a simple API.",
-		Image:       "ollama/ollama",
-		Ports:       map[int]int{11434: 11434},
-		GPUs:        "all",
-		OpenPath:    "/",
-		MinVRAMGB:   4,
-		Verified:    true,
-		Preinstall:  true,
-		Network:     cloudlessNet,
+		// vLLM is the default inference engine powering "Cloudless AI" (D12).
+		// OpenAI-compatible server; Open WebUI talks to it over the OpenAI API.
+		ID:          "vllm",
+		Name:        "vLLM Engine",
+		Description: "High-throughput inference engine powering Cloudless AI.",
+		Image:       "vllm/vllm-openai:latest",
+		Ports:       map[int]int{8000: 8000},
+		// Image entrypoint is `vllm serve`; the model is the positional arg.
+		Command: []string{
+			defaultLLM,
+			"--served-model-name", "cloudless",
+			"--gpu-memory-utilization", "0.5",
+			"--max-model-len", "8192",
+		},
+		Volumes:    map[string]string{"cloudless-hf": "/root/.cache/huggingface"}, // persist model cache
+		GPUs:       "all",
+		OpenPath:   "/",
+		MinVRAMGB:  6,
+		Verified:   false, // pending Blackwell (RTX 50xx / sm_120) validation — see D12
+		Preinstall: true,
+		Service:    true,
+		Network:    cloudlessNet,
 	},
 	{
 		ID:          "open-webui",
 		Name:        "Open WebUI",
-		Description: "Chat with your local LLMs — the engine behind Cloudless AI.",
+		Description: "Chat with your local LLMs — the face of Cloudless AI.",
 		Image:       "ghcr.io/open-webui/open-webui:main",
 		Ports:       map[int]int{3000: 8080},
 		Env: map[string]string{
-			"WEBUI_NAME":      "Cloudless AI",
-			"WEBUI_AUTH":      "False", // local appliance: no login wall
-			"OLLAMA_BASE_URL": "http://cloudless-ollama:11434",
+			"WEBUI_NAME":          "Cloudless AI",
+			"WEBUI_AUTH":          "False", // local appliance: no login wall
+			"ENABLE_OLLAMA_API":   "False",
+			"OPENAI_API_BASE_URL": "http://cloudless-vllm:8000/v1",
+			"OPENAI_API_KEY":      "cloudless", // vLLM ignores it unless --api-key is set
 		},
 		GPUs:       "",
 		OpenPath:   "/",
@@ -106,6 +139,21 @@ var apps = []App{
 		Verified:   false,
 		Preinstall: true,
 		Network:    cloudlessNet,
+	},
+	{
+		// Kept as an optional alternative engine, not the default (see D12).
+		ID:          "ollama",
+		Name:        "Ollama",
+		Description: "Alternative LLM runtime (llama.cpp-based). Optional; not the default engine.",
+		Image:       "ollama/ollama",
+		Ports:       map[int]int{11434: 11434},
+		GPUs:        "all",
+		OpenPath:    "/",
+		MinVRAMGB:   4,
+		Verified:    true,
+		Preinstall:  false,
+		Service:     true,
+		Network:     cloudlessNet,
 	},
 }
 

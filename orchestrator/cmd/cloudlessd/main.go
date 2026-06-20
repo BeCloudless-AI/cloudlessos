@@ -44,13 +44,9 @@ func main() {
 		}
 	}()
 
-	// Pre-install the bundled apps (Ollama, Open WebUI, ComfyUI) in the background.
-	// Set CLOUDLESS_DEFAULT_MODEL="" to skip the default chat-model pull.
-	defaultModel := "llama3.2:1b"
-	if v, ok := os.LookupEnv("CLOUDLESS_DEFAULT_MODEL"); ok {
-		defaultModel = v
-	}
-	go provision.Run(context.Background(), eng, defaultModel, func(m string) {
+	// Pre-install the bundled apps (vLLM engine, Open WebUI, ComfyUI) in the
+	// background. The served model is set via CLOUDLESS_DEFAULT_MODEL (catalog).
+	go provision.Run(context.Background(), eng, func(m string) {
 		log.Printf("[provision] %s", m)
 	})
 

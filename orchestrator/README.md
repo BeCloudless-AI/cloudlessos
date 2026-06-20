@@ -61,12 +61,18 @@ runs in the background, streaming progress (per-layer pull counts, then start/ru
 
 ## Pre-installed apps (D11)
 
-On startup the daemon provisions the bundled apps (Ollama, Open WebUI, ComfyUI) onto a
-shared `cloudless` docker network and pulls a default chat model so "Chat with your
-Cloudless AI" works out of the box. Override the model with `CLOUDLESS_DEFAULT_MODEL`
-(set to empty to skip). Open WebUI is branded "Cloudless AI", runs without a login wall,
-and is wired to Ollama at `cloudless-ollama:11434`. ComfyUI's image is pinned but not yet
-validated on Blackwell GPUs. Reset everything with `../scripts/reset-apps.sh`.
+On startup the daemon provisions the bundled apps onto a shared `cloudless` docker network:
+
+- **vLLM** (`cloudless-vllm`) — the default inference engine (D12), OpenAI-compatible on
+  `:8000`, serving the model named `cloudless`. Default `Qwen/Qwen2.5-1.5B-Instruct`;
+  override with `CLOUDLESS_DEFAULT_MODEL` (any Hugging Face id). Validated on Blackwell.
+- **Open WebUI** (`cloudless-open-webui`) — branded "Cloudless AI", no login wall, wired to
+  vLLM via the OpenAI API (`http://cloudless-vllm:8000/v1`). The hero "Chat with your
+  Cloudless AI" button opens it.
+- **ComfyUI** (`cloudless-comfyui`) — image pinned but not yet validated on Blackwell.
+
+Ollama is kept as an optional, non-default engine (not auto-provisioned). Reset everything
+with `../scripts/reset-apps.sh`.
 
 ## Known Phase 0 limitations (intentional)
 

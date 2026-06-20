@@ -41,11 +41,13 @@ removed via the API.
   Three.js removed in favor of a pure-CSS Big Sur gradient wallpaper. Red Hat Mono kept,
   used lightly. Verified assets/font 200 and GPU/folders payloads.
 
-- **Pre-installed apps + Chat button** (`internal/provision`, D11): Ollama, Open WebUI,
-  ComfyUI auto-provision on startup onto a shared `cloudless` network. Open WebUI branded
-  "Cloudless AI", no login, wired to Ollama; default model `llama3.2:1b` pulled so chat
-  works OOTB. Hero "Chat with your Cloudless AI" button opens it. Verified: Ollama +
-  Open WebUI come up wired correctly; Open WebUI reaches Ollama by DNS.
+- **Pre-installed apps + Chat button** (`internal/provision`, D11): vLLM, Open WebUI,
+  ComfyUI auto-provision on startup onto a shared `cloudless` network. Hero "Chat with
+  your Cloudless AI" button opens Open WebUI (branded, no login).
+- **vLLM is the default engine** (D12, supersedes Ollama default): Open WebUI repointed to
+  vLLM's OpenAI API; Ollama demoted to optional. **Validated on Blackwell** — vLLM 0.23.0
+  on the RTX 5090 served Qwen2.5-1.5B and returned a completion; Open WebUI lists the
+  `cloudless` model over the network.
 
 ## In progress
 
@@ -55,8 +57,9 @@ removed via the API.
 
 1. **Validate ComfyUI on Blackwell (RTX 50xx)** — current image (mmartial/...) is pinned
    but unverified on sm_120; confirm or swap for a CUDA 12.8+/PyTorch-Blackwell build.
-2. **Model manager v0** — download models + "fits your VRAM" recommendations (the default
-   model pull in `provision` is the seed of this).
+   (vLLM is already validated on Blackwell — D12.)
+2. **Model manager / engine UI** — pick/switch the vLLM model (one per instance today),
+   show "fits your VRAM", and optionally offer llama.cpp as a second engine for low-VRAM.
 3. **State persistence for apps/jobs** — beyond `docker ps` + in-memory, likely extending
    `internal/state` (onboarding state already lives there, D8).
 

@@ -347,8 +347,14 @@ fired during first-boot provisioning could be clobbered by the provisioner's sta
 read (it would stop the just-started engine). Now both serialize on `provision.EngineMu` and
 the provisioner re-reads the desired engine under the lock. Keeps switching smooth (D15).
 
+**Context length:** engines serve the model's full **32K** context
+(vLLM `--max-model-len 32768`, SGLang `--context-length 32768`) — agents send big prompts
+(system + tool schemas + history) and overflowed the earlier 8K cap. Verified vLLM serves
+`max_model_len: 32768` with KV cache fitting in VRAM (~11.9 GiB, ~13× concurrency).
+
 **Note:** a 1.5B model does tool calling but is weak at agentic work; a stronger default
-model would improve OpenClaw/Hermes quality (ties into the model-manager work).
+model (e.g. Qwen2.5-7B-Instruct — fits easily on a 32 GB GPU) would materially improve
+OpenClaw/Hermes quality. Ties into the model-manager work.
 
 ---
 

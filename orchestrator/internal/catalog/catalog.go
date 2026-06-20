@@ -142,7 +142,7 @@ var apps = []App{
 			defaultLLM,
 			"--served-model-name", "cloudless",
 			"--gpu-memory-utilization", "0.5",
-			"--max-model-len", "8192",
+			"--max-model-len", "32768", // Qwen2.5 native context; agents send big prompts
 			"--enable-auto-tool-choice",
 			"--tool-call-parser", "hermes",
 		},
@@ -171,6 +171,7 @@ var apps = []App{
 			"--served-model-name", "cloudless",
 			"--host", "0.0.0.0", "--port", "8000",
 			"--mem-fraction-static", "0.5",
+			"--context-length", "32768", // match vLLM; agents send big prompts
 			"--tool-call-parser", "qwen25", // agents need tool calling
 		},
 		Volumes:   map[string]string{"cloudless-hf": "/root/.cache/huggingface"},

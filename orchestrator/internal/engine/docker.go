@@ -149,6 +149,13 @@ func (d *Docker) Build(ctx context.Context, image, contextDir string, onLine fun
 	return nil
 }
 
+func (d *Docker) RemoveImage(ctx context.Context, image string) error {
+	if _, errs, err := d.exec(ctx, "rmi", "-f", image); err != nil {
+		return fmt.Errorf("rmi %s: %v: %s", image, err, strings.TrimSpace(errs))
+	}
+	return nil
+}
+
 func (d *Docker) Run(ctx context.Context, spec RunSpec) (string, error) {
 	args := []string{"run", "-d", "--name", spec.Name, "--restart", "unless-stopped"}
 	if spec.GPUs != "" {

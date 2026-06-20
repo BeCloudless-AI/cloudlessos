@@ -16,6 +16,7 @@ type State struct {
 	FirstSeen string `json:"firstSeen"`        // RFC3339; when the daemon first initialized this store
 	Onboarded bool   `json:"onboarded"`        // user has completed first-run onboarding
 	Engine    string `json:"engine,omitempty"` // selected inference engine ("" = default)
+	Model     string `json:"model,omitempty"`  // selected model ("" = catalog default)
 }
 
 // Store is a file-backed state store, safe for concurrent use.
@@ -113,6 +114,14 @@ func (s *Store) SetEngine(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.st.Engine = id
+	return s.save()
+}
+
+// SetModel records the selected model and persists.
+func (s *Store) SetModel(model string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.st.Model = model
 	return s.save()
 }
 

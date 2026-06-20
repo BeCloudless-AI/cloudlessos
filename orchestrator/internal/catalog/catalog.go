@@ -83,6 +83,27 @@ func Engines() []App {
 	return out
 }
 
+// DefaultModel returns the built-in default model (also the substitution sentinel).
+func DefaultModel() string { return defaultLLM }
+
+// EngineSpec builds an engine's run spec, substituting the chosen model for the
+// default. model "" (or the default) leaves the catalog command unchanged.
+func EngineSpec(a App, model string) engine.RunSpec {
+	rs := a.Spec()
+	if model == "" || model == defaultLLM {
+		return rs
+	}
+	args := make([]string, len(rs.Args)) // copy: don't mutate the shared catalog slice
+	copy(args, rs.Args)
+	for i := range args {
+		if args[i] == defaultLLM {
+			args[i] = model
+		}
+	}
+	rs.Args = args
+	return rs
+}
+
 // DefaultEngine returns the id of the default engine (the preinstalled one).
 func DefaultEngine() string {
 	for _, a := range apps {

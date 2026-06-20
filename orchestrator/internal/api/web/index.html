@@ -58,6 +58,34 @@
   .menubar .led { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); }
   .menubar .led.ok { background: var(--ok); } .menubar .led.bad { background: var(--err); }
   #clock { color: var(--ink); font-weight: 500; letter-spacing: 0.4px; }
+  .gear { border: none; background: none; cursor: pointer; font-size: 15px; color: var(--ink-2);
+    padding: 0 2px; line-height: 1; transition: color 0.15s, transform 0.3s; }
+  .gear:hover { color: var(--accent); transform: rotate(30deg); }
+
+  /* settings sheet */
+  .set { width: min(560px, 94vw); max-height: 86vh; display: flex; flex-direction: column;
+    background: rgba(255, 255, 255, 0.88); backdrop-filter: blur(40px) saturate(180%);
+    border: 0.5px solid var(--card-edge); border-radius: 20px;
+    box-shadow: 0 30px 80px rgba(20, 50, 100, 0.22); animation: rise 0.4s cubic-bezier(.2,.8,.2,1); overflow: hidden; }
+  .set-head { display: flex; align-items: center; padding: 16px 22px; border-bottom: 0.5px solid var(--hair); }
+  .set-title { font-weight: 700; font-size: 16px; }
+  .set-x { margin-left: auto; border: none; background: none; font-size: 15px; color: var(--muted); cursor: pointer; }
+  .set-x:hover { color: var(--ink); }
+  .set-body { padding: 4px 22px 20px; overflow-y: auto; }
+  .set-section { padding: 16px 0; border-bottom: 0.5px solid var(--hair); }
+  .set-section:last-child { border-bottom: none; }
+  .set-section h3 { margin: 0 0 10px; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--muted); }
+  .set-row { display: flex; align-items: center; gap: 12px; padding: 7px 0; font-size: 13.5px; }
+  .srow-label { width: 70px; color: var(--muted); flex: none; }
+  .er-pills { display: flex; gap: 8px; }
+  .model-edit { display: flex; gap: 8px; flex: 1; }
+  .model-edit input { flex: 1; font: inherit; font-size: 13px; padding: 8px 11px; border-radius: 10px;
+    border: 0.5px solid var(--hair); background: #fff; color: var(--ink); }
+  .model-edit input:focus { outline: none; border-color: var(--accent); }
+  .set-hint { color: var(--faint); font-size: 11.5px; margin-top: 4px; }
+  .row-actions { margin-left: auto; display: flex; gap: 8px; }
+  .btn.danger { color: var(--err); border-color: rgba(224, 72, 61, 0.4); }
+  .btn.danger:hover { background: rgba(224, 72, 61, 0.08); filter: none; }
 
   /* ---------- layout ---------- */
   main { max-width: 1080px; margin: 0 auto; padding: 56px 28px 90px; }
@@ -198,6 +226,7 @@
   <div class="mi"><span class="led" id="led-gpu"></span> <span id="mi-gpu">GPU</span></div>
   <div class="mi"><span class="led" id="led-sys"></span> <span id="mi-sys">System</span></div>
   <div id="clock">--:--</div>
+  <button class="gear" id="gear" title="Settings">⚙</button>
 </div>
 
 <main>
@@ -226,6 +255,13 @@
 </main>
 
 <div id="toast"></div>
+
+<div class="overlay hidden" id="settings">
+  <div class="set">
+    <div class="set-head"><span class="set-title">Settings</span><button class="set-x" id="set-x">✕</button></div>
+    <div class="set-body" id="set-body"></div>
+  </div>
+</div>
 
 <div class="overlay hidden" id="onboarding">
   <div class="ob">
@@ -397,7 +433,10 @@ function switchEngine(id) {
     .then(res => { if (res.jobId) trackEngineJob(res.jobId); else endSwitch(); })
     .catch(() => endSwitch());
 }
-function endSwitch() { engineSwitching = false; renderEngine(); }
+function endSwitch() {
+  engineSwitching = false; renderEngine();
+  if (!document.getElementById('settings').classList.contains('hidden')) renderSettings();
+}
 function trackEngineJob(jobId) {
   const es = new EventSource(`/api/jobs/${jobId}/events`); let ended = false;
   const fin = () => { if (ended) return; ended = true; es.close(); endSwitch(); };
@@ -469,6 +508,81 @@ function finishOnboarding(pendingId) {
   setTimeout(() => { ov.classList.add('hidden'); ov.classList.remove('out'); }, 360);
   if (pendingId) renderApps().then(() => installById(pendingId));
 }
+
+/* ---- settings ---- */
+function openSettings() { document.getElementById('settings').classList.remove('hidden'); renderSettings(); }
+function closeSettings() { document.getElementById('settings').classList.add('hidden'); }
+function settingsOpen() { return !document.getElementById('settings').classList.contains('hidden'); }
+
+async function renderSettings() {
+  let settings, catalog, engine;
+  try { [settings, catalog, engine] = await Promise.all([api('/api/settings'), api('/api/catalog'), api('/api/engine')]); }
+  catch { return; }
+  const enginePills = (engine.engines || []).map(e =>
+    `<button class="er-pill ${e.active ? 'on' : ''}" data-eng="${e.id}" ${e.active || engineSwitching ? 'disabled' : ''}>${e.name.replace(' Engine', '')}</button>`).join('');
+  const apps = catalog.filter(a => !a.service);
+  document.getElementById('set-body').innerHTML = `
+    <div class="set-section">
+      <h3>Cloudless AI</h3>
+      <div class="set-row"><span class="srow-label">Engine</span><div class="er-pills">${enginePills}</div></div>
+      <div class="set-row"><span class="srow-label">Model</span>
+        <div class="model-edit"><input id="set-model" value="${settings.model}" spellcheck="false" />
+        <button class="btn" id="set-model-apply">Apply</button></div></div>
+      <div class="set-hint">A Hugging Face model id. Applying restarts the engine and may download weights.</div>
+    </div>
+    <div class="set-section">
+      <h3>Apps</h3>
+      ${apps.map(a => `<div class="set-row"><span>${glyph(a.id)}&nbsp; ${a.name}</span>
+        <span class="row-actions">
+          <button class="btn" data-reset="${a.id}" ${a.image ? '' : 'disabled'}>Reset</button>
+          <button class="btn danger" data-uninstall="${a.id}" ${a.image ? '' : 'disabled'}>Uninstall</button>
+        </span></div>`).join('')}
+    </div>
+    <div class="set-section">
+      <h3>System</h3>
+      <div class="set-row"><span>Welcome tour</span><span class="row-actions"><button class="btn" id="set-replay">Replay</button></span></div>
+    </div>`;
+
+  document.querySelectorAll('#set-body .er-pill:not(.on)').forEach(b => b.onclick = () => { switchEngine(b.dataset.eng); toast('Switching engine…'); });
+  document.getElementById('set-model-apply').onclick = () => {
+    const m = document.getElementById('set-model').value.trim();
+    if (!m) return;
+    toast('Applying model… (may download)');
+    api('/api/settings/model', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: m }) })
+      .then(r => { if (r.jobId) trackJobToast(r.jobId, 'Model'); }).catch(() => toast('Failed', true));
+  };
+  document.querySelectorAll('#set-body button[data-reset]').forEach(b => b.onclick = () => {
+    const id = b.dataset.reset;
+    toast('Resetting ' + id + '…');
+    api(`/api/apps/${id}/reset`, { method: 'POST' }).then(r => { if (r.jobId) trackJobToast(r.jobId, 'Reset ' + id); }).catch(() => toast('Failed', true));
+  });
+  document.querySelectorAll('#set-body button[data-uninstall]').forEach(b => b.onclick = async () => {
+    const id = b.dataset.uninstall;
+    if (!confirm(`Uninstall ${id}? This removes its container and image.`)) return;
+    toast('Uninstalling ' + id + '…');
+    try { await api(`/api/apps/${id}/uninstall`, { method: 'POST' }); toast(id + ' uninstalled'); renderApps(); renderSettings(); }
+    catch { toast('Failed', true); }
+  });
+  document.getElementById('set-replay').onclick = () => {
+    api('/api/onboarding/reset', { method: 'POST' }).then(() => { closeSettings(); showOnboarding(); }).catch(() => toast('Failed', true));
+  };
+}
+
+function trackJobToast(jobId, label) {
+  const es = new EventSource(`/api/jobs/${jobId}/events`); let ended = false;
+  const fin = (ok) => { if (ended) return; ended = true; es.close(); toast(label + (ok ? ' done' : ' failed'), !ok); renderApps(); renderEngine(); if (settingsOpen()) renderSettings(); };
+  es.onmessage = e => {
+    const u = JSON.parse(e.data);
+    if (u.phase === 'error') return fin(false);
+    if (u.message) toast(label + ': ' + u.message);
+    if (u.done) fin(u.phase !== 'error');
+  };
+  es.onerror = () => fin(true);
+}
+
+document.getElementById('gear').onclick = openSettings;
+document.getElementById('set-x').onclick = closeSettings;
+document.getElementById('settings').addEventListener('click', e => { if (e.target.id === 'settings') closeSettings(); });
 
 /* ---- boot ---- */
 tickClock(); setInterval(tickClock, 1000);

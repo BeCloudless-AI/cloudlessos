@@ -68,6 +68,11 @@ removed via the API.
   Choice persists; exactly one engine runs; self-healing alias. Verified vLLM↔SGLang
   round-trip survives restart; completion works through the stable endpoint after a switch.
 
+- **Settings panel** (D18): gear → frosted sheet with Cloudless AI (engine switch +
+  editable model, applied by restarting the engine), Apps (per-app **Reset**/Uninstall —
+  the "fix a mistake" button), System (replay welcome). Runtime-configurable model
+  (`state.Model`). Verified: settings served, OpenClaw reset rebuilds + restarts cleanly.
+
 ## In progress
 
 - Nothing actively mid-change. Ready to pick the next Phase 0 increment.

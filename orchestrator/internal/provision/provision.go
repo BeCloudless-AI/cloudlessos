@@ -46,6 +46,7 @@ func Run(ctx context.Context, eng engine.Engine, st *state.Store, logf func(stri
 	if desired == "" {
 		desired = catalog.DefaultEngine()
 	}
+	model := st.Get().Model
 	// Stop any non-selected engine first, so the shared port/alias is free.
 	for _, e := range catalog.Engines() {
 		if e.ID == desired {
@@ -72,7 +73,7 @@ func Run(ctx context.Context, eng engine.Engine, st *state.Store, logf func(stri
 			logf(e.ID + ": active engine running")
 		} else {
 			_ = eng.Remove(ctx, e.ContainerName())
-			if _, err := eng.Run(ctx, e.Spec()); err != nil {
+			if _, err := eng.Run(ctx, catalog.EngineSpec(e, model)); err != nil {
 				logf(e.ID + ": start failed: " + err.Error())
 			} else {
 				logf(e.ID + ": started (active engine)")

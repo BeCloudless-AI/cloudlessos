@@ -358,6 +358,30 @@ OpenClaw/Hermes quality. Ties into the model-manager work.
 
 ---
 
+## D18 — Settings panel (config + reset)
+**Date:** 2026-06-20 · **Status:** Accepted
+
+A gear in the menu bar opens a frosted **Settings sheet** (macOS System-Settings style,
+reusing the overlay/card styling). Three sections:
+- **Cloudless AI** — engine switch pills + an editable **Model** field (HF id) with Apply,
+  which restarts the active engine on the new model. The model is runtime-configurable and
+  persisted (`state.Model`); engines get it via `catalog.EngineSpec(app, model)`, which
+  substitutes the chosen model for the default in the launch args (copying the slice so the
+  shared catalog command isn't mutated).
+- **Apps** — per-app **Reset** and **Uninstall**. Reset = remove container (+ image for
+  locally-built apps so the recipe rebuilds) then reinstall — the "I messed up OpenClaw, fix
+  it" button. Uninstall = remove container + image.
+- **System** — Replay the welcome tour (resets onboarding).
+
+Endpoints: `GET /api/settings`, `POST /api/settings/model`, `POST /api/apps/{id}/reset`
+(async job), `POST /api/apps/{id}/uninstall`, `POST /api/onboarding/reset`; engine gains
+`RemoveImage`. The switch path was refactored into `applyEngine` so model-change reuses it.
+
+**Verified:** settings served + `/api/settings` correct; onboarding reset works; resetting
+OpenClaw rebuilt and restarted it cleanly (`auth mode=none`, running).
+
+---
+
 ## Open questions (not yet decided)
 
 - **Open-source CloudlessOS?** Leaning yes (trust/community for a privacy brand, like

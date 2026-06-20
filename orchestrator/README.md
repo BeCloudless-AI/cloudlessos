@@ -53,6 +53,11 @@ The daemon binds `127.0.0.1:8765` by default (override with `CLOUDLESS_ADDR`).
 | POST   | /api/folders/{id}/open    | create if needed + open in file manager  |
 | GET    | /api/engine               | active inference engine + readiness      |
 | POST   | /api/engine/{id}          | switch engine (vllm/sglang); async job   |
+| GET    | /api/settings             | current model + default                  |
+| POST   | /api/settings/model       | set model + restart engine; async job    |
+| POST   | /api/apps/{id}/reset      | remove + (rebuild) + reinstall; async    |
+| POST   | /api/apps/{id}/uninstall  | remove container + image                 |
+| POST   | /api/onboarding/reset     | replay the welcome tour                  |
 
 First-run state is owned by the daemon (`internal/state`), persisted to a per-user JSON
 file (`CLOUDLESS_STATE_DIR` → `$XDG_STATE_HOME/cloudless` → `~/.local/state/cloudless`).

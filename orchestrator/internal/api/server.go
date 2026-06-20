@@ -48,6 +48,11 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/apps/{id}/start", s.start)
 	mux.HandleFunc("POST /api/apps/{id}/stop", s.stop)
 	mux.HandleFunc("POST /api/apps/{id}/remove", s.remove)
+	mux.HandleFunc("POST /api/apps/{id}/reset", s.appReset)
+	mux.HandleFunc("POST /api/apps/{id}/uninstall", s.appUninstall)
+	mux.HandleFunc("GET /api/settings", s.settingsGet)
+	mux.HandleFunc("POST /api/settings/model", s.settingsModel)
+	mux.HandleFunc("POST /api/onboarding/reset", s.onboardingReset)
 	mux.HandleFunc("GET /api/jobs/{id}", s.jobState)
 	mux.HandleFunc("GET /api/jobs/{id}/events", s.jobEvents)
 	mux.HandleFunc("GET /api/onboarding", s.onboardingGet)
@@ -154,9 +159,6 @@ func (s *Server) engineSwitch(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) runSwitch(job *jobs.Job, target catalog.App) {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
-	defer cancel()
-
 	// Already the active, ready engine? No-op.
 	check, ccancel := context.WithTimeout(context.Background(), 5*time.Second)
 	if s.activeEngine(check) == target.ID && engineReady(check) {
@@ -165,7 +167,16 @@ func (s *Server) runSwitch(job *jobs.Job, target catalog.App) {
 		return
 	}
 	ccancel()
+	s.applyEngine(job, target)
+}
 
+// applyEngine makes `target` the only running engine, with the current model and
+// the stable alias, then waits until it's serving. Used by switch + model change.
+func (s *Server) applyEngine(job *jobs.Job, target catalog.App) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+	defer cancel()
+
+	model := s.state.Get().Model
 	// Serialize with the startup provisioner so neither clobbers the other (D15).
 	provision.EngineMu.Lock()
 	_ = s.state.SetEngine(target.ID) // remember the choice across restarts
@@ -177,7 +188,7 @@ func (s *Server) runSwitch(job *jobs.Job, target catalog.App) {
 	}
 	job.Progress("switching", "Starting "+target.Name+" …", -1, -1)
 	_ = s.eng.Remove(ctx, target.ContainerName())
-	_, runErr := s.eng.Run(ctx, target.Spec())
+	_, runErr := s.eng.Run(ctx, catalog.EngineSpec(target, model))
 	provision.EngineMu.Unlock()
 	if runErr != nil {
 		job.Fail(runErr)
@@ -395,6 +406,88 @@ func countComplete(m map[string]bool) (done, total int) {
 		}
 	}
 	return done, total
+}
+
+// appReset wipes an app to a clean state: remove its container (and image, so a
+// build app rebuilds the recipe), then reinstall. Runs as an async job.
+func (s *Server) appReset(w http.ResponseWriter, r *http.Request) {
+	app, ok := catalog.Get(r.PathValue("id"))
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "unknown app"})
+		return
+	}
+	job := s.jobs.Create("reset:" + app.ID)
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+		defer cancel()
+		_ = s.eng.Remove(ctx, app.ContainerName())
+		if app.Build != "" { // force a fresh rebuild of locally-built apps
+			_ = s.eng.RemoveImage(ctx, app.Image)
+		}
+		s.runInstall(job, app)
+	}()
+	writeJSON(w, http.StatusAccepted, map[string]string{"jobId": job.ID, "app": app.ID})
+}
+
+// appUninstall removes an app's container and image.
+func (s *Server) appUninstall(w http.ResponseWriter, r *http.Request) {
+	app, ok := catalog.Get(r.PathValue("id"))
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "unknown app"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
+	defer cancel()
+	_ = s.eng.Remove(ctx, app.ContainerName())
+	_ = s.eng.RemoveImage(ctx, app.Image)
+	writeJSON(w, http.StatusOK, map[string]string{"status": "uninstalled"})
+}
+
+func (s *Server) settingsGet(w http.ResponseWriter, r *http.Request) {
+	st := s.state.Get()
+	model := st.Model
+	if model == "" {
+		model = catalog.DefaultModel()
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"model":        model,
+		"defaultModel": catalog.DefaultModel(),
+	})
+}
+
+// settingsModel sets the served model and restarts the active engine to apply it.
+func (s *Server) settingsModel(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Model string `json:"model"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad request"})
+		return
+	}
+	model := strings.TrimSpace(body.Model)
+	if model == catalog.DefaultModel() {
+		model = "" // store empty to mean "default"
+	}
+	_ = s.state.SetModel(model)
+
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	active := s.activeEngine(ctx)
+	cancel()
+	if active == "" {
+		active = catalog.DefaultEngine()
+	}
+	app, _ := catalog.Get(active)
+	job := s.jobs.Create("model:" + app.ID)
+	go s.applyEngine(job, app)
+	writeJSON(w, http.StatusAccepted, map[string]string{"jobId": job.ID})
+}
+
+func (s *Server) onboardingReset(w http.ResponseWriter, r *http.Request) {
+	if err := s.state.SetOnboarded(false); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "reset"})
 }
 
 func (s *Server) stop(w http.ResponseWriter, r *http.Request) {

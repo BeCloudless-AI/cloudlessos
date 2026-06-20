@@ -46,6 +46,8 @@ type Engine interface {
 	PullStream(ctx context.Context, image string, onLine func(string)) error
 	// Build builds an image from a local context dir, invoking onLine per output line.
 	Build(ctx context.Context, image, contextDir string, onLine func(string)) error
+	// RemoveImage force-removes an image (used by reset/uninstall).
+	RemoveImage(ctx context.Context, image string) error
 	// Run starts a detached container and returns its ID.
 	Run(ctx context.Context, spec RunSpec) (string, error)
 	// Stop stops a running container by name.

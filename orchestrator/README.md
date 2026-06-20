@@ -71,8 +71,12 @@ On startup the daemon provisions the bundled apps onto a shared `cloudless` dock
   Cloudless AI" button opens it.
 - **ComfyUI** (`cloudless-comfyui`) — image pinned but not yet validated on Blackwell.
 
-Ollama is kept as an optional, non-default engine (not auto-provisioned). Reset everything
-with `../scripts/reset-apps.sh`.
+- **SGLang** — alternative engine, **pre-fetched** (image pulled, ~41.6 GB) but not run by
+  default; switch to it instead of vLLM. (`Prefetch` apps are pulled, not started.)
+
+Ollama is kept as an optional, non-default engine (not auto-provisioned). **OpenClaw** and
+**Hermes** are AI agents shown in the launcher as "coming soon" — recipe pending (no
+official Docker image yet; see DECISIONS D13). Reset everything with `../scripts/reset-apps.sh`.
 
 ## Known Phase 0 limitations (intentional)
 

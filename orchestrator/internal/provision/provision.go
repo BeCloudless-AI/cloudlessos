@@ -25,7 +25,7 @@ func Run(ctx context.Context, eng engine.Engine, logf func(string)) {
 		logf("network " + Network + " ready")
 	}
 
-	for _, app := range catalog.Preinstalled() {
+	for _, app := range catalog.Bundled() {
 		if c, _ := eng.Find(ctx, app.ContainerName()); c != nil && c.State == "running" {
 			logf(app.ID + ": already running")
 			if app.Network != "" { // ensure reachable by name even if started earlier
@@ -38,6 +38,10 @@ func Run(ctx context.Context, eng engine.Engine, logf func(string)) {
 		logf(app.ID + ": pulling " + app.Image + " …")
 		if err := eng.Pull(ctx, app.Image); err != nil {
 			logf(app.ID + ": pull failed: " + err.Error())
+			continue
+		}
+		if !app.Preinstall { // prefetch-only: image is ready, don't start it
+			logf(app.ID + ": fetched (ready to start)")
 			continue
 		}
 		_ = eng.Remove(ctx, app.ContainerName()) // clear any stale stopped container

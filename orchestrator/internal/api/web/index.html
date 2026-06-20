@@ -227,11 +227,13 @@
 
 <script>
 const api = (p, o) => fetch(p, o).then(r => r.json());
-const GLYPH = { ollama: '🦙', 'open-webui': '💬', comfyui: '🎨' };
+const GLYPH = { ollama: '🦙', 'open-webui': '💬', comfyui: '🎨', openclaw: '🦞', hermes: '🪽' };
 const TILE_BG = {
   ollama: 'linear-gradient(135deg,#ffd27a,#ff9e63)',
   'open-webui': 'linear-gradient(135deg,#74b4ff,#4f8bff)',
   comfyui: 'linear-gradient(135deg,#c79bff,#ff96d0)',
+  openclaw: 'linear-gradient(135deg,#ff8e72,#e8533a)',
+  hermes: 'linear-gradient(135deg,#9be7c4,#34b3a0)',
 };
 const PLACE_ICON = { models: '📦', outputs: '🖼️', workspace: '🗂️', downloads: '⬇️' };
 const glyph = id => GLYPH[id] || '⚙️';

@@ -32,7 +32,8 @@ type App struct {
 	OpenPath    string            `json:"openPath"`   // URL path to open once running
 	MinVRAMGB   int               `json:"minVramGB"`  // rough VRAM floor for usefulness
 	Verified    bool              `json:"verified"`   // recipe validated on Cloudless dev hardware
-	Preinstall  bool              `json:"preinstall"` // provisioned automatically on first boot
+	Preinstall  bool              `json:"preinstall"` // pulled AND run automatically on first boot
+	Prefetch    bool              `json:"-"`          // image pulled on boot but not run (ready alternative)
 	Service     bool              `json:"service"`    // infrastructure (engine), hidden from the launcher
 	Network     string            `json:"-"`          // docker network to join (for inter-app DNS)
 	Command     []string          `json:"-"`          // container command/args
@@ -64,11 +65,12 @@ func (a App) Spec() engine.RunSpec {
 	}
 }
 
-// Preinstalled returns the apps that should be provisioned on first boot.
-func Preinstalled() []App {
+// Bundled returns apps whose images should be present on boot: Preinstall apps
+// are also started; Prefetch apps are pulled only (ready to start on demand).
+func Bundled() []App {
 	var out []App
 	for _, a := range apps {
-		if a.Preinstall && a.Image != "" {
+		if (a.Preinstall || a.Prefetch) && a.Image != "" {
 			out = append(out, a)
 		}
 	}
@@ -107,6 +109,31 @@ var apps = []App{
 		Network:    cloudlessNet,
 	},
 	{
+		// Alternative engine (D13): pre-fetched (image ready) but not run by
+		// default — switch to it instead of vLLM. RadixAttention; OpenAI-compatible.
+		// Entrypoint is the NVIDIA wrapper, so the launch command is passed as args.
+		ID:          "sglang",
+		Name:        "SGLang Engine",
+		Description: "Alternative high-performance inference engine (OpenAI-compatible).",
+		Image:       "lmsysorg/sglang:latest",
+		Ports:       map[int]int{30000: 30000},
+		Command: []string{
+			"python3", "-m", "sglang.launch_server",
+			"--model-path", defaultLLM,
+			"--served-model-name", "cloudless",
+			"--host", "0.0.0.0", "--port", "30000",
+			"--mem-fraction-static", "0.5",
+		},
+		Volumes:   map[string]string{"cloudless-hf": "/root/.cache/huggingface"},
+		GPUs:      "all",
+		OpenPath:  "/",
+		MinVRAMGB: 6,
+		Verified:  false,
+		Prefetch:  true,
+		Service:   true,
+		Network:   cloudlessNet,
+	},
+	{
 		ID:          "open-webui",
 		Name:        "Open WebUI",
 		Description: "Chat with your local LLMs — the face of Cloudless AI.",
@@ -139,6 +166,31 @@ var apps = []App{
 		Verified:   false,
 		Preinstall: true,
 		Network:    cloudlessNet,
+	},
+	{
+		// Agent (D13). No official Docker image yet (installer/desktop-based), so
+		// the recipe is pending; when added it will be pre-configured to use
+		// Cloudless AI at http://cloudless-vllm:8000/v1 (OpenAI-compatible).
+		ID:          "openclaw",
+		Name:        "OpenClaw",
+		Description: "Open-source personal AI agent that takes actions on your machine. Pre-wired to Cloudless AI.",
+		Image:       "", // recipe pending — see D13
+		OpenPath:    "/",
+		MinVRAMGB:   0,
+		Verified:    false,
+		Network:     cloudlessNet,
+	},
+	{
+		// Agent (D13). Nous Research Hermes; installer/desktop-based, recipe pending.
+		// Will be pre-configured to use Cloudless AI (OpenAI-compatible base URL).
+		ID:          "hermes",
+		Name:        "Hermes",
+		Description: "Nous Research self-improving agent with persistent memory. Pre-wired to Cloudless AI.",
+		Image:       "", // recipe pending — see D13
+		OpenPath:    "/",
+		MinVRAMGB:   0,
+		Verified:    false,
+		Network:     cloudlessNet,
 	},
 	{
 		// Kept as an optional alternative engine, not the default (see D12).

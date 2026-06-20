@@ -48,6 +48,11 @@ removed via the API.
   vLLM's OpenAI API; Ollama demoted to optional. **Validated on Blackwell** — vLLM 0.23.0
   on the RTX 5090 served Qwen2.5-1.5B and returned a completion; Open WebUI lists the
   `cloudless` model over the network.
+- **SGLang alternative engine** (D13): pre-fetched (image ready, ~41.6 GB) but not run by
+  default — switch to it instead of vLLM. New `Prefetch` provisioning mode. Verified:
+  provisioner fetches it without starting it.
+- **OpenClaw + Hermes** (D13): added as recipe-pending agent apps (no official Docker
+  image; installer/desktop-based). Shown as "coming soon"; pending a packaging decision.
 
 ## In progress
 
@@ -58,8 +63,10 @@ removed via the API.
 1. **Validate ComfyUI on Blackwell (RTX 50xx)** — current image (mmartial/...) is pinned
    but unverified on sm_120; confirm or swap for a CUDA 12.8+/PyTorch-Blackwell build.
    (vLLM is already validated on Blackwell — D12.)
-2. **Model manager / engine UI** — pick/switch the vLLM model (one per instance today),
-   show "fits your VRAM", and optionally offer llama.cpp as a second engine for low-VRAM.
+2. **Engine-switching UI** — switch between vLLM and the pre-fetched SGLang (stop one,
+   start the other; repoint Open WebUI), plus model pick + "fits your VRAM".
+3. **OpenClaw / Hermes recipes** — decide packaging (custom Dockerfile wrapping their
+   installers vs host install) and pre-configure them to Cloudless AI (D13).
 3. **State persistence for apps/jobs** — beyond `docker ps` + in-memory, likely extending
    `internal/state` (onboarding state already lives there, D8).
 

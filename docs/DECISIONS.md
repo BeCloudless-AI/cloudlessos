@@ -210,6 +210,32 @@ llama.cpp remains the better fit and is a candidate second engine.
 
 ---
 
+## D13 — SGLang as a pre-fetched alternative engine; OpenClaw/Hermes agents pending
+**Date:** 2026-06-20 · **Status:** Accepted (SGLang) / Pending recipe (agents)
+
+**SGLang** (`lmsysorg/sglang:latest`) is added as an alternative inference engine. It's
+**pre-fetched** (image pulled on boot) but **not run by default** — running two engines
+would contend for VRAM, so it's "installed and ready to switch to" rather than active. New
+`Prefetch` flag + `catalog.Bundled()`: Preinstall apps are pulled *and* run; Prefetch apps
+are pulled only. Launch command passes the model positionally via `--model-path` (image
+entrypoint is the NVIDIA wrapper), OpenAI-compatible on `:30000`. **Note:** the SGLang
+image is ~41.6 GB — a meaningful disk cost to pre-install; revisit a slimmer tag.
+
+**OpenClaw and Hermes** are AI *agents* (OpenClaw: local agent gateway that actions your
+machine; Hermes: Nous Research self-improving agent). Both connect to an OpenAI-compatible
+LLM, so wiring them to Cloudless AI (`http://cloudless-vllm:8000/v1`) is just a base-URL
+setting. **But neither ships an official Docker image** — they're installer/desktop-based
+(OpenClaw `curl install.sh` / repo `moltbot/moltbot`; Hermes curl installer + desktop GUI,
+config in `~/.hermes/config.yaml`), and exact config keys aren't documented in sources
+found. They're added as **recipe-pending** catalog entries (`Image:""`, shown as "coming
+soon" in the launcher) rather than shipping guessed/broken containers.
+
+**Open decision:** how to package the agents — (a) custom Dockerfiles that run their
+installers and bake in the Cloudless AI config, or (b) host-level install (they're really
+desktop/host apps). Needs validated image + config keys before implementing.
+
+---
+
 ## Open questions (not yet decided)
 
 - **Open-source CloudlessOS?** Leaning yes (trust/community for a privacy brand, like

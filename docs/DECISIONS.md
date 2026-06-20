@@ -211,7 +211,7 @@ llama.cpp remains the better fit and is a candidate second engine.
 ---
 
 ## D13 — SGLang as a pre-fetched alternative engine; OpenClaw/Hermes agents pending
-**Date:** 2026-06-20 · **Status:** Accepted (SGLang) / Pending recipe (agents)
+**Date:** 2026-06-20 · **Status:** Accepted (SGLang); agents now implemented in D14
 
 **SGLang** (`lmsysorg/sglang:latest`) is added as an alternative inference engine. It's
 **pre-fetched** (image pulled on boot) but **not run by default** — running two engines
@@ -233,6 +233,34 @@ soon" in the launcher) rather than shipping guessed/broken containers.
 **Open decision:** how to package the agents — (a) custom Dockerfiles that run their
 installers and bake in the Cloudless AI config, or (b) host-level install (they're really
 desktop/host apps). Needs validated image + config keys before implementing.
+
+---
+
+## D14 — Agent apps are built locally from embedded Dockerfiles, pre-wired to Cloudless AI
+**Date:** 2026-06-20 · **Status:** Accepted
+
+OpenClaw and Hermes have no upstream Docker images, so Cloudless **builds them locally**.
+`internal/apps/<name>/` holds an embedded Dockerfile + baked config (go:embed); the engine
+gains `Build(image, contextDir)` and `apps.Materialize` writes the embedded context to a
+temp dir; catalog apps with a `Build` field are **built instead of pulled** by the install
+flow (new job phase `building`). On first install the launcher builds, then runs.
+
+- **OpenClaw** (`node:24-slim` + `npm i -g openclaw`): baked `~/.openclaw/openclaw.json`
+  declares a `custom` provider → `http://cloudless-vllm:8000/v1`, model `custom/cloudless`,
+  `gateway.mode=local`, and `OPENCLAW_GATEWAY_TOKEN` (gateway refuses 0.0.0.0 without auth).
+  Provider `models` must be an array of objects (`[{id,name}]`). Runs the gateway on `:18789`.
+- **Hermes** (`debian` + official curl installer; needs `xz-utils` for its Node download):
+  baked `~/.hermes/config.yaml` (`provider: custom`, `base_url: …vllm…/v1`) + `.env`
+  `OPENAI_API_KEY`. Runs `hermes gateway run` (foreground; `start` needs systemd).
+
+**Verified:** both images build and run; OpenClaw logs `agent model: custom/cloudless`.
+The daemon install path (build from the *embedded* context via `POST /api/apps/openclaw/start`)
+brings the container up wired to Cloudless AI.
+
+**Caveats:** the LLM backend is pre-wired, but each agent still needs user-specific setup
+to be fully useful (OpenClaw: connect messaging platforms; Hermes: user allowlists /
+platforms). Config schemas were reverse-engineered from docs + iterated against the real
+binaries, so they may need updates as these fast-moving tools change.
 
 ---
 

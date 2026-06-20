@@ -41,6 +41,8 @@ type Engine interface {
 	Pull(ctx context.Context, image string) error
 	// PullStream fetches an image, invoking onLine for each line of pull output.
 	PullStream(ctx context.Context, image string, onLine func(string)) error
+	// Build builds an image from a local context dir, invoking onLine per output line.
+	Build(ctx context.Context, image, contextDir string, onLine func(string)) error
 	// Run starts a detached container and returns its ID.
 	Run(ctx context.Context, spec RunSpec) (string, error)
 	// Stop stops a running container by name.

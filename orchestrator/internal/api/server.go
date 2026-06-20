@@ -9,9 +9,11 @@ import (
 	"io/fs"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
+	"github.com/cloudless/orchestrator/internal/apps"
 	"github.com/cloudless/orchestrator/internal/catalog"
 	"github.com/cloudless/orchestrator/internal/engine"
 	"github.com/cloudless/orchestrator/internal/hardware"
@@ -168,30 +170,47 @@ func (s *Server) runInstall(job *jobs.Job, app catalog.App) {
 	defer cancel()
 
 	_ = s.eng.Remove(ctx, app.ContainerName()) // clear any stale container
-	job.Progress("pulling", "Pulling image…", 0, 0)
 
-	layers := map[string]bool{} // layer id -> complete
-	err := s.eng.PullStream(ctx, app.Image, func(line string) {
-		id, status, ok := splitStatus(line)
-		switch {
-		case ok && strings.HasPrefix(status, "Pulling fs layer"):
-			if _, seen := layers[id]; !seen {
-				layers[id] = false
-			}
-		case ok && (status == "Pull complete" || status == "Already exists"):
-			layers[id] = true
-		case strings.HasPrefix(line, "Status:"):
-			job.Progress("pulling", line, -1, -1)
-			return
-		default:
+	if app.Build != "" {
+		// Locally-built image (no upstream): materialize the embedded context and build.
+		job.Progress("building", "Building "+app.Name+" …", -1, -1)
+		dir, err := apps.Materialize(app.Build)
+		if err != nil {
+			job.Fail(err)
 			return
 		}
-		done, total := countComplete(layers)
-		job.Progress("pulling", fmt.Sprintf("Downloading layers %d/%d", done, total), done, total)
-	})
-	if err != nil {
-		job.Fail(err)
-		return
+		defer os.RemoveAll(dir)
+		if err := s.eng.Build(ctx, app.Image, dir, func(l string) {
+			log.Printf("[build %s] %s", app.ID, l)
+		}); err != nil {
+			job.Fail(err)
+			return
+		}
+	} else {
+		job.Progress("pulling", "Pulling image…", 0, 0)
+		layers := map[string]bool{} // layer id -> complete
+		err := s.eng.PullStream(ctx, app.Image, func(line string) {
+			id, status, ok := splitStatus(line)
+			switch {
+			case ok && strings.HasPrefix(status, "Pulling fs layer"):
+				if _, seen := layers[id]; !seen {
+					layers[id] = false
+				}
+			case ok && (status == "Pull complete" || status == "Already exists"):
+				layers[id] = true
+			case strings.HasPrefix(line, "Status:"):
+				job.Progress("pulling", line, -1, -1)
+				return
+			default:
+				return
+			}
+			done, total := countComplete(layers)
+			job.Progress("pulling", fmt.Sprintf("Downloading layers %d/%d", done, total), done, total)
+		})
+		if err != nil {
+			job.Fail(err)
+			return
+		}
 	}
 
 	job.Progress("starting", "Starting container…", -1, -1)

@@ -14,6 +14,7 @@ internal/jobs/       async install jobs + progress fan-out (SSE)
 internal/hardware/   host GPU stats via nvidia-smi
 internal/places/     well-known folders + open-in-file-manager
 internal/provision/  pre-install bundled apps on startup (shared network + default model)
+internal/apps/       embedded Dockerfiles for locally-built apps (OpenClaw, Hermes)
 internal/state/      per-user persisted state (first-run/onboarding)
 internal/api/        local HTTP API + embedded web UI (internal/api/web/)
                      web/vendor/ holds offline-vendored Three.js + Red Hat Mono
@@ -75,8 +76,9 @@ On startup the daemon provisions the bundled apps onto a shared `cloudless` dock
   default; switch to it instead of vLLM. (`Prefetch` apps are pulled, not started.)
 
 Ollama is kept as an optional, non-default engine (not auto-provisioned). **OpenClaw** and
-**Hermes** are AI agents shown in the launcher as "coming soon" — recipe pending (no
-official Docker image yet; see DECISIONS D13). Reset everything with `../scripts/reset-apps.sh`.
+**Hermes** are AI agents with no upstream image, so they're **built locally** from embedded
+Dockerfiles (`internal/apps/`) on first install and pre-wired to Cloudless AI (D14). Reset
+everything with `../scripts/reset-apps.sh`.
 
 ## Known Phase 0 limitations (intentional)
 

@@ -38,6 +38,7 @@ type App struct {
 	Network     string            `json:"-"`          // docker network to join (for inter-app DNS)
 	Command     []string          `json:"-"`          // container command/args
 	Volumes     map[string]string `json:"-"`          // host-or-named-volume -> containerPath
+	Build       string            `json:"-"`          // embedded build-context name (build instead of pull)
 }
 
 // ContainerName is the orchestrator-managed container name for this app.
@@ -168,25 +169,31 @@ var apps = []App{
 		Network:    cloudlessNet,
 	},
 	{
-		// Agent (D13). No official Docker image yet (installer/desktop-based), so
-		// the recipe is pending; when added it will be pre-configured to use
-		// Cloudless AI at http://cloudless-vllm:8000/v1 (OpenAI-compatible).
+		// Agent (D13/D14). No upstream image; built locally from an embedded
+		// Dockerfile (internal/apps/openclaw) that npm-installs OpenClaw and bakes
+		// in the Cloudless AI provider config.
 		ID:          "openclaw",
 		Name:        "OpenClaw",
 		Description: "Open-source personal AI agent that takes actions on your machine. Pre-wired to Cloudless AI.",
-		Image:       "", // recipe pending — see D13
+		Image:       "cloudless/openclaw:local",
+		Build:       "openclaw",
+		Ports:       map[int]int{18789: 18789},
+		Env:         map[string]string{"CUSTOM_API_KEY": "cloudless"},
 		OpenPath:    "/",
 		MinVRAMGB:   0,
 		Verified:    false,
 		Network:     cloudlessNet,
 	},
 	{
-		// Agent (D13). Nous Research Hermes; installer/desktop-based, recipe pending.
-		// Will be pre-configured to use Cloudless AI (OpenAI-compatible base URL).
+		// Agent (D13/D14). Built locally from an embedded Dockerfile
+		// (internal/apps/hermes) that runs the Hermes installer and bakes in the
+		// Cloudless AI endpoint config. Installer-in-container is unverified.
 		ID:          "hermes",
 		Name:        "Hermes",
 		Description: "Nous Research self-improving agent with persistent memory. Pre-wired to Cloudless AI.",
-		Image:       "", // recipe pending — see D13
+		Image:       "cloudless/hermes:local",
+		Build:       "hermes",
+		Env:         map[string]string{"OPENAI_API_KEY": "cloudless"},
 		OpenPath:    "/",
 		MinVRAMGB:   0,
 		Verified:    false,

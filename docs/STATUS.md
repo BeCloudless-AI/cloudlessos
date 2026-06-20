@@ -51,8 +51,10 @@ removed via the API.
 - **SGLang alternative engine** (D13): pre-fetched (image ready, ~41.6 GB) but not run by
   default — switch to it instead of vLLM. New `Prefetch` provisioning mode. Verified:
   provisioner fetches it without starting it.
-- **OpenClaw + Hermes** (D13): added as recipe-pending agent apps (no official Docker
-  image; installer/desktop-based). Shown as "coming soon"; pending a packaging decision.
+- **OpenClaw + Hermes agents** (D14): no upstream image, so **built locally** from embedded
+  Dockerfiles (new `apps` package + `engine.Build` + `building` install phase) and
+  pre-wired to Cloudless AI. Verified: both build and run; OpenClaw logs
+  `agent model: custom/cloudless`; daemon build-and-install path works via the API.
 
 ## In progress
 
@@ -65,8 +67,8 @@ removed via the API.
    (vLLM is already validated on Blackwell — D12.)
 2. **Engine-switching UI** — switch between vLLM and the pre-fetched SGLang (stop one,
    start the other; repoint Open WebUI), plus model pick + "fits your VRAM".
-3. **OpenClaw / Hermes recipes** — decide packaging (custom Dockerfile wrapping their
-   installers vs host install) and pre-configure them to Cloudless AI (D13).
+3. **Agent UX polish** — OpenClaw/Hermes install + run pre-wired (D14); next is exposing
+   their UIs/setup (messaging platforms, allowlists) cleanly in the launcher.
 3. **State persistence for apps/jobs** — beyond `docker ps` + in-memory, likely extending
    `internal/state` (onboarding state already lives there, D8).
 

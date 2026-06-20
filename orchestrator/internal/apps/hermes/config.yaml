@@ -1,0 +1,4 @@
+model:
+  provider: custom
+  model: "cloudless"
+  base_url: "http://cloudless-vllm:8000/v1"

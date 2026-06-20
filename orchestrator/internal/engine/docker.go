@@ -106,6 +106,35 @@ func (d *Docker) PullStream(ctx context.Context, image string, onLine func(strin
 	return nil
 }
 
+// Build runs `docker build -t image contextDir`, streaming output to onLine.
+func (d *Docker) Build(ctx context.Context, image, contextDir string, onLine func(string)) error {
+	cmd := exec.CommandContext(ctx, d.bin, "build", "-t", image, contextDir)
+	pr, pw := io.Pipe()
+	cmd.Stdout = pw
+	cmd.Stderr = pw
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("build %s: %w", image, err)
+	}
+	done := make(chan error, 1)
+	go func() {
+		err := cmd.Wait()
+		_ = pw.Close()
+		done <- err
+	}()
+
+	sc := bufio.NewScanner(pr)
+	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	for sc.Scan() {
+		if line := strings.TrimSpace(sc.Text()); line != "" && onLine != nil {
+			onLine(line)
+		}
+	}
+	if err := <-done; err != nil {
+		return fmt.Errorf("build %s: %w", image, err)
+	}
+	return nil
+}
+
 func (d *Docker) Run(ctx context.Context, spec RunSpec) (string, error) {
 	args := []string{"run", "-d", "--name", spec.Name, "--restart", "unless-stopped"}
 	if spec.GPUs != "" {

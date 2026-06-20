@@ -337,6 +337,7 @@ function trackJob(jobId, tile) {
   const done = r => { if (ended) return; ended = true; es.close(); installing--; if (r) renderApps(); else tile.classList.remove('busy'); };
   es.onmessage = e => { const u = JSON.parse(e.data);
     if (u.phase === 'pulling') meta.textContent = u.layersTotal > 0 ? `Downloading ${u.layersDone}/${u.layersTotal}` : 'Preparing…';
+    else if (u.phase === 'building') meta.textContent = 'Building…';
     else if (u.phase === 'starting') meta.textContent = 'Starting…';
     else if (u.phase === 'error') { meta.textContent = 'Failed'; toast('Install failed: ' + (u.error || 'error'), true); return done(false); }
     if (u.done) done(u.phase === 'running');

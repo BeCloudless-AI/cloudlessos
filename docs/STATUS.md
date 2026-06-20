@@ -55,6 +55,9 @@ removed via the API.
   Dockerfiles (new `apps` package + `engine.Build` + `building` install phase) and
   pre-wired to Cloudless AI. Verified: both build and run; OpenClaw logs
   `agent model: custom/cloudless`; daemon build-and-install path works via the API.
+- **OpenClaw plug-and-play** (D16): no auth wall — gateway runs `--auth none --bind loopback`
+  under host networking (reachable at `localhost:18789`, nothing to enter), reaching the
+  active engine via host `127.0.0.1:8000`. Engine gained `host` networking support. Verified.
 - **Smooth engine switching** (D15): all clients use one stable endpoint
   `http://cloudless-ai:8000/v1`; the active engine owns the `cloudless-ai` alias on fixed
   port 8000, serving model id `cloudless`. `GET/POST /api/engine`; engine pills in the UI.

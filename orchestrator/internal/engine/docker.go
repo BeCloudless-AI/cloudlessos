@@ -156,12 +156,15 @@ func (d *Docker) Run(ctx context.Context, spec RunSpec) (string, error) {
 	}
 	if spec.Network != "" {
 		args = append(args, "--network", spec.Network)
-		if spec.NetworkAlias != "" {
+		if spec.Network != "host" && spec.NetworkAlias != "" {
 			args = append(args, "--network-alias", spec.NetworkAlias)
 		}
 	}
-	for host, cont := range spec.Ports {
-		args = append(args, "-p", fmt.Sprintf("127.0.0.1:%d:%d", host, cont))
+	// Host networking binds host ports directly; -p is invalid there.
+	if spec.Network != "host" {
+		for host, cont := range spec.Ports {
+			args = append(args, "-p", fmt.Sprintf("127.0.0.1:%d:%d", host, cont))
+		}
 	}
 	for k, v := range spec.Env {
 		args = append(args, "-e", fmt.Sprintf("%s=%s", k, v))

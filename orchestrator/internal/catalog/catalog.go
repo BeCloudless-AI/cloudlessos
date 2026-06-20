@@ -222,12 +222,14 @@ var apps = []App{
 		Description: "Open-source personal AI agent that takes actions on your machine. Pre-wired to Cloudless AI.",
 		Image:       "cloudless/openclaw:local",
 		Build:       "openclaw",
-		Ports:       map[int]int{18789: 18789},
+		Ports:       map[int]int{18789: 18789}, // for the UI link; host networking binds it directly
 		Env:         map[string]string{"CUSTOM_API_KEY": "cloudless"},
 		OpenPath:    "/",
 		MinVRAMGB:   0,
 		Verified:    false,
-		Network:     cloudlessNet,
+		// Host networking: the gateway binds host 127.0.0.1 so it can run with no
+		// auth, and reaches the active engine via the host-published :8000 (D16).
+		Network: "host",
 	},
 	{
 		// Agent (D13/D14). Built locally from an embedded Dockerfile

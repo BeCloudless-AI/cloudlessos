@@ -302,6 +302,32 @@ engine uses all GPUs (today both engines default to one GPU). Not yet built; val
 
 ---
 
+## D16 — OpenClaw is plug-and-play: no auth, host networking
+**Date:** 2026-06-20 · **Status:** Accepted
+
+**Problem:** OpenClaw's gateway **refuses to bind `0.0.0.0` without auth**, so on a normal
+container (`-p 127.0.0.1:18789`) it demanded a gateway token/password — an auth wall, not
+plug-and-play.
+
+**Solution:** run the gateway `--auth none --bind loopback` under **host networking**. The
+no-auth guard only blocks *non-loopback* binds, so a loopback bind is accepted with no auth;
+host networking puts that `127.0.0.1:18789` on the **host's** loopback, reachable by the
+browser with nothing to enter. With host networking it reaches the active engine via the
+host-published `127.0.0.1:8000` (which already follows engine switches, D15), so OpenClaw's
+baked `baseUrl` is `http://127.0.0.1:8000/v1`. The engine gained host-networking support
+(`Network:"host"` → `--network host`, skip `-p` and the alias).
+
+**Why no auth is fine:** it's a local single-user appliance only ever published to
+localhost — same stance as Open WebUI (`WEBUI_AUTH=False`) and vLLM (no api-key).
+
+**Verified:** gateway logs `auth mode=none` (no "Refusing"), `agent model: custom/cloudless`,
+reachable at `localhost:18789`; the daemon build-and-install path brings it up the same way.
+
+**Follow-up:** review Hermes for a similar wall (it starts without blocking, but its
+UI/access may want the same no-auth pass).
+
+---
+
 ## Open questions (not yet decided)
 
 - **Open-source CloudlessOS?** Leaning yes (trust/community for a privacy brand, like

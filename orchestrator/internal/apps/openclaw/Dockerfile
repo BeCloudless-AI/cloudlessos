@@ -10,8 +10,9 @@ COPY openclaw.json /root/.openclaw/openclaw.json
 
 # Referenced as ${CUSTOM_API_KEY} in the config; vLLM ignores the value.
 ENV CUSTOM_API_KEY=cloudless
-# In a container the gateway binds 0.0.0.0 and requires auth; set a default token.
-ENV OPENCLAW_GATEWAY_TOKEN=cloudless
 
 EXPOSE 18789
-CMD ["openclaw", "gateway", "--port", "18789"]
+# Local single-user appliance, run with host networking: bind the gateway to
+# loopback (so it accepts --auth none — the 0.0.0.0 guard only blocks no-auth on
+# non-loopback) at the host's 127.0.0.1:18789. Plug-and-play: nothing to enter.
+CMD ["openclaw", "gateway", "run", "--auth", "none", "--bind", "loopback", "--port", "18789"]

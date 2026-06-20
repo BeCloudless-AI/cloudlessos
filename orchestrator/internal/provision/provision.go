@@ -6,6 +6,7 @@ package provision
 
 import (
 	"context"
+	"sync"
 
 	"github.com/cloudless/orchestrator/internal/catalog"
 	"github.com/cloudless/orchestrator/internal/engine"
@@ -14,6 +15,10 @@ import (
 
 // Network is the shared docker network for inter-app DNS.
 const Network = "cloudless"
+
+// EngineMu serializes engine start/stop between the startup provisioner and the
+// engine-switch API so they can't clobber each other (D15).
+var EngineMu sync.Mutex
 
 // Run provisions the bundled apps. Both engine images are pulled (so either is
 // ready), but only the selected engine runs (others are stopped) — exactly one
@@ -26,18 +31,23 @@ func Run(ctx context.Context, eng engine.Engine, st *state.Store, logf func(stri
 		logf("network " + Network + " ready")
 	}
 
-	// Engines: pull all images (either is ready), but run only the selected one.
-	desired := st.Get().Engine
-	if desired == "" {
-		desired = catalog.DefaultEngine()
-	}
-	// Pass 1: pull every engine image and STOP any non-selected one first, so the
-	// shared port/alias is free before we start the selected engine.
+	// Engines: pull all images (either is ready); the slow pulls need no lock.
 	for _, e := range catalog.Engines() {
 		logf(e.ID + ": pulling " + e.Image + " …")
 		if err := eng.Pull(ctx, e.Image); err != nil {
 			logf(e.ID + ": pull failed: " + err.Error())
 		}
+	}
+
+	// Start/stop under the lock and re-read the desired engine inside it, so a
+	// concurrent switch (which sets it + holds the same lock) isn't clobbered.
+	EngineMu.Lock()
+	desired := st.Get().Engine
+	if desired == "" {
+		desired = catalog.DefaultEngine()
+	}
+	// Stop any non-selected engine first, so the shared port/alias is free.
+	for _, e := range catalog.Engines() {
 		if e.ID == desired {
 			continue
 		}
@@ -48,7 +58,7 @@ func Run(ctx context.Context, eng engine.Engine, st *state.Store, logf func(stri
 			logf(e.ID + ": ready (inactive)")
 		}
 	}
-	// Pass 2: ensure the selected engine is running with the stable alias.
+	// Ensure the selected engine is running with the stable alias.
 	for _, e := range catalog.Engines() {
 		if e.ID != desired {
 			continue
@@ -69,6 +79,7 @@ func Run(ctx context.Context, eng engine.Engine, st *state.Store, logf func(stri
 			}
 		}
 	}
+	EngineMu.Unlock()
 
 	// Non-engine bundled apps (Open WebUI, ComfyUI): pull and run.
 	for _, app := range catalog.Bundled() {

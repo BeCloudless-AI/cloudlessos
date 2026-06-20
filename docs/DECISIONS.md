@@ -328,6 +328,30 @@ UI/access may want the same no-auth pass).
 
 ---
 
+## D17 — Engines run with tool calling enabled (agents need it)
+**Date:** 2026-06-20 · **Status:** Accepted
+
+**Problem:** OpenClaw (an agent) sends `tools` + `tool_choice: auto`, and vLLM/SGLang
+rejected it ("provider rejected the request schema or tool payload" → vLLM:
+`"auto" tool choice requires --enable-auto-tool-choice and --tool-call-parser`). Agents are
+unusable without tool calling.
+
+**Fix:** launch both engines with the tool-call parser for the served model (Qwen2.5):
+- vLLM: `--enable-auto-tool-choice --tool-call-parser hermes`
+- SGLang: `--tool-call-parser qwen25`
+(Both parser values verified valid for this Qwen2.5 model.) **Verified:** both engines now
+return a valid `tool_calls` response (`get_weather({"location":"Paris"})`).
+
+**Also fixed (found while verifying):** a **provisioner↔switch race** — an engine switch
+fired during first-boot provisioning could be clobbered by the provisioner's stale "desired"
+read (it would stop the just-started engine). Now both serialize on `provision.EngineMu` and
+the provisioner re-reads the desired engine under the lock. Keeps switching smooth (D15).
+
+**Note:** a 1.5B model does tool calling but is weak at agentic work; a stronger default
+model would improve OpenClaw/Hermes quality (ties into the model-manager work).
+
+---
+
 ## Open questions (not yet decided)
 
 - **Open-source CloudlessOS?** Leaning yes (trust/community for a privacy brand, like

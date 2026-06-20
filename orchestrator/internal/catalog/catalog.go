@@ -137,11 +137,14 @@ var apps = []App{
 		Image:       "vllm/vllm-openai:latest",
 		Ports:       map[int]int{8000: 8000},
 		// Image entrypoint is `vllm serve`; the model is the positional arg.
+		// Tool calling enabled (agents like OpenClaw send tools); Qwen2.5 -> hermes parser.
 		Command: []string{
 			defaultLLM,
 			"--served-model-name", "cloudless",
 			"--gpu-memory-utilization", "0.5",
 			"--max-model-len", "8192",
+			"--enable-auto-tool-choice",
+			"--tool-call-parser", "hermes",
 		},
 		Volumes:    map[string]string{"cloudless-hf": "/root/.cache/huggingface"}, // persist model cache
 		GPUs:       "all",
@@ -168,6 +171,7 @@ var apps = []App{
 			"--served-model-name", "cloudless",
 			"--host", "0.0.0.0", "--port", "8000",
 			"--mem-fraction-static", "0.5",
+			"--tool-call-parser", "qwen25", // agents need tool calling
 		},
 		Volumes:   map[string]string{"cloudless-hf": "/root/.cache/huggingface"},
 		GPUs:      "all",

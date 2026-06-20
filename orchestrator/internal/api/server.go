@@ -19,6 +19,7 @@ import (
 	"github.com/cloudless/orchestrator/internal/hardware"
 	"github.com/cloudless/orchestrator/internal/jobs"
 	"github.com/cloudless/orchestrator/internal/places"
+	"github.com/cloudless/orchestrator/internal/provision"
 	"github.com/cloudless/orchestrator/internal/state"
 )
 
@@ -157,8 +158,6 @@ func (s *Server) runSwitch(job *jobs.Job, target catalog.App) {
 	defer cancel()
 
 	// Already the active, ready engine? No-op.
-	_ = s.state.SetEngine(target.ID) // remember the choice across restarts
-
 	check, ccancel := context.WithTimeout(context.Background(), 5*time.Second)
 	if s.activeEngine(check) == target.ID && engineReady(check) {
 		ccancel()
@@ -167,17 +166,21 @@ func (s *Server) runSwitch(job *jobs.Job, target catalog.App) {
 	}
 	ccancel()
 
+	// Serialize with the startup provisioner so neither clobbers the other (D15).
+	provision.EngineMu.Lock()
+	_ = s.state.SetEngine(target.ID) // remember the choice across restarts
 	for _, e := range catalog.Engines() {
 		if e.ID != target.ID {
 			job.Progress("switching", "Stopping "+e.Name+" …", -1, -1)
 			_ = s.eng.Stop(ctx, e.ContainerName())
 		}
 	}
-
 	job.Progress("switching", "Starting "+target.Name+" …", -1, -1)
 	_ = s.eng.Remove(ctx, target.ContainerName())
-	if _, err := s.eng.Run(ctx, target.Spec()); err != nil {
-		job.Fail(err)
+	_, runErr := s.eng.Run(ctx, target.Spec())
+	provision.EngineMu.Unlock()
+	if runErr != nil {
+		job.Fail(runErr)
 		return
 	}
 

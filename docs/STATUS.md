@@ -58,6 +58,10 @@ removed via the API.
 - **OpenClaw plug-and-play** (D16): no auth wall — gateway runs `--auth none --bind loopback`
   under host networking (reachable at `localhost:18789`, nothing to enter), reaching the
   active engine via host `127.0.0.1:8000`. Engine gained `host` networking support. Verified.
+- **Tool calling enabled** (D17): both engines launch with the Qwen2.5 tool-call parser
+  (vLLM `--enable-auto-tool-choice --tool-call-parser hermes`, SGLang `--tool-call-parser
+  qwen25`) so agents (OpenClaw) work — was failing with "provider rejected the request
+  schema". Also fixed a provisioner↔switch race (`provision.EngineMu`). Verified on both.
 - **Smooth engine switching** (D15): all clients use one stable endpoint
   `http://cloudless-ai:8000/v1`; the active engine owns the `cloudless-ai` alias on fixed
   port 8000, serving model id `cloudless`. `GET/POST /api/engine`; engine pills in the UI.

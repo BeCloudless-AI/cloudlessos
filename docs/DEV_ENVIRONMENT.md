@@ -72,3 +72,9 @@ driver; you only install the CUDA toolkit / container toolkit inside Ubuntu.
   refresh. Either `wsl --shutdown` + reopen, or run via `sg docker -c '…'` for now.
 - Go is on PATH for interactive shells via `~/.bashrc`; non-interactive `bash -lc` needs
   `export PATH=/usr/local/go/bin:$PATH` (the build/smoke scripts do this).
+- **Stale daemon / image after recipe changes:** the orchestrator embeds app Dockerfiles
+  and bakes engine flags into the compiled binary, so changing a recipe requires
+  rebuilding **and restarting** the daemon (`scripts/build-orchestrator.sh` + run the new
+  binary), then **reinstalling** the affected app so its image rebuilds. A long-running old
+  daemon keeps serving the old image. `scripts/openclaw-reinstall.sh` force-rebuilds OpenClaw
+  (rm image + container, reinstall) when in doubt.

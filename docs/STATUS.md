@@ -77,6 +77,11 @@ removed via the API.
   the full config file(s); Save & apply restarts the app (no rebuild). Verified: an edit to
   `openclaw.json` lands in the container's mounted file and it still starts.
 
+- **Flat Swiss/instrument restyle** (D20, supersedes D10): adapted to a user reference —
+  flat (no glass/blur/shadow), light-grey base with white hairline tiles, **monochrome +
+  sky-blue (brand/interactive) + orange (live status)**, Red Hat Mono with a big numeral
+  clock and tiny lowercase labels. Verified served; visual tuning is a follow-up.
+
 ## In progress
 
 - Nothing actively mid-change. Ready to pick the next Phase 0 increment.

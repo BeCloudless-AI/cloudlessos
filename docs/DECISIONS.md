@@ -136,7 +136,7 @@ self-contained, rearrangeable tile. Light theme reflects the "cloudless sky" bra
 ---
 
 ## D10 — Visual language: macOS-style (elegant, soft, Launchpad), not blocky
-**Date:** 2026-06-20 · **Status:** Accepted (supersedes D9's blocky aesthetic)
+**Date:** 2026-06-20 · **Status:** Superseded by D20 (flat Swiss/instrument look)
 
 The home screen targets a **macOS (Big Sur-era) feel**: simple, elegant, intuitive.
 Concretely: a thin translucent **menu bar**; a centered **"Welcome to Cloudless"** hero;
@@ -402,6 +402,29 @@ copy). So a config change applies by **restarting** the app — no rebuild.
 
 **Verified:** editing `openclaw.json` via the API lands in the container's mounted file and
 OpenClaw still starts (`auth mode=none`).
+
+---
+
+## D20 — Visual language: flat, monochrome + sky-blue & orange (Swiss/instrument)
+**Date:** 2026-06-20 · **Status:** Accepted (supersedes D10's macOS look)
+
+Adapted to a user-provided reference (instrument-panel / editorial / Swiss). **Flat, not
+glassy** — no blur, no soft shadows: a solid light-grey background (`#e8e8e7`) with white,
+hairline-bordered tiles (1px `rgba(0,0,0,.1)`), crisp and high-contrast.
+
+**Two-accent system on a monochrome base** (keeping the cloudless sky blue per the brand):
+- **Blue `#1f6bff` (cloudless sky) = brand/interactive** — logo mark, primary buttons, the
+  chat CTA, active engine pill, GPU/data bars, focus borders, selected states.
+- **Orange `#ff5a00` = live status** — the hero accent dot, status LEDs, the running dot.
+- Black/white/grey carry everything else.
+
+Type: **Red Hat Mono** (D9) with **oversized bold numerals** (a big `HH:MM` clock as the hero
+focal point, like the reference) and **tiny lowercase labels** (`graphics`, `places`,
+`engine`, GPU stat rows). App icons are flat neutral tiles (the per-app gradient backgrounds
+were removed). GPU stats render as bordered chip tiles with bold values.
+
+**Verified:** page + font serve 200; markers present; **zero `backdrop-filter`** remain.
+(Visual rendering not seen — headless — so spacing/scale is a follow-up tuning pass.)
 
 ---
 

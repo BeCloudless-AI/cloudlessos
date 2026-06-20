@@ -38,17 +38,6 @@ func (d *Docker) Available(ctx context.Context) error {
 	return nil
 }
 
-func (d *Docker) GPUInfo(ctx context.Context) (string, error) {
-	cmd := exec.CommandContext(ctx, "nvidia-smi",
-		"--query-gpu=name,memory.used,memory.total,utilization.gpu,driver_version",
-		"--format=csv,noheader,nounits")
-	out, err := cmd.Output()
-	if err != nil {
-		return "", fmt.Errorf("nvidia-smi failed: %w", err)
-	}
-	return strings.TrimSpace(string(out)), nil
-}
-
 func (d *Docker) Pull(ctx context.Context, image string) error {
 	_, errs, err := d.exec(ctx, "pull", image)
 	if err != nil {

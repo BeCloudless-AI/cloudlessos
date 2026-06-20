@@ -32,6 +32,11 @@ removed via the API.
 - **Server-side first-run state** (`internal/state`, D8): the daemon — not the browser —
   decides first launch (absence of a per-user state file). `GET /api/onboarding` +
   `POST /api/onboarding/complete`. Verified it persists across daemon restarts.
+- **OS home-screen redesign** (D9): blocky/modular bento layout — System+clock, Graphics,
+  Places, App Launcher — in a sky/white/black palette with Red Hat Mono (vendored woff2).
+  New backends: `internal/hardware` (multi-GPU stats → `gpus[]` from `GET /api/gpu`) and
+  `internal/places` (folders under `~/Cloudless` → `GET /api/folders`,
+  `POST /api/folders/{id}/open`). Verified: assets/font 200, GPU + folders payloads correct.
 
 ## In progress
 

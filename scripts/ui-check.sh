@@ -1,23 +1,27 @@
 #!/usr/bin/env bash
-# Build, run the daemon, and verify the web UI + vendored assets are served.
+# Build, run the daemon, and verify the redesigned UI + new endpoints/assets.
 # Run from WSL Ubuntu:  bash /mnt/d/Cloudless/scripts/ui-check.sh
 set -euo pipefail
 export PATH="/usr/local/go/bin:$HOME/go/bin:$PATH"
 export GOFLAGS=-buildvcs=false
 
-BIN=/tmp/cloudlessd-ui
-echo "==> Building"
+BIN=/tmp/cl-ui   # short name so `pkill -x` (15-char comm limit) works
+echo "==> vet + build"
 ( cd /mnt/d/Cloudless/orchestrator && go vet ./... && go build -o "$BIN" ./cmd/cloudlessd )
-echo "    binary size: $(du -h "$BIN" | cut -f1)"
+echo "    binary: $(du -h "$BIN" | cut -f1)"
 
+pkill -x cl-ui 2>/dev/null || true
 sg docker -c "$BIN" &
-trap 'pkill -x cloudlessd-ui 2>/dev/null' EXIT  # sg orphans the child; kill by name
-for i in $(seq 1 20); do curl -sf localhost:8765/api/health >/dev/null 2>&1 && break; sleep 0.5; done
+trap 'pkill -x cl-ui 2>/dev/null' EXIT
+for i in $(seq 1 20); do curl -sf localhost:8765/api/health >/dev/null 2>&1 && break; sleep 0.3; done
 
-echo "--- GET / ---"
-curl -s -D - -o /dev/null localhost:8765/ | grep -iE 'HTTP/|content-type'
-echo "--- GET /vendor/three.min.js ---"
-curl -s -D - -o /dev/null localhost:8765/vendor/three.min.js | grep -iE 'HTTP/|content-type|content-length'
-echo "--- key UI elements present in index ---"
-curl -s localhost:8765/ | grep -oE 'vendor/three\.min\.js|id="onboarding"|canvas id="bg"|cloudless\.onboarded' | sort -u
+code() { curl -s -o /dev/null -w "%{http_code}" "localhost:8765$1"; }
+echo "--- asset status codes ---"
+echo "  /                                         -> $(code /)"
+echo "  /vendor/three.min.js                      -> $(code /vendor/three.min.js)"
+echo "  /vendor/fonts/red-hat-mono-latin-400-normal.woff2 -> $(code /vendor/fonts/red-hat-mono-latin-400-normal.woff2)"
+echo "--- api payloads ---"
+echo "  /api/gpu       -> $(curl -s localhost:8765/api/gpu)"
+echo "  /api/folders   -> $(curl -s localhost:8765/api/folders)"
+echo "  /api/onboarding-> $(curl -s localhost:8765/api/onboarding)"
 echo "UI CHECK DONE"

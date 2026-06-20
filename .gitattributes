@@ -9,8 +9,9 @@
 *.html text eol=lf
 
 # Binary artifacts (never normalize)
-*.iso  binary
-*.img  binary
-*.png  binary
-*.jpg  binary
-*.gguf binary
+*.iso   binary
+*.img   binary
+*.png   binary
+*.jpg   binary
+*.gguf  binary
+*.woff2 binary

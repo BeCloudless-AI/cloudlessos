@@ -29,8 +29,6 @@ type Container struct {
 type Engine interface {
 	// Available reports whether the runtime is reachable.
 	Available(ctx context.Context) error
-	// GPUInfo returns a short human-readable GPU summary (via nvidia-smi).
-	GPUInfo(ctx context.Context) (string, error)
 	// Pull fetches an image.
 	Pull(ctx context.Context, image string) error
 	// PullStream fetches an image, invoking onLine for each line of pull output.

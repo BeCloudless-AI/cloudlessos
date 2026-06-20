@@ -14,7 +14,9 @@ import (
 
 	"github.com/cloudless/orchestrator/internal/catalog"
 	"github.com/cloudless/orchestrator/internal/engine"
+	"github.com/cloudless/orchestrator/internal/hardware"
 	"github.com/cloudless/orchestrator/internal/jobs"
+	"github.com/cloudless/orchestrator/internal/places"
 	"github.com/cloudless/orchestrator/internal/state"
 )
 
@@ -47,6 +49,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/jobs/{id}/events", s.jobEvents)
 	mux.HandleFunc("GET /api/onboarding", s.onboardingGet)
 	mux.HandleFunc("POST /api/onboarding/complete", s.onboardingComplete)
+	mux.HandleFunc("GET /api/folders", s.folders)
+	mux.HandleFunc("POST /api/folders/{id}/open", s.openFolder)
 
 	sub, err := fs.Sub(webFS, "web")
 	if err != nil {
@@ -73,12 +77,29 @@ func (s *Server) gpu(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 
-	info, err := s.eng.GPUInfo(ctx)
-	if err != nil {
-		writeJSON(w, http.StatusOK, map[string]any{"available": false, "error": err.Error()})
+	gpus, err := hardware.GPUs(ctx)
+	resp := map[string]any{"available": len(gpus) > 0, "gpus": gpus}
+	if err != nil && len(gpus) == 0 {
+		resp["error"] = err.Error()
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func (s *Server) folders(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, places.List())
+}
+
+func (s *Server) openFolder(w http.ResponseWriter, r *http.Request) {
+	p, ok := places.Get(r.PathValue("id"))
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "unknown folder"})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"available": true, "raw": info})
+	if err := places.Open(p); err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{"opened": false, "path": p.Path, "error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"opened": true, "path": p.Path})
 }
 
 func (s *Server) catalog(w http.ResponseWriter, r *http.Request) {

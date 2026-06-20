@@ -114,6 +114,26 @@ persistence — app/job persistence will likely extend the same package.
 
 ---
 
+## D9 — UI design language: blocky, modular, sky/white/black, Red Hat Mono
+**Date:** 2026-06-20 · **Status:** Accepted
+
+The home screen is an OS-style **bento grid of modular blocks** (System/clock, Graphics,
+Places, App Launcher), each a bordered tile with a monospace `// NN` header. Palette is
+**sky blue + white + black** (light theme, `--sky #1f6bff` over a cloudless-sky gradient).
+Font is **Red Hat Mono**, vendored locally as woff2 (offline-first, per D7) at
+`internal/api/web/vendor/fonts/`. Colors and particle params are CSS variables / constants
+for easy tuning.
+
+Backing capabilities added: `internal/hardware` (multi-GPU stats via nvidia-smi →
+`GET /api/gpu` returns a `gpus[]` array) and `internal/places` (well-known folders under
+`~/Cloudless` (or `$CLOUDLESS_HOME`) → `GET /api/folders`, `POST /api/folders/{id}/open`
+via `xdg-open`).
+
+**Why:** "Blocky/modular" matches a monospace, OS-appliance feel and makes each function a
+self-contained, rearrangeable tile. Light theme reflects the "cloudless sky" brand.
+
+---
+
 ## Open questions (not yet decided)
 
 - **Open-source CloudlessOS?** Leaning yes (trust/community for a privacy brand, like

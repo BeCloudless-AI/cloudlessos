@@ -10,7 +10,12 @@ and serves the web UI that drives them. This is the Phase 0 prototype (see
 cmd/cloudlessd/      entrypoint (HTTP server + graceful shutdown)
 internal/engine/     container runtime abstraction + Docker (CLI) implementation
 internal/catalog/    curated app recipes (Ollama, Open WebUI, ComfyUI)
+internal/jobs/       async install jobs + progress fan-out (SSE)
+internal/hardware/   host GPU stats via nvidia-smi
+internal/places/     well-known folders + open-in-file-manager
+internal/state/      per-user persisted state (first-run/onboarding)
 internal/api/        local HTTP API + embedded web UI (internal/api/web/)
+                     web/vendor/ holds offline-vendored Three.js + Red Hat Mono
 ```
 
 Module path `github.com/cloudless/orchestrator` is a placeholder until we pick the
@@ -32,7 +37,7 @@ The daemon binds `127.0.0.1:8765` by default (override with `CLOUDLESS_ADDR`).
 | Method | Path                      | Purpose                                  |
 |--------|---------------------------|------------------------------------------|
 | GET    | /api/health               | daemon + docker reachability             |
-| GET    | /api/gpu                  | nvidia-smi summary                       |
+| GET    | /api/gpu                  | `{available, gpus[]}` (per-GPU stats)    |
 | GET    | /api/catalog              | available app recipes                    |
 | GET    | /api/apps                 | orchestrator-managed containers          |
 | POST   | /api/apps/{id}/start      | start async install job; returns `jobId` |
@@ -42,6 +47,8 @@ The daemon binds `127.0.0.1:8765` by default (override with `CLOUDLESS_ADDR`).
 | GET    | /api/jobs/{id}/events     | install job progress (Server-Sent Events)|
 | GET    | /api/onboarding           | first-run state (`completed`,`firstLaunch`)|
 | POST   | /api/onboarding/complete  | mark first-run onboarding done           |
+| GET    | /api/folders              | well-known folders (Models/Outputs/…)    |
+| POST   | /api/folders/{id}/open    | create if needed + open in file manager  |
 
 First-run state is owned by the daemon (`internal/state`), persisted to a per-user JSON
 file (`CLOUDLESS_STATE_DIR` → `$XDG_STATE_HOME/cloudless` → `~/.local/state/cloudless`).

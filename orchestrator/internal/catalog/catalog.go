@@ -13,10 +13,12 @@ type App struct {
 	Image       string            `json:"image"` // empty = recipe not yet available
 	Ports       map[int]int       `json:"ports"` // hostPort -> containerPort
 	Env         map[string]string `json:"env,omitempty"`
-	GPUs        string            `json:"gpus"`      // "all", "0", ... or "" for none
-	OpenPath    string            `json:"openPath"`  // URL path to open once running
-	MinVRAMGB   int               `json:"minVramGB"` // rough VRAM floor for usefulness
-	Verified    bool              `json:"verified"`  // recipe validated on Cloudless dev hardware
+	GPUs        string            `json:"gpus"`       // "all", "0", ... or "" for none
+	OpenPath    string            `json:"openPath"`   // URL path to open once running
+	MinVRAMGB   int               `json:"minVramGB"`  // rough VRAM floor for usefulness
+	Verified    bool              `json:"verified"`   // recipe validated on Cloudless dev hardware
+	Preinstall  bool              `json:"preinstall"` // provisioned automatically on first boot
+	Network     string            `json:"-"`          // docker network to join (for inter-app DNS)
 }
 
 // ContainerName is the orchestrator-managed container name for this app.
@@ -33,16 +35,32 @@ func (a App) PrimaryHostPort() int {
 // Spec converts a catalog app into an engine.RunSpec.
 func (a App) Spec() engine.RunSpec {
 	return engine.RunSpec{
-		Name:  a.ContainerName(),
-		Image: a.Image,
-		Ports: a.Ports,
-		Env:   a.Env,
-		GPUs:  a.GPUs,
+		Name:    a.ContainerName(),
+		Image:   a.Image,
+		Ports:   a.Ports,
+		Env:     a.Env,
+		GPUs:    a.GPUs,
+		Network: a.Network,
 	}
+}
+
+// Preinstalled returns the apps that should be provisioned on first boot.
+func Preinstalled() []App {
+	var out []App
+	for _, a := range apps {
+		if a.Preinstall && a.Image != "" {
+			out = append(out, a)
+		}
+	}
+	return out
 }
 
 // apps is the Phase 0 starter catalog. Images marked Verified=false still need a
 // validated recipe before we promise they "just work".
+// cloudlessNet is the shared docker network so apps can reach each other by
+// container name (e.g. Open WebUI -> cloudless-ollama:11434).
+const cloudlessNet = "cloudless"
+
 var apps = []App{
 	{
 		ID:          "ollama",
@@ -54,28 +72,40 @@ var apps = []App{
 		OpenPath:    "/",
 		MinVRAMGB:   4,
 		Verified:    true,
+		Preinstall:  true,
+		Network:     cloudlessNet,
 	},
 	{
 		ID:          "open-webui",
 		Name:        "Open WebUI",
-		Description: "A friendly chat interface for local LLMs (pairs with Ollama).",
+		Description: "Chat with your local LLMs — the engine behind Cloudless AI.",
 		Image:       "ghcr.io/open-webui/open-webui:main",
 		Ports:       map[int]int{3000: 8080},
-		GPUs:        "",
-		OpenPath:    "/",
-		MinVRAMGB:   0,
-		Verified:    false,
+		Env: map[string]string{
+			"WEBUI_NAME":      "Cloudless AI",
+			"WEBUI_AUTH":      "False", // local appliance: no login wall
+			"OLLAMA_BASE_URL": "http://cloudless-ollama:11434",
+		},
+		GPUs:       "",
+		OpenPath:   "/",
+		MinVRAMGB:  0,
+		Verified:   true,
+		Preinstall: true,
+		Network:    cloudlessNet,
 	},
 	{
 		ID:          "comfyui",
 		Name:        "ComfyUI",
 		Description: "Node-based image/video generation (Stable Diffusion, Flux, …).",
-		Image:       "", // TODO: pin a validated ComfyUI image recipe
-		Ports:       map[int]int{8188: 8188},
-		GPUs:        "all",
-		OpenPath:    "/",
-		MinVRAMGB:   6,
-		Verified:    false,
+		// Community image; NOT yet validated on Blackwell (RTX 50xx) — see DECISIONS D11.
+		Image:      "mmartial/comfyui-nvidia-docker:latest",
+		Ports:      map[int]int{8188: 8188},
+		GPUs:       "all",
+		OpenPath:   "/",
+		MinVRAMGB:  6,
+		Verified:   false,
+		Preinstall: true,
+		Network:    cloudlessNet,
 	},
 }
 

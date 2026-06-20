@@ -13,6 +13,7 @@ type RunSpec struct {
 	Env     map[string]string // environment variables
 	Volumes map[string]string // hostPath -> containerPath
 	GPUs    string            // "all", "0", ... or "" for no GPU
+	Network string            // docker network to join (container-name DNS), or ""
 }
 
 // Container is the orchestrator's view of a container.
@@ -29,6 +30,12 @@ type Container struct {
 type Engine interface {
 	// Available reports whether the runtime is reachable.
 	Available(ctx context.Context) error
+	// EnsureNetwork creates the named docker network if it does not exist.
+	EnsureNetwork(ctx context.Context, name string) error
+	// ConnectNetwork attaches a running container to a network (no-op if already attached).
+	ConnectNetwork(ctx context.Context, network, container string) error
+	// Exec runs a command inside a running container.
+	Exec(ctx context.Context, container string, args ...string) error
 	// Pull fetches an image.
 	Pull(ctx context.Context, image string) error
 	// PullStream fetches an image, invoking onLine for each line of pull output.

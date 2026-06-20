@@ -38,6 +38,35 @@ func (d *Docker) Available(ctx context.Context) error {
 	return nil
 }
 
+func (d *Docker) EnsureNetwork(ctx context.Context, name string) error {
+	if _, _, err := d.exec(ctx, "network", "inspect", name); err == nil {
+		return nil
+	}
+	if _, errs, err := d.exec(ctx, "network", "create", name); err != nil {
+		return fmt.Errorf("create network %s: %v: %s", name, err, strings.TrimSpace(errs))
+	}
+	return nil
+}
+
+func (d *Docker) ConnectNetwork(ctx context.Context, network, container string) error {
+	_, errs, err := d.exec(ctx, "network", "connect", network, container)
+	if err != nil {
+		if strings.Contains(errs, "already exists") || strings.Contains(errs, "already connected") {
+			return nil
+		}
+		return fmt.Errorf("connect %s to %s: %v: %s", container, network, err, strings.TrimSpace(errs))
+	}
+	return nil
+}
+
+func (d *Docker) Exec(ctx context.Context, container string, args ...string) error {
+	full := append([]string{"exec", container}, args...)
+	if _, errs, err := d.exec(ctx, full...); err != nil {
+		return fmt.Errorf("exec %s: %v: %s", container, err, strings.TrimSpace(errs))
+	}
+	return nil
+}
+
 func (d *Docker) Pull(ctx context.Context, image string) error {
 	_, errs, err := d.exec(ctx, "pull", image)
 	if err != nil {
@@ -81,6 +110,9 @@ func (d *Docker) Run(ctx context.Context, spec RunSpec) (string, error) {
 	args := []string{"run", "-d", "--name", spec.Name, "--restart", "unless-stopped"}
 	if spec.GPUs != "" {
 		args = append(args, "--gpus", spec.GPUs)
+	}
+	if spec.Network != "" {
+		args = append(args, "--network", spec.Network)
 	}
 	for host, cont := range spec.Ports {
 		args = append(args, "-p", fmt.Sprintf("127.0.0.1:%d:%d", host, cont))

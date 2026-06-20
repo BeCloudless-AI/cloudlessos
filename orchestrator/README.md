@@ -13,6 +13,7 @@ internal/catalog/    curated app recipes (Ollama, Open WebUI, ComfyUI)
 internal/jobs/       async install jobs + progress fan-out (SSE)
 internal/hardware/   host GPU stats via nvidia-smi
 internal/places/     well-known folders + open-in-file-manager
+internal/provision/  pre-install bundled apps on startup (shared network + default model)
 internal/state/      per-user persisted state (first-run/onboarding)
 internal/api/        local HTTP API + embedded web UI (internal/api/web/)
                      web/vendor/ holds offline-vendored Three.js + Red Hat Mono
@@ -57,6 +58,15 @@ file (`CLOUDLESS_STATE_DIR` → `$XDG_STATE_HOME/cloudless` → `~/.local/state/
 Install is asynchronous: `start` returns a `jobId` immediately and the daemon pulls +
 runs in the background, streaming progress (per-layer pull counts, then start/running) to
 `/api/jobs/{id}/events`. The web UI consumes this via `EventSource`.
+
+## Pre-installed apps (D11)
+
+On startup the daemon provisions the bundled apps (Ollama, Open WebUI, ComfyUI) onto a
+shared `cloudless` docker network and pulls a default chat model so "Chat with your
+Cloudless AI" works out of the box. Override the model with `CLOUDLESS_DEFAULT_MODEL`
+(set to empty to skip). Open WebUI is branded "Cloudless AI", runs without a login wall,
+and is wired to Ollama at `cloudless-ollama:11434`. ComfyUI's image is pinned but not yet
+validated on Blackwell GPUs. Reset everything with `../scripts/reset-apps.sh`.
 
 ## Known Phase 0 limitations (intentional)
 

@@ -154,6 +154,29 @@ and `places` backends from D9 are unchanged.
 
 ---
 
+## D11 — Bundled apps are pre-installed on first boot; Open WebUI is "Cloudless AI"
+**Date:** 2026-06-20 · **Status:** Accepted
+
+Ollama, Open WebUI, and ComfyUI ship **pre-installed**: `internal/provision` auto-pulls
+and runs them on daemon startup (background goroutine, best-effort, idempotent — skips
+already-running, logs failures, never blocks). They join a shared docker network
+(`cloudless`) so they resolve each other by name. Open WebUI is branded and wired via env:
+`WEBUI_NAME="Cloudless AI"`, `WEBUI_AUTH=False` (no login on a local appliance),
+`OLLAMA_BASE_URL=http://cloudless-ollama:11434`. A default chat model (`llama3.2:1b`,
+override with `CLOUDLESS_DEFAULT_MODEL`, "" to skip) is pulled into Ollama so chat works
+out of the box. The home screen has a prominent **"Chat with your Cloudless AI"** button
+that opens Open WebUI (enabled once it's running).
+
+**ComfyUI caveat:** pinned to `mmartial/comfyui-nvidia-docker:latest` (community image) and
+marked `Verified:false`. It is **not yet validated on Blackwell (RTX 50xx)** — older CUDA
+builds won't run on sm_120, so the image may need swapping. Provisioning it is best-effort;
+failure doesn't affect the rest.
+
+**Verified:** provisioner brings up Ollama + Open WebUI on the `cloudless` network with
+correct branding/wiring; Open WebUI reaches Ollama by DNS ("Ollama is running").
+
+---
+
 ## Open questions (not yet decided)
 
 - **Open-source CloudlessOS?** Leaning yes (trust/community for a privacy brand, like

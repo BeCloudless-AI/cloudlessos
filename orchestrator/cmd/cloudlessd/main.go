@@ -14,6 +14,7 @@ import (
 
 	"github.com/cloudless/orchestrator/internal/api"
 	"github.com/cloudless/orchestrator/internal/engine"
+	"github.com/cloudless/orchestrator/internal/provision"
 	"github.com/cloudless/orchestrator/internal/state"
 )
 
@@ -42,6 +43,16 @@ func main() {
 			log.Fatalf("server error: %v", err)
 		}
 	}()
+
+	// Pre-install the bundled apps (Ollama, Open WebUI, ComfyUI) in the background.
+	// Set CLOUDLESS_DEFAULT_MODEL="" to skip the default chat-model pull.
+	defaultModel := "llama3.2:1b"
+	if v, ok := os.LookupEnv("CLOUDLESS_DEFAULT_MODEL"); ok {
+		defaultModel = v
+	}
+	go provision.Run(context.Background(), eng, defaultModel, func(m string) {
+		log.Printf("[provision] %s", m)
+	})
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)

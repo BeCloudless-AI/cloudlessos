@@ -41,16 +41,24 @@ removed via the API.
   Three.js removed in favor of a pure-CSS Big Sur gradient wallpaper. Red Hat Mono kept,
   used lightly. Verified assets/font 200 and GPU/folders payloads.
 
+- **Pre-installed apps + Chat button** (`internal/provision`, D11): Ollama, Open WebUI,
+  ComfyUI auto-provision on startup onto a shared `cloudless` network. Open WebUI branded
+  "Cloudless AI", no login, wired to Ollama; default model `llama3.2:1b` pulled so chat
+  works OOTB. Hero "Chat with your Cloudless AI" button opens it. Verified: Ollama +
+  Open WebUI come up wired correctly; Open WebUI reaches Ollama by DNS.
+
 ## In progress
 
 - Nothing actively mid-change. Ready to pick the next Phase 0 increment.
 
 ## Next steps (candidates, roughly prioritized)
 
-1. **ComfyUI recipe** — pin a validated image so the image-gen app actually works.
-2. **Model manager v0** — download models + "fits your VRAM" recommendations.
-3. **State persistence for apps/jobs** — track installed apps/jobs beyond `docker ps` +
-   in-memory, likely extending `internal/state` (onboarding state already lives there, D8).
+1. **Validate ComfyUI on Blackwell (RTX 50xx)** — current image (mmartial/...) is pinned
+   but unverified on sm_120; confirm or swap for a CUDA 12.8+/PyTorch-Blackwell build.
+2. **Model manager v0** — download models + "fits your VRAM" recommendations (the default
+   model pull in `provision` is the seed of this).
+3. **State persistence for apps/jobs** — beyond `docker ps` + in-memory, likely extending
+   `internal/state` (onboarding state already lives there, D8).
 
 ## Known limitations (see orchestrator/README.md)
 

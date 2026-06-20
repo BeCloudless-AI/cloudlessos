@@ -64,6 +64,15 @@
   .hero { text-align: center; margin-bottom: 52px; }
   .hero h1 { margin: 0 0 10px; font-size: 40px; font-weight: 700; letter-spacing: -1px; }
   .hero p { margin: 0; color: var(--muted); font-size: 15px; }
+  .chat-btn { margin-top: 30px; font: inherit; font-size: 15px; font-weight: 700; color: #fff;
+    padding: 15px 32px; border-radius: 16px; border: none; cursor: pointer;
+    background: linear-gradient(135deg, var(--accent), #2f6dff);
+    box-shadow: 0 14px 34px rgba(10, 132, 255, 0.4);
+    transition: transform 0.15s, box-shadow 0.15s, filter 0.15s; }
+  .chat-btn:hover:not([disabled]) { transform: translateY(-2px); box-shadow: 0 20px 46px rgba(10, 132, 255, 0.52); filter: brightness(1.05); }
+  .chat-btn:active:not([disabled]) { transform: scale(0.98); }
+  .chat-btn.prep { background: rgba(0, 0, 0, 0.06); color: var(--muted); box-shadow: none;
+    cursor: default; animation: pulse 1.6s ease-in-out infinite; }
 
   .cards { display: grid; grid-template-columns: 1.5fr 1fr; gap: 22px; margin-bottom: 46px; }
   @media (max-width: 820px) { .cards { grid-template-columns: 1fr; } }
@@ -184,6 +193,7 @@
   <div class="hero">
     <h1>Welcome to Cloudless</h1>
     <p id="hero-sub">Your private, local-AI workstation.</p>
+    <button class="chat-btn prep" id="chat-btn" disabled>Setting up Cloudless AI…</button>
   </div>
 
   <div class="cards">
@@ -290,6 +300,7 @@ async function renderApps() {
   const [catalog, apps] = await Promise.all([api('/api/catalog'), api('/api/apps')]);
   catalogCache = catalog;
   const running = {}; apps.forEach(c => running[c.name.replace(/^cloudless-/, '')] = c.state);
+  updateChat(running);
   const pad = document.getElementById('pad');
   pad.innerHTML = catalog.map(app => {
     const isRun = running[app.id] === 'running';
@@ -334,6 +345,18 @@ function installById(id) {
   const app = catalogCache.find(a => a.id === id);
   const tile = document.querySelector(`.tile[data-id="${id}"]`);
   if (app && tile) startInstall(app, tile);
+}
+function updateChat(running) {
+  const b = document.getElementById('chat-btn');
+  if (running['open-webui'] === 'running') {
+    b.disabled = false; b.classList.remove('prep');
+    b.textContent = 'Chat with your Cloudless AI';
+    b.onclick = () => window.open('http://localhost:3000/', '_blank');
+  } else {
+    b.disabled = true; b.classList.add('prep');
+    b.textContent = 'Setting up Cloudless AI…';
+    b.onclick = null;
+  }
 }
 
 /* ---- toast ---- */

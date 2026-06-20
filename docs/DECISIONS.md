@@ -264,6 +264,33 @@ binaries, so they may need updates as these fast-moving tools change.
 
 ---
 
+## D15 — Smooth engine switching via a stable endpoint
+**Date:** 2026-06-20 · **Status:** Accepted
+
+**Problem:** clients (Open WebUI, OpenClaw, Hermes) baked the engine URL at container
+creation pointing straight at `cloudless-vllm:8000`, so switching engines would break them.
+
+**Solution — one stable endpoint that the active engine "owns":**
+- Every engine listens on the **fixed port 8000** and, when active, carries the docker
+  **network alias `cloudless-ai`** (`RunSpec.NetworkAlias`; catalog `Engine` apps get it in
+  `Spec()`). Both engines serve the model id **`cloudless`** (`--served-model-name`), so the
+  endpoint *and* the model name are identical across engines — clients can't tell.
+- All clients are configured **once** to `http://cloudless-ai:8000/v1` and never touched again.
+- API: `GET /api/engine` (active / ready / list), `POST /api/engine/{id}` (async job:
+  stop current → start chosen → poll `/v1/models` until ready). UI: engine pills in the
+  Graphics card; the Chat button is gated on engine readiness.
+- Single GPU ⇒ one engine at a time. A switch is stop-then-start, so there's a model-load
+  gap (~50 s for SGLang) surfaced in the UI; clients reconnect automatically via the stable
+  name. The choice is **persisted** (`state.Engine`); on boot the provisioner runs only the
+  selected engine (stopping others *first* to free the port) and self-heals a missing alias
+  (`HasAlias`). Both engine images are still pulled so either is ready instantly.
+
+**Verified:** `cloudless-ai` follows the active engine from inside Open WebUI; vLLM↔SGLang
+round-trips; the selection survives a daemon restart with exactly one engine running; a
+completion works through `cloudless-ai` after switching. Both engines run on Blackwell (sm_120).
+
+---
+
 ## Open questions (not yet decided)
 
 - **Open-source CloudlessOS?** Leaning yes (trust/community for a privacy brand, like

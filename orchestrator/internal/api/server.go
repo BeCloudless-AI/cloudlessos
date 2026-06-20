@@ -53,6 +53,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/onboarding/complete", s.onboardingComplete)
 	mux.HandleFunc("GET /api/folders", s.folders)
 	mux.HandleFunc("POST /api/folders/{id}/open", s.openFolder)
+	mux.HandleFunc("GET /api/engine", s.engineState)
+	mux.HandleFunc("POST /api/engine/{id}", s.engineSwitch)
 
 	sub, err := fs.Sub(webFS, "web")
 	if err != nil {
@@ -89,6 +91,111 @@ func (s *Server) gpu(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) folders(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, places.List())
+}
+
+// activeEngine returns the id of the currently-running inference engine, or "".
+func (s *Server) activeEngine(ctx context.Context) string {
+	for _, e := range catalog.Engines() {
+		if c, _ := s.eng.Find(ctx, e.ContainerName()); c != nil && c.State == "running" {
+			return e.ID
+		}
+	}
+	return ""
+}
+
+// engineReady reports whether the active engine is serving (model loaded).
+func engineReady(ctx context.Context) bool {
+	url := fmt.Sprintf("http://127.0.0.1:%d/v1/models", catalog.EnginePort)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return false
+	}
+	resp, err := (&http.Client{Timeout: 3 * time.Second}).Do(req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	return resp.StatusCode == http.StatusOK
+}
+
+func (s *Server) engineState(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 6*time.Second)
+	defer cancel()
+
+	active := s.activeEngine(ctx)
+	type eng struct {
+		ID     string `json:"id"`
+		Name   string `json:"name"`
+		Active bool   `json:"active"`
+	}
+	list := []eng{}
+	for _, e := range catalog.Engines() {
+		list = append(list, eng{ID: e.ID, Name: e.Name, Active: e.ID == active})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"active":  active,
+		"ready":   active != "" && engineReady(ctx),
+		"engines": list,
+	})
+}
+
+// engineSwitch stops the current engine and starts the chosen one, which inherits
+// the stable `cloudless-ai` alias — so every client follows automatically.
+func (s *Server) engineSwitch(w http.ResponseWriter, r *http.Request) {
+	app, ok := catalog.Get(r.PathValue("id"))
+	if !ok || !app.Engine {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "unknown engine"})
+		return
+	}
+	job := s.jobs.Create("engine:" + app.ID)
+	go s.runSwitch(job, app)
+	writeJSON(w, http.StatusAccepted, map[string]string{"jobId": job.ID, "engine": app.ID})
+}
+
+func (s *Server) runSwitch(job *jobs.Job, target catalog.App) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+	defer cancel()
+
+	// Already the active, ready engine? No-op.
+	_ = s.state.SetEngine(target.ID) // remember the choice across restarts
+
+	check, ccancel := context.WithTimeout(context.Background(), 5*time.Second)
+	if s.activeEngine(check) == target.ID && engineReady(check) {
+		ccancel()
+		job.Succeed("")
+		return
+	}
+	ccancel()
+
+	for _, e := range catalog.Engines() {
+		if e.ID != target.ID {
+			job.Progress("switching", "Stopping "+e.Name+" …", -1, -1)
+			_ = s.eng.Stop(ctx, e.ContainerName())
+		}
+	}
+
+	job.Progress("switching", "Starting "+target.Name+" …", -1, -1)
+	_ = s.eng.Remove(ctx, target.ContainerName())
+	if _, err := s.eng.Run(ctx, target.Spec()); err != nil {
+		job.Fail(err)
+		return
+	}
+
+	job.Progress("loading", "Loading model …", -1, -1)
+	for {
+		if ctx.Err() != nil {
+			job.Fail(fmt.Errorf("%s did not become ready in time", target.Name))
+			return
+		}
+		pctx, pcancel := context.WithTimeout(context.Background(), 3*time.Second)
+		ready := engineReady(pctx)
+		pcancel()
+		if ready {
+			job.Succeed("")
+			return
+		}
+		time.Sleep(2 * time.Second)
+	}
 }
 
 func (s *Server) openFolder(w http.ResponseWriter, r *http.Request) {

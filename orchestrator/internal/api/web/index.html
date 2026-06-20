@@ -98,6 +98,17 @@
   .chips b { color: var(--ink); font-weight: 500; }
   .empty { color: var(--muted); font-size: 13px; }
 
+  .engine-row { display: flex; align-items: center; gap: 8px; margin-top: 16px;
+    padding-top: 14px; border-top: 0.5px solid var(--hair); font-size: 12px; }
+  .engine-row .er-label { color: var(--muted); margin-right: 2px; }
+  .er-pill { font: inherit; font-size: 12px; padding: 5px 12px; border-radius: 999px;
+    border: 0.5px solid var(--hair); background: #fff; color: var(--ink); cursor: pointer; transition: all .15s; }
+  .er-pill:hover:not([disabled]) { border-color: var(--accent); }
+  .er-pill.on { background: var(--accent); border-color: var(--accent); color: #fff; cursor: default; }
+  .er-pill[disabled]:not(.on) { opacity: 0.5; cursor: default; }
+  .er-state { margin-left: auto; color: var(--muted); font-size: 11px; }
+  .er-state.ready { color: var(--ok); }
+
   /* places */
   .place { display: flex; align-items: center; gap: 12px; padding: 9px 10px; margin: 0 -10px;
     border-radius: 10px; cursor: pointer; transition: background 0.15s; }
@@ -200,6 +211,7 @@
     <section class="card">
       <h2>Graphics</h2>
       <div id="gpu-body"><div class="empty">Reading GPUs…</div></div>
+      <div class="engine-row" id="engine-row"></div>
     </section>
     <section class="card">
       <h2>Places</h2>
@@ -240,6 +252,7 @@ const glyph = id => GLYPH[id] || '⚙️';
 const tileBg = id => TILE_BG[id] || 'linear-gradient(135deg,#cfd9e8,#aab8cc)';
 const gb = mb => (mb / 1024).toFixed(1);
 let installing = 0, catalogCache = [];
+let lastRunning = {}, engineReady = false, engineActive = '', engineSwitching = false;
 
 /* ---- clock ---- */
 const DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
@@ -302,7 +315,8 @@ async function renderApps() {
   const [catalog, apps] = await Promise.all([api('/api/catalog'), api('/api/apps')]);
   catalogCache = catalog;
   const running = {}; apps.forEach(c => running[c.name.replace(/^cloudless-/, '')] = c.state);
-  updateChat(running);
+  lastRunning = running;
+  updateChat();
   const pad = document.getElementById('pad');
   pad.innerHTML = catalog.filter(app => !app.service).map(app => {
     const isRun = running[app.id] === 'running';
@@ -349,17 +363,51 @@ function installById(id) {
   const tile = document.querySelector(`.tile[data-id="${id}"]`);
   if (app && tile) startInstall(app, tile);
 }
-function updateChat(running) {
+function updateChat() {
   const b = document.getElementById('chat-btn');
-  if (running['open-webui'] === 'running') {
+  if (lastRunning['open-webui'] === 'running' && engineReady) {
     b.disabled = false; b.classList.remove('prep');
     b.textContent = 'Chat with your Cloudless AI';
     b.onclick = () => window.open('http://localhost:3000/', '_blank');
   } else {
     b.disabled = true; b.classList.add('prep');
-    b.textContent = 'Setting up Cloudless AI…';
+    b.textContent = engineSwitching ? 'Switching engine…'
+      : (lastRunning['open-webui'] === 'running' ? 'Starting inference engine…' : 'Setting up Cloudless AI…');
     b.onclick = null;
   }
+}
+
+/* ---- inference engine switch ---- */
+async function renderEngine() {
+  let d; try { d = await api('/api/engine'); } catch { return; }
+  engineReady = !!d.ready; engineActive = d.active || '';
+  const row = document.getElementById('engine-row');
+  const pills = (d.engines || []).map(e =>
+    `<button class="er-pill ${e.active ? 'on' : ''}" data-id="${e.id}" ${e.active || engineSwitching ? 'disabled' : ''}>${e.name.replace(' Engine', '')}</button>`
+  ).join('');
+  const state = engineSwitching ? 'switching…' : (d.ready ? 'ready' : (engineActive ? 'loading…' : 'stopped'));
+  row.innerHTML = `<span class="er-label">Engine</span>${pills}<span class="er-state ${d.ready && !engineSwitching ? 'ready' : ''}">${state}</span>`;
+  row.querySelectorAll('.er-pill:not(.on)').forEach(b => b.onclick = () => switchEngine(b.dataset.id));
+  updateChat();
+}
+function switchEngine(id) {
+  if (engineSwitching) return;
+  engineSwitching = true; engineReady = false; renderEngine();
+  api(`/api/engine/${id}`, { method: 'POST' })
+    .then(res => { if (res.jobId) trackEngineJob(res.jobId); else endSwitch(); })
+    .catch(() => endSwitch());
+}
+function endSwitch() { engineSwitching = false; renderEngine(); }
+function trackEngineJob(jobId) {
+  const es = new EventSource(`/api/jobs/${jobId}/events`); let ended = false;
+  const fin = () => { if (ended) return; ended = true; es.close(); endSwitch(); };
+  es.onmessage = e => {
+    const u = JSON.parse(e.data);
+    const st = document.querySelector('#engine-row .er-state');
+    if (st && u.message) st.textContent = u.message;
+    if (u.done) fin();
+  };
+  es.onerror = () => fin();
 }
 
 /* ---- toast ---- */
@@ -424,8 +472,8 @@ function finishOnboarding(pendingId) {
 
 /* ---- boot ---- */
 tickClock(); setInterval(tickClock, 1000);
-refreshStatus(); renderGPUs(); renderPlaces(); renderApps();
-setInterval(() => { refreshStatus(); renderGPUs(); }, 4000);
+refreshStatus(); renderGPUs(); renderPlaces(); renderApps(); renderEngine();
+setInterval(() => { refreshStatus(); renderGPUs(); if (!engineSwitching) renderEngine(); }, 4000);
 setInterval(() => { if (installing === 0) renderApps(); }, 8000);
 api('/api/onboarding').then(o => { if (!o || !o.completed) renderApps().then(showOnboarding); }).catch(() => {});
 </script>

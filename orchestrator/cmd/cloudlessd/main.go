@@ -46,7 +46,7 @@ func main() {
 
 	// Pre-install the bundled apps (vLLM engine, Open WebUI, ComfyUI) in the
 	// background. The served model is set via CLOUDLESS_DEFAULT_MODEL (catalog).
-	go provision.Run(context.Background(), eng, func(m string) {
+	go provision.Run(context.Background(), eng, st, func(m string) {
 		log.Printf("[provision] %s", m)
 	})
 

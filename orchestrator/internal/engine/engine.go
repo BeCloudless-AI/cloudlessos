@@ -12,9 +12,10 @@ type RunSpec struct {
 	Ports   map[int]int       // hostPort -> containerPort (bound to 127.0.0.1)
 	Env     map[string]string // environment variables
 	Volumes map[string]string // hostPath-or-named-volume -> containerPath
-	GPUs    string            // "all", "0", ... or "" for no GPU
-	Network string            // docker network to join (container-name DNS), or ""
-	Args    []string          // extra args appended after the image (container command)
+	GPUs         string            // "all", "0", ... or "" for no GPU
+	Network      string            // docker network to join (container-name DNS), or ""
+	NetworkAlias string            // extra DNS alias on the network (e.g. "cloudless-ai")
+	Args         []string          // extra args appended after the image (container command)
 }
 
 // Container is the orchestrator's view of a container.
@@ -35,6 +36,8 @@ type Engine interface {
 	EnsureNetwork(ctx context.Context, name string) error
 	// ConnectNetwork attaches a running container to a network (no-op if already attached).
 	ConnectNetwork(ctx context.Context, network, container string) error
+	// HasAlias reports whether a container has the given network alias.
+	HasAlias(ctx context.Context, container, alias string) (bool, error)
 	// Exec runs a command inside a running container.
 	Exec(ctx context.Context, container string, args ...string) error
 	// Pull fetches an image.

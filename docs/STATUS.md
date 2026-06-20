@@ -55,6 +55,11 @@ removed via the API.
   Dockerfiles (new `apps` package + `engine.Build` + `building` install phase) and
   pre-wired to Cloudless AI. Verified: both build and run; OpenClaw logs
   `agent model: custom/cloudless`; daemon build-and-install path works via the API.
+- **Smooth engine switching** (D15): all clients use one stable endpoint
+  `http://cloudless-ai:8000/v1`; the active engine owns the `cloudless-ai` alias on fixed
+  port 8000, serving model id `cloudless`. `GET/POST /api/engine`; engine pills in the UI.
+  Choice persists; exactly one engine runs; self-healing alias. Verified vLLM↔SGLang
+  round-trip survives restart; completion works through the stable endpoint after a switch.
 
 ## In progress
 
@@ -65,8 +70,8 @@ removed via the API.
 1. **Validate ComfyUI on Blackwell (RTX 50xx)** — current image (mmartial/...) is pinned
    but unverified on sm_120; confirm or swap for a CUDA 12.8+/PyTorch-Blackwell build.
    (vLLM is already validated on Blackwell — D12.)
-2. **Engine-switching UI** — switch between vLLM and the pre-fetched SGLang (stop one,
-   start the other; repoint Open WebUI), plus model pick + "fits your VRAM".
+2. **Model manager** — pick/switch the served model (one per engine instance today) and
+   show "fits your VRAM". (Engine switching itself is done — D15.)
 3. **Agent UX polish** — OpenClaw/Hermes install + run pre-wired (D14); next is exposing
    their UIs/setup (messaging platforms, allowlists) cleanly in the launcher.
 3. **State persistence for apps/jobs** — beyond `docker ps` + in-memory, likely extending

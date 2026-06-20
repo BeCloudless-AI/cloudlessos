@@ -51,6 +51,8 @@ The daemon binds `127.0.0.1:8765` by default (override with `CLOUDLESS_ADDR`).
 | POST   | /api/onboarding/complete  | mark first-run onboarding done           |
 | GET    | /api/folders              | well-known folders (Models/Outputs/…)    |
 | POST   | /api/folders/{id}/open    | create if needed + open in file manager  |
+| GET    | /api/engine               | active inference engine + readiness      |
+| POST   | /api/engine/{id}          | switch engine (vllm/sglang); async job   |
 
 First-run state is owned by the daemon (`internal/state`), persisted to a per-user JSON
 file (`CLOUDLESS_STATE_DIR` → `$XDG_STATE_HOME/cloudless` → `~/.local/state/cloudless`).
@@ -74,6 +76,12 @@ On startup the daemon provisions the bundled apps onto a shared `cloudless` dock
 
 - **SGLang** — alternative engine, **pre-fetched** (image pulled, ~41.6 GB) but not run by
   default; switch to it instead of vLLM. (`Prefetch` apps are pulled, not started.)
+
+**Engine switching (D15):** all clients use one stable endpoint `http://cloudless-ai:8000/v1`.
+The active engine owns the `cloudless-ai` alias on fixed port 8000 and serves model id
+`cloudless`, so switching engines is transparent to Open WebUI and the agents. Switch via
+`POST /api/engine/{vllm|sglang}` or the engine pills in the UI; the choice persists and
+exactly one engine runs at a time.
 
 Ollama is kept as an optional, non-default engine (not auto-provisioned). **OpenClaw** and
 **Hermes** are AI agents with no upstream image, so they're **built locally** from embedded

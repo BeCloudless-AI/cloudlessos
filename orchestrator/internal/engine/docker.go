@@ -59,6 +59,20 @@ func (d *Docker) ConnectNetwork(ctx context.Context, network, container string) 
 	return nil
 }
 
+func (d *Docker) HasAlias(ctx context.Context, container, alias string) (bool, error) {
+	out, errs, err := d.exec(ctx, "inspect", "--format",
+		"{{range .NetworkSettings.Networks}}{{range .Aliases}}{{.}} {{end}}{{end}}", container)
+	if err != nil {
+		return false, fmt.Errorf("inspect %s: %v: %s", container, err, strings.TrimSpace(errs))
+	}
+	for _, a := range strings.Fields(out) {
+		if a == alias {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func (d *Docker) Exec(ctx context.Context, container string, args ...string) error {
 	full := append([]string{"exec", container}, args...)
 	if _, errs, err := d.exec(ctx, full...); err != nil {
@@ -142,6 +156,9 @@ func (d *Docker) Run(ctx context.Context, spec RunSpec) (string, error) {
 	}
 	if spec.Network != "" {
 		args = append(args, "--network", spec.Network)
+		if spec.NetworkAlias != "" {
+			args = append(args, "--network-alias", spec.NetworkAlias)
+		}
 	}
 	for host, cont := range spec.Ports {
 		args = append(args, "-p", fmt.Sprintf("127.0.0.1:%d:%d", host, cont))

@@ -35,6 +35,7 @@ type App struct {
 	Preinstall  bool              `json:"preinstall"` // pulled AND run automatically on first boot
 	Prefetch    bool              `json:"-"`          // image pulled on boot but not run (ready alternative)
 	Service     bool              `json:"service"`    // infrastructure (engine), hidden from the launcher
+	Engine      bool              `json:"engine"`     // switchable inference engine (carries the stable alias)
 	Network     string            `json:"-"`          // docker network to join (for inter-app DNS)
 	Command     []string          `json:"-"`          // container command/args
 	Volumes     map[string]string `json:"-"`          // host-or-named-volume -> containerPath
@@ -54,7 +55,7 @@ func (a App) PrimaryHostPort() int {
 
 // Spec converts a catalog app into an engine.RunSpec.
 func (a App) Spec() engine.RunSpec {
-	return engine.RunSpec{
+	rs := engine.RunSpec{
 		Name:    a.ContainerName(),
 		Image:   a.Image,
 		Ports:   a.Ports,
@@ -64,6 +65,37 @@ func (a App) Spec() engine.RunSpec {
 		Args:    a.Command,
 		Volumes: a.Volumes,
 	}
+	// Engines carry the stable alias so clients reach whichever one is active.
+	if a.Engine {
+		rs.NetworkAlias = EngineAlias
+	}
+	return rs
+}
+
+// Engines returns the switchable inference engines.
+func Engines() []App {
+	var out []App
+	for _, a := range apps {
+		if a.Engine {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
+// DefaultEngine returns the id of the default engine (the preinstalled one).
+func DefaultEngine() string {
+	for _, a := range apps {
+		if a.Engine && a.Preinstall {
+			return a.ID
+		}
+	}
+	for _, a := range apps {
+		if a.Engine {
+			return a.ID
+		}
+	}
+	return ""
 }
 
 // Bundled returns apps whose images should be present on boot: Preinstall apps
@@ -83,6 +115,17 @@ func Bundled() []App {
 // cloudlessNet is the shared docker network so apps can reach each other by
 // container name (e.g. Open WebUI -> cloudless-ollama:11434).
 const cloudlessNet = "cloudless"
+
+// EngineAlias is the stable DNS name all clients use for the active inference
+// engine; switching engines just moves this alias (see D15). EnginePort is the
+// fixed port every engine listens on (so the endpoint never changes).
+const (
+	EngineAlias = "cloudless-ai"
+	EnginePort  = 8000
+)
+
+// EngineEndpoint is the stable OpenAI base URL clients are configured with.
+const EngineEndpoint = "http://cloudless-ai:8000/v1"
 
 var apps = []App{
 	{
@@ -107,6 +150,7 @@ var apps = []App{
 		Verified:   false, // pending Blackwell (RTX 50xx / sm_120) validation — see D12
 		Preinstall: true,
 		Service:    true,
+		Engine:     true,
 		Network:    cloudlessNet,
 	},
 	{
@@ -117,12 +161,12 @@ var apps = []App{
 		Name:        "SGLang Engine",
 		Description: "Alternative high-performance inference engine (OpenAI-compatible).",
 		Image:       "lmsysorg/sglang:latest",
-		Ports:       map[int]int{30000: 30000},
+		Ports:       map[int]int{8000: 8000}, // same fixed port as vLLM (one engine runs at a time)
 		Command: []string{
 			"python3", "-m", "sglang.launch_server",
 			"--model-path", defaultLLM,
 			"--served-model-name", "cloudless",
-			"--host", "0.0.0.0", "--port", "30000",
+			"--host", "0.0.0.0", "--port", "8000",
 			"--mem-fraction-static", "0.5",
 		},
 		Volumes:   map[string]string{"cloudless-hf": "/root/.cache/huggingface"},
@@ -132,6 +176,7 @@ var apps = []App{
 		Verified:  false,
 		Prefetch:  true,
 		Service:   true,
+		Engine:    true,
 		Network:   cloudlessNet,
 	},
 	{
@@ -144,8 +189,8 @@ var apps = []App{
 			"WEBUI_NAME":          "Cloudless AI",
 			"WEBUI_AUTH":          "False", // local appliance: no login wall
 			"ENABLE_OLLAMA_API":   "False",
-			"OPENAI_API_BASE_URL": "http://cloudless-vllm:8000/v1",
-			"OPENAI_API_KEY":      "cloudless", // vLLM ignores it unless --api-key is set
+			"OPENAI_API_BASE_URL": EngineEndpoint, // stable alias -> active engine (D15)
+			"OPENAI_API_KEY":      "cloudless",    // engines ignore it unless --api-key is set
 		},
 		GPUs:       "",
 		OpenPath:   "/",

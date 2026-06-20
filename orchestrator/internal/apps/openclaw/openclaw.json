@@ -9,7 +9,7 @@
   models: {
     providers: {
       custom: {
-        baseUrl: "http://cloudless-vllm:8000/v1",
+        baseUrl: "http://cloudless-ai:8000/v1",
         apiKey: "${CUSTOM_API_KEY}",
         models: [{ id: "cloudless", name: "Cloudless AI" }],
       },

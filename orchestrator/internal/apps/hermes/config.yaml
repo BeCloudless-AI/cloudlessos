@@ -1,4 +1,4 @@
 model:
   provider: custom
   model: "cloudless"
-  base_url: "http://cloudless-vllm:8000/v1"
+  base_url: "http://cloudless-ai:8000/v1"

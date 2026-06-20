@@ -382,6 +382,29 @@ OpenClaw rebuilt and restarted it cleanly (`auth mode=none`, running).
 
 ---
 
+## D19 — Per-app config is editable (mounted, not baked)
+**Date:** 2026-06-20 · **Status:** Accepted
+
+To make OpenClaw/Hermes "fully configurable," their config stops being baked into the image
+and instead lives as **editable files in the state dir** (`<stateDir>/apps/<id>/<file>`),
+seeded from the embedded defaults and **mounted into the container** (overriding the image's
+copy). So a config change applies by **restarting** the app — no rebuild.
+
+- Catalog apps declare `Config []ConfigFile{File, Path, Lang}` (exposed in `/api/catalog`).
+  OpenClaw: `openclaw.json`; Hermes: `config.yaml` + `.env`.
+- `Server.appSpec(app)` = `app.Spec()` + the seeded config mounts; `runInstall`/reset use it.
+- Endpoints: `GET /api/apps/{id}/config` (files + content), `POST /api/apps/{id}/config`
+  (write + restart), `POST /api/apps/{id}/config/reset` (restore defaults + restart).
+- Settings → Apps → **Configure** opens a raw editor (one textarea per file, monospace) with
+  Save & apply and Reset-to-defaults. The whole config file is editable = "literally
+  everything." App-level **Reset** (rebuild image/container) is separate and keeps user
+  config; **Reset to defaults** (in Configure) restores it.
+
+**Verified:** editing `openclaw.json` via the API lands in the container's mounted file and
+OpenClaw still starts (`auth mode=none`).
+
+---
+
 ## Open questions (not yet decided)
 
 - **Open-source CloudlessOS?** Leaning yes (trust/community for a privacy brand, like

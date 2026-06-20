@@ -57,6 +57,9 @@ The daemon binds `127.0.0.1:8765` by default (override with `CLOUDLESS_ADDR`).
 | POST   | /api/settings/model       | set model + restart engine; async job    |
 | POST   | /api/apps/{id}/reset      | remove + (rebuild) + reinstall; async    |
 | POST   | /api/apps/{id}/uninstall  | remove container + image                 |
+| GET    | /api/apps/{id}/config     | editable config files + content          |
+| POST   | /api/apps/{id}/config     | write config + restart app; async        |
+| POST   | /api/apps/{id}/config/reset | restore default config + restart       |
 | POST   | /api/onboarding/reset     | replay the welcome tour                  |
 
 First-run state is owned by the daemon (`internal/state`), persisted to a per-user JSON

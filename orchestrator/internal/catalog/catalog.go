@@ -20,6 +20,14 @@ func envOr(k, d string) string {
 	return d
 }
 
+// ConfigFile is an editable config file for an app, mounted into the container
+// from the state dir (seeded from the app's embedded default).
+type ConfigFile struct {
+	File string `json:"file"` // filename in the app's embedded context + state dir
+	Path string `json:"-"`    // mount path inside the container
+	Lang string `json:"lang"` // json5 | yaml | env (UI hint)
+}
+
 // App is a curated, installable AI application backed by a container image.
 type App struct {
 	ID          string            `json:"id"`
@@ -40,6 +48,7 @@ type App struct {
 	Command     []string          `json:"-"`          // container command/args
 	Volumes     map[string]string `json:"-"`          // host-or-named-volume -> containerPath
 	Build       string            `json:"-"`          // embedded build-context name (build instead of pull)
+	Config      []ConfigFile      `json:"config,omitempty"` // editable config files (mounted)
 }
 
 // ContainerName is the orchestrator-managed container name for this app.
@@ -250,6 +259,7 @@ var apps = []App{
 		Build:       "openclaw",
 		Ports:       map[int]int{18789: 18789}, // for the UI link; host networking binds it directly
 		Env:         map[string]string{"CUSTOM_API_KEY": "cloudless"},
+		Config:      []ConfigFile{{File: "openclaw.json", Path: "/root/.openclaw/openclaw.json", Lang: "json5"}},
 		OpenPath:    "/",
 		MinVRAMGB:   0,
 		Verified:    false,
@@ -267,9 +277,13 @@ var apps = []App{
 		Image:       "cloudless/hermes:local",
 		Build:       "hermes",
 		Env:         map[string]string{"OPENAI_API_KEY": "cloudless"},
-		OpenPath:    "/",
-		MinVRAMGB:   0,
-		Verified:    false,
+		Config: []ConfigFile{
+			{File: "config.yaml", Path: "/root/.hermes/config.yaml", Lang: "yaml"},
+			{File: "hermes.env", Path: "/root/.hermes/.env", Lang: "env"},
+		},
+		OpenPath:  "/",
+		MinVRAMGB: 0,
+		Verified:  false,
 		Network:     cloudlessNet,
 	},
 	{

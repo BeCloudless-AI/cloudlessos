@@ -12,6 +12,12 @@ import (
 //go:embed openclaw hermes
 var buildFS embed.FS
 
+// ReadDefault returns the embedded default content of an app's config file
+// (e.g. ReadDefault("openclaw", "openclaw.json")).
+func ReadDefault(appID, file string) ([]byte, error) {
+	return buildFS.ReadFile(appID + "/" + file)
+}
+
 // Materialize writes the embedded build context named `name` (e.g. "openclaw")
 // to a fresh temp directory and returns its path. The caller should
 // os.RemoveAll the directory when the build is done.

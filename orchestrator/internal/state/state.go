@@ -130,3 +130,6 @@ func (s *Store) FirstRun() bool { return s.firstRun }
 
 // Path returns the state file path.
 func (s *Store) Path() string { return s.path }
+
+// Dir returns the state directory (where per-app config also lives).
+func (s *Store) Dir() string { return filepath.Dir(s.path) }

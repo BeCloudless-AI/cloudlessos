@@ -86,6 +86,17 @@
   .row-actions { margin-left: auto; display: flex; gap: 8px; }
   .btn.danger { color: var(--err); border-color: rgba(224, 72, 61, 0.4); }
   .btn.danger:hover { background: rgba(224, 72, 61, 0.08); filter: none; }
+  .cfg-editor { padding: 4px 0 12px; }
+  .cfg-editor.hidden { display: none; }
+  .cfg-file { margin-bottom: 10px; }
+  .cfg-name { font-size: 11.5px; color: var(--muted); margin-bottom: 5px; display: flex; align-items: center; gap: 8px; }
+  .cfg-lang { font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--faint);
+    border: 0.5px solid var(--hair); border-radius: 4px; padding: 1px 6px; }
+  .cfg-area { width: 100%; min-height: 130px; max-height: 320px; resize: vertical; font-family: inherit;
+    font-size: 12px; line-height: 1.5; padding: 11px 13px; border-radius: 10px; border: 0.5px solid var(--hair);
+    background: rgba(0, 0, 0, 0.03); color: var(--ink); white-space: pre; overflow-wrap: normal; tab-size: 2; }
+  .cfg-area:focus { outline: none; border-color: var(--accent); background: #fff; }
+  .cfg-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
 
   /* ---------- layout ---------- */
   main { max-width: 1080px; margin: 0 auto; padding: 56px 28px 90px; }
@@ -534,9 +545,11 @@ async function renderSettings() {
       <h3>Apps</h3>
       ${apps.map(a => `<div class="set-row"><span>${glyph(a.id)}&nbsp; ${a.name}</span>
         <span class="row-actions">
+          ${(a.config && a.config.length) ? `<button class="btn" data-config="${a.id}">Configure</button>` : ''}
           <button class="btn" data-reset="${a.id}" ${a.image ? '' : 'disabled'}>Reset</button>
           <button class="btn danger" data-uninstall="${a.id}" ${a.image ? '' : 'disabled'}>Uninstall</button>
-        </span></div>`).join('')}
+        </span></div>
+        <div class="cfg-editor hidden" id="cfg-${a.id}"></div>`).join('')}
     </div>
     <div class="set-section">
       <h3>System</h3>
@@ -551,6 +564,7 @@ async function renderSettings() {
     api('/api/settings/model', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: m }) })
       .then(r => { if (r.jobId) trackJobToast(r.jobId, 'Model'); }).catch(() => toast('Failed', true));
   };
+  document.querySelectorAll('#set-body button[data-config]').forEach(b => b.onclick = () => openConfig(b.dataset.config));
   document.querySelectorAll('#set-body button[data-reset]').forEach(b => b.onclick = () => {
     const id = b.dataset.reset;
     toast('Resetting ' + id + '…');
@@ -565,6 +579,38 @@ async function renderSettings() {
   });
   document.getElementById('set-replay').onclick = () => {
     api('/api/onboarding/reset', { method: 'POST' }).then(() => { closeSettings(); showOnboarding(); }).catch(() => toast('Failed', true));
+  };
+}
+
+const escapeHtml = s => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+async function openConfig(id) {
+  const el = document.getElementById('cfg-' + id);
+  if (!el.classList.contains('hidden')) { el.classList.add('hidden'); el.innerHTML = ''; return; }
+  let d; try { d = await api(`/api/apps/${id}/config`); } catch { return toast('Could not load config', true); }
+  el.innerHTML = d.files.map(f => `
+    <div class="cfg-file">
+      <div class="cfg-name">${f.file}<span class="cfg-lang">${f.lang}</span></div>
+      <textarea class="cfg-area" data-file="${f.file}" spellcheck="false">${escapeHtml(f.content)}</textarea>
+    </div>`).join('') +
+    `<div class="cfg-actions">
+      <button class="btn danger" data-cfgreset="${id}">Reset to defaults</button>
+      <button class="btn primary" data-cfgsave="${id}">Save &amp; apply</button>
+    </div>`;
+  el.classList.remove('hidden');
+  el.querySelector('[data-cfgsave]').onclick = () => {
+    const files = {};
+    el.querySelectorAll('textarea[data-file]').forEach(t => files[t.dataset.file] = t.value);
+    toast('Saving ' + id + ' config…');
+    api(`/api/apps/${id}/config`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ files }) })
+      .then(r => { if (r.jobId) trackJobToast(r.jobId, id + ' config'); else toast('Saved (applies on install)'); })
+      .catch(() => toast('Failed', true));
+  };
+  el.querySelector('[data-cfgreset]').onclick = () => {
+    if (!confirm(`Reset ${id} config to defaults?`)) return;
+    toast('Resetting ' + id + ' config…');
+    api(`/api/apps/${id}/config/reset`, { method: 'POST' })
+      .then(r => { el.classList.add('hidden'); el.innerHTML = ''; if (r.jobId) trackJobToast(r.jobId, id + ' config'); else toast('Reset'); })
+      .catch(() => toast('Failed', true));
   };
 }
 

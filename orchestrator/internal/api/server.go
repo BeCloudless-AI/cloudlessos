@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -50,6 +51,9 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/apps/{id}/remove", s.remove)
 	mux.HandleFunc("POST /api/apps/{id}/reset", s.appReset)
 	mux.HandleFunc("POST /api/apps/{id}/uninstall", s.appUninstall)
+	mux.HandleFunc("GET /api/apps/{id}/config", s.appConfigGet)
+	mux.HandleFunc("POST /api/apps/{id}/config", s.appConfigSet)
+	mux.HandleFunc("POST /api/apps/{id}/config/reset", s.appConfigReset)
 	mux.HandleFunc("GET /api/settings", s.settingsGet)
 	mux.HandleFunc("POST /api/settings/model", s.settingsModel)
 	mux.HandleFunc("POST /api/onboarding/reset", s.onboardingReset)
@@ -335,7 +339,7 @@ func (s *Server) runInstall(job *jobs.Job, app catalog.App) {
 	}
 
 	job.Progress("starting", "Starting container…", -1, -1)
-	id, err := s.eng.Run(ctx, app.Spec())
+	id, err := s.eng.Run(ctx, s.appSpec(app))
 	if err != nil {
 		job.Fail(err)
 		return
@@ -441,6 +445,139 @@ func (s *Server) appUninstall(w http.ResponseWriter, r *http.Request) {
 	_ = s.eng.Remove(ctx, app.ContainerName())
 	_ = s.eng.RemoveImage(ctx, app.Image)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "uninstalled"})
+}
+
+// appConfigDir is where an app's editable config files live in the state dir.
+func (s *Server) appConfigDir(appID string) string {
+	return filepath.Join(s.state.Dir(), "apps", appID)
+}
+
+// configVolumes seeds missing config files from their embedded defaults and
+// returns host->container mounts so the app reads the user's editable config.
+func (s *Server) configVolumes(app catalog.App) map[string]string {
+	vols := map[string]string{}
+	dir := s.appConfigDir(app.ID)
+	for _, cf := range app.Config {
+		host := filepath.Join(dir, cf.File)
+		if _, err := os.Stat(host); err != nil {
+			def, derr := apps.ReadDefault(app.ID, cf.File)
+			if derr != nil {
+				log.Printf("config: default %s/%s: %v", app.ID, cf.File, derr)
+				continue
+			}
+			_ = os.MkdirAll(dir, 0o755)
+			if werr := os.WriteFile(host, def, 0o644); werr != nil {
+				log.Printf("config: seed %s: %v", host, werr)
+				continue
+			}
+		}
+		vols[host] = cf.Path
+	}
+	return vols
+}
+
+// appSpec is app.Spec() plus the user's mounted config files.
+func (s *Server) appSpec(app catalog.App) engine.RunSpec {
+	rs := app.Spec()
+	vols := s.configVolumes(app)
+	if len(vols) > 0 {
+		if rs.Volumes == nil {
+			rs.Volumes = map[string]string{}
+		}
+		for h, c := range vols {
+			rs.Volumes[h] = c
+		}
+	}
+	return rs
+}
+
+func (s *Server) appConfigGet(w http.ResponseWriter, r *http.Request) {
+	app, ok := catalog.Get(r.PathValue("id"))
+	if !ok || len(app.Config) == 0 {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no config"})
+		return
+	}
+	type file struct {
+		File    string `json:"file"`
+		Lang    string `json:"lang"`
+		Content string `json:"content"`
+	}
+	dir := s.appConfigDir(app.ID)
+	files := []file{}
+	for _, cf := range app.Config {
+		content := ""
+		if b, err := os.ReadFile(filepath.Join(dir, cf.File)); err == nil {
+			content = string(b)
+		} else if def, derr := apps.ReadDefault(app.ID, cf.File); derr == nil {
+			content = string(def)
+		}
+		files = append(files, file{File: cf.File, Lang: cf.Lang, Content: content})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"files": files})
+}
+
+func (s *Server) appConfigSet(w http.ResponseWriter, r *http.Request) {
+	app, ok := catalog.Get(r.PathValue("id"))
+	if !ok || len(app.Config) == 0 {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no config"})
+		return
+	}
+	var body struct {
+		Files map[string]string `json:"files"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad request"})
+		return
+	}
+	dir := s.appConfigDir(app.ID)
+	_ = os.MkdirAll(dir, 0o755)
+	for _, cf := range app.Config {
+		if content, present := body.Files[cf.File]; present {
+			if err := os.WriteFile(filepath.Join(dir, cf.File), []byte(content), 0o644); err != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+				return
+			}
+		}
+	}
+	s.restartApp(w, app)
+}
+
+func (s *Server) appConfigReset(w http.ResponseWriter, r *http.Request) {
+	app, ok := catalog.Get(r.PathValue("id"))
+	if !ok || len(app.Config) == 0 {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no config"})
+		return
+	}
+	dir := s.appConfigDir(app.ID)
+	for _, cf := range app.Config {
+		_ = os.Remove(filepath.Join(dir, cf.File)) // appSpec reseeds defaults on next run
+	}
+	s.restartApp(w, app)
+}
+
+// restartApp recreates the app's container (applying current config) if it's
+// installed; otherwise acknowledges (config applies on next install).
+func (s *Server) restartApp(w http.ResponseWriter, app catalog.App) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	c, _ := s.eng.Find(ctx, app.ContainerName())
+	cancel()
+	if c == nil {
+		writeJSON(w, http.StatusOK, map[string]string{"status": "saved"})
+		return
+	}
+	job := s.jobs.Create("config:" + app.ID)
+	go func() {
+		rctx, rcancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer rcancel()
+		job.Progress("switching", "Applying config…", -1, -1)
+		_ = s.eng.Remove(rctx, app.ContainerName())
+		if _, err := s.eng.Run(rctx, s.appSpec(app)); err != nil {
+			job.Fail(err)
+			return
+		}
+		job.Succeed("")
+	}()
+	writeJSON(w, http.StatusAccepted, map[string]string{"jobId": job.ID})
 }
 
 func (s *Server) settingsGet(w http.ResponseWriter, r *http.Request) {

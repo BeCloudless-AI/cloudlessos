@@ -72,6 +72,10 @@ removed via the API.
   editable model, applied by restarting the engine), Apps (per-app **Reset**/Uninstall —
   the "fix a mistake" button), System (replay welcome). Runtime-configurable model
   (`state.Model`). Verified: settings served, OpenClaw reset rebuilds + restarts cleanly.
+- **Per-app config editor** (D19): OpenClaw/Hermes config moved from baked-in to **mounted**
+  editable files in the state dir (seeded from defaults). Settings → Apps → Configure edits
+  the full config file(s); Save & apply restarts the app (no rebuild). Verified: an edit to
+  `openclaw.json` lands in the container's mounted file and it still starts.
 
 ## In progress
 

@@ -32,11 +32,14 @@ removed via the API.
 - **Server-side first-run state** (`internal/state`, D8): the daemon — not the browser —
   decides first launch (absence of a per-user state file). `GET /api/onboarding` +
   `POST /api/onboarding/complete`. Verified it persists across daemon restarts.
-- **OS home-screen redesign** (D9): blocky/modular bento layout — System+clock, Graphics,
-  Places, App Launcher — in a sky/white/black palette with Red Hat Mono (vendored woff2).
-  New backends: `internal/hardware` (multi-GPU stats → `gpus[]` from `GET /api/gpu`) and
-  `internal/places` (folders under `~/Cloudless` → `GET /api/folders`,
-  `POST /api/folders/{id}/open`). Verified: assets/font 200, GPU + folders payloads correct.
+- **OS home screen**: backends `internal/hardware` (multi-GPU stats → `gpus[]` from
+  `GET /api/gpu`) and `internal/places` (folders under `~/Cloudless` → `GET /api/folders`,
+  `POST /api/folders/{id}/open`).
+- **macOS-style redesign** (D10, supersedes D9's blocky take): translucent menu bar,
+  centered "Welcome to Cloudless" hero, frosted vibrancy cards (Graphics, Places),
+  Launchpad-style app grid (large rounded icons, hover lift, running dot, hover-to-stop).
+  Three.js removed in favor of a pure-CSS Big Sur gradient wallpaper. Red Hat Mono kept,
+  used lightly. Verified assets/font 200 and GPU/folders payloads.
 
 ## In progress
 

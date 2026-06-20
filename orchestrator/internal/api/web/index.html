@@ -5,225 +5,208 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Cloudless</title>
 <style>
-  @font-face { font-family: 'Red Hat Mono'; font-style: normal; font-weight: 400; font-display: swap;
+  @font-face { font-family: 'Red Hat Mono'; font-weight: 400; font-display: swap;
     src: url('vendor/fonts/red-hat-mono-latin-400-normal.woff2') format('woff2'); }
-  @font-face { font-family: 'Red Hat Mono'; font-style: normal; font-weight: 500; font-display: swap;
+  @font-face { font-family: 'Red Hat Mono'; font-weight: 500; font-display: swap;
     src: url('vendor/fonts/red-hat-mono-latin-500-normal.woff2') format('woff2'); }
-  @font-face { font-family: 'Red Hat Mono'; font-style: normal; font-weight: 700; font-display: swap;
+  @font-face { font-family: 'Red Hat Mono'; font-weight: 700; font-display: swap;
     src: url('vendor/fonts/red-hat-mono-latin-700-normal.woff2') format('woff2'); }
 
   :root {
-    --sky: #1f6bff; --sky-2: #58a0ff; --sky-deep: #0a3aa3;
-    --ink: #0b1220; --ink-2: #41506a; --muted: #6b7a93;
-    --paper: #ffffff; --panel: rgba(255, 255, 255, 0.74);
-    --line: rgba(11, 18, 32, 0.16); --line-2: rgba(11, 18, 32, 0.28);
-    --ok: #14a06b; --warn: #c8841a; --err: #d23b3b;
-    --tick: var(--sky);
+    --accent: #0a84ff; --accent-2: #4fa3ff;
+    --ink: #1d1d1f; --muted: #6e6e73; --faint: #9b9ba1;
+    --card: rgba(255, 255, 255, 0.62); --card-edge: rgba(255, 255, 255, 0.7);
+    --hair: rgba(0, 0, 0, 0.08);
+    --shadow: 0 12px 40px rgba(20, 50, 100, 0.12);
+    --ok: #1aa06a; --warn: #c8841a; --err: #e0483d;
+    --radius: 18px;
   }
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; }
   body {
     color: var(--ink);
     font-family: 'Red Hat Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 14px; line-height: 1.5;
-    background:
-      radial-gradient(1100px 720px at 78% -8%, #bcdcff 0%, rgba(188,220,255,0) 55%),
-      linear-gradient(180deg, #cfe6ff 0%, #e9f3ff 42%, #f5f9ff 100%);
-    background-attachment: fixed;
+    font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased;
   }
-  #bg { position: fixed; inset: 0; z-index: -1; }
-  ::selection { background: rgba(31, 107, 255, 0.22); }
-  a { color: inherit; text-decoration: none; }
+  ::selection { background: rgba(10, 132, 255, 0.18); }
+  button { font: inherit; cursor: pointer; }
 
-  /* ---------- top status bar ---------- */
-  .bar {
-    position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 14px;
-    padding: 11px 20px; border-bottom: 1.5px solid var(--line);
-    background: rgba(255, 255, 255, 0.6); backdrop-filter: blur(12px) saturate(140%);
+  /* ---------- wallpaper (Big Sur-style soft gradient) ---------- */
+  .wall { position: fixed; inset: 0; z-index: -1; overflow: hidden;
+    background: linear-gradient(180deg, #e7f1ff 0%, #eef5ff 45%, #f6f9ff 100%); }
+  .wall .blob { position: absolute; border-radius: 50%; filter: blur(90px); opacity: 0.5; }
+  .b1 { width: 620px; height: 620px; background: #8fbcff; top: -180px; left: -140px; animation: d1 32s ease-in-out infinite; }
+  .b2 { width: 560px; height: 560px; background: #b6acff; top: 8%; right: -180px; animation: d2 38s ease-in-out infinite; }
+  .b3 { width: 540px; height: 540px; background: #8fe4ff; bottom: -200px; left: 32%; animation: d3 42s ease-in-out infinite; }
+  @keyframes d1 { 50% { transform: translate(60px, 40px) scale(1.08); } }
+  @keyframes d2 { 50% { transform: translate(-50px, 50px) scale(1.06); } }
+  @keyframes d3 { 50% { transform: translate(40px, -50px) scale(1.07); } }
+  @media (prefers-reduced-motion: reduce) { .wall .blob { animation: none; } }
+
+  /* ---------- menu bar ---------- */
+  .menubar {
+    position: sticky; top: 0; z-index: 30; height: 32px; display: flex; align-items: center; gap: 14px;
+    padding: 0 18px; font-size: 12px; color: var(--ink);
+    background: rgba(255, 255, 255, 0.5); backdrop-filter: blur(20px) saturate(180%);
+    border-bottom: 0.5px solid var(--hair);
   }
-  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: 0.5px; }
-  .brand .mark { width: 18px; height: 18px; background: linear-gradient(135deg, var(--sky), var(--sky-2)); }
-  .brand small { color: var(--muted); font-weight: 500; letter-spacing: 2px; font-size: 11px; }
-  .bar .spacer { flex: 1; }
-  .stat-chip { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--ink-2); }
-  .led { width: 8px; height: 8px; background: var(--muted); }
-  .led.ok { background: var(--ok); } .led.bad { background: var(--err); }
-  #bar-clock { font-weight: 700; letter-spacing: 1px; }
+  .menubar .brand { display: flex; align-items: center; gap: 8px; font-weight: 700; }
+  .menubar .brand .mark { width: 14px; height: 14px; border-radius: 4px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2)); }
+  .menubar .spacer { flex: 1; }
+  .menubar .mi { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+  .menubar .led { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); }
+  .menubar .led.ok { background: var(--ok); } .menubar .led.bad { background: var(--err); }
+  #clock { color: var(--ink); font-weight: 500; letter-spacing: 0.4px; }
 
-  /* ---------- bento ---------- */
-  main { max-width: 1180px; margin: 0 auto; padding: 22px 20px 64px; }
-  .bento { display: grid; grid-template-columns: repeat(12, 1fr); gap: 14px; }
-  .mod {
-    background: var(--panel); border: 1.5px solid var(--line); border-radius: 10px;
-    backdrop-filter: blur(14px) saturate(140%); overflow: hidden;
-    display: flex; flex-direction: column;
+  /* ---------- layout ---------- */
+  main { max-width: 1080px; margin: 0 auto; padding: 56px 28px 90px; }
+  .hero { text-align: center; margin-bottom: 52px; }
+  .hero h1 { margin: 0 0 10px; font-size: 40px; font-weight: 700; letter-spacing: -1px; }
+  .hero p { margin: 0; color: var(--muted); font-size: 15px; }
+
+  .cards { display: grid; grid-template-columns: 1.5fr 1fr; gap: 22px; margin-bottom: 46px; }
+  @media (max-width: 820px) { .cards { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--card); backdrop-filter: blur(30px) saturate(180%);
+    border: 0.5px solid var(--card-edge); border-radius: var(--radius);
+    box-shadow: var(--shadow); padding: 22px 24px;
   }
-  .mod-head {
-    display: flex; align-items: center; gap: 9px; padding: 10px 14px;
-    border-bottom: 1.5px solid var(--line); font-size: 11.5px; letter-spacing: 1.6px;
-    text-transform: uppercase; color: var(--ink-2);
-  }
-  .mod-head .tk { width: 9px; height: 9px; background: var(--tick); }
-  .mod-head .id { margin-left: auto; color: var(--muted); font-weight: 500; }
-  .mod-body { padding: 14px; }
-
-  .m-welcome { grid-column: span 12; }
-  .m-gpu     { grid-column: span 7; }
-  .m-places  { grid-column: span 5; }
-  .m-apps    { grid-column: span 12; }
-  @media (max-width: 880px) { .m-gpu, .m-places { grid-column: span 12; } }
-
-  /* welcome */
-  .welcome-row { display: flex; align-items: flex-end; gap: 24px; flex-wrap: wrap; }
-  .welcome-row .hello { flex: 1; min-width: 260px; }
-  .hello h1 { margin: 0 0 6px; font-size: 30px; font-weight: 700; letter-spacing: -0.5px; }
-  .hello h1 .blue { color: var(--sky); }
-  .hello p { margin: 0; color: var(--ink-2); font-size: 13.5px; }
-  .clock { text-align: right; }
-  .clock .t { font-size: 40px; font-weight: 700; letter-spacing: 2px; line-height: 1; }
-  .clock .d { color: var(--muted); font-size: 12.5px; letter-spacing: 1px; margin-top: 6px; }
+  .card h2 { margin: 0 0 16px; font-size: 12px; font-weight: 500; letter-spacing: 0.5px;
+    text-transform: uppercase; color: var(--muted); }
 
   /* gpu */
-  .gpu + .gpu { margin-top: 14px; padding-top: 14px; border-top: 1.5px dashed var(--line); }
-  .gpu-name { font-weight: 700; display: flex; align-items: center; gap: 8px; }
-  .gpu-name .idx { color: var(--sky); font-size: 12px; }
-  .stat { margin-top: 10px; }
-  .stat-row { display: flex; justify-content: space-between; font-size: 12px; color: var(--ink-2); margin-bottom: 5px; }
-  .stat-row b { color: var(--ink); }
-  .bar2 { height: 12px; background: rgba(11, 18, 32, 0.07); border: 1.5px solid var(--line); border-radius: 3px; overflow: hidden; }
-  .bar2 > i { display: block; height: 100%; background: repeating-linear-gradient(90deg, var(--sky) 0 8px, var(--sky-2) 8px 10px); transition: width .5s ease; }
-  .kv { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
-  .kv span { font-size: 11.5px; color: var(--ink-2); border: 1.5px solid var(--line); border-radius: 4px; padding: 3px 8px; }
+  .gpu + .gpu { margin-top: 18px; padding-top: 18px; border-top: 0.5px solid var(--hair); }
+  .gpu-name { font-weight: 700; font-size: 15px; }
+  .gpu-name .idx { color: var(--faint); font-weight: 400; margin-left: 6px; font-size: 12px; }
+  .stat { margin-top: 12px; }
+  .stat-row { display: flex; justify-content: space-between; font-size: 12.5px; color: var(--muted); margin-bottom: 6px; }
+  .stat-row b { color: var(--ink); font-weight: 500; }
+  .track { height: 7px; border-radius: 4px; background: rgba(0, 0, 0, 0.08); overflow: hidden; }
+  .track > i { display: block; height: 100%; border-radius: 4px;
+    background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width 0.6s ease; }
+  .chips { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 14px; font-size: 12px; color: var(--muted); }
+  .chips b { color: var(--ink); font-weight: 500; }
   .empty { color: var(--muted); font-size: 13px; }
 
   /* places */
-  .places-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  .place {
-    display: flex; flex-direction: column; gap: 3px; text-align: left; cursor: pointer;
-    padding: 12px; border: 1.5px solid var(--line); border-radius: 8px; background: rgba(255,255,255,0.5);
-    font: inherit; color: var(--ink); transition: border-color .15s, transform .08s, background .15s;
-  }
-  .place:hover { border-color: var(--sky); background: rgba(31,107,255,0.06); }
-  .place:active { transform: translateY(1px); }
-  .place .p-ic { font-size: 20px; }
-  .place .p-l { font-weight: 700; }
-  .place .p-sub { font-size: 10.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .place { display: flex; align-items: center; gap: 12px; padding: 9px 10px; margin: 0 -10px;
+    border-radius: 10px; cursor: pointer; transition: background 0.15s; }
+  .place:hover { background: rgba(10, 132, 255, 0.08); }
+  .place .pic { font-size: 19px; width: 24px; text-align: center; }
+  .place .pl { font-weight: 500; }
+  .place .pp { margin-left: auto; color: var(--faint); font-size: 11px; max-width: 46%;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-  /* apps launcher */
-  .apps-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
-  .app { border: 1.5px solid var(--line); border-radius: 8px; padding: 14px; background: rgba(255,255,255,0.5);
-    display: flex; flex-direction: column; gap: 10px; transition: border-color .15s, transform .12s; }
-  .app:hover { border-color: var(--sky); transform: translateY(-2px); }
-  .app-top { display: flex; align-items: center; gap: 11px; }
-  .app-ic { width: 40px; height: 40px; display: grid; place-items: center; font-size: 21px;
-    border: 1.5px solid var(--line); border-radius: 8px; background: rgba(31,107,255,0.07); }
-  .app-name { font-weight: 700; }
-  .app p { margin: 0; color: var(--ink-2); font-size: 12px; flex: 1; }
-  .badges { display: flex; gap: 6px; flex-wrap: wrap; }
-  .badge { font-size: 10.5px; padding: 2px 7px; border: 1.5px solid var(--line); border-radius: 4px; color: var(--ink-2); text-transform: uppercase; letter-spacing: .5px; }
-  .badge.ok { color: var(--ok); border-color: rgba(20,160,107,0.4); }
-  .badge.run { color: var(--sky); border-color: rgba(31,107,255,0.45); }
-  .app-actions { display: flex; gap: 8px; }
-
-  button {
-    font: inherit; font-size: 12.5px; font-weight: 700; padding: 9px 13px; border-radius: 6px;
-    border: 1.5px solid var(--line); background: #fff; color: var(--ink); cursor: pointer;
-    letter-spacing: .3px; transition: filter .15s, transform .08s, border-color .15s;
+  /* launchpad */
+  .sec { text-align: center; font-size: 12px; font-weight: 500; letter-spacing: 0.5px;
+    text-transform: uppercase; color: var(--muted); margin: 0 0 24px; }
+  .pad { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+    gap: 30px 16px; justify-items: center; max-width: 760px; margin: 0 auto; }
+  .tile { width: 104px; text-align: center; }
+  .ic {
+    position: relative; width: 76px; height: 76px; margin: 0 auto 9px; border-radius: 20px;
+    display: grid; place-items: center; font-size: 36px; cursor: pointer;
+    box-shadow: 0 8px 22px rgba(20, 50, 100, 0.18); border: 0.5px solid rgba(255, 255, 255, 0.4);
+    transition: transform 0.18s cubic-bezier(.2,.8,.2,1), box-shadow 0.18s; user-select: none;
   }
-  button:hover { border-color: var(--sky); }
-  button:active { transform: scale(0.98); }
-  button.primary { background: var(--sky); border-color: var(--sky); color: #fff; }
-  button.primary:hover { filter: brightness(1.07); }
-  button:disabled { opacity: .55; cursor: default; }
+  .tile .ic:hover { transform: translateY(-4px) scale(1.05); box-shadow: 0 16px 34px rgba(20, 50, 100, 0.26); }
+  .tile.busy .ic { filter: saturate(0.5) brightness(0.96); animation: pulse 1.4s ease-in-out infinite; }
+  .tile.disabled .ic { opacity: 0.5; cursor: default; }
+  @keyframes pulse { 50% { opacity: 0.7; } }
+  .nm { font-size: 13px; font-weight: 500; }
+  .meta { font-size: 11px; color: var(--muted); margin-top: 3px; min-height: 14px; }
+  .meta .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+    background: var(--accent); margin-right: 5px; vertical-align: middle; }
+  .stopx {
+    position: absolute; top: -7px; left: -7px; width: 20px; height: 20px; border-radius: 50%;
+    border: none; background: rgba(40, 40, 45, 0.92); color: #fff; font-size: 13px; line-height: 1;
+    display: none; place-items: center; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  }
+  .tile.running .ic:hover .stopx, .stopx:hover { display: grid; }
 
   /* toast */
-  #toast { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(20px);
-    background: var(--ink); color: #fff; padding: 11px 16px; border-radius: 8px; font-size: 12.5px;
-    opacity: 0; pointer-events: none; transition: opacity .25s, transform .25s; z-index: 60; max-width: 80vw; }
+  #toast { position: fixed; left: 50%; bottom: 30px; transform: translateX(-50%) translateY(16px);
+    background: rgba(30, 30, 34, 0.92); color: #fff; padding: 11px 18px; border-radius: 12px;
+    font-size: 12.5px; opacity: 0; pointer-events: none; transition: opacity 0.25s, transform 0.25s;
+    backdrop-filter: blur(20px); z-index: 60; }
   #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-  #toast.err { background: var(--err); }
+  #toast.err { background: rgba(200, 50, 45, 0.94); }
 
-  /* ---------- onboarding ---------- */
+  /* onboarding */
   .overlay { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center;
-    background: rgba(207, 230, 255, 0.55); backdrop-filter: blur(8px); animation: fade .4s ease; }
-  .overlay.hidden { display: none; }
-  .overlay.fade-out { animation: fadeo .35s ease forwards; }
-  @keyframes fade { from { opacity: 0 } to { opacity: 1 } }
-  @keyframes fadeo { from { opacity: 1 } to { opacity: 0 } }
-  .ob { width: min(560px, 92vw); background: var(--paper); border: 1.5px solid var(--line-2);
-    border-radius: 12px; box-shadow: 0 22px 60px rgba(10,58,163,0.18); animation: rise .45s cubic-bezier(.2,.8,.2,1); }
-  @keyframes rise { from { transform: translateY(16px); opacity: 0 } to { transform: none; opacity: 1 } }
-  .ob-head { display: flex; align-items: center; gap: 9px; padding: 12px 16px; border-bottom: 1.5px solid var(--line);
-    font-size: 11.5px; letter-spacing: 1.6px; text-transform: uppercase; color: var(--muted); }
-  .ob-head .tk { width: 9px; height: 9px; background: var(--sky); }
-  .ob-body { padding: 30px 30px 8px; min-height: 220px; }
-  .ob-logo { width: 52px; height: 52px; background: linear-gradient(135deg, var(--sky), var(--sky-2)); margin-bottom: 18px; }
-  .ob-body h2 { margin: 0 0 10px; font-size: 24px; font-weight: 700; letter-spacing: -0.3px; }
-  .ob-body .lead { color: var(--ink-2); font-size: 13.5px; margin: 0 0 16px; }
-  .hw { display: flex; align-items: center; gap: 13px; padding: 14px; border: 1.5px solid var(--line); border-radius: 8px; }
+    background: rgba(220, 235, 255, 0.5); backdrop-filter: blur(14px); animation: fade 0.4s ease; }
+  .overlay.hidden { display: none; } .overlay.out { animation: fadeo 0.35s ease forwards; }
+  @keyframes fade { from { opacity: 0 } } @keyframes fadeo { to { opacity: 0 } }
+  .ob { width: min(520px, 92vw); background: rgba(255, 255, 255, 0.86); backdrop-filter: blur(40px) saturate(180%);
+    border: 0.5px solid var(--card-edge); border-radius: 22px; box-shadow: 0 30px 80px rgba(20, 50, 100, 0.22);
+    padding: 38px 38px 28px; animation: rise 0.45s cubic-bezier(.2,.8,.2,1); }
+  @keyframes rise { from { transform: translateY(14px); opacity: 0 } }
+  .ob-body { min-height: 218px; }
+  .ob-logo { width: 56px; height: 56px; border-radius: 16px; margin: 0 auto 20px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2)); box-shadow: 0 10px 26px rgba(10, 132, 255, 0.4); }
+  .ob-body h2 { margin: 0 0 10px; font-size: 25px; font-weight: 700; letter-spacing: -0.4px; text-align: center; }
+  .ob-body .lead { color: var(--muted); font-size: 13.5px; margin: 0 0 18px; text-align: center; }
+  .hw { display: flex; align-items: center; gap: 13px; padding: 14px 16px; border-radius: 14px;
+    background: rgba(0, 0, 0, 0.04); }
   .hw .hi { font-size: 24px; } .hw .hn { font-weight: 700; } .hw .hs { color: var(--muted); font-size: 12px; }
   .hw .verdict { margin-left: auto; font-weight: 700; font-size: 12.5px; }
   .verdict.ok { color: var(--ok); } .verdict.warn { color: var(--warn); }
   .pick { display: flex; flex-direction: column; gap: 9px; }
-  .pi { display: flex; align-items: center; gap: 12px; padding: 12px; border: 1.5px solid var(--line);
-    border-radius: 8px; cursor: pointer; transition: border-color .15s, background .15s; }
-  .pi:hover { border-color: var(--sky); } .pi.sel { border-color: var(--sky); background: rgba(31,107,255,0.08); }
-  .pi .app-ic { width: 36px; height: 36px; font-size: 18px; }
+  .pi { display: flex; align-items: center; gap: 12px; padding: 11px 13px; border-radius: 14px;
+    cursor: pointer; border: 0.5px solid var(--hair); transition: background 0.15s, border-color 0.15s; }
+  .pi:hover { background: rgba(10, 132, 255, 0.06); } .pi.sel { border-color: var(--accent); background: rgba(10, 132, 255, 0.1); }
+  .pi .pic { width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; font-size: 19px; }
   .pi .t { font-weight: 700; } .pi .d { color: var(--muted); font-size: 11.5px; }
-  .pi .ck { margin-left: auto; color: var(--sky); font-weight: 700; opacity: 0; } .pi.sel .ck { opacity: 1; }
-  .ob-foot { display: flex; align-items: center; padding: 18px 30px 26px; }
-  .dots { display: flex; gap: 6px; } .dots span { width: 7px; height: 7px; background: var(--line-2); }
-  .dots span.on { background: var(--sky); width: 18px; }
+  .pi .ck { margin-left: auto; color: var(--accent); font-weight: 700; opacity: 0; } .pi.sel .ck { opacity: 1; }
+  .ob-foot { display: flex; align-items: center; margin-top: 24px; }
+  .dots { display: flex; gap: 7px; } .dots span { width: 7px; height: 7px; border-radius: 50%; background: var(--hair); transition: width 0.3s, background 0.3s; }
+  .dots span.on { background: var(--accent); width: 18px; border-radius: 4px; }
   .ob-act { margin-left: auto; display: flex; gap: 9px; }
-  .link { background: none; border: none; color: var(--muted); } .link:hover { color: var(--ink); border: none; }
+  .btn { padding: 9px 18px; border-radius: 11px; border: 0.5px solid var(--hair); background: #fff; color: var(--ink); font-weight: 500; transition: filter 0.15s; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover { filter: brightness(1.07); }
+  .btn.link { background: none; border: none; color: var(--muted); } .btn.link:hover { color: var(--ink); }
 </style>
 </head>
 <body>
-<canvas id="bg"></canvas>
+<div class="wall"><div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div></div>
 
-<div class="bar">
-  <div class="brand"><span class="mark"></span> Cloudless <small>OS</small></div>
+<div class="menubar">
+  <div class="brand"><span class="mark"></span> Cloudless</div>
   <div class="spacer"></div>
-  <div class="stat-chip"><span class="led" id="led-gpu"></span> <span id="chip-gpu">GPU —</span></div>
-  <div class="stat-chip"><span class="led" id="led-sys"></span> <span id="chip-sys">SYSTEM</span></div>
-  <div id="bar-clock">--:--:--</div>
+  <div class="mi"><span class="led" id="led-gpu"></span> <span id="mi-gpu">GPU</span></div>
+  <div class="mi"><span class="led" id="led-sys"></span> <span id="mi-sys">System</span></div>
+  <div id="clock">--:--</div>
 </div>
 
 <main>
-  <div class="bento">
-    <section class="mod m-welcome">
-      <div class="mod-head"><span class="tk"></span> System <span class="id">// 01</span></div>
-      <div class="mod-body welcome-row">
-        <div class="hello">
-          <h1>Welcome to <span class="blue">Cloudless</span></h1>
-          <p id="welcome-sub">Your private, local-AI workstation.</p>
-        </div>
-        <div class="clock"><div class="t" id="big-clock">--:--</div><div class="d" id="big-date"></div></div>
-      </div>
-    </section>
+  <div class="hero">
+    <h1>Welcome to Cloudless</h1>
+    <p id="hero-sub">Your private, local-AI workstation.</p>
+  </div>
 
-    <section class="mod m-gpu">
-      <div class="mod-head"><span class="tk"></span> Graphics <span class="id">// 02</span></div>
-      <div class="mod-body" id="gpu-body"><div class="empty">Reading GPUs…</div></div>
+  <div class="cards">
+    <section class="card">
+      <h2>Graphics</h2>
+      <div id="gpu-body"><div class="empty">Reading GPUs…</div></div>
     </section>
-
-    <section class="mod m-places">
-      <div class="mod-head"><span class="tk"></span> Places <span class="id">// 03</span></div>
-      <div class="mod-body"><div class="places-grid" id="places-body"></div></div>
-    </section>
-
-    <section class="mod m-apps">
-      <div class="mod-head"><span class="tk"></span> App Launcher <span class="id">// 04</span></div>
-      <div class="mod-body"><div class="apps-grid" id="apps-body"></div></div>
+    <section class="card">
+      <h2>Places</h2>
+      <div id="places-body"></div>
     </section>
   </div>
+
+  <section>
+    <h3 class="sec">Apps</h3>
+    <div class="pad" id="pad"></div>
+  </section>
 </main>
 
 <div id="toast"></div>
 
 <div class="overlay hidden" id="onboarding">
   <div class="ob">
-    <div class="ob-head"><span class="tk"></span> Setup</div>
     <div class="ob-body" id="ob-body"></div>
     <div class="ob-foot">
       <div class="dots" id="ob-dots"><span></span><span></span><span></span></div>
@@ -232,84 +215,58 @@
   </div>
 </div>
 
-<script src="vendor/three.min.js"></script>
 <script>
 const api = (p, o) => fetch(p, o).then(r => r.json());
-const ICONS = { ollama: '🦙', 'open-webui': '💬', comfyui: '🎨' };
-const PLACE_ICONS = { models: '📦', outputs: '🖼️', workspace: '🗂️', downloads: '⬇️' };
-const icon = id => ICONS[id] || '⚙️';
+const GLYPH = { ollama: '🦙', 'open-webui': '💬', comfyui: '🎨' };
+const TILE_BG = {
+  ollama: 'linear-gradient(135deg,#ffd27a,#ff9e63)',
+  'open-webui': 'linear-gradient(135deg,#74b4ff,#4f8bff)',
+  comfyui: 'linear-gradient(135deg,#c79bff,#ff96d0)',
+};
+const PLACE_ICON = { models: '📦', outputs: '🖼️', workspace: '🗂️', downloads: '⬇️' };
+const glyph = id => GLYPH[id] || '⚙️';
+const tileBg = id => TILE_BG[id] || 'linear-gradient(135deg,#cfd9e8,#aab8cc)';
 const gb = mb => (mb / 1024).toFixed(1);
 let installing = 0, catalogCache = [];
 
-/* ---- ambient sky background ---- */
-function initBackground() {
-  if (!window.THREE) return;
-  let renderer;
-  try { renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('bg'), antialias: true, alpha: true }); }
-  catch (e) { return; }
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-  const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(62, innerWidth / innerHeight, 0.1, 1000);
-  camera.position.z = 62;
-  const c = document.createElement('canvas'); c.width = c.height = 64;
-  const g = c.getContext('2d'); const grd = g.createRadialGradient(32, 32, 0, 32, 32, 32);
-  grd.addColorStop(0, 'rgba(31,107,255,0.9)'); grd.addColorStop(1, 'rgba(31,107,255,0)');
-  g.fillStyle = grd; g.fillRect(0, 0, 64, 64);
-  const tex = new THREE.CanvasTexture(c);
-  const N = 520, pos = new Float32Array(N * 3);
-  for (let i = 0; i < N; i++) { pos[i*3]=(Math.random()-0.5)*230; pos[i*3+1]=(Math.random()-0.5)*150; pos[i*3+2]=(Math.random()-0.5)*170; }
-  const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  const pts = new THREE.Points(geo, new THREE.PointsMaterial({ size: 1.5, map: tex, transparent: true, depthWrite: false, opacity: 0.5, color: 0x2f7dff }));
-  scene.add(pts);
-  let mx = 0, my = 0, t = 0, run = true;
-  addEventListener('pointermove', e => { mx = e.clientX/innerWidth-0.5; my = e.clientY/innerHeight-0.5; });
-  function resize() { camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight, false); }
-  addEventListener('resize', resize); resize();
-  document.addEventListener('visibilitychange', () => { run = !document.hidden; if (run) loop(); });
-  function loop() { if (!run) return; t += 0.0012; pts.rotation.y = t; pts.rotation.x = t*0.4;
-    camera.position.x += (mx*16 - camera.position.x)*0.04; camera.position.y += (-my*10 - camera.position.y)*0.04;
-    camera.lookAt(scene.position); renderer.render(scene, camera); requestAnimationFrame(loop); }
-  loop();
-}
-
 /* ---- clock ---- */
-const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
-function pad(n) { return String(n).padStart(2, '0'); }
-function greet(h) { return h < 5 ? 'Good night' : h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'; }
-function updateClock() {
+const DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+const MON = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const pad = n => String(n).padStart(2, '0');
+const greet = h => h < 5 ? 'Good night' : h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
+function tickClock() {
   const d = new Date();
-  document.getElementById('bar-clock').textContent = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-  document.getElementById('big-clock').textContent = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  document.getElementById('big-date').textContent = `${DAYS[d.getDay()]} ${pad(d.getDate())} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`.toUpperCase();
-  document.getElementById('welcome-sub').textContent = `${greet(d.getHours())} — your private, local-AI workstation.`;
+  document.getElementById('clock').textContent =
+    `${DAYS[d.getDay()].slice(0,3)} ${pad(d.getDate())} ${MON[d.getMonth()].slice(0,3)}  ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  document.getElementById('hero-sub').textContent =
+    `${greet(d.getHours())} — ${DAYS[d.getDay()]}, ${pad(d.getDate())} ${MON[d.getMonth()]}`;
 }
 
 /* ---- status + gpu ---- */
 async function refreshStatus() {
   try { const h = await api('/api/health');
     document.getElementById('led-sys').className = 'led ' + (h.dockerOK ? 'ok' : 'bad');
-    document.getElementById('chip-sys').textContent = h.dockerOK ? 'SYSTEM READY' : 'DOCKER OFFLINE';
-  } catch { document.getElementById('led-sys').className = 'led bad'; document.getElementById('chip-sys').textContent = 'DAEMON OFFLINE'; }
+    document.getElementById('mi-sys').textContent = h.dockerOK ? 'Ready' : 'Docker offline';
+  } catch { document.getElementById('led-sys').className = 'led bad'; document.getElementById('mi-sys').textContent = 'Offline'; }
 }
 async function renderGPUs() {
   let data; try { data = await api('/api/gpu'); } catch { return; }
   const gpus = (data && data.gpus) || [];
   document.getElementById('led-gpu').className = 'led ' + (gpus.length ? 'ok' : '');
-  document.getElementById('chip-gpu').textContent = gpus.length
-    ? (gpus.length === 1 ? gpus[0].name.replace('NVIDIA GeForce ', '') : gpus.length + ' GPUS') : 'NO GPU';
+  document.getElementById('mi-gpu').textContent = gpus.length
+    ? (gpus.length === 1 ? gpus[0].name.replace('NVIDIA GeForce ', '') : gpus.length + ' GPUs') : 'No GPU';
   const body = document.getElementById('gpu-body');
   if (!gpus.length) { body.innerHTML = '<div class="empty">No NVIDIA GPU detected on this machine.</div>'; return; }
   body.innerHTML = gpus.map(g => {
-    const vramPct = g.memTotalMB > 0 ? Math.round(g.memUsedMB / g.memTotalMB * 100) : 0;
-    const power = g.powerW >= 0 ? `${Math.round(g.powerW)} / ${Math.round(g.powerLimitW)} W` : 'n/a';
+    const vram = g.memTotalMB > 0 ? Math.round(g.memUsedMB / g.memTotalMB * 100) : 0;
+    const power = g.powerW >= 0 ? `${Math.round(g.powerW)} / ${Math.round(g.powerLimitW)} W` : '—';
     return `<div class="gpu">
-      <div class="gpu-name">${g.name} <span class="idx">#${g.index}</span></div>
-      <div class="stat"><div class="stat-row"><span>VRAM</span><b>${gb(g.memUsedMB)} / ${gb(g.memTotalMB)} GB</b></div>
-        <div class="bar2"><i style="width:${vramPct}%"></i></div></div>
-      <div class="stat"><div class="stat-row"><span>UTILIZATION</span><b>${g.utilPct}%</b></div>
-        <div class="bar2"><i style="width:${Math.max(0, g.utilPct)}%"></i></div></div>
-      <div class="kv"><span>TEMP ${g.tempC}°C</span><span>POWER ${power}</span><span>DRIVER ${g.driver}</span></div>
+      <div class="gpu-name">${g.name}<span class="idx">#${g.index}</span></div>
+      <div class="stat"><div class="stat-row"><span>Memory</span><b>${gb(g.memUsedMB)} / ${gb(g.memTotalMB)} GB</b></div>
+        <div class="track"><i style="width:${vram}%"></i></div></div>
+      <div class="stat"><div class="stat-row"><span>Utilization</span><b>${g.utilPct}%</b></div>
+        <div class="track"><i style="width:${Math.max(0, g.utilPct)}%"></i></div></div>
+      <div class="chips"><span>${g.tempC}°C</span><span><b>${power}</b></span><span>Driver ${g.driver}</span></div>
     </div>`;
   }).join('');
 }
@@ -318,65 +275,65 @@ async function renderGPUs() {
 async function renderPlaces() {
   let list; try { list = await api('/api/folders'); } catch { return; }
   const body = document.getElementById('places-body');
-  body.innerHTML = list.map(p => `<button class="place" data-id="${p.id}">
-      <span class="p-ic">${PLACE_ICONS[p.id] || '📁'}</span>
-      <span class="p-l">${p.label}</span>
-      <span class="p-sub" title="${p.path}">${p.path}</span></button>`).join('');
-  body.querySelectorAll('.place').forEach(b => b.onclick = async () => {
-    try { const r = await api(`/api/folders/${b.dataset.id}/open`, { method: 'POST' });
-      toast(r.opened ? `Opened ${b.querySelector('.p-l').textContent}` : (r.error || 'Could not open folder'), !r.opened);
+  body.innerHTML = list.map(p => `<div class="place" data-id="${p.id}">
+    <span class="pic">${PLACE_ICON[p.id] || '📁'}</span><span class="pl">${p.label}</span>
+    <span class="pp" title="${p.path}">${p.path.replace(/^.*\/(?=[^/]+\/[^/]+$)/, '…/')}</span></div>`).join('');
+  body.querySelectorAll('.place').forEach(el => el.onclick = async () => {
+    try { const r = await api(`/api/folders/${el.dataset.id}/open`, { method: 'POST' });
+      toast(r.opened ? `Opened ${el.querySelector('.pl').textContent}` : (r.error || 'Could not open folder'), !r.opened);
     } catch { toast('Could not open folder', true); }
   });
 }
 
-/* ---- app launcher ---- */
+/* ---- launchpad ---- */
 async function renderApps() {
   const [catalog, apps] = await Promise.all([api('/api/catalog'), api('/api/apps')]);
   catalogCache = catalog;
   const running = {}; apps.forEach(c => running[c.name.replace(/^cloudless-/, '')] = c.state);
-  const body = document.getElementById('apps-body');
-  body.innerHTML = catalog.map(app => {
+  const pad = document.getElementById('pad');
+  pad.innerHTML = catalog.map(app => {
     const isRun = running[app.id] === 'running';
-    const badges = [];
-    if (app.verified) badges.push('<span class="badge ok">verified</span>');
-    if (app.minVramGB > 0) badges.push(`<span class="badge">${app.minVramGB} GB+</span>`);
-    if (isRun) badges.push('<span class="badge run">running</span>');
-    let actions;
-    if (isRun) {
-      const port = app.ports ? Object.keys(app.ports)[0] : '';
-      actions = `<a href="http://localhost:${port}${app.openPath || '/'}" target="_blank"><button class="primary">Open</button></a>
-                 <button data-act="stop" data-id="${app.id}">Stop</button>`;
-    } else {
-      const dis = app.image ? '' : 'disabled title="recipe coming soon"';
-      actions = `<button class="primary" data-act="start" data-id="${app.id}" ${dis}>Install</button>`;
-    }
-    return `<div class="app"><div class="app-top"><span class="app-ic">${icon(app.id)}</span><span class="app-name">${app.name}</span></div>
-      <div class="badges">${badges.join('')}</div><p>${app.description}</p>
-      <div class="app-actions">${actions}</div></div>`;
+    const cls = 'tile' + (isRun ? ' running' : '') + (app.image ? '' : ' disabled');
+    const meta = isRun ? '<span class="dot"></span>Running' : (app.image ? '' : 'Coming soon');
+    return `<div class="${cls}" data-id="${app.id}">
+      <div class="ic" style="background:${tileBg(app.id)}">${glyph(app.id)}<button class="stopx" title="Stop">×</button></div>
+      <div class="nm">${app.name}</div><div class="meta">${meta}</div></div>`;
   }).join('');
-  body.querySelectorAll('button[data-act]').forEach(btn => btn.addEventListener('click', async () => {
-    const { act, id } = btn.dataset; btn.disabled = true;
-    if (act === 'start') {
-      btn.textContent = 'Preparing…';
-      try { const res = await api(`/api/apps/${id}/start`, { method: 'POST' }); if (res.jobId) return trackJob(res.jobId, btn); } catch {}
-      return renderApps();
-    }
-    btn.textContent = 'Stopping…';
-    try { await api(`/api/apps/${id}/${act}`, { method: 'POST' }); } catch {}
-    renderApps();
-  }));
+
+  pad.querySelectorAll('.tile').forEach(tile => {
+    const app = catalog.find(a => a.id === tile.dataset.id);
+    const isRun = running[app.id] === 'running';
+    tile.querySelector('.ic').onclick = () => {
+      if (isRun) { const port = app.ports ? Object.keys(app.ports)[0] : ''; window.open(`http://localhost:${port}${app.openPath || '/'}`, '_blank'); }
+      else if (app.image) startInstall(app, tile);
+    };
+    const stop = tile.querySelector('.stopx');
+    if (stop) stop.onclick = async e => { e.stopPropagation(); try { await api(`/api/apps/${app.id}/stop`, { method: 'POST' }); } catch {} renderApps(); };
+  });
 }
-function trackJob(jobId, btn) {
+function startInstall(app, tile) {
+  tile.classList.add('busy'); tile.querySelector('.meta').textContent = 'Preparing…';
+  api(`/api/apps/${app.id}/start`, { method: 'POST' })
+    .then(res => { if (res.jobId) trackJob(res.jobId, tile); else renderApps(); })
+    .catch(() => renderApps());
+}
+function trackJob(jobId, tile) {
   installing++;
+  const meta = tile.querySelector('.meta');
   const es = new EventSource(`/api/jobs/${jobId}/events`); let ended = false;
-  const done = (r) => { if (ended) return; ended = true; es.close(); installing--; if (r) renderApps(); };
+  const done = r => { if (ended) return; ended = true; es.close(); installing--; if (r) renderApps(); else tile.classList.remove('busy'); };
   es.onmessage = e => { const u = JSON.parse(e.data);
-    if (u.phase === 'pulling') btn.textContent = u.layersTotal > 0 ? `Downloading ${u.layersDone}/${u.layersTotal}…` : (u.message || 'Pulling…');
-    else if (u.phase === 'starting') btn.textContent = 'Starting…';
-    else if (u.phase === 'error') { btn.disabled = false; btn.textContent = 'Failed — retry'; toast('Install failed: ' + (u.error || 'error'), true); return done(false); }
+    if (u.phase === 'pulling') meta.textContent = u.layersTotal > 0 ? `Downloading ${u.layersDone}/${u.layersTotal}` : 'Preparing…';
+    else if (u.phase === 'starting') meta.textContent = 'Starting…';
+    else if (u.phase === 'error') { meta.textContent = 'Failed'; toast('Install failed: ' + (u.error || 'error'), true); return done(false); }
     if (u.done) done(u.phase === 'running');
   };
   es.onerror = () => done(true);
+}
+function installById(id) {
+  const app = catalogCache.find(a => a.id === id);
+  const tile = document.querySelector(`.tile[data-id="${id}"]`);
+  if (app && tile) startInstall(app, tile);
 }
 
 /* ---- toast ---- */
@@ -398,26 +355,28 @@ function showOnboarding() {
     if (i === 0) {
       body.innerHTML = `<div class="ob-logo"></div><h2>Welcome to Cloudless</h2>
         <p class="lead">A private AI workstation that runs on your own machine — no cloud, no accounts.
-        Your models and data stay with you. This takes a few seconds.</p>`;
-      act.innerHTML = `<button class="primary" id="nx">Get started</button>`;
+        Your models and data stay with you.</p>`;
+      act.innerHTML = `<button class="btn primary" id="nx">Get started</button>`;
       document.getElementById('nx').onclick = () => step(1);
     } else if (i === 1) {
       body.innerHTML = `<h2>Your machine</h2><p class="lead">Checking what your hardware can run…</p>
         <div class="hw" id="hw"><div class="hi">🖥️</div><div><div class="hn">Detecting…</div><div class="hs">reading GPU</div></div></div>`;
-      act.innerHTML = `<button class="link" id="bk">Back</button><button class="primary" id="nx">Continue</button>`;
+      act.innerHTML = `<button class="btn link" id="bk">Back</button><button class="btn primary" id="nx">Continue</button>`;
       document.getElementById('bk').onclick = () => step(0); document.getElementById('nx').onclick = () => step(2);
       try { const d = await api('/api/gpu'); const hw = document.getElementById('hw');
         if (d.gpus && d.gpus.length) { const g = d.gpus[0];
           hw.innerHTML = `<div class="hi">⚡</div><div><div class="hn">${g.name}${d.gpus.length > 1 ? ' ×' + d.gpus.length : ''}</div>
-            <div class="hs">${gb(g.memTotalMB)} GB VRAM · driver ${g.driver}</div></div><div class="verdict ok">✓ READY</div>`;
-        } else { hw.innerHTML = `<div class="hi">🖥️</div><div><div class="hn">No GPU detected</div><div class="hs">apps run on CPU (slower)</div></div><div class="verdict warn">LIMITED</div>`; }
+            <div class="hs">${gb(g.memTotalMB)} GB VRAM · driver ${g.driver}</div></div><div class="verdict ok">✓ Ready</div>`;
+        } else { hw.innerHTML = `<div class="hi">🖥️</div><div><div class="hn">No GPU detected</div><div class="hs">apps run on CPU (slower)</div></div><div class="verdict warn">Limited</div>`; }
       } catch {}
     } else {
       const picks = catalogCache.filter(a => a.image).slice(0, 3);
-      body.innerHTML = `<h2>Pick your first app</h2><p class="lead">Install one now, or explore the launcher yourself.</p>
-        <div class="pick">${picks.map(a => `<div class="pi" data-id="${a.id}"><span class="app-ic">${icon(a.id)}</span>
-          <div><div class="t">${a.name}${a.verified ? ' · recommended' : ''}</div><div class="d">${a.description}</div></div><span class="ck">✓</span></div>`).join('')}</div>`;
-      act.innerHTML = `<button class="link" id="bk">Back</button><button class="primary" id="fin">Finish</button>`;
+      body.innerHTML = `<h2>Your first app</h2><p class="lead">Install one now, or explore Launchpad yourself.</p>
+        <div class="pick">${picks.map(a => `<div class="pi" data-id="${a.id}">
+          <span class="pic" style="background:${tileBg(a.id)}">${glyph(a.id)}</span>
+          <div><div class="t">${a.name}${a.verified ? ' · recommended' : ''}</div><div class="d">${a.description}</div></div>
+          <span class="ck">✓</span></div>`).join('')}</div>`;
+      act.innerHTML = `<button class="btn link" id="bk">Back</button><button class="btn primary" id="fin">Finish</button>`;
       document.getElementById('bk').onclick = () => step(1);
       document.getElementById('fin').onclick = () => finishOnboarding(sel);
       body.querySelectorAll('.pi').forEach(el => el.onclick = () => {
@@ -432,16 +391,13 @@ function showOnboarding() {
 }
 function finishOnboarding(pendingId) {
   api('/api/onboarding/complete', { method: 'POST' }).catch(() => {});
-  const ov = document.getElementById('onboarding'); ov.classList.add('fade-out');
-  setTimeout(() => { ov.classList.add('hidden'); ov.classList.remove('fade-out'); }, 380);
-  if (pendingId) renderApps().then(() => {
-    const b = document.querySelector(`button[data-act="start"][data-id="${pendingId}"]`); if (b) b.click();
-  });
+  const ov = document.getElementById('onboarding'); ov.classList.add('out');
+  setTimeout(() => { ov.classList.add('hidden'); ov.classList.remove('out'); }, 360);
+  if (pendingId) renderApps().then(() => installById(pendingId));
 }
 
 /* ---- boot ---- */
-initBackground();
-updateClock(); setInterval(updateClock, 1000);
+tickClock(); setInterval(tickClock, 1000);
 refreshStatus(); renderGPUs(); renderPlaces(); renderApps();
 setInterval(() => { refreshStatus(); renderGPUs(); }, 4000);
 setInterval(() => { if (installing === 0) renderApps(); }, 8000);

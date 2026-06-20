@@ -89,8 +89,9 @@ drop-in swaps. **Verified:** end-to-end Ollama install/run/stop/remove with GPU 
 **Date:** 2026-06-19 · **Status:** Accepted
 
 The web UI ships as static assets embedded in the daemon binary (`go:embed all:web`).
-Third-party libraries are **vendored locally** (Three.js at `internal/api/web/vendor/`),
-never loaded from a CDN.
+Third-party assets are **vendored locally** (Red Hat Mono woff2 at
+`internal/api/web/vendor/fonts/`), never loaded from a CDN. (Three.js was vendored here
+too, then removed in D10 when the background became pure CSS.)
 
 **Why:** An OS/appliance must work fully offline — no runtime network dependency for the
 UI. Embedding in the binary keeps deployment to a single artifact.
@@ -115,7 +116,7 @@ persistence — app/job persistence will likely extend the same package.
 ---
 
 ## D9 — UI design language: blocky, modular, sky/white/black, Red Hat Mono
-**Date:** 2026-06-20 · **Status:** Accepted
+**Date:** 2026-06-20 · **Status:** Visual language superseded by D10; backends still current
 
 The home screen is an OS-style **bento grid of modular blocks** (System/clock, Graphics,
 Places, App Launcher), each a bordered tile with a monospace `// NN` header. Palette is
@@ -131,6 +132,25 @@ via `xdg-open`).
 
 **Why:** "Blocky/modular" matches a monospace, OS-appliance feel and makes each function a
 self-contained, rearrangeable tile. Light theme reflects the "cloudless sky" brand.
+
+---
+
+## D10 — Visual language: macOS-style (elegant, soft, Launchpad), not blocky
+**Date:** 2026-06-20 · **Status:** Accepted (supersedes D9's blocky aesthetic)
+
+The home screen targets a **macOS (Big Sur-era) feel**: simple, elegant, intuitive.
+Concretely: a thin translucent **menu bar**; a centered **"Welcome to Cloudless"** hero;
+**frosted "vibrancy" cards** (translucent, blurred, rounded ~18px, soft shadows, hairline
+edges — not hard borders) for Graphics and Places; and a **Launchpad-style app grid** of
+large rounded icons with per-app gradients, hover lift, a running dot, and a hover stop
+badge. Background is a **pure-CSS Big Sur gradient** with slow drifting blurred blobs —
+**Three.js was removed** (the particle field read as "techy", not elegant; CSS is lighter
+and offline by default). Font stays Red Hat Mono (used more lightly). Palette uses macOS
+system blue `#0a84ff`.
+
+**Why:** User direction — "very macOS X, simple, elegant, intuitive." The earlier blocky
+take (D9) felt too hard/techy and the launcher didn't read as a launcher. The `hardware`
+and `places` backends from D9 are unchanged.
 
 ---
 

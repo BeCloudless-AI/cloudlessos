@@ -12,10 +12,11 @@ control, offline capability, and ownership.
 Local-AI-ready desktops/workstations. Ships with CloudlessOS preinstalled and tuned
 to the hardware. (Later phase — software comes first.)
 
-**Cloudless PCs ship with multiple GPUs.** This is a load-bearing assumption: the
-software should exploit multi-GPU where present (e.g. keep multiple inference engines
-warm on separate GPUs so engine switching is instant — see DECISIONS D15), while
-degrading gracefully to one-at-a-time on single-GPU standalone installs.
+**Cloudless PCs ship with multiple GPUs.** Those GPUs are used to scale the *single
+active* inference engine — bigger models / higher throughput via tensor parallelism
+across the cards — **not** to run multiple engines at once. Exactly one engine runs at a
+time (one port, one endpoint) on every machine; engine switching keeps its model-reload
+downtime by design (see DECISIONS D15).
 
 ### CloudlessOS (software)
 A Linux-based distro whose job is to make local AI **effortless**:

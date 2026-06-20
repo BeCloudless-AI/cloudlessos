@@ -1,18 +1,18 @@
 {
-  gateway: { mode: "local" },
-  agents: {
-    defaults: {
-      model: { primary: "custom/cloudless" },
-      models: { "custom/cloudless": { alias: "Cloudless AI" } },
-    },
+  "gateway": { "mode": "local" },
+  "agents": {
+    "defaults": {
+      "model": { "primary": "custom/cloudless" },
+      "models": { "custom/cloudless": { "alias": "Cloudless AI" } }
+    }
   },
-  models: {
-    providers: {
-      custom: {
-        baseUrl: "http://127.0.0.1:8000/v1",
-        apiKey: "${CUSTOM_API_KEY}",
-        models: [{ id: "cloudless", name: "Cloudless AI" }],
-      },
-    },
-  },
+  "models": {
+    "providers": {
+      "custom": {
+        "baseUrl": "http://127.0.0.1:8000/v1",
+        "apiKey": "${CUSTOM_API_KEY}",
+        "models": [{ "id": "cloudless", "name": "Cloudless AI" }]
+      }
+    }
+  }
 }

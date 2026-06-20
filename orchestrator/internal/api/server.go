@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -54,6 +55,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/apps/{id}/config", s.appConfigGet)
 	mux.HandleFunc("POST /api/apps/{id}/config", s.appConfigSet)
 	mux.HandleFunc("POST /api/apps/{id}/config/reset", s.appConfigReset)
+	mux.HandleFunc("GET /api/apps/{id}/settings", s.appSettingsGet)
+	mux.HandleFunc("POST /api/apps/{id}/settings", s.appSettingsSet)
 	mux.HandleFunc("GET /api/settings", s.settingsGet)
 	mux.HandleFunc("POST /api/settings/model", s.settingsModel)
 	mux.HandleFunc("POST /api/onboarding/reset", s.onboardingReset)
@@ -578,6 +581,196 @@ func (s *Server) restartApp(w http.ResponseWriter, app catalog.App) {
 		job.Succeed("")
 	}()
 	writeJSON(w, http.StatusAccepted, map[string]string{"jobId": job.ID})
+}
+
+func (s *Server) configFileFor(app catalog.App, file string) catalog.ConfigFile {
+	for _, cf := range app.Config {
+		if cf.File == file {
+			return cf
+		}
+	}
+	return catalog.ConfigFile{}
+}
+
+func (s *Server) readConfigContent(app catalog.App, file string) string {
+	if b, err := os.ReadFile(filepath.Join(s.appConfigDir(app.ID), file)); err == nil {
+		return string(b)
+	}
+	if def, err := apps.ReadDefault(app.ID, file); err == nil {
+		return string(def)
+	}
+	return ""
+}
+
+func jsonGetPath(m map[string]any, path string) (string, bool) {
+	var cur any = m
+	for _, p := range strings.Split(path, ".") {
+		mm, ok := cur.(map[string]any)
+		if !ok {
+			return "", false
+		}
+		cur, ok = mm[p]
+		if !ok {
+			return "", false
+		}
+	}
+	switch v := cur.(type) {
+	case string:
+		return v, true
+	case bool:
+		if v {
+			return "true", true
+		}
+		return "false", true
+	case float64:
+		return strconv.FormatFloat(v, 'f', -1, 64), true
+	}
+	return "", false
+}
+
+func jsonSetPath(m map[string]any, path, value, typ string) {
+	parts := strings.Split(path, ".")
+	cur := m
+	for _, p := range parts[:len(parts)-1] {
+		next, ok := cur[p].(map[string]any)
+		if !ok {
+			next = map[string]any{}
+			cur[p] = next
+		}
+		cur = next
+	}
+	key := parts[len(parts)-1]
+	switch typ {
+	case "toggle":
+		cur[key] = value == "true"
+	case "number":
+		if f, err := strconv.ParseFloat(value, 64); err == nil {
+			cur[key] = f
+		} else {
+			cur[key] = value
+		}
+	default:
+		cur[key] = value
+	}
+}
+
+func envGetKey(content, key string) (string, bool) {
+	for _, line := range strings.Split(content, "\n") {
+		if t := strings.TrimSpace(line); strings.HasPrefix(t, key+"=") {
+			return strings.TrimPrefix(t, key+"="), true
+		}
+	}
+	return "", false
+}
+
+func envSetKey(content, key, value string) string {
+	var out []string
+	for _, line := range strings.Split(content, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), key+"=") {
+			continue
+		}
+		out = append(out, line)
+	}
+	for len(out) > 0 && strings.TrimSpace(out[len(out)-1]) == "" {
+		out = out[:len(out)-1]
+	}
+	out = append(out, key+"="+value)
+	return strings.Join(out, "\n") + "\n"
+}
+
+func (s *Server) readField(app catalog.App, f catalog.Field) string {
+	cf := s.configFileFor(app, f.File)
+	content := s.readConfigContent(app, f.File)
+	if cf.Lang == "env" {
+		if v, ok := envGetKey(content, f.Path); ok {
+			return v
+		}
+		return f.Default
+	}
+	var m map[string]any
+	if json.Unmarshal([]byte(content), &m) == nil {
+		if v, ok := jsonGetPath(m, f.Path); ok {
+			return v
+		}
+	}
+	return f.Default
+}
+
+func (s *Server) appSettingsGet(w http.ResponseWriter, r *http.Request) {
+	app, ok := catalog.Get(r.PathValue("id"))
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "unknown app"})
+		return
+	}
+	type field struct {
+		Key     string   `json:"key"`
+		Label   string   `json:"label"`
+		Help    string   `json:"help,omitempty"`
+		Type    string   `json:"type"`
+		Options []string `json:"options,omitempty"`
+		Default string   `json:"default"`
+		Value   string   `json:"value"`
+	}
+	out := []field{}
+	for _, f := range app.Settings {
+		out = append(out, field{f.Key, f.Label, f.Help, f.Type, f.Options, f.Default, s.readField(app, f)})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"fields": out})
+}
+
+func (s *Server) appSettingsSet(w http.ResponseWriter, r *http.Request) {
+	app, ok := catalog.Get(r.PathValue("id"))
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "unknown app"})
+		return
+	}
+	var body struct {
+		Values map[string]string `json:"values"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad request"})
+		return
+	}
+
+	// Group fields by file so each file is read/written once.
+	byFile := map[string][]catalog.Field{}
+	var order []string
+	for _, f := range app.Settings {
+		if _, seen := byFile[f.File]; !seen {
+			order = append(order, f.File)
+		}
+		byFile[f.File] = append(byFile[f.File], f)
+	}
+	dir := s.appConfigDir(app.ID)
+	_ = os.MkdirAll(dir, 0o755)
+	for _, file := range order {
+		cf := s.configFileFor(app, file)
+		content := s.readConfigContent(app, file)
+		if cf.Lang == "env" {
+			for _, f := range byFile[file] {
+				if v, present := body.Values[f.Key]; present {
+					content = envSetKey(content, f.Path, v)
+				}
+			}
+		} else {
+			var m map[string]any
+			if err := json.Unmarshal([]byte(content), &m); err != nil || m == nil {
+				m = map[string]any{}
+			}
+			for _, f := range byFile[file] {
+				if v, present := body.Values[f.Key]; present {
+					jsonSetPath(m, f.Path, v, f.Type)
+				}
+			}
+			b, _ := json.MarshalIndent(m, "", "  ")
+			content = string(b) + "\n"
+		}
+		if err := os.WriteFile(filepath.Join(dir, file), []byte(content), 0o644); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+	}
+	s.restartApp(w, app)
 }
 
 func (s *Server) settingsGet(w http.ResponseWriter, r *http.Request) {

@@ -72,10 +72,11 @@ removed via the API.
   editable model, applied by restarting the engine), Apps (per-app **Reset**/Uninstall —
   the "fix a mistake" button), System (replay welcome). Runtime-configurable model
   (`state.Model`). Verified: settings served, OpenClaw reset rebuilds + restarts cleanly.
-- **Per-app config editor** (D19): OpenClaw/Hermes config moved from baked-in to **mounted**
-  editable files in the state dir (seeded from defaults). Settings → Apps → Configure edits
-  the full config file(s); Save & apply restarts the app (no rebuild). Verified: an edit to
-  `openclaw.json` lands in the container's mounted file and it still starts.
+- **Per-app config** (D19/D21): config moved from baked-in to **mounted** editable files
+  (seeded from defaults). Settings → Apps → **Configure** is now an intuitive **form**
+  (inputs, password fields, toggles) — D21 — mapped to config via JSON dot-paths (OpenClaw)
+  and `.env` keys (Hermes), with a collapsible **Advanced — raw config**. Verified: form
+  saves write the right config and restart the app.
 
 - **Flat Swiss/instrument restyle** (D20, supersedes D10): adapted to a user reference —
   flat (no glass/blur/shadow), light-grey base with white hairline tiles, **monochrome +

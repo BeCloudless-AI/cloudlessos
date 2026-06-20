@@ -428,6 +428,28 @@ were removed). GPU stats render as bordered chip tiles with bold values.
 
 ---
 
+## D21 — App config is a form, not JSON (raw editor kept as "Advanced")
+**Date:** 2026-06-20 · **Status:** Accepted (refines D19)
+
+The per-app config UI (D19) was a raw textarea — wrong for an OS. Replaced with intuitive
+**form controls**. Catalog apps declare `Settings []Field{Key, Label, Help, Type, Options,
+Default, File, Path}`; types are **text / password / number / toggle / select**. Each field
+maps to a location in a config file, applied with **stdlib only**:
+- **JSON dot-path** get/set for json config (OpenClaw's `openclaw.json` was rewritten to
+  strict JSON so `encoding/json` can round-trip it; path keys may contain `/`, e.g.
+  `agents.defaults.models.custom/cloudless.alias`).
+- **`KEY=VALUE` line edit** for env config (Hermes `.env`), preserving other keys.
+
+`GET /api/apps/{id}/settings` returns the schema + current values; `POST` writes the values
+into the mounted config files and restarts the app. A collapsible **Advanced — raw config**
+keeps the full file editor (D19) for power users.
+
+Fields today: OpenClaw (AI endpoint, model name); Hermes (allow-all toggle, Telegram/Discord
+tokens, allowed users) — extensible by adding `Field`s. **Verified:** toggle/password/text
+save to `.env`; text saves to the `openclaw.json` path; both restart cleanly; form served.
+
+---
+
 ## Open questions (not yet decided)
 
 - **Open-source CloudlessOS?** Leaning yes (trust/community for a privacy brand, like

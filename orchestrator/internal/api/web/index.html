@@ -87,7 +87,22 @@
     font-size: 12px; line-height: 1.5; padding: 11px 13px; border-radius: 8px; border: 1px solid var(--line-2);
     background: var(--panel-2); color: var(--ink); white-space: pre; overflow-wrap: normal; tab-size: 2; }
   .cfg-area:focus { outline: none; border-color: var(--blue); background: #fff; }
-  .cfg-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+  .cfg-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
+  .fld-form { padding: 4px 0; }
+  .fld { display: flex; align-items: center; gap: 12px; padding: 8px 0; }
+  .fld-label { color: var(--ink); font-size: 13px; flex: 1; }
+  .fld-input { font: inherit; font-size: 12.5px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-2);
+    background: #fff; color: var(--ink); min-width: 180px; max-width: 56%; }
+  .fld-input:focus { outline: none; border-color: var(--blue); }
+  .fld-help { font-size: 11px; color: var(--faint); margin: -3px 0 6px; }
+  .switch { position: relative; width: 38px; height: 22px; flex: none; cursor: pointer; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .switch .track2 { position: absolute; inset: 0; background: var(--line-2); border-radius: 999px; transition: background .15s; }
+  .switch .track2::before { content: ""; position: absolute; left: 3px; top: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .15s; }
+  .switch input:checked + .track2 { background: var(--blue); }
+  .switch input:checked + .track2::before { transform: translateX(16px); }
+  .adv-toggle { display: block; margin: 14px 0 8px; background: none; border: none; color: var(--blue); font: inherit; font-size: 12px; cursor: pointer; padding: 0; }
+  .adv.hidden { display: none; }
 
   /* ---------- layout ---------- */
   main { max-width: 1080px; margin: 0 auto; padding: 44px 26px 90px; }
@@ -575,34 +590,66 @@ async function renderSettings() {
 }
 
 const escapeHtml = s => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const escapeAttr = s => (s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+function fieldControl(f) {
+  const help = f.help ? `<div class="fld-help">${f.help}</div>` : '';
+  if (f.type === 'toggle') {
+    return `<div class="fld"><span class="fld-label">${f.label}</span>
+      <label class="switch"><input type="checkbox" data-field="${f.key}" ${f.value === 'true' ? 'checked' : ''}><span class="track2"></span></label></div>${help}`;
+  }
+  if (f.type === 'select') {
+    return `<div class="fld"><span class="fld-label">${f.label}</span>
+      <select class="fld-input" data-field="${f.key}">${(f.options || []).map(o => `<option ${o === f.value ? 'selected' : ''}>${o}</option>`).join('')}</select></div>${help}`;
+  }
+  const t = f.type === 'password' ? 'password' : (f.type === 'number' ? 'number' : 'text');
+  return `<div class="fld"><span class="fld-label">${f.label}</span>
+    <input class="fld-input" type="${t}" data-field="${f.key}" value="${escapeAttr(f.value)}" placeholder="${escapeAttr(f.default)}" spellcheck="false"></div>${help}`;
+}
 async function openConfig(id) {
   const el = document.getElementById('cfg-' + id);
   if (!el.classList.contains('hidden')) { el.classList.add('hidden'); el.innerHTML = ''; return; }
-  let d; try { d = await api(`/api/apps/${id}/config`); } catch { return toast('Could not load config', true); }
-  el.innerHTML = d.files.map(f => `
-    <div class="cfg-file">
-      <div class="cfg-name">${f.file}<span class="cfg-lang">${f.lang}</span></div>
-      <textarea class="cfg-area" data-file="${f.file}" spellcheck="false">${escapeHtml(f.content)}</textarea>
-    </div>`).join('') +
-    `<div class="cfg-actions">
-      <button class="btn danger" data-cfgreset="${id}">Reset to defaults</button>
-      <button class="btn primary" data-cfgsave="${id}">Save &amp; apply</button>
+  let st, cfg;
+  try { [st, cfg] = await Promise.all([api(`/api/apps/${id}/settings`), api(`/api/apps/${id}/config`)]); }
+  catch { return toast('Could not load settings', true); }
+  const fields = st.fields || [];
+  const form = fields.length
+    ? `<div class="fld-form">${fields.map(fieldControl).join('')}</div>
+       <div class="cfg-actions">
+         <button class="btn danger" data-fldreset="${id}">Reset</button>
+         <button class="btn primary" data-fldsave="${id}">Save &amp; apply</button>
+       </div>`
+    : '<div class="set-hint">No simple settings — use Advanced below.</div>';
+  const raw = `<button class="adv-toggle" data-adv="${id}">Advanced — raw config</button>
+    <div class="adv hidden" id="adv-${id}">
+      ${cfg.files.map(f => `<div class="cfg-file"><div class="cfg-name">${f.file}<span class="cfg-lang">${f.lang}</span></div>
+        <textarea class="cfg-area" data-file="${f.file}" spellcheck="false">${escapeHtml(f.content)}</textarea></div>`).join('')}
+      <div class="cfg-actions"><button class="btn" data-rawsave="${id}">Save raw &amp; apply</button></div>
     </div>`;
+  el.innerHTML = form + raw;
   el.classList.remove('hidden');
-  el.querySelector('[data-cfgsave]').onclick = () => {
-    const files = {};
-    el.querySelectorAll('textarea[data-file]').forEach(t => files[t.dataset.file] = t.value);
-    toast('Saving ' + id + ' config…');
-    api(`/api/apps/${id}/config`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ files }) })
-      .then(r => { if (r.jobId) trackJobToast(r.jobId, id + ' config'); else toast('Saved (applies on install)'); })
-      .catch(() => toast('Failed', true));
+
+  const save = el.querySelector('[data-fldsave]');
+  if (save) save.onclick = () => {
+    const values = {};
+    el.querySelectorAll('.fld-form [data-field]').forEach(c => { values[c.dataset.field] = c.type === 'checkbox' ? (c.checked ? 'true' : 'false') : c.value; });
+    toast('Saving ' + id + '…');
+    api(`/api/apps/${id}/settings`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ values }) })
+      .then(r => { if (r.jobId) trackJobToast(r.jobId, id); else toast('Saved (applies on install)'); }).catch(() => toast('Failed', true));
   };
-  el.querySelector('[data-cfgreset]').onclick = () => {
-    if (!confirm(`Reset ${id} config to defaults?`)) return;
-    toast('Resetting ' + id + ' config…');
+  const reset = el.querySelector('[data-fldreset]');
+  if (reset) reset.onclick = () => {
+    if (!confirm(`Reset ${id} settings to defaults?`)) return;
+    toast('Resetting ' + id + '…');
     api(`/api/apps/${id}/config/reset`, { method: 'POST' })
-      .then(r => { el.classList.add('hidden'); el.innerHTML = ''; if (r.jobId) trackJobToast(r.jobId, id + ' config'); else toast('Reset'); })
-      .catch(() => toast('Failed', true));
+      .then(r => { el.classList.add('hidden'); el.innerHTML = ''; if (r.jobId) trackJobToast(r.jobId, id); else toast('Reset'); }).catch(() => toast('Failed', true));
+  };
+  el.querySelector('[data-adv]').onclick = () => document.getElementById('adv-' + id).classList.toggle('hidden');
+  el.querySelector('[data-rawsave]').onclick = () => {
+    const files = {};
+    el.querySelectorAll('#adv-' + id + ' textarea[data-file]').forEach(t => files[t.dataset.file] = t.value);
+    toast('Saving raw config…');
+    api(`/api/apps/${id}/config`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ files }) })
+      .then(r => { if (r.jobId) trackJobToast(r.jobId, id + ' config'); else toast('Saved'); }).catch(() => toast('Failed', true));
   };
 }
 

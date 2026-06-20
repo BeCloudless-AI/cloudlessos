@@ -28,6 +28,18 @@ type ConfigFile struct {
 	Lang string `json:"lang"` // json5 | yaml | env (UI hint)
 }
 
+// Field is an intuitive (form) config parameter, mapped into a config file.
+type Field struct {
+	Key     string   `json:"key"`
+	Label   string   `json:"label"`
+	Help    string   `json:"help,omitempty"`
+	Type    string   `json:"type"` // text | password | number | toggle | select
+	Options []string `json:"options,omitempty"`
+	Default string   `json:"default"`
+	File    string   `json:"-"` // a ConfigFile.File this value lives in
+	Path    string   `json:"-"` // JSON dot-path (json file) or env key (env file)
+}
+
 // App is a curated, installable AI application backed by a container image.
 type App struct {
 	ID          string            `json:"id"`
@@ -49,6 +61,7 @@ type App struct {
 	Volumes     map[string]string `json:"-"`          // host-or-named-volume -> containerPath
 	Build       string            `json:"-"`          // embedded build-context name (build instead of pull)
 	Config      []ConfigFile      `json:"config,omitempty"` // editable config files (mounted)
+	Settings    []Field           `json:"-"`                // form fields (via /api/apps/{id}/settings)
 }
 
 // ContainerName is the orchestrator-managed container name for this app.
@@ -259,10 +272,16 @@ var apps = []App{
 		Build:       "openclaw",
 		Ports:       map[int]int{18789: 18789}, // for the UI link; host networking binds it directly
 		Env:         map[string]string{"CUSTOM_API_KEY": "cloudless"},
-		Config:      []ConfigFile{{File: "openclaw.json", Path: "/root/.openclaw/openclaw.json", Lang: "json5"}},
-		OpenPath:    "/",
-		MinVRAMGB:   0,
-		Verified:    false,
+		Config:      []ConfigFile{{File: "openclaw.json", Path: "/root/.openclaw/openclaw.json", Lang: "json"}},
+		Settings: []Field{
+			{Key: "baseUrl", Label: "AI endpoint", Help: "OpenAI-compatible URL OpenClaw sends requests to.",
+				Type: "text", Default: "http://127.0.0.1:8000/v1", File: "openclaw.json", Path: "models.providers.custom.baseUrl"},
+			{Key: "alias", Label: "Model name", Help: "Display name shown for the model.",
+				Type: "text", Default: "Cloudless AI", File: "openclaw.json", Path: "agents.defaults.models.custom/cloudless.alias"},
+		},
+		OpenPath:  "/",
+		MinVRAMGB: 0,
+		Verified:  false,
 		// Host networking: the gateway binds host 127.0.0.1 so it can run with no
 		// auth, and reaches the active engine via the host-published :8000 (D16).
 		Network: "host",
@@ -280,6 +299,16 @@ var apps = []App{
 		Config: []ConfigFile{
 			{File: "config.yaml", Path: "/root/.hermes/config.yaml", Lang: "yaml"},
 			{File: "hermes.env", Path: "/root/.hermes/.env", Lang: "env"},
+		},
+		Settings: []Field{
+			{Key: "allowAll", Label: "Allow all users", Help: "Let anyone message the agent (otherwise use the allowlist below).",
+				Type: "toggle", Default: "false", File: "hermes.env", Path: "GATEWAY_ALLOW_ALL_USERS"},
+			{Key: "tgToken", Label: "Telegram bot token", Type: "password", Default: "",
+				File: "hermes.env", Path: "TELEGRAM_BOT_TOKEN"},
+			{Key: "tgUsers", Label: "Telegram allowed users", Help: "Comma-separated Telegram user IDs.",
+				Type: "text", Default: "", File: "hermes.env", Path: "TELEGRAM_ALLOWED_USERS"},
+			{Key: "discordToken", Label: "Discord bot token", Type: "password", Default: "",
+				File: "hermes.env", Path: "DISCORD_BOT_TOKEN"},
 		},
 		OpenPath:  "/",
 		MinVRAMGB: 0,

@@ -57,8 +57,10 @@ The daemon binds `127.0.0.1:8765` by default (override with `CLOUDLESS_ADDR`).
 | POST   | /api/settings/model       | set model + restart engine; async job    |
 | POST   | /api/apps/{id}/reset      | remove + (rebuild) + reinstall; async    |
 | POST   | /api/apps/{id}/uninstall  | remove container + image                 |
-| GET    | /api/apps/{id}/config     | editable config files + content          |
-| POST   | /api/apps/{id}/config     | write config + restart app; async        |
+| GET    | /api/apps/{id}/settings   | form-field schema + current values       |
+| POST   | /api/apps/{id}/settings   | write field values + restart app; async  |
+| GET    | /api/apps/{id}/config     | raw config files + content (Advanced)    |
+| POST   | /api/apps/{id}/config     | write raw config + restart app; async    |
 | POST   | /api/apps/{id}/config/reset | restore default config + restart       |
 | POST   | /api/onboarding/reset     | replay the welcome tour                  |
 

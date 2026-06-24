@@ -78,3 +78,9 @@ driver; you only install the CUDA toolkit / container toolkit inside Ubuntu.
   binary), then **reinstalling** the affected app so its image rebuilds. A long-running old
   daemon keeps serving the old image. `scripts/openclaw-reinstall.sh` force-rebuilds OpenClaw
   (rm image + container, reinstall) when in doubt.
+
+## See also
+
+- [[ROADMAP]] — Phase 0 milestones this environment supports
+- [[STATUS]] — living state: what's done, in progress, and next
+- [[DECISIONS]] — decision log (ADR-style); see D1 (Docker), D4 (WSL2 assumptions)

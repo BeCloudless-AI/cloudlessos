@@ -10,7 +10,7 @@ container, downloads a sensible default model, and opens — with a working unin
 
 Milestones:
 1. Dev env ready: Ubuntu 24.04 in WSL2, `nvidia-smi` works inside WSL, container engine
-   sees the GPU. (See `DEV_ENVIRONMENT.md`.)
+   sees the GPU. (See [[DEV_ENVIRONMENT]].)
 2. Manual baseline: run ComfyUI in a GPU container by hand (the thing we'll automate).
 3. Orchestrator daemon v0: install/run/stop/uninstall one app via a local API.
 4. Minimal web UI: catalog list + install/launch buttons + status.
@@ -25,7 +25,7 @@ without touching a terminal.
 Package the daemon + web UI + kiosk shell + drivers into a bootable distro image.
 
 Milestones:
-- Choose the distro base (immutable Fedora-family vs Ubuntu) — see `DECISIONS.md`.
+- Choose the distro base (immutable Fedora-family vs Ubuntu) — see [[DECISIONS]].
 - Build a branded image (bootc / Universal Blue approach if immutable).
 - Kiosk boot flow: boot → daemon up → Chromium kiosk → web UI.
 - First-run / onboarding experience.
@@ -45,3 +45,11 @@ Milestones:
 
 Windows + WSL2 (RTX 5090) for Phase 0 → 3-GPU Ubuntu box for multi-GPU/native testing
 → VM for distro-image iteration → real Cloudless PC reference units in Phase 2.
+
+## See also
+
+- [[VISION]] — why we're building this and for whom
+- [[ARCHITECTURE]] — the three-layer technical design being built out
+- [[DECISIONS]] — decision log (ADR-style) & open questions (distro base, engine, …)
+- [[STATUS]] — living state: what's done, in progress, and next
+- [[DEV_ENVIRONMENT]] — hardware, WSL2 setup & runbook for Phase 0

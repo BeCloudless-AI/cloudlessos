@@ -4,6 +4,7 @@
 package catalog
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/cloudless/orchestrator/internal/engine"
@@ -45,6 +46,10 @@ type App struct {
 	ID          string            `json:"id"`
 	Name        string            `json:"name"`
 	Description string            `json:"description"`
+	Category    string            `json:"category,omitempty"` // launcher grouping (user-facing apps)
+	Tagline     string            `json:"tagline,omitempty"`  // short "what it's for" line for the launcher
+	Long        string            `json:"long,omitempty"`     // full paragraph for the app's launcher page
+	Examples    []string          `json:"examples,omitempty"` // example "what you can do" bullets
 	Image       string            `json:"image"` // empty = recipe not yet available
 	Ports       map[int]int       `json:"ports"` // hostPort -> containerPort
 	Env         map[string]string `json:"env,omitempty"`
@@ -55,6 +60,7 @@ type App struct {
 	Preinstall  bool              `json:"preinstall"` // pulled AND run automatically on first boot
 	Prefetch    bool              `json:"-"`          // image pulled on boot but not run (ready alternative)
 	Service     bool              `json:"service"`    // infrastructure (engine), hidden from the launcher
+	Hidden      bool              `json:"hidden,omitempty"` // installed/usable but not shown as a launcher tile
 	Engine      bool              `json:"engine"`     // switchable inference engine (carries the stable alias)
 	Network     string            `json:"-"`          // docker network to join (for inter-app DNS)
 	Command     []string          `json:"-"`          // container command/args
@@ -73,6 +79,42 @@ func (a App) PrimaryHostPort() int {
 		return host
 	}
 	return 0
+}
+
+// CloudflaredImage is the Cloudflare Tunnel client used to expose an app online
+// via a zero-config quick tunnel (no account/domain needed).
+const CloudflaredImage = "cloudflare/cloudflared:latest"
+
+// SocatImage is the tiny TCP forwarder used to re-serve an app on the LAN IP.
+const SocatImage = "alpine/socat:latest"
+
+// TunnelName is the orchestrator-managed cloudflared container name for this app.
+func (a App) TunnelName() string { return "cloudless-tunnel-" + a.ID }
+
+// LanName is the orchestrator-managed LAN-forwarder container name for this app.
+func (a App) LanName() string { return "cloudless-lan-" + a.ID }
+
+// HasWebPort reports whether an app serves a web port that can be exposed
+// (on the LAN or online). Engines/services are excluded.
+func (a App) HasWebPort() bool { return a.Launchable() && a.PrimaryHostPort() > 0 }
+
+// Tunnelable reports whether an app can be exposed online.
+func (a App) Tunnelable() bool { return a.HasWebPort() }
+
+// LanSidecarSpec builds the host-networked socat forwarder that re-serves this app
+// on <ip>:<port> (same port as localhost; binding the specific LAN IP avoids a
+// conflict with the app's own 127.0.0.1:<port> binding).
+func (a App) LanSidecarSpec(ip string) engine.RunSpec {
+	port := a.PrimaryHostPort()
+	return engine.RunSpec{
+		Name:    a.LanName(),
+		Image:   SocatImage,
+		Network: "host",
+		Args: []string{
+			fmt.Sprintf("TCP-LISTEN:%d,bind=%s,fork,reuseaddr", port, ip),
+			fmt.Sprintf("TCP:127.0.0.1:%d", port),
+		},
+	}
 }
 
 // Spec converts a catalog app into an engine.RunSpec.
@@ -156,7 +198,7 @@ func Bundled() []App {
 // apps is the Phase 0 starter catalog. Images marked Verified=false still need a
 // validated recipe before we promise they "just work".
 // cloudlessNet is the shared docker network so apps can reach each other by
-// container name (e.g. Open WebUI -> cloudless-ollama:11434).
+// container name (e.g. Open WebUI -> the engine alias cloudless-ai:8000).
 const cloudlessNet = "cloudless"
 
 // EngineAlias is the stable DNS name all clients use for the active inference
@@ -231,6 +273,15 @@ var apps = []App{
 		ID:          "open-webui",
 		Name:        "Open WebUI",
 		Description: "Chat with your local LLMs — the face of Cloudless AI.",
+		Category:    "Chat & interfaces",
+		Tagline:     "Full chat interface for your local model.",
+		Long:        "Open WebUI is a full-featured chat interface for your local models — the friendly face of Cloudless AI. Hold long private conversations, upload documents to ask about, tune system prompts, and switch models, all running on your own GPU with nothing sent to the cloud.",
+		Examples: []string{
+			"Have long, private conversations with your local LLM",
+			"Upload a document and ask questions about its contents",
+			"Tune system prompts and switch between models",
+			"Revisit and continue your past chats",
+		},
 		Image:       "ghcr.io/open-webui/open-webui:main",
 		Ports:       map[int]int{3000: 8080},
 		Env: map[string]string{
@@ -240,25 +291,107 @@ var apps = []App{
 			"OPENAI_API_BASE_URL": EngineEndpoint, // stable alias -> active engine (D15)
 			"OPENAI_API_KEY":      "cloudless",    // engines ignore it unless --api-key is set
 		},
+		// Persist chats/settings/accounts so updates (new image, same volume) don't reset them.
+		Volumes:    map[string]string{"cloudless-open-webui": "/app/backend/data"},
 		GPUs:       "",
 		OpenPath:   "/",
 		MinVRAMGB:  0,
 		Verified:   true,
 		Preinstall: true,
+		Hidden:     true, // reached via the hero "Chat with your Cloudless AI" button, not a tile
 		Network:    cloudlessNet,
 	},
 	{
 		ID:          "comfyui",
 		Name:        "ComfyUI",
 		Description: "Node-based image/video generation (Stable Diffusion, Flux, …).",
+		Category:    "Image & video",
+		Tagline:     "Generate and edit images locally.",
+		Long:        "ComfyUI is a powerful node-based studio for image and video generation. Build repeatable pipelines with Stable Diffusion and Flux — text-to-image, inpainting, upscaling and more — entirely on your own hardware, with full control over every step.",
+		Examples: []string{
+			"Generate images from a text prompt",
+			"Edit or restyle an existing photo with inpainting",
+			"Upscale images to high resolution",
+			"Design reusable generation workflows as node graphs",
+		},
 		// Community image; NOT yet validated on Blackwell (RTX 50xx) — see DECISIONS D11.
-		Image:      "mmartial/comfyui-nvidia-docker:latest",
-		Ports:      map[int]int{8188: 8188},
+		Image: "mmartial/comfyui-nvidia-docker:latest",
+		Ports: map[int]int{8188: 8188},
+		// /comfy/mnt holds the ComfyUI install, models, outputs and custom nodes —
+		// persist it so installs survive updates (the image seeds it on first run).
+		Volumes:    map[string]string{"cloudless-comfyui": "/comfy/mnt"},
 		GPUs:       "all",
 		OpenPath:   "/",
 		MinVRAMGB:  6,
 		Verified:   false,
 		Preinstall: true,
+		Network:    cloudlessNet,
+	},
+	{
+		// Ostris AI Toolkit — diffusion-model trainer with a web UI (official image
+		// ostris/aitoolkit, UI on :8675). NOT yet validated on Blackwell.
+		ID:          "ai-toolkit",
+		Name:        "AI Toolkit",
+		Description: "Ostris AI Toolkit — train your own image-model LoRAs (FLUX, SDXL).",
+		Category:    "Training & fine-tuning",
+		Tagline:     "Train image-model LoRAs — by Ostris.",
+		Long:        "Ostris AI Toolkit is the ultimate trainer for fine-tuning diffusion models. From its web UI you can train your own LoRAs for FLUX, SDXL and more, on your own images — entirely on your GPU. The UI is protected by a password (default: cloudless).",
+		Examples: []string{
+			"Train a FLUX LoRA on your own photos",
+			"Fine-tune SDXL on a custom style",
+			"Prepare datasets and run training jobs from a web UI",
+			"Export trained models to use in ComfyUI",
+		},
+		Image: "ostris/aitoolkit:latest",
+		Ports: map[int]int{8675: 8675},
+		Env: map[string]string{
+			"AI_TOOLKIT_AUTH": "cloudless", // UI login (change in the app); keeps LAN/online sharing gated
+			"NODE_ENV":        "production",
+			"TZ":              "UTC",
+		},
+		Volumes: map[string]string{
+			"cloudless-aitk-hf":     "/root/.cache/huggingface/hub", // shared model cache
+			"cloudless-aitk-out":    "/app/ai-toolkit/output",       // trained models
+			"cloudless-aitk-data":   "/app/ai-toolkit/datasets",     // training images
+			"cloudless-aitk-config": "/app/ai-toolkit/config",       // job configs
+		},
+		GPUs:       "all",
+		OpenPath:   "/",
+		MinVRAMGB:  24, // FLUX LoRA training is VRAM-hungry; smaller models work with less
+		Verified:   false,
+		Preinstall: false,
+		Network:    cloudlessNet,
+	},
+	{
+		// Unsloth — fast, low-VRAM LLM fine-tuning. Official image bundles Jupyter
+		// Lab + ready-made notebooks (UI on :8888). We only publish 8888 (the
+		// image's :8000 secondary port would collide with the engine). Unverified
+		// on Blackwell.
+		ID:          "unsloth",
+		Name:        "Unsloth",
+		Description: "Fast, low-VRAM fine-tuning for LLMs (Llama, Qwen, Gemma) in a notebook.",
+		Category:    "Training & fine-tuning",
+		Tagline:     "Fine-tune LLMs 2× faster, with less VRAM.",
+		Long:        "Unsloth makes fine-tuning large language models fast and memory-efficient — often 2× faster and with far less VRAM. This image bundles Jupyter Lab with Unsloth and ready-to-run notebooks, so you can fine-tune models like Llama, Qwen and Gemma on your own data, then export to GGUF or your inference engine. The notebook is protected by a password (default: cloudless).",
+		Examples: []string{
+			"Fine-tune Llama or Qwen on your own dataset",
+			"Train QLoRA adapters that fit in low VRAM",
+			"Run ready-made fine-tuning notebooks",
+			"Export trained models to GGUF for local inference",
+		},
+		Image: "unsloth/unsloth:latest",
+		Ports: map[int]int{8888: 8888}, // Jupyter Lab (image's :8000/:22 left unpublished)
+		Env: map[string]string{
+			"JUPYTER_PASSWORD": "cloudless", // notebook login (change in the app)
+		},
+		Volumes: map[string]string{
+			"cloudless-unsloth-work": "/workspace/work", // notebooks, datasets, outputs
+		},
+		GPUs:       "all",
+		OpenPath:   "/",
+		MinVRAMGB:  8, // Unsloth's whole point is low-VRAM fine-tuning
+		Verified:   false,
+		Preinstall: false,
 		Network:    cloudlessNet,
 	},
 	{
@@ -268,8 +401,18 @@ var apps = []App{
 		ID:          "openclaw",
 		Name:        "OpenClaw",
 		Description: "Open-source personal AI agent that takes actions on your machine. Pre-wired to Cloudless AI.",
-		Image:       "cloudless/openclaw:local",
-		Build:       "openclaw",
+		Category:    "Agents & automation",
+		Tagline:     "Autonomous agent that uses tools.",
+		Long:        "OpenClaw is an open-source autonomous agent that takes real actions on your machine — reading files, running tools, and chaining steps to finish a task. It comes pre-wired to Cloudless AI, so there's nothing to set up: just tell it what you need.",
+		Examples: []string{
+			"Ask it to explain or refactor code in a project",
+			"Automate multi-step tasks using tools",
+			"Have it read files and answer questions about them",
+			"Let it draft and run commands on your behalf",
+		},
+		// Pulled from the Cloudless Docker Hub space (built from internal/apps/openclaw,
+		// which stays the source of truth for rebuilding + re-pushing). Manifest-pinnable.
+		Image:       "samuelcardillo/cloudless-openclaw:v1",
 		Ports:       map[int]int{18789: 18789}, // for the UI link; host networking binds it directly
 		Env:         map[string]string{"CUSTOM_API_KEY": "cloudless"},
 		Config:      []ConfigFile{{File: "openclaw.json", Path: "/root/.openclaw/openclaw.json", Lang: "json"}},
@@ -287,14 +430,21 @@ var apps = []App{
 		Network: "host",
 	},
 	{
-		// Agent (D13/D14). Built locally from an embedded Dockerfile
-		// (internal/apps/hermes) that runs the Hermes installer and bakes in the
-		// Cloudless AI endpoint config. Installer-in-container is unverified.
+		// Agent (D13/D14). Pulled from the Cloudless Docker Hub space (built from
+		// internal/apps/hermes, which stays the source of truth for rebuilds).
 		ID:          "hermes",
 		Name:        "Hermes",
 		Description: "Nous Research self-improving agent with persistent memory. Pre-wired to Cloudless AI.",
-		Image:       "cloudless/hermes:local",
-		Build:       "hermes",
+		Category:    "Agents & automation",
+		Tagline:     "Personal agent on Telegram / Discord.",
+		Long:        "Hermes is a personal AI agent with persistent memory from Nous Research. Reach it from Telegram or Discord and it keeps context across conversations — an always-available assistant that runs entirely on your own hardware.",
+		Examples: []string{
+			"Chat with your AI from Telegram or Discord",
+			"Keep memory and context across sessions",
+			"Set an allowlist of who is allowed to talk to it",
+			"Use it as a personal assistant on the go",
+		},
+		Image:       "samuelcardillo/cloudless-hermes:v1",
 		Env:         map[string]string{"OPENAI_API_KEY": "cloudless"},
 		Config: []ConfigFile{
 			{File: "config.yaml", Path: "/root/.hermes/config.yaml", Lang: "yaml"},
@@ -315,21 +465,6 @@ var apps = []App{
 		Verified:  false,
 		Network:     cloudlessNet,
 	},
-	{
-		// Kept as an optional alternative engine, not the default (see D12).
-		ID:          "ollama",
-		Name:        "Ollama",
-		Description: "Alternative LLM runtime (llama.cpp-based). Optional; not the default engine.",
-		Image:       "ollama/ollama",
-		Ports:       map[int]int{11434: 11434},
-		GPUs:        "all",
-		OpenPath:    "/",
-		MinVRAMGB:   4,
-		Verified:    true,
-		Preinstall:  false,
-		Service:     true,
-		Network:     cloudlessNet,
-	},
 }
 
 // All returns the full catalog.
@@ -344,3 +479,11 @@ func Get(id string) (App, bool) {
 	}
 	return App{}, false
 }
+
+// DefaultPins are the apps pinned to the dashboard "fast launch" before the user
+// customizes. Empty by design — the user pins what they want from the launcher.
+func DefaultPins() []string { return nil }
+
+// Launchable reports whether an app belongs in the App Launcher (user-facing,
+// not an inference engine / infrastructure service).
+func (a App) Launchable() bool { return !a.Service }

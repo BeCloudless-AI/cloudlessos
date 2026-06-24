@@ -58,4 +58,14 @@ type Engine interface {
 	List(ctx context.Context) ([]Container, error)
 	// Find returns the container with the given name, or nil if absent.
 	Find(ctx context.Context, name string) (*Container, error)
+	// Logs returns the captured stdout+stderr of a container.
+	Logs(ctx context.Context, name string) (string, error)
+	// ImageDigest returns the local repo digest of a pulled image ("sha256:…"), or "" if not pulled.
+	ImageDigest(ctx context.Context, image string) (string, error)
+	// RemoteDigest returns the digest the registry currently serves for image's tag ("sha256:…").
+	RemoteDigest(ctx context.Context, image string) (string, error)
+	// ContainerImageDigest returns the repo digest of the image a container runs ("" if absent).
+	ContainerImageDigest(ctx context.Context, name string) (string, error)
+	// Output runs `docker <args>` and returns stdout (for read-only queries, e.g. listing a volume).
+	Output(ctx context.Context, args ...string) (string, error)
 }

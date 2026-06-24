@@ -1,0 +1,62 @@
+{
+  "manifestVersion": 1,
+  "updated": "2026-06-21",
+  "highlights": [
+    {
+      "id": "sd15",
+      "name": "Stable Diffusion 1.5",
+      "base": "SD1.5",
+      "type": "checkpoint",
+      "dir": "checkpoints",
+      "file": "v1-5-pruned-emaonly.safetensors",
+      "url": "https://huggingface.co/stable-diffusion-v1-5/stable-diffusion-v1-5/resolve/main/v1-5-pruned-emaonly.safetensors",
+      "sizeGB": 4.0,
+      "minVramGB": 4,
+      "tags": ["sd1.5", "classic", "low-vram"],
+      "license": "OpenRAIL-M",
+      "description": "The classic, lightweight base — fast and runs on almost anything, with a huge ecosystem."
+    },
+    {
+      "id": "sdxl-base",
+      "name": "Stable Diffusion XL",
+      "base": "SDXL",
+      "type": "checkpoint",
+      "dir": "checkpoints",
+      "file": "sd_xl_base_1.0.safetensors",
+      "url": "https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0/resolve/main/sd_xl_base_1.0.safetensors",
+      "sizeGB": 6.9,
+      "minVramGB": 8,
+      "tags": ["sdxl", "photorealistic", "versatile"],
+      "license": "OpenRAIL++-M",
+      "description": "High-quality 1024px base model — sharp, versatile, a great SDXL default."
+    },
+    {
+      "id": "sdxl-turbo",
+      "name": "SDXL Turbo",
+      "base": "SDXL",
+      "type": "checkpoint",
+      "dir": "checkpoints",
+      "file": "sd_xl_turbo_1.0_fp16.safetensors",
+      "url": "https://huggingface.co/stabilityai/sdxl-turbo/resolve/main/sd_xl_turbo_1.0_fp16.safetensors",
+      "sizeGB": 6.9,
+      "minVramGB": 8,
+      "tags": ["sdxl", "fast", "real-time"],
+      "license": "SAI-NC",
+      "description": "Generates in 1-4 steps — near real-time previews. Best for speed over peak quality."
+    },
+    {
+      "id": "flux-schnell",
+      "name": "FLUX.1 schnell",
+      "base": "FLUX",
+      "type": "checkpoint",
+      "dir": "checkpoints",
+      "file": "flux1-schnell-fp8.safetensors",
+      "url": "https://huggingface.co/Comfy-Org/flux1-schnell/resolve/main/flux1-schnell-fp8.safetensors",
+      "sizeGB": 17.0,
+      "minVramGB": 16,
+      "tags": ["flux", "high-quality", "fast"],
+      "license": "Apache-2.0",
+      "description": "Top open image model: striking quality in ~4 steps. fp8 single-file build for ComfyUI."
+    }
+  ]
+}

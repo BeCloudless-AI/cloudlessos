@@ -243,6 +243,63 @@ func (d *Docker) List(ctx context.Context) ([]Container, error) {
 	return cs, nil
 }
 
+// ImageDigest returns the repo digest of a locally-pulled image (e.g. "sha256:…"),
+// or "" if the image isn't present or has no repo digest (locally-built images).
+func (d *Docker) ImageDigest(ctx context.Context, image string) (string, error) {
+	out, _, err := d.exec(ctx, "image", "inspect", image, "-f", "{{if .RepoDigests}}{{index .RepoDigests 0}}{{end}}")
+	if err != nil {
+		return "", nil // not pulled
+	}
+	s := strings.TrimSpace(out)
+	if i := strings.LastIndex(s, "@"); i >= 0 {
+		return s[i+1:], nil // "repo@sha256:…" -> "sha256:…"
+	}
+	return "", nil
+}
+
+// RemoteDigest returns the digest the registry currently serves for image's tag,
+// without pulling, via `docker buildx imagetools inspect`.
+func (d *Docker) RemoteDigest(ctx context.Context, image string) (string, error) {
+	out, errs, err := d.exec(ctx, "buildx", "imagetools", "inspect", image)
+	if err != nil {
+		return "", fmt.Errorf("remote inspect %s: %v: %s", image, err, strings.TrimSpace(errs))
+	}
+	for _, line := range strings.Split(out, "\n") {
+		if rest, ok := strings.CutPrefix(strings.TrimSpace(line), "Digest:"); ok {
+			return strings.TrimSpace(rest), nil
+		}
+	}
+	return "", nil
+}
+
+// ContainerImageDigest resolves a container's image to its repo digest ("sha256:…"),
+// so we can tell which exact (possibly digest-pinned) image it's running.
+func (d *Docker) ContainerImageDigest(ctx context.Context, name string) (string, error) {
+	id, _, err := d.exec(ctx, "inspect", name, "-f", "{{.Image}}")
+	if err != nil {
+		return "", nil // no such container
+	}
+	return d.ImageDigest(ctx, strings.TrimSpace(id))
+}
+
+// Output runs an arbitrary read-only `docker <args>` and returns stdout.
+func (d *Docker) Output(ctx context.Context, args ...string) (string, error) {
+	out, errs, err := d.exec(ctx, args...)
+	if err != nil {
+		return "", fmt.Errorf("docker %v: %v: %s", args, err, strings.TrimSpace(errs))
+	}
+	return out, nil
+}
+
+// Logs returns a container's captured output (cloudflared prints its URL to stderr).
+func (d *Docker) Logs(ctx context.Context, name string) (string, error) {
+	out, errs, err := d.exec(ctx, "logs", name)
+	if err != nil {
+		return "", fmt.Errorf("logs %s: %v: %s", name, err, strings.TrimSpace(errs))
+	}
+	return out + errs, nil
+}
+
 func (d *Docker) Find(ctx context.Context, name string) (*Container, error) {
 	cs, err := d.List(ctx)
 	if err != nil {

@@ -67,7 +67,7 @@ daemon/UI/container layers; kernel/boot/init assumptions belong on the real imag
 The value and engineering live in the orchestrator daemon (L1), hardware enablement (L2),
 and curated catalog (L3). The headless Chromium kiosk is just presentation.
 
-**Why:** Avoid mistaking the easy 5% for the product. See `ARCHITECTURE.md`.
+**Why:** Avoid mistaking the easy 5% for the product. See [[ARCHITECTURE]].
 
 ---
 
@@ -469,6 +469,460 @@ present; the page JavaScript passes `node --check`.
 
 ---
 
+## D23 — Dashboard rework: live three.js field, hourly themes, engine moved off home
+**Date:** 2026-06-20 · **Status:** Accepted (refines D20, D22)
+
+Tightened the home screen to feel like a finished OS rather than a control panel.
+
+- **Engine choice removed from the dashboard.** Switching engines now lives only in
+  Settings → Cloudless AI (D22). The Graphics card is just GPU stats; the dashboard keeps a
+  hidden `renderEngine()` that fetches `/api/engine` purely to gate the Chat button on
+  readiness. (`#engine-row` markup + its CSS removed; `er-pill` styles kept for Settings.)
+- **Open WebUI hidden from the launcher.** New catalog flag `App.Hidden`
+  (`json:"hidden,omitempty"`), set on `open-webui`. Filtered out of the app grid and the
+  onboarding picks — it's reached through the hero "Chat with your Cloudless AI" button, so a
+  duplicate tile was redundant. Still installed/provisioned as normal.
+- **Clock shows seconds** (`HH:MM:SS`), tabular-nums so it doesn't jiggle.
+- **Theme follows the hour** (ties to the "cloudless sky"): `applyTheme(hour)` sets
+  `html[data-theme]` → **dawn** (05–08, warm light), **day** (08–18, the bare `:root`
+  default), **dusk** (18–21, warm dark), **night** (21–05, deep blue dark). Implemented purely
+  by overriding CSS custom properties; brand blue + orange status accents persist in every
+  theme. Fixed a latent bug: `--line` was used by Settings but never defined — now defined in
+  `:root` and each theme. Control backgrounds switched from literal `#fff` to `var(--control)`
+  so inputs/pills track the theme.
+- **Subtle three.js background re-introduced** (had been dropped in D10/D20 for the flat look):
+  a slow, breathing point-grid wave — `#bg` canvas, vendored `vendor/three.min.js` (r149,
+  offline per D7). Colour/opacity come from the theme's `--sky` / `--sky-alpha` vars, so it
+  warms at dawn/dusk and glows blue at night. Falls back to the flat base if WebGL is absent;
+  pauses when the tab is hidden. Kept deliberately quiet to respect the Swiss/instrument
+  aesthetic (D20).
+
+- **Motion / "feels alive" pass** (follow-up to the above): progress fills are now
+  **organic** — GPU bars use a flowing gradient + a sweeping sheen + a soft glow, and their
+  values **glide** to new readings (widths updated in place via `updateGPUValues`, not a
+  rebuild-jump-cut every 4 s). App installs gained a **real per-tile progress bar**:
+  determinate from docker layer counts, an indeterminate barber-pole when the total is
+  unknown / building / starting. Plus springy, overshoot easings on tile/place/switch hovers,
+  breathing live indicators (status LED, running dot, hero beacon dot), a gently pulsing
+  "Chat" CTA, and a one-time staggered entrance for hero → cards → apps. All looping motion
+  is disabled under `prefers-reduced-motion`.
+
+Frontend + one catalog field. **Verified:** builds/vets clean; `node --check` passes;
+`three.min.js` 200; `#engine-row` absent; `#bg` present; `data-theme`/`getSeconds`/`--line`
+markers present; new motion markers (`.tbar`, `updateGPUValues`, `@keyframes flow/sheen/
+breathe/beacon/cta/indet/tile-in`, `prefers-reduced-motion`) present; exactly one
+`"hidden":true` (open-webui) in `/api/catalog`. Visual rendering is unverified (headless dev
+box) — needs an eyes-on pass.
+
+---
+
+## D24 — Cloudless Assistant: a built-in guide powered by the local engine
+**Date:** 2026-06-20 · **Status:** Accepted
+
+A floating chat assistant (bottom-right) that helps the user decide what to do with the OS.
+It is **grounded, not generic**: a server-built system prompt (`internal/assistant`) tells the
+model what CloudlessOS is, the company goal, the **live machine state** (active engine +
+readiness, model, GPU summary, first-run/onboarded), and the **app catalog** with per-app
+"what it's for" and install status. It then drives the **same local engine** that powers
+everything else — `POST /api/assistant/chat` streams from `127.0.0.1:8000/v1/chat/completions`
+(served model `cloudless`) back to the browser as SSE; the UI renders tokens live.
+
+- **Privacy stays intact:** the assistant runs on the user's own engine — no cloud call.
+- **Actionable, within OS logic:** the model may end a reply with tags
+  (`[[do:install:comfyui]]`, `[[do:open:…]]`, `[[do:chat]]`, `[[do:engine:sglang]]`). The
+  backend parses them — and falls back to keyword intent on the user's last message — into a
+  small set of one-click `actions` returned on the final SSE event. The UI turns these into
+  buttons (install an app, open it, open chat, switch engine). Robust even with the small
+  default model.
+- **Graceful when cold:** if the engine isn't ready yet, the endpoint returns a friendly
+  "warming up" message instead of an error.
+- Frontend: a pulsing FAB → chat panel with streaming bubbles, a typing indicator, starter
+  intent chips ("use AI agents", "build images", "analyze images", "just chat"), and action
+  buttons. **Verified** end-to-end against the live engine — a grounded reply streamed and
+  recommended ComfyUI for "I want to build images".
+
+---
+
+## D25 — App Launcher (full-screen, by category) + dashboard "fast launch" pins
+**Date:** 2026-06-20 · **Status:** Accepted (supersedes the D23 "hide Open WebUI" tweak)
+
+The dashboard app grid became a **curated "Fast launch"** of *pinned* apps; the full set moved
+into a proper **App Launcher** (full-screen overlay, Launchpad-style).
+
+- **Launcher:** apps grouped by **category** (`Chat & interfaces`, `Image & video`,
+  `Agents & automation` — new `App.Category` + `App.Tagline` in the catalog), each card with a
+  description, a status badge (running / available / soon), and **actions**: Install / Open /
+  Stop, **Configure** (deep-links to the app's Settings page), and a **Pin/Unpin** toggle.
+  Includes search. Engines (vLLM/SGLang/Ollama) stay out — they're infrastructure managed in
+  Settings, not launchable apps (`App.Launchable()` = `!Service`).
+- **Fast launch = pins:** the dashboard shows only pinned apps (with a graceful empty state +
+  "Open the App Launcher" CTA). Pins persist per-user (`state.Pinned` + `PinnedSet`;
+  `GET /api/pins`, `POST /api/apps/{id}/pin` toggle). **Default = none** (user's choice — they
+  said start empty); this is why Open WebUI / ComfyUI can come *back* to the dashboard by being
+  pinned. The earlier `Hidden` flag now only suppresses Open WebUI from first-run *suggestions*.
+- **Dev affordance:** `CLOUDLESS_NO_PROVISION=1` skips startup provisioning so a second daemon
+  (separate `CLOUDLESS_ADDR`) can be run for testing without touching the primary daemon's
+  containers.
+
+**Verified:** builds/vets clean; `node --check` passes; category/tagline served; pins default
+`[]`, pin→`["comfyui"]`→unpin→`[]`; engines reject pinning (404); launcher/assistant UI markers
+present. Visual rendering unverified (headless box).
+
+---
+
+## D26 — Assistant becomes the primary entry; launcher gets per-app pages
+**Date:** 2026-06-20 · **Status:** Accepted (refines D24, D25)
+
+Two UX refinements after first use.
+
+- **Assistant is now the hero, not a corner afterthought.** The big "Chat with your Cloudless
+  AI" button is gone; the hero leads with a prominent **prompt bar** — *"What do you want to do
+  with CloudlessOS?"* — that opens the assistant (and sends the typed question). The full Open
+  WebUI chat demotes to a small secondary "Open the full chat ↗" link under it. The floating FAB
+  stays for re-access. This puts the OS-aware guide (which can take actions) front-and-centre.
+  **Update:** "the full chat" is the **assistant itself in a full-screen mode** (a large centered
+  window over a dimmed backdrop, with an expand/collapse toggle) — *not* Open WebUI. The assistant
+  is now framed as "the Cloudless AI chat you're talking to"; Open WebUI is just an optional,
+  separate dedicated-chat app in the launcher. The old OWUI entry points (the `localhost:3000`
+  link and the `[[do:chat]]` action) were removed — "just chat" is answered by the assistant
+  inline, and Open WebUI is only suggested when explicitly asked for.
+- **Launcher app cards open a real per-app page.** Clicking a card (or "Details ›") opens a
+  full page inside the launcher: big icon, status, a **long description**, and an **"Examples of
+  what you can do"** bullet list, with the same Install/Open/Stop/Configure/Pin actions. New
+  catalog fields `App.Long` + `App.Examples` (populated for Open WebUI, ComfyUI, OpenClaw,
+  Hermes). Search or "← All apps" returns to the category grid. Action buttons and the card
+  body share one wiring path (`wireActions`).
+
+- **Launcher → two-pane master/detail + flicker fix** (follow-up): the card-grid layouts read
+  as cluttered. Final design is **two panes** (like macOS System Settings): a **left list** of
+  apps grouped by category (searchable, live running-dot, active highlight) and a **right pane**
+  that shows an **intro** by default ("Your local AI apps" + category blurbs) and swaps to the
+  **selected app's full page** on click — icon, name, status, long description, "examples of
+  what you can do", and the action set (Open/Stop, Install, Configure, Pin). Also fixed a
+  **re-render bug**: the dashboard's 8 s `/api/apps` poll called `renderApps`, which
+  unconditionally rebuilt the open launcher every cycle (flicker + scroll jump). Now gated by a
+  state signature (`lpStateSig` = running set + pins + selected app + query) so it only rebuilds
+  when something it shows actually changed.
+
+  **Flicker — final fix (decouple, not gate):** the signature/gating approaches kept failing
+  in practice. Replaced entirely: the 8 s `/api/apps` poll (`renderApps`) now **never** renders
+  the launcher — that code path was deleted. The launcher is redrawn **only** by explicit user
+  interaction (open / select an app / search / install-stop-pin actions), each of which calls
+  `refreshLauncher()`. There is no timer-driven path that can touch the launcher DOM, so
+  poll-driven flicker is structurally impossible rather than merely gated.
+
+  **Same fix for Settings:** the 4 s poll called `renderEngine()`, which rebuilt the entire
+  Settings panel (`renderSettings()`) when open — flickering it and wiping any form input mid-
+  type every 4 s. `renderEngine()` now only updates engine state and never renders Settings;
+  the panel is redrawn solely by user actions (open / nav click / engine switch / job completion).
+  Same principle: no timer-driven path may rebuild a panel the user is interacting with.
+
+**Verified:** builds/vets clean; `node --check` passes; `long`/`examples` served; hero `ask`
+bar + `renderAppDetail`/`showAppPage`/`ac-cta`/`ac-pin`/`lpStateSig` markers present; old
+`chat-btn` gone; assistant still streams a real reply. Visual rendering unverified (headless box).
+
+---
+
+## D27 — "Share online" via Cloudflare quick tunnels (zero-config)
+**Date:** 2026-06-20 · **Status:** Accepted
+
+Users can expose an app (e.g. Open WebUI) to the internet with a single toggle in its Settings
+page. Chosen mechanism: **Cloudflare Quick Tunnels** (`cloudflared tunnel --url …`), which mint
+a public `https://<random>.trycloudflare.com` URL with **no Cloudflare account, domain, DNS or
+login** — the easiest possible path, matching the "network must be easy" requirement.
+
+- **Runtime:** a `cloudflare/cloudflared` container per shared app (`cloudless-tunnel-<id>`),
+  run with **host networking** pointed at the app's published host port
+  (`--url http://localhost:<hostPort>`). Host netns means one approach works for every app,
+  including host-networked ones (OpenClaw); cloudflared is outbound-only so no inbound ports.
+- **API:** `GET /api/apps/{id}/tunnel` → `{supported, enabled, url}`; `POST` `{enable}` starts
+  (pull → run → scrape the `trycloudflare.com` URL from container logs, up to ~60s) or stops
+  (remove the container). New `engine.Logs`. Catalog gains `Tunnelable()` (= launchable + has a
+  web port) and `TunnelName()`. Apps without a web port (Hermes) report `supported:false`.
+- **UI:** a "share online" block on the app's Settings page — a toggle, then the live public
+  URL with Copy/Open, plus a blunt warning: **anyone with the link can use it** (quick tunnels
+  add no auth; Open WebUI ships with no login). Persists via the container's restart policy.
+- **Limits (intentional, v1):** URL is random and changes if the tunnel restarts; no access
+  control. **Named tunnels** (stable custom-domain URL, needs a Cloudflare token) are a later
+  upgrade. The cloudflared image is pulled on first enable.
+
+**Verified:** builds/vets clean; `node --check` passes; `tunnel` endpoints return correct
+`supported` flags (Open WebUI/ComfyUI true, Hermes false) and UI markers present. Did **not**
+exercise live-enable in tests (it would publicly expose the running app).
+
+---
+
+## D28 — "Local network" serving via a same-port socat sidecar
+**Date:** 2026-06-20 · **Status:** Accepted (companion to D27)
+
+Apps run bound to `127.0.0.1` (localhost-only) by default. A per-app **"local network"** toggle
+(Settings page, above "share online") lets the user serve an app to other devices on the same
+network — phones, tablets, laptops — with a clear explanation of the exact address to use.
+
+- **Mechanism (chosen):** a tiny host-networked **socat** sidecar (`cloudless-lan-<id>`,
+  `alpine/socat`) that listens on **`<LAN-IP>:<port>`** and forwards to `127.0.0.1:<port>`.
+  Binding to the specific LAN IP (not `0.0.0.0`) means it uses the **same port** as localhost
+  without colliding with the app's existing `127.0.0.1:<port>` binding — so the URL is just
+  `http://<LAN-IP>:<port>`, no offset, no port juggling.
+- **Why a sidecar (not rebinding the app):** zero changes to how app containers are created —
+  no recreation, no threading a bind-address through provision/install/restart, no persisting a
+  per-app bind preference. Same low-risk pattern as the D27 tunnel. Enable/disable = run/remove
+  one container.
+- **IP detection:** standard UDP-dial trick (`net.Dial("udp","8.8.8.8:80")` → local addr),
+  with an interface-scan fallback for the first private IPv4.
+- **API:** `GET /api/apps/{id}/lan` → `{supported, enabled, ip, port, url}`; `POST {enable}`.
+  New catalog `HasWebPort()` (shared with `Tunnelable()`) + `LanName()`. Apps with no web port
+  (Hermes) report `supported:false`.
+- **UI:** a "local network" block that always explains *how it works and which `http://IP:port`
+  to open from another device*; toggling on shows the live address with Copy/Open and a
+  one-line how-to. Persists via the sidecar's restart policy.
+- **WSL caveat:** on the dev box the detected IP is the **WSL2 VM** address (172.x) — reachable
+  from the Windows host but not from other LAN devices without Windows mirrored-networking/port-
+  proxy. On bare-metal CloudlessOS the same code yields the real LAN IP and works directly.
+
+**Verified:** builds/vets clean; `node --check` passes; `lan` endpoint returns the right
+`supported`/`ip`/`port` (Open WebUI true + detected IP; Hermes false); UI markers present. Live
+enable not exercised in tests (it would expose the running app on the network).
+
+**Machine-wide default + onboarding (follow-up):** the welcome tour gained a **"Local network"**
+step (a toggle, **default ON**, with a plain-language explanation of what it means and that it
+can be changed later). The choice is a machine-wide preference (`state.LocalNet`, defaults ON
+until set; `GET/POST /api/network/local`) applied by `provision.EnsureLAN`, which starts/stops
+the per-app socat forwarders for every running web app. It's re-applied on every boot inside
+`provision.Run` (and the sidecars also persist via their restart policy), so the setting sticks.
+Shared `provision.PrimaryLANIP` + `catalog.LanSidecarSpec` back both the per-app toggle and the
+global preference. **Verified:** default `enabled:true`; toggling to `false` persists; onboarding
+step/markers served.
+
+---
+
+## D29 — Connectivity status (internet / local-only / offline)
+**Date:** 2026-06-20 · **Status:** Accepted
+
+A menubar indicator shows whether the machine can reach the **internet**, only the **local
+network**, or **nothing** — with a click-to-open popover explaining what each state means for
+the user (what they can/can't do). It complements the LAN/online-share features by making it
+obvious *why* a download or public link might be unavailable.
+
+- **Detection (`GET /api/network/status` → `{state,internet,lan,ip}`):** internet = a TCP
+  connect to any of `1.1.1.1:443 / 8.8.8.8:53 / 1.1.1.1:53` succeeds within 2s (run in
+  parallel, first hit wins; no DNS dependency); LAN = `provision.PrimaryLANIP() != ""`. State =
+  `internet` if online, else `local` if on a network, else `offline`. The internet check is
+  cached ~12s so the 20s UI poll stays snappy and offline doesn't stall.
+- **UI:** a menubar chip with a colour-coded dot — **blue = Online**, **orange = Local network**,
+  **grey = Offline** — and a popover with a title + plain-language message (e.g. offline: "Your
+  apps run only on this machine… everything stays fully private") plus the machine's LAN IP.
+  Offline is shown as neutral grey, not an alarm — being air-gapped is a legitimate private-AI
+  choice, not an error.
+
+**Verified:** builds/vets clean; `node --check` passes; endpoint returns `state:"internet"` on
+the connected dev box; UI markers served.
+
+---
+
+## D30 — OTA updates: validated-manifest + recreate-on-volumes; persistence groundwork
+**Date:** 2026-06-20 · **Status:** Accepted; persistence + app-update both built (OS update pending)
+
+How CloudlessOS and its apps update over the internet **without resetting user config/data**.
+
+- **The non-destructive rule:** an app's mutable state must live in **volumes**, never the
+  container's writable layer. Then "update" = pull new image → `stop`+`rm` the old container
+  (this does NOT delete named volumes/bind mounts) → `run` the new image with the **same name,
+  env, ports and volumes**. Data survives; the app runs its own in-place data migrations.
+- **Persistence groundwork (done now):** audited every app and added data volumes where missing —
+  **open-webui** `/app/backend/data` (chats/settings) and **comfyui** `/comfy/mnt` (install,
+  models, outputs, custom nodes). Engines already persist the HF cache; the trainers (AI Toolkit,
+  Unsloth) already had volumes; agents' editable config is mounted (D19). Also fixed a latent
+  `appSpec` aliasing bug that could mutate the catalog's shared volume map. *(One-time caveat: an
+  already-running open-webui/comfyui re-inits once when the volume is first attached; fresh
+  installs are unaffected.)*
+- **Update source — Cloudless validated manifest** (chosen over raw upstream `:latest`): the OS
+  fetches a Cloudless-hosted JSON pinning each app to a **tested** image (ideally by digest).
+  "Update available" = running digest ≠ manifest digest. Keeps the curation/reliability bet,
+  gives controlled rollout and one-click rollback to the prior pinned digest.
+- **App-update mechanism (built):** new `engine.ImageDigest` (local repo digest via
+  `docker image inspect`) + `engine.RemoteDigest` (registry digest via `docker buildx imagetools
+  inspect`, no pull). `GET /api/apps/{id}/update` reports `{installed, updatable, hasUpdate,
+  current, latest, checkError, build}` by comparing the two; `POST` applies by reusing
+  `runInstall` (pull latest → remove old container → run `app.Spec()` with the **same volumes**),
+  so config/data are preserved. Each app's Settings page shows an **updates** section
+  (Checking… → "Update available / Update now" / "Up to date / Check again", or "Rebuild" for the
+  locally-built agents). For now the catalog's image ref *is* the manifest (validated tags); a
+  remote Cloudless manifest can later override the desired digest. **Verified** against the live
+  images: open-webui/comfyui report up-to-date (local digest == remote), openclaw reports
+  `build:true`. Engines (vLLM/SGLang) update is a later add via the AI page.
+- **Manifest consumption (built + live):** new `internal/manifest` package fetches a hosted JSON
+  (`CLOUDLESS_MANIFEST_URL`, default `https://samuelcardillo.com/cloudless/cloudless-apps-manifest.json`),
+  caches ~10 min, serves stale on error, falls back to catalog tags when unset/offline. When a
+  pin exists the daemon pulls/runs **`image@digest`** instead of the moving tag — wired into
+  install/update (`runInstall`), the update check (installed digest vs the **pinned** digest;
+  surfaces `source/channel/verified/notes`), **provisioning** (boot pulls the validated apps +
+  engine image, appends `--revision <sha>` for the pinned default model), and the **infra**
+  sidecars (cloudflared/socat). The Settings update section shows "Cloudless validated · <channel>
+  — ✓ tested / pinned, not yet hardware-tested". **Verified live** against the hosted file:
+  open-webui `source:cloudless, verified:true`, comfyui `verified:false`, both matched to their
+  pinned digests. **OpenClaw/Hermes are now registry images too:** their locally-built images were
+  pushed to Docker Hub (`samuelcardillo/cloudless-openclaw:v1`, `…-hermes:v1`) and the catalog
+  switched from build-on-device → pull-from-registry (embedded Dockerfiles stay as the rebuild
+  source). They're pinned in the manifest like every other app, so *everything on the box* —
+  apps, agents, infra, model — is a pinned, validated version. Update flow for the agents:
+  rebuild from `internal/apps/<name>`, `docker push`, paste the new digest into the manifest.
+- **OS updates — same OCI model:** with the immutable/atomic base (bootc / Universal Blue, the
+  leaning per D-base), the OS is an OCI image; `bootc upgrade` pulls + stages it for next boot
+  with **automatic rollback** and preserves `/var`+`/home` (incl. app volumes). Apps and OS thus
+  share one story: versioned OCI images, pulled from Cloudless's registry, validated, atomic,
+  data-preserving.
+
+## D31 — Remove Ollama entirely
+**Date:** 2026-06-20 · **Status:** Accepted (supersedes the D12 "kept as optional engine")
+
+Ollama was demoted to a non-default optional engine when we moved to vLLM/SGLang (D12), but never
+removed. Per the user ("we shouldn't have Ollama"), the catalog entry, glyph and tile styling are
+deleted. The only remaining reference is Open WebUI's `ENABLE_OLLAMA_API=False`, which *disables*
+Open WebUI's built-in Ollama support so it only talks to the Cloudless engine — kept intentionally.
+Catalog is now: vllm, sglang, open-webui, comfyui, ai-toolkit, unsloth, openclaw, hermes.
+
+---
+
+## D32 — Model Manager (curated models + "fits your VRAM")
+**Date:** 2026-06-21 · **Status:** Accepted (v1 built)
+
+A model browser on the Settings → Cloudless AI page, inspired by LM Studio (hardware-fit
+indicator + one-click use) and vLLM Studio (model lifecycle). Realised against our architecture:
+the engine serves **one model at a time**, and vLLM downloads weights from HF on serve, so
+"use a model" = restart the engine on it (the existing `POST /api/settings/model` async job,
+which streams the download/restart progress).
+
+- **Curated, NON-GATED catalog** (`internal/models`): every entry is vLLM-servable and open on
+  HF (no license wall / token needed for auto-download) — deliberately Qwen2.5-heavy (1.5B→72B,
+  incl. 4-bit AWQ and Coder variants) plus Phi-3.5-mini. Curation = the reliability bet, same as
+  apps. Each has rough `MinVRAMGB` (weights + KV headroom).
+- **`GET /api/models`** returns the catalog with a per-model **fit** verdict (`fits` / `tight` /
+  `over`, computed vs summed GPU VRAM with an 0.85 comfort factor), the active model, and whether
+  the current model is a custom (non-catalog) id.
+- **UI:** cards with name, params/quant/context/~VRAM, a colour-coded fit dot (green/amber/red),
+  a `code` tag for coding models, the active marker, and click-to-use (confirm for `over` models).
+  Engine pills kept; a collapsible **Advanced** holds the custom-HF-id field (the old behaviour).
+- **Two sections + hosted "Cloudless highlights" + capability tags (follow-up, built):** the page
+  now shows **"Your models"** (what's downloaded — detected by scanning the `cloudless-hf` cache
+  volume via a throwaway busybox `ls`, exposed as `engine.Output`) and **"Cloudless highlights"**
+  (curated picks you haven't downloaded yet). Highlights come from a **hosted models manifest**
+  (`CLOUDLESS_MODELS_URL`, default `…/cloudless-models.json`, cached ~10 min, falls back to the
+  built-in `internal/models` list when unreachable) so the company can curate remotely without an
+  OS rebuild. Each model carries a **description**, **use-case tags**, and **toolCalling / vision**
+  capability badges. `GET /api/models` → `{gpuVRAMGB, current, yours[], highlights[]}` each with
+  fit/active/downloaded.
+- **Verified:** 31 GB detected; the HF-cache scan put the downloaded default under "Your models"
+  and the rest under highlights; vision/tools flags correct (Qwen2.5-VL = vision, Qwen2.5 = tools);
+  72B = `over`. Builds/vets/`node --check` clean.
+- **Standalone, dashboard-accessible (not in Settings):** the Model Manager is its own large
+  full-screen overlay (`#models`, ~`min(1280px,96vw) × 92vh`), opened from the main screen — a
+  **◈ button in the menubar** and a **"◈ Model Manager →" link in the Graphics card** (shows the
+  active model name). It is **models only** — the inference-engine switch is NOT here (it's an
+  advanced, rarely-touched setting). Engine switching lives on a **Settings → "Inference engine"**
+  page; `switchEngine`/`trackEngineJob` refresh `#settings`.
+- **Image models too (diffusion), same pattern:** the Model Manager has **Language / Image
+  tabs**. The Image tab mirrors the LLM one — "Your image models" (files scanned from the ComfyUI
+  volume) + "Cloudless highlights" (curated open diffusion models: SD1.5, SDXL, SDXL Turbo, FLUX
+  schnell) with base/tags/VRAM-fit. New `internal/diffusion` catalog + `manifest.DiffusionStore`
+  (hosted `cloudless-diffusion.json`, fallback to built-in). Mechanics differ from LLMs: diffusion
+  models are **files** placed in ComfyUI's `models/checkpoints` (no "serve/restart"), so getting
+  one = a **download into the ComfyUI volume**. `GET /api/diffusion`; `POST /api/diffusion/{id}/
+  download` runs a job that `curl`s the file in via a `curlimages/curl --user 0` throwaway
+  container (root perms + TLS validation; `engine.Output`). **Verified:** endpoint + fit + the
+  scan (a file dropped in the volume shows under "Your image models") + the curl-into-volume
+  download recipe. **Caveats:** (1) ComfyUI is crash-looping on Blackwell (sm_120) here, so the
+  image side can't be used until that's fixed; (2) model URLs/sizes are best-effort — only a tiny
+  test file was actually downloaded, not real multi-GB weights; add a sha256 check before trusting.
+- **Click → detail → explicit actions (not click-to-act):** clicking a model card no longer
+  switches/downloads. It opens an in-overlay **detail view** (reusing the launcher's app-detail
+  styling, with a "← All models" back button) showing the full id/file, specs, license,
+  description, capability badges, tags, and a VRAM-fit line, plus an explicit **action set**:
+  - LLM: **Launch** (set + restart engine, the existing `/api/settings/model` job) and, when not
+    on disk, **Download only** — a new **`POST /api/models/download`** that pre-fetches weights
+    into the `cloudless-hf` cache via the engine image (`--entrypoint python3 … snapshot_download`)
+    so a later launch is instant. Active model shows "✓ Loaded in vLLM right now" + a re-download.
+  - Image: **Download** (the existing diffusion job); once present it says "choose it in ComfyUI's
+    checkpoint menu" (no launch — ComfyUI picks per-workflow).
+- **Launch warning:** before launching, a confirm explains exactly what happens — the engine
+  restarts, the currently-loaded model (named) is unloaded, in-progress chats are interrupted
+  (~30–60 s), plus extra lines if it isn't downloaded yet (weights download first) or is `over`
+  VRAM (may fail to load). The advanced custom-HF-id field launches directly (explicit by nature).
+- **Dashboard shows the loaded model:** the Graphics-card link now reads "◈ <model> · loaded →"
+  (or "· loading…" while the engine warms up), driven by `refreshActiveModel` (`/api/settings` +
+  `/api/engine`), and refreshes after a switch. **Verified:** GET `/api/models` (31 GB, current
+  Qwen2.5-1.5B), download endpoint validates (400 on empty/bad id); build/vet/`node --check` clean.
+- **Design pass (v2):** the manager was reworked from a settings-page look into a dedicated,
+  LM-Studio-style surface. A **toolbar** sits under the tabs: a hardware summary ("Your GPU:
+  31 GB · green fits comfortably"), a **search box** (matches name/id/family/params/tags/desc),
+  and **capability filter chips** (Fits my GPU · Vision · Tool-calling — image tab shows only
+  Fits) that filter the already-fetched lists client-side without a re-fetch, with an empty
+  state + "Clear filters". The two tabs share one `paintModelList(c, data, kind)` renderer. The
+  **detail view** was rebuilt (no longer borrows the app-launcher layout): an icon-tile hero
+  with the name + mono HF id + capability/use tags, a colour-coded **status banner** (blue
+  "loaded" / green "ready" / neutral "not downloaded"), the description, a bordered **spec grid**
+  (params, quant, context, VRAM, license), the fit line, and the action row. Verified by
+  rendering the real CSS in a static harness via headless Edge (light + dark themes) — all
+  var-driven, legible in both; `node --check` + `go build` clean.
+- **Follow-ups:** multi-backend (llama.cpp/MLX, per vLLM-Studio), per-model advanced config
+  (context/quant), pinning user-selected model revisions via the manifest, sha256 on downloads,
+  a real progress bar for the pre-download job (snapshot_download output isn't streamed yet).
+
+---
+
+## D33 — Desktop (dashboard) redesign for ergonomics + clarity
+**Date:** 2026-06-22 · **Status:** Accepted (built)
+
+The home screen led with an 84px clock (the biggest, highest-contrast, *least* actionable
+element — and a duplicate of the menubar clock), while the app launcher (the primary task)
+sat at the very bottom under ambient status cards. Reworked the information hierarchy:
+
+- **Compact hero.** The clock shrank 84px → 40px and moved to a quiet top-right anchor with
+  the date beneath it (`.hero-time` / `.ht-clock` / `.hero-date`); the greeting moved into the
+  subtitle ("Good afternoon. Your private, local-AI workstation."). Reclaims ~150px of prime
+  space and stops the eye landing on the time. Seconds dropped from the big clock.
+- **Apps promoted.** "Your apps" (the pinned fast-launch tiles, renamed from "Fast launch")
+  now sits directly under the hero — the thing you came to do is first. The Graphics + Places
+  status cards drop below it. Entrance-animation stagger reordered to match.
+- **Better width use.** `main` 1080 → 1140px, hero/section spacing tightened, ask bar widened
+  470 → 560px so the primary "ask Cloudless" entry is more prominent.
+- **Verified** by rendering the real CSS/markup in a static harness (`scripts/desk-harness.ps1`)
+  via headless Edge in both the light (`day`) and dark (`night`) time-of-day themes — legible and
+  balanced in both; `node --check` + `go build` clean. (Live-page screenshots weren't possible:
+  WSL2 localhost forwarding is off on this box, so the harness renders the embedded file directly.)
+
+---
+
+## D34 — Machine info, user profile, region awareness (France → Mistral)
+**Date:** 2026-06-24 · **Status:** Accepted (built)
+
+The OS now knows more about the machine and its user, and tailors itself by region —
+all detected **locally**, with **no IP/geo network lookup** (keeps the privacy promise).
+
+- **`internal/locale`** infers timezone (from `$TZ` / `/etc/timezone` / `/etc/localtime`),
+  UTC offset, and country — from the **locale** (`fr_FR` → FR) preferring it, else a curated
+  **IANA-zone→country** map (France covered incl. overseas territories). No network.
+- **`hardware.Sys()`** reports host, distro (`/etc/os-release`), kernel, arch, CPU, cores,
+  RAM, uptime (`/proc`). Exposed at **`GET /api/system`**.
+- **User profile** (`state.Profile{Name, Region}`) with **`GET/POST /api/profile`**. Region
+  is an optional override; "" = auto-detect. `effectiveCountry()` = override ?: detected, and
+  is the single source of truth for region features.
+- **France → Mistral.** `models.Model` gained `Region` + `Gated`. Two French-built Mistral
+  models (`Mistral-7B-Instruct-v0.3`, `Mistral-Nemo-Instruct-2407`, both Apache-2.0) carry
+  `Region:"FR"`. `modelsList` flags region-matched models `recommended`, floats them to the
+  top, and **merges them in even when the hosted manifest omits them** — so Mistral always
+  surfaces on a French machine. They're marked `gated` (their HF repos require accepting terms);
+  honest badge + note in the UI. **Caveat:** one-click download of gated repos needs a HF token —
+  not yet supported (follow-up: a HF-token field in the profile).
+- **UI:** Settings → **Profile** (name, region override, detected timezone/locale/country, a
+  "France detected" note); the renamed Settings → **Machine** page adds a **system** block
+  (device/OS/kernel/CPU/RAM/uptime/timezone/region); the dashboard hero greets by **name** and
+  shows the **timezone · region (🇫🇷)** under the clock; the Model Manager gets a **"Recommended
+  in <country>"** section with ★/gated badges. Verified: backend live (TZ/LANG-driven, FR→Mistral
+  vs US→none), UI via static harness (`scripts/feat-harness.ps1`); build/vet/`node --check` clean.
+
+---
+
 ## Open questions (not yet decided)
 
 - **Open-source CloudlessOS?** Leaning yes (trust/community for a privacy brand, like
@@ -476,3 +930,13 @@ present; the page JavaScript passes `node --check`.
 - **Orchestrator language:** Go vs Python vs Rust.
 - **Web UI framework.**
 - **Catalog scope:** how curated vs how extensible (defensibility = curation + reliability).
+
+---
+
+## See also
+
+- [[VISION]] — the vision & strategy these decisions support
+- [[ARCHITECTURE]] — the technical design these decisions shape
+- [[ROADMAP]] — the phased plan these decisions feed into
+- [[STATUS]] — living state, including which decisions are pending input
+- [[DEV_ENVIRONMENT]] — hardware & WSL2 runbook (referenced by D1, D4, D8, …)

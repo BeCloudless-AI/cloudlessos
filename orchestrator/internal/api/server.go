@@ -20,6 +20,7 @@ import (
 	"github.com/cloudless/orchestrator/internal/engine"
 	"github.com/cloudless/orchestrator/internal/hardware"
 	"github.com/cloudless/orchestrator/internal/jobs"
+	"github.com/cloudless/orchestrator/internal/manifest"
 	"github.com/cloudless/orchestrator/internal/places"
 	"github.com/cloudless/orchestrator/internal/provision"
 	"github.com/cloudless/orchestrator/internal/state"
@@ -30,14 +31,34 @@ var webFS embed.FS
 
 // Server wires the container engine, job manager, and state store to HTTP handlers.
 type Server struct {
-	eng   engine.Engine
-	jobs  *jobs.Manager
-	state *state.Store
+	eng      engine.Engine
+	jobs     *jobs.Manager
+	state    *state.Store
+	manifest *manifest.Store
+	mfModels *manifest.ModelsStore
+	mfDiff   *manifest.DiffusionStore
 }
 
-// NewServer constructs a Server backed by the given engine and state store.
-func NewServer(eng engine.Engine, st *state.Store) *Server {
-	return &Server{eng: eng, jobs: jobs.NewManager(), state: st}
+// NewServer constructs a Server backed by the given engine, state store and manifests.
+func NewServer(eng engine.Engine, st *state.Store, mf *manifest.Store, mfModels *manifest.ModelsStore, mfDiff *manifest.DiffusionStore) *Server {
+	return &Server{eng: eng, jobs: jobs.NewManager(), state: st, manifest: mf, mfModels: mfModels, mfDiff: mfDiff}
+}
+
+// imageFor returns the image reference to pull/run for an app: the manifest's
+// validated digest pin ("image@sha256:…") when present, else the catalog's tag.
+func (s *Server) imageFor(ctx context.Context, app catalog.App) string {
+	if p, ok := s.manifest.Pin(ctx, app.ID); ok {
+		return p.Ref()
+	}
+	return app.Image
+}
+
+// infraImage resolves an infra image (cloudflared/socat) to the manifest pin, else fallback.
+func (s *Server) infraImage(ctx context.Context, key, fallback string) string {
+	if p, ok := s.manifest.Pin(ctx, key); ok {
+		return p.Ref()
+	}
+	return fallback
 }
 
 // Routes returns the configured HTTP handler.
@@ -45,6 +66,9 @@ func (s *Server) Routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", s.health)
 	mux.HandleFunc("GET /api/gpu", s.gpu)
+	mux.HandleFunc("GET /api/system", s.system)
+	mux.HandleFunc("GET /api/profile", s.profileGet)
+	mux.HandleFunc("POST /api/profile", s.profileSet)
 	mux.HandleFunc("GET /api/catalog", s.catalog)
 	mux.HandleFunc("GET /api/apps", s.apps)
 	mux.HandleFunc("POST /api/apps/{id}/start", s.start)
@@ -59,6 +83,10 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/apps/{id}/settings", s.appSettingsSet)
 	mux.HandleFunc("GET /api/settings", s.settingsGet)
 	mux.HandleFunc("POST /api/settings/model", s.settingsModel)
+	mux.HandleFunc("GET /api/models", s.modelsList)
+	mux.HandleFunc("POST /api/models/download", s.modelDownload)
+	mux.HandleFunc("GET /api/diffusion", s.diffusionList)
+	mux.HandleFunc("POST /api/diffusion/{id}/download", s.diffusionDownload)
 	mux.HandleFunc("POST /api/onboarding/reset", s.onboardingReset)
 	mux.HandleFunc("GET /api/jobs/{id}", s.jobState)
 	mux.HandleFunc("GET /api/jobs/{id}/events", s.jobEvents)
@@ -68,6 +96,18 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/folders/{id}/open", s.openFolder)
 	mux.HandleFunc("GET /api/engine", s.engineState)
 	mux.HandleFunc("POST /api/engine/{id}", s.engineSwitch)
+	mux.HandleFunc("GET /api/pins", s.pinsGet)
+	mux.HandleFunc("POST /api/apps/{id}/pin", s.pinToggle)
+	mux.HandleFunc("GET /api/apps/{id}/tunnel", s.tunnelGet)
+	mux.HandleFunc("POST /api/apps/{id}/tunnel", s.tunnelSet)
+	mux.HandleFunc("GET /api/apps/{id}/lan", s.lanGet)
+	mux.HandleFunc("POST /api/apps/{id}/lan", s.lanSet)
+	mux.HandleFunc("GET /api/network/local", s.localNetGet)
+	mux.HandleFunc("POST /api/network/local", s.localNetSet)
+	mux.HandleFunc("GET /api/network/status", s.networkStatus)
+	mux.HandleFunc("GET /api/apps/{id}/update", s.updateGet)
+	mux.HandleFunc("POST /api/apps/{id}/update", s.updateApply)
+	mux.HandleFunc("POST /api/assistant/chat", s.assistantChat)
 
 	sub, err := fs.Sub(webFS, "web")
 	if err != nil {
@@ -299,6 +339,9 @@ func (s *Server) runInstall(job *jobs.Job, app catalog.App) {
 
 	_ = s.eng.Remove(ctx, app.ContainerName()) // clear any stale container
 
+	// Use the manifest's validated digest when pinned, else the catalog tag.
+	img := s.imageFor(ctx, app)
+
 	if app.Build != "" {
 		// Locally-built image (no upstream): materialize the embedded context and build.
 		job.Progress("building", "Building "+app.Name+" …", -1, -1)
@@ -317,7 +360,7 @@ func (s *Server) runInstall(job *jobs.Job, app catalog.App) {
 	} else {
 		job.Progress("pulling", "Pulling image…", 0, 0)
 		layers := map[string]bool{} // layer id -> complete
-		err := s.eng.PullStream(ctx, app.Image, func(line string) {
+		err := s.eng.PullStream(ctx, img, func(line string) {
 			id, status, ok := splitStatus(line)
 			switch {
 			case ok && strings.HasPrefix(status, "Pulling fs layer"):
@@ -342,7 +385,9 @@ func (s *Server) runInstall(job *jobs.Job, app catalog.App) {
 	}
 
 	job.Progress("starting", "Starting container…", -1, -1)
-	id, err := s.eng.Run(ctx, s.appSpec(app))
+	spec := s.appSpec(app)
+	spec.Image = img // run the exact image we pulled (pinned digest when manifest applies)
+	id, err := s.eng.Run(ctx, spec)
 	if err != nil {
 		job.Fail(err)
 		return
@@ -479,17 +524,20 @@ func (s *Server) configVolumes(app catalog.App) map[string]string {
 	return vols
 }
 
-// appSpec is app.Spec() plus the user's mounted config files.
+// appSpec is app.Spec() plus the user's mounted config files. It builds a fresh
+// volumes map so it never mutates the catalog's shared map (which would otherwise
+// accumulate config mounts for an app that has both data volumes and config files).
 func (s *Server) appSpec(app catalog.App) engine.RunSpec {
 	rs := app.Spec()
-	vols := s.configVolumes(app)
-	if len(vols) > 0 {
-		if rs.Volumes == nil {
-			rs.Volumes = map[string]string{}
-		}
-		for h, c := range vols {
-			rs.Volumes[h] = c
-		}
+	merged := map[string]string{}
+	for h, c := range rs.Volumes {
+		merged[h] = c
+	}
+	for h, c := range s.configVolumes(app) {
+		merged[h] = c
+	}
+	if len(merged) > 0 {
+		rs.Volumes = merged
 	}
 	return rs
 }

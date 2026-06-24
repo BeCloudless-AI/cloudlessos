@@ -11,12 +11,23 @@ import (
 	"time"
 )
 
+// Profile is the user-controlled profile for this CloudlessOS install.
+type Profile struct {
+	Name   string `json:"name,omitempty"`   // display name (greeting / personalization)
+	Region string `json:"region,omitempty"` // ISO-3166 alpha-2 override, e.g. "FR"; "" = auto-detect
+}
+
 // State is the persisted state.
 type State struct {
-	FirstSeen string `json:"firstSeen"`        // RFC3339; when the daemon first initialized this store
-	Onboarded bool   `json:"onboarded"`        // user has completed first-run onboarding
-	Engine    string `json:"engine,omitempty"` // selected inference engine ("" = default)
-	Model     string `json:"model,omitempty"`  // selected model ("" = catalog default)
+	FirstSeen   string   `json:"firstSeen"`             // RFC3339; when the daemon first initialized this store
+	Onboarded   bool     `json:"onboarded"`             // user has completed first-run onboarding
+	Engine      string   `json:"engine,omitempty"`      // selected inference engine ("" = default)
+	Model       string   `json:"model,omitempty"`       // selected model ("" = catalog default)
+	Pinned      []string `json:"pinned,omitempty"`      // app ids pinned to the dashboard "fast launch"
+	PinnedSet   bool     `json:"pinnedSet,omitempty"`   // user has customized pins (else use catalog default)
+	LocalNet    bool     `json:"localNet"`              // serve apps on the local network (LAN)
+	LocalNetSet bool     `json:"localNetSet,omitempty"` // user has chosen (else default ON)
+	Profile     Profile  `json:"profile"`               // user-controlled profile
 }
 
 // Store is a file-backed state store, safe for concurrent use.
@@ -122,6 +133,57 @@ func (s *Store) SetModel(model string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.st.Model = model
+	return s.save()
+}
+
+// Pins returns the pinned app ids and whether the user has customized them.
+func (s *Store) Pins() (ids []string, customized bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]string(nil), s.st.Pinned...), s.st.PinnedSet
+}
+
+// SetPins records the dashboard "fast launch" pins (marking them customized).
+func (s *Store) SetPins(ids []string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.st.Pinned = append([]string(nil), ids...)
+	s.st.PinnedSet = true
+	return s.save()
+}
+
+// LocalNetwork reports whether apps should be served on the local network.
+// Defaults to ON until the user explicitly chooses (in the welcome tour or Settings).
+func (s *Store) LocalNetwork() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.st.LocalNetSet {
+		return true
+	}
+	return s.st.LocalNet
+}
+
+// SetLocalNetwork records the local-network preference.
+func (s *Store) SetLocalNetwork(v bool) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.st.LocalNet = v
+	s.st.LocalNetSet = true
+	return s.save()
+}
+
+// Profile returns a copy of the user profile.
+func (s *Store) Profile() Profile {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.st.Profile
+}
+
+// SetProfile records the user profile and persists.
+func (s *Store) SetProfile(p Profile) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.st.Profile = p
 	return s.save()
 }
 

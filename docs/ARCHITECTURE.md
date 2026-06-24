@@ -74,7 +74,7 @@ Container Toolkit. The catalog = vetted container recipes.
 The shipped OS. Leaning toward an **immutable/atomic image** (bootc / Universal Blue /
 Fedora, à la Bazzite) for atomic updates, automatic rollback, and a system users can't
 easily corrupt. Ubuntu/Debian is the easier-to-start alternative; NixOS is the most
-reproducible but steepest. Not finalized — see `DECISIONS.md`.
+reproducible but steepest. Not finalized — see [[DECISIONS]].
 
 ## Open technical questions
 
@@ -85,3 +85,9 @@ reproducible but steepest. Not finalized — see `DECISIONS.md`.
 - Final distro base (immutable Fedora-family vs Ubuntu) — undecided.
 
 These are intentionally open; revisit during Phase 0 once the prototype reveals constraints.
+
+## See also
+
+- [[VISION]] — the company & product vision this architecture serves
+- [[DECISIONS]] — decision log (ADR-style) & open questions behind these choices
+- [[ROADMAP]] — the phased plan that builds these layers

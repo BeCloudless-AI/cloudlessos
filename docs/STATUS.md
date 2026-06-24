@@ -3,7 +3,7 @@
 > The cold-start anchor. If resuming work, read this first (after `CLAUDE.md`).
 > Keep it current — update the date and sections whenever state changes.
 
-**Last updated:** 2026-06-19
+**Last updated:** 2026-06-20
 
 ## Where we are
 
@@ -85,21 +85,69 @@ removed via the API.
   sky-blue (brand/interactive) + orange (live status)**, Red Hat Mono with a big numeral
   clock and tiny lowercase labels. Verified served; visual tuning is a follow-up.
 
+- **Dashboard rework** (D23, refines D20/D22): engine choice removed from the home screen
+  (lives only in Settings → Cloudless AI now); Open WebUI hidden from the launcher (new
+  `App.Hidden` catalog flag — reached via the Chat button instead); clock shows **seconds**;
+  **theme follows the hour** (dawn/day/dusk/night via `html[data-theme]`, keeping blue+orange);
+  a quiet **three.js** point-field background re-added (`vendor/three.min.js` r149, theme-tinted,
+  WebGL-optional). Fixed an undefined `--line` CSS var. Verified built/served/checked; visual
+  pass still pending (headless box).
+- **Motion / "feels alive" pass** (D23 follow-up): organic progress fills (flowing gradient +
+  sheen + glow; GPU bars glide to new values in place), a real per-tile install progress bar
+  (determinate from layer counts, indeterminate barber-pole otherwise), springy hovers,
+  breathing status indicators, a pulsing Chat CTA, and a one-time staggered entrance — all
+  gated by `prefers-reduced-motion`. Built/served/checked; visual pass still pending.
+- **Cloudless Assistant** (D24, `internal/assistant`): a built-in chat (floating FAB → panel)
+  that knows the OS, the company goal, the live machine state and the app catalog, and runs on
+  the **local engine** (`POST /api/assistant/chat`, SSE streaming). Replies can carry one-click
+  actions (install/open/chat/switch-engine). Verified end-to-end against the live engine.
+- **App Launcher + fast-launch pins** (D25): dashboard now shows a curated **Fast launch** of
+  *pinned* apps; the full categorized set lives in a **full-screen App Launcher** (search,
+  per-app description + Install/Open/Stop/Configure/Pin). New catalog `Category`/`Tagline`;
+  pins persist (`/api/pins`, `/api/apps/{id}/pin`), default empty. `CLOUDLESS_NO_PROVISION=1`
+  added for safe side-by-side test daemons. Built/served/checked; visual pass pending.
+- **Assistant-first hero + per-app launcher pages** (D26): the hero now leads with an assistant
+  **prompt bar** (replacing the "Chat with your Cloudless AI" button; full chat demoted to a
+  small secondary link). Launcher cards open a **per-app page** with a long description +
+  "examples of what you can do" (new catalog `Long`/`Examples`). Built/served/checked.
+- **Networking — share online + local network** (D27/D28): per-app **"share online"** toggle
+  (Cloudflare quick tunnel via cloudflared sidecar → public `trycloudflare.com` URL) and
+  **"local network"** serving (host-networked socat sidecar bound to `<LAN-IP>:<port>` → reach
+  apps from other devices at the same `http://IP:port`). A machine-wide **Local network** default
+  (ON) is chosen in a new **welcome-tour step** and applied to all web apps (`/api/network/local`,
+  `provision.EnsureLAN`, re-applied on boot). Tunnel verified live (HTTP 200 round-trip);
+  cloudflared confirmed working under WSL — LAN reachability is the only WSL-limited part.
+- **Connectivity indicator** (D29): menubar chip + popover showing internet / local-network /
+  offline with a plain-language explanation (`GET /api/network/status`, parallel TCP probes,
+  cached). Offline shown as neutral, not an error.
+- **App updates + persistence** (D30): every app's mutable state is now volume-backed (added
+  open-webui `/app/backend/data`, comfyui `/comfy/mnt`) so updates don't reset data. Per-app
+  **update check** (local vs remote image digest) + **Update now** (pull latest → recreate on
+  same volumes) in each app's Settings; Cloudless-validated-manifest model (catalog tags for now).
+  Verified against live images. OS-image (bootc) OTA still pending.
+- **Ollama removed** (D31): dropped from the catalog/UI entirely (leftover from the vLLM/SGLang
+  switch). Catalog: vllm, sglang, open-webui, comfyui, ai-toolkit, unsloth, openclaw, hermes.
+
 ## In progress
 
-- Nothing actively mid-change. Ready to pick the next Phase 0 increment.
+- Nothing actively mid-change. Ready to pick the next Phase 0 increment. **Eyes-on visual
+  pass owed** on the D20/D23 restyle (can't render on the headless dev box).
 
 ## Next steps (candidates, roughly prioritized)
 
-1. **Validate ComfyUI on Blackwell (RTX 50xx)** — current image (mmartial/...) is pinned
-   but unverified on sm_120; confirm or swap for a CUDA 12.8+/PyTorch-Blackwell build.
-   (vLLM is already validated on Blackwell — D12.)
+1. **Validate ComfyUI + the trainers on Blackwell (RTX 50xx)** — ComfyUI (mmartial/...) plus the
+   new **Training & fine-tuning** apps — **AI Toolkit** (`ostris/aitoolkit:latest`, image-model
+   LoRA trainer, UI :8675) and **Unsloth** (`unsloth/unsloth:latest`, fast LLM fine-tuning, Jupyter
+   Lab :8888) — are all pinned but unverified on sm_120; confirm or swap for CUDA 12.8+/PyTorch-
+   Blackwell builds. (vLLM is already validated on Blackwell — D12.)
 2. **Multi-GPU scaling** — use all GPUs for the *active* engine via tensor parallelism
    (vLLM `--tensor-parallel-size` / SGLang `--tp` from the detected GPU count). One engine
    at a time stays the invariant — no running two engines at once (D15). Validate on the
    3-GPU box (dev box is single-GPU).
-3. **Model manager** — pick/switch the served model (one per engine instance today) and
-   show "fits your VRAM".
+3. **Model manager** — ✅ v1 done (D32): curated non-gated catalog (`internal/models`),
+   `GET /api/models` with a "fits your VRAM" verdict, a model-browser UI on the Cloudless AI
+   page, one-click switch (restart-on-serve). Follow-ups: downloaded badge, pre-download,
+   multi-backend (llama.cpp/MLX), per-model advanced config.
 3. **Agent UX polish** — OpenClaw/Hermes install + run pre-wired (D14); next is exposing
    their UIs/setup (messaging platforms, allowlists) cleanly in the launcher.
 3. **State persistence for apps/jobs** — beyond `docker ps` + in-memory, likely extending
@@ -111,13 +159,19 @@ removed via the API.
 - Job + app state is in-memory / derived from `docker ps`; no persistence yet.
 - ComfyUI recipe is a placeholder pending a validated image.
 
-See `DEV_ENVIRONMENT.md` for setup/runbook and WSL gotchas.
+See [[DEV_ENVIRONMENT]] for setup/runbook and WSL gotchas.
 
 ## Decisions pending input
 
 - Orchestrator language (Go / Python / Rust), web UI framework, Docker vs Podman.
 - Final shipped-distro base (immutable Fedora-family vs Ubuntu).
 - Open-source CloudlessOS? (leaning yes) + license.
+
+## See also
+
+- [[ROADMAP]] — the phased plan this status tracks against
+- [[DECISIONS]] — decision log (ADR-style) & open questions
+- [[DEV_ENVIRONMENT]] — hardware, WSL2 setup & runbook
 
 ## Blockers
 

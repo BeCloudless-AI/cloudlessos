@@ -13,16 +13,45 @@
     src: url('vendor/fonts/red-hat-mono-latin-700-normal.woff2') format('woff2'); }
 
   :root {
+    /* default = daytime (overridden by html[data-theme] below) */
     --bg: #e8e8e7;
     --accent: #ff5a00; --accent-2: #ff5a00; --accent-soft: rgba(255, 90, 0, 0.12);
     --blue: #1f6bff; --blue-soft: rgba(31, 107, 255, 0.12); /* cloudless sky */
     --ink: #0c0c0c; --ink-2: #3a3a3a; --muted: #8a8a88; --faint: #bdbdbb;
     --card: #ffffff; --panel-2: #f1f1f0; --card-edge: rgba(0, 0, 0, 0.12);
-    --hair: rgba(0, 0, 0, 0.10); --line-2: rgba(0, 0, 0, 0.22);
+    --hair: rgba(0, 0, 0, 0.10); --line: rgba(0, 0, 0, 0.10); --line-2: rgba(0, 0, 0, 0.22);
     --shadow: none;
     --ok: #ff5a00; --warn: #b8860b; --err: #d23b1e;
     --radius: 14px;
+    --sky: 31, 107, 255;     /* three.js dot field colour (rgb triplet) */
+    --sky-alpha: 0.16;       /* how present the background field is */
+    --control: #ffffff;      /* input/pill backgrounds (tracks --card across themes) */
   }
+  /* ---- time-of-day themes (set by applyTheme(hour)) ---- */
+  html[data-theme="dawn"] {           /* 05–08: warm, low sun */
+    --bg: #efe7df; --card: #fffaf4; --panel-2: #f3ebe1; --control: #fffaf4;
+    --ink: #1a130c; --ink-2: #46382b; --muted: #978c7e; --faint: #c7bbac;
+    --hair: rgba(60, 40, 20, 0.10); --line: rgba(60, 40, 20, 0.10); --line-2: rgba(60, 40, 20, 0.22);
+    --card-edge: rgba(60, 40, 20, 0.12);
+    --sky: 255, 138, 60; --sky-alpha: 0.18;
+  }
+  html[data-theme="dusk"] {           /* 18–21: warm, fading light */
+    --bg: #2a241f; --card: #34302a; --panel-2: #2f2a25; --control: #3a352e;
+    --ink: #f4ece2; --ink-2: #cdc2b4; --muted: #9a8f80; --faint: #6b6256;
+    --hair: rgba(255, 240, 220, 0.10); --line: rgba(255, 240, 220, 0.10); --line-2: rgba(255, 240, 220, 0.20);
+    --card-edge: rgba(255, 240, 220, 0.14);
+    --sky: 255, 122, 48; --sky-alpha: 0.22;
+  }
+  html[data-theme="night"] {          /* 21–05: deep, blue dark */
+    --bg: #0d1117; --card: #161b24; --panel-2: #11161e; --control: #1b2230;
+    --ink: #eef2f8; --ink-2: #c2ccda; --muted: #7c8696; --faint: #4a5364;
+    --hair: rgba(190, 210, 240, 0.10); --line: rgba(190, 210, 240, 0.10); --line-2: rgba(190, 210, 240, 0.20);
+    --card-edge: rgba(190, 210, 240, 0.14);
+    --blue: #4d8bff; --blue-soft: rgba(77, 139, 255, 0.16);
+    --sky: 77, 139, 255; --sky-alpha: 0.30;
+  }
+  html { transition: none; }
+  body, .menubar, .set, .card, .tile, .fld-input, .er-pill { transition: background-color 0.6s ease, color 0.6s ease, border-color 0.6s ease; }
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; }
   body {
@@ -33,9 +62,10 @@
   ::selection { background: var(--blue-soft); }
   button { font: inherit; cursor: pointer; }
 
-  /* ---------- flat background (no wallpaper) ---------- */
+  /* ---------- background: flat base + subtle three.js field ---------- */
   .wall { position: fixed; inset: 0; z-index: -1; background: var(--bg); }
   .wall .blob { display: none; }
+  #bg { position: fixed; inset: 0; z-index: -1; display: block; pointer-events: none; }
 
   /* ---------- menu bar ---------- */
   .menubar {
@@ -48,7 +78,24 @@
   .menubar .spacer { flex: 1; }
   .menubar .mi { display: flex; align-items: center; gap: 6px; color: var(--muted); }
   .menubar .led { width: 6px; height: 6px; border-radius: 50%; background: var(--faint); }
-  .menubar .led.ok { background: var(--accent); } .menubar .led.bad { background: var(--err); }
+  .menubar .led.ok { background: var(--accent); animation: breathe 2.6s ease-in-out infinite; }
+  .menubar .led.bad { background: var(--err); }
+  .menubar .mi-net { cursor: pointer; transition: color .15s; } .menubar .mi-net:hover { color: var(--ink); }
+  .menubar .led.net-online { background: var(--blue); animation: breathe 2.6s ease-in-out infinite; }
+  .menubar .led.net-local { background: var(--accent); animation: breathe 2.6s ease-in-out infinite; }
+  .menubar .led.net-off { background: var(--faint); }
+  /* connectivity explanation popover */
+  .net-pop { position: fixed; top: 42px; right: 14px; z-index: 80; width: min(330px, 92vw);
+    background: var(--card); border: 1px solid var(--line-2); border-radius: 14px;
+    box-shadow: 0 22px 54px -18px rgba(0, 0, 0, 0.45); padding: 16px 18px; animation: pop .2s cubic-bezier(.22, 1, .36, 1); }
+  .net-pop.hidden { display: none; }
+  .net-pop .np-head { display: flex; align-items: center; gap: 10px; margin-bottom: 9px; }
+  .net-pop .np-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+  .net-pop .np-dot.net-online { background: var(--blue); } .net-pop .np-dot.net-local { background: var(--accent); } .net-pop .np-dot.net-off { background: var(--faint); }
+  .net-pop .np-title { font-weight: 700; font-size: 14px; }
+  .net-pop .np-msg { color: var(--muted); font-size: 12.5px; line-height: 1.6; }
+  .net-pop .np-ip { margin-top: 11px; padding-top: 10px; border-top: 1px solid var(--hair); font-size: 11.5px; color: var(--faint); }
+  .net-pop .np-ip b { color: var(--ink-2); }
   #clock { color: var(--ink); font-weight: 500; letter-spacing: 0.4px; }
   .gear { border: none; background: none; cursor: pointer; font-size: 14px; color: var(--ink-2);
     padding: 0 2px; line-height: 1; transition: color 0.15s, transform 0.3s; }
@@ -80,13 +127,29 @@
   .app-status .led { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); }
   .app-status .led.ok { background: var(--accent); }
   .app-head a { margin-left: auto; }
+  /* share-online (Cloudflare quick tunnel) result */
+  .tun-out { margin-top: 12px; } .tun-out.hidden { display: none; }
+  .tun-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 11px 13px; border-radius: 10px;
+    background: var(--blue-soft); border: 1px solid color-mix(in srgb, var(--blue) 35%, transparent); }
+  .tun-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--accent); animation: breathe 2s ease-in-out infinite; }
+  .tun-link { flex: 1; min-width: 170px; color: var(--blue); font-size: 13px; text-decoration: none; word-break: break-all; }
+  .tun-link:hover { text-decoration: underline; }
+  .tun-status { font-size: 12.5px; color: var(--muted); padding: 8px 2px; }
+  .tun-status.err { color: var(--err); }
+  /* app updates */
+  .set-block.hidden { display: none; }
+  .upd-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .upd-new { color: var(--blue); font-weight: 700; font-size: 13px; }
+  .upd-ok { color: var(--accent); font-size: 13px; font-weight: 500; }
+  .upd-muted { color: var(--muted); font-size: 12.5px; }
+  .upd-src { font-size: 11px; color: var(--faint); margin-top: 7px; }
   .hw-card + .hw-card { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
   .set-row { display: flex; align-items: center; gap: 12px; padding: 7px 0; font-size: 13.5px; }
   .srow-label { width: 70px; color: var(--muted); flex: none; }
   .er-pills { display: flex; gap: 8px; }
   .model-edit { display: flex; gap: 8px; flex: 1; }
   .model-edit input { flex: 1; font: inherit; font-size: 12.5px; padding: 8px 11px; border-radius: 8px;
-    border: 1px solid var(--line-2); background: #fff; color: var(--ink); }
+    border: 1px solid var(--line-2); background: var(--control); color: var(--ink); }
   .model-edit input:focus { outline: none; border-color: var(--blue); }
   .set-hint { color: var(--faint); font-size: 11.5px; margin-top: 4px; }
   .row-actions { margin-left: auto; display: flex; gap: 8px; }
@@ -101,42 +164,168 @@
   .cfg-area { width: 100%; min-height: 130px; max-height: 320px; resize: vertical; font-family: inherit;
     font-size: 12px; line-height: 1.5; padding: 11px 13px; border-radius: 8px; border: 1px solid var(--line-2);
     background: var(--panel-2); color: var(--ink); white-space: pre; overflow-wrap: normal; tab-size: 2; }
-  .cfg-area:focus { outline: none; border-color: var(--blue); background: #fff; }
+  .cfg-area:focus { outline: none; border-color: var(--blue); background: var(--control); }
   .cfg-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
   .fld-form { padding: 4px 0; }
   .fld { display: flex; align-items: center; gap: 12px; padding: 8px 0; }
   .fld-label { color: var(--ink); font-size: 13px; flex: 1; }
   .fld-input { font: inherit; font-size: 12.5px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--line-2);
-    background: #fff; color: var(--ink); min-width: 180px; max-width: 56%; }
+    background: var(--control); color: var(--ink); min-width: 180px; max-width: 56%; }
   .fld-input:focus { outline: none; border-color: var(--blue); }
   .fld-help { font-size: 11px; color: var(--faint); margin: -3px 0 6px; }
   .switch { position: relative; width: 38px; height: 22px; flex: none; cursor: pointer; }
   .switch input { opacity: 0; width: 0; height: 0; }
   .switch .track2 { position: absolute; inset: 0; background: var(--line-2); border-radius: 999px; transition: background .15s; }
-  .switch .track2::before { content: ""; position: absolute; left: 3px; top: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .15s; }
+  .switch .track2::before { content: ""; position: absolute; left: 3px; top: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .28s cubic-bezier(.34, 1.56, .64, 1); }
   .switch input:checked + .track2 { background: var(--blue); }
   .switch input:checked + .track2::before { transform: translateX(16px); }
   .adv-toggle { display: block; margin: 14px 0 8px; background: none; border: none; color: var(--blue); font: inherit; font-size: 12px; cursor: pointer; padding: 0; }
   .adv.hidden { display: none; }
 
-  /* ---------- layout ---------- */
-  main { max-width: 1080px; margin: 0 auto; padding: 44px 26px 90px; }
-  .hero { margin-bottom: 44px; }
-  .big-time { display: flex; align-items: flex-start; gap: 12px; line-height: 1; }
-  .big-time #big-clock { font-size: 84px; font-weight: 700; letter-spacing: -4px; color: var(--ink); font-variant-numeric: tabular-nums; }
-  .big-time .accent-dot { width: 11px; height: 11px; border-radius: 50%; background: var(--accent); margin-top: 14px; flex: none; }
-  .hero h1 { margin: 18px 0 6px; font-size: 21px; font-weight: 700; letter-spacing: -0.3px; }
-  .hero p { margin: 0; color: var(--muted); font-size: 13px; }
-  .chat-btn { margin-top: 24px; font: inherit; font-size: 13.5px; font-weight: 700; color: #fff;
-    padding: 13px 26px; border-radius: 11px; border: none; cursor: pointer; background: var(--blue);
-    transition: filter 0.15s, transform 0.1s; }
-  .chat-btn:hover:not([disabled]) { filter: brightness(1.08); }
-  .chat-btn:active:not([disabled]) { transform: scale(0.98); }
-  .chat-btn.prep { background: var(--panel-2); color: var(--muted); border: 1px solid var(--hair);
-    cursor: default; animation: pulse 1.6s ease-in-out infinite; }
+  /* ---------- model manager ---------- */
+  #models { background: rgba(16, 18, 24, 0.5); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
+  .mm { width: min(1280px, 96vw); height: min(92vh, 1040px); display: flex; flex-direction: column;
+    background: var(--card); border: 1px solid var(--line-2); border-radius: 18px; overflow: hidden; animation: rise 0.32s ease; }
+  .mm-body { flex: 1; overflow-y: auto; padding: 20px 32px 34px; }
+  .mm-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--hair); margin-bottom: 18px; }
+  .mm-tab { font: inherit; font-size: 13px; font-weight: 500; padding: 9px 15px; background: none; border: none;
+    border-bottom: 2px solid transparent; color: var(--muted); cursor: pointer; margin-bottom: -1px; transition: color .15s; }
+  .mm-tab:hover { color: var(--ink); }
+  .mm-tab.on { color: var(--blue); border-bottom-color: var(--blue); }
+  .card-link { display: flex; align-items: center; gap: 6px; width: 100%; margin-top: 16px; padding: 13px 0 0;
+    border: none; border-top: 1px solid var(--hair); background: none; font: inherit; font-size: 12.5px; color: var(--ink-2); cursor: pointer; transition: color .15s; text-align: left; }
+  .card-link:hover { color: var(--blue); }
+  .mdl-sec { font-size: 11px; font-weight: 500; letter-spacing: .5px; text-transform: lowercase; color: var(--muted); margin: 18px 0 11px; }
+  .mdl-sec:first-of-type { margin-top: 2px; }
+  .mdl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 11px; }
+  .mdl-tags { display: flex; flex-wrap: wrap; gap: 5px; margin: 2px 0 8px; }
+  .mdl-t { font-size: 10px; color: var(--muted); background: var(--panel-2); border: 1px solid var(--hair); border-radius: 5px; padding: 1px 6px; }
+  .mdl-cap { font-size: 10px; font-weight: 700; color: var(--blue); background: var(--blue-soft); border: 1px solid color-mix(in srgb, var(--blue) 35%, transparent); border-radius: 5px; padding: 1px 6px; }
+  .mdl-cap.vis { color: #8a4dff; background: color-mix(in srgb, #8a4dff 12%, transparent); border-color: color-mix(in srgb, #8a4dff 35%, transparent); }
+  .mdl-cap.rec { color: var(--accent); background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 38%, transparent); }
+  .mdl-cap.gated { color: var(--muted); background: var(--panel-2); border-color: var(--hair); }
+  .mdl { text-align: left; display: flex; flex-direction: column; gap: 4px; padding: 13px 14px; border-radius: 12px;
+    background: var(--card); border: 1px solid var(--line-2); cursor: pointer; transition: border-color .15s, transform .18s cubic-bezier(.34,1.56,.64,1), box-shadow .18s; }
+  .mdl:hover { border-color: var(--blue); transform: translateY(-2px); box-shadow: 0 10px 22px -14px color-mix(in srgb, var(--blue) 55%, transparent); }
+  .mdl.on { border-color: var(--blue); background: var(--blue-soft); cursor: default; }
+  .mdl.rec { border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+  .md-banner.rec { color: var(--accent); background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent); }
+  .md-banner.rec::before { content: "★"; }
+  .mdl.on:hover { transform: none; box-shadow: none; }
+  .mdl.fit-over { opacity: .72; }
+  .mdl-top { display: flex; align-items: center; gap: 7px; }
+  .mdl-name { font-weight: 700; font-size: 13.5px; color: var(--ink); }
+  .mdl-tag { font-size: 9px; text-transform: uppercase; letter-spacing: .4px; color: var(--blue); border: 1px solid var(--blue); border-radius: 4px; padding: 1px 4px; }
+  .mdl-active { margin-left: auto; font-size: 10.5px; color: var(--blue); font-weight: 700; }
+  .mdl-meta { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .mdl-notes { font-size: 11.5px; color: var(--ink-2); line-height: 1.4; margin: 2px 0 4px; }
+  .mdl-foot { display: flex; align-items: center; justify-content: space-between; margin-top: auto; }
+  .mdl-fit { font-size: 10.5px; font-weight: 700; display: inline-flex; align-items: center; gap: 5px; }
+  .mdl-fit::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--faint); }
+  .mdl-fit.fit-fits { color: #2faa5b; } .mdl-fit.fit-fits::before { background: #2faa5b; }
+  .mdl-fit.fit-tight { color: var(--warn); } .mdl-fit.fit-tight::before { background: var(--warn); }
+  .mdl-fit.fit-over { color: var(--muted); } .mdl-fit.fit-over::before { background: var(--err); }
+  .mdl-use { font-size: 11px; color: var(--blue); font-weight: 500; } .mdl.on .mdl-use { color: var(--muted); }
+  .mdl-disk { margin-left: auto; font-size: 10px; color: var(--muted); font-weight: 600; }
+  /* manager toolbar: summary + search + filters */
+  .mm-bar { display: flex; align-items: center; gap: 16px; justify-content: space-between; flex-wrap: wrap; margin: 2px 0 12px; }
+  .mm-sum { font-size: 12.5px; color: var(--muted); } .mm-sum b { color: var(--ink); font-variant-numeric: tabular-nums; }
+  .mm-sum-fit::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #2faa5b; margin-right: 5px; vertical-align: middle; }
+  .mm-search { position: relative; display: flex; align-items: center; }
+  .mm-search-ic { position: absolute; left: 10px; color: var(--faint); font-size: 14px; pointer-events: none; }
+  .mm-search input { font: inherit; font-size: 12.5px; padding: 8px 12px 8px 28px; width: 240px; max-width: 46vw; border-radius: 9px;
+    border: 1px solid var(--line-2); background: var(--control); color: var(--ink); transition: border-color .15s, box-shadow .15s; }
+  .mm-search input:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-soft); }
+  .mm-filters { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 4px; }
+  .mm-chip { font: inherit; font-size: 11.5px; font-weight: 500; padding: 5px 12px; border-radius: 999px; cursor: pointer;
+    color: var(--muted); background: var(--panel-2); border: 1px solid var(--hair); transition: all .15s; }
+  .mm-chip:hover { color: var(--ink); border-color: var(--line-2); }
+  .mm-chip.on { color: var(--blue); background: var(--blue-soft); border-color: color-mix(in srgb, var(--blue) 40%, transparent); }
+  .mm-empty { text-align: center; color: var(--muted); font-size: 13px; padding: 46px 0; }
+  .lnk { background: none; border: none; color: var(--blue); font: inherit; cursor: pointer; padding: 0; }
+  .lnk:hover { text-decoration: underline; }
 
-  .cards { display: grid; grid-template-columns: 1.5fr 1fr; gap: 14px; margin-bottom: 44px; }
+  /* model detail (inside the Model Manager) */
+  .md-detail { max-width: 740px; }
+  .md-hero { display: flex; align-items: flex-start; gap: 16px; margin: 4px 0 20px; }
+  .md-ic2 { width: 56px; height: 56px; flex: none; display: grid; place-items: center; font-size: 28px;
+    border-radius: 14px; background: var(--panel-2); border: 1px solid var(--hair); }
+  .md-hd { min-width: 0; flex: 1; }
+  .md-nm { font-size: 21px; font-weight: 800; letter-spacing: -0.3px; color: var(--ink); line-height: 1.1; }
+  .md-sub { font-size: 12px; color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; margin-top: 4px; word-break: break-all; }
+  .md-caps { margin-top: 10px; }
+  .md-desc { color: var(--ink-2); font-size: 14px; line-height: 1.65; margin: 0 0 20px; }
+  .md-banner { display: flex; align-items: center; gap: 9px; font-size: 13px; font-weight: 600; line-height: 1.45;
+    padding: 11px 14px; border-radius: 11px; margin: 0 0 20px; }
+  .md-banner::before { font-size: 14px; flex: none; }
+  .md-banner.loaded { color: var(--blue); background: var(--blue-soft); border: 1px solid color-mix(in srgb, var(--blue) 30%, transparent); }
+  .md-banner.loaded::before { content: "●"; }
+  .md-banner.ready { color: #2faa5b; background: color-mix(in srgb, #2faa5b 11%, transparent); border: 1px solid color-mix(in srgb, #2faa5b 32%, transparent); }
+  .md-banner.ready::before { content: "✓"; }
+  .md-banner.note { color: var(--ink-2); background: var(--panel-2); border: 1px solid var(--hair); }
+  .md-banner.note::before { content: "↓"; color: var(--muted); }
+  .md-specgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); gap: 8px; margin: 0 0 16px; }
+  .md-spec { display: flex; flex-direction: column; gap: 3px; padding: 10px 13px; border: 1px solid var(--hair); border-radius: 10px; background: var(--panel-2); }
+  .md-k { font-size: 10.5px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); }
+  .md-v { font-size: 13.5px; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .md-fit { font-size: 12.5px; color: var(--ink-2); margin: 0 0 18px; }
+  .md-fit .mdl-fit { margin-right: 5px; }
+  .md-acts { display: flex; flex-wrap: wrap; gap: 9px; padding-top: 20px; border-top: 1px solid var(--hair); }
+
+  /* ---------- layout ---------- */
+  main { max-width: 1140px; margin: 0 auto; padding: 38px 26px 90px; }
+  .hero { margin-bottom: 30px; }
+  /* compact hero: greeting on the left, time + date as a quiet anchor on the right */
+  .greet-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; }
+  .greet-txt { min-width: 0; }
+  .hero-time { display: flex; flex-direction: column; align-items: flex-end; gap: 5px; line-height: 1; flex: none; padding-top: 2px; }
+  .ht-clock { display: flex; align-items: flex-start; gap: 6px; }
+  .hero-time #big-clock { font-size: 40px; font-weight: 700; letter-spacing: -1.5px; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .hero-time .accent-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); margin-top: 7px; flex: none;
+    animation: beacon 3s ease-in-out infinite; }
+  .hero-date { font-size: 11.5px; color: var(--muted); letter-spacing: .3px; }
+  .hero-zone { font-size: 11px; color: var(--faint); letter-spacing: .2px; }
+  @keyframes beacon { 0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent); }
+    50% { transform: scale(1.12); box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 0%, transparent); } }
+  .hero h1 { margin: 0 0 7px; font-size: 25px; font-weight: 700; letter-spacing: -0.4px; }
+  .hero p { margin: 0; color: var(--muted); font-size: 13.5px; line-height: 1.5; max-width: 520px; }
+  /* hero assistant prompt bar — the primary, most-visible way into Cloudless AI */
+  @keyframes cta { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--blue) 42%, transparent); }
+    50% { box-shadow: 0 0 24px 2px color-mix(in srgb, var(--blue) 34%, transparent); } }
+  .ask { display: flex; align-items: center; gap: 11px; margin-top: 22px; max-width: 560px;
+    padding: 6px 6px 6px 16px; background: var(--card); border: 1.5px solid var(--blue); border-radius: 14px;
+    animation: cta 3.6s ease-in-out infinite; transition: border-color .15s; }
+  .ask:focus-within { animation: none; box-shadow: 0 0 0 4px var(--blue-soft); }
+  .ask-spark { width: 16px; height: 16px; flex: none; background: var(--blue);
+    clip-path: polygon(50% 0, 61% 39%, 100% 50%, 61% 61%, 50% 100%, 39% 61%, 0 50%, 39% 39%); animation: spin 9s linear infinite; }
+  .ask input { flex: 1; min-width: 0; font: inherit; font-size: 14px; border: none; background: none; color: var(--ink); padding: 10px 0; }
+  .ask input:focus { outline: none; } .ask input::placeholder { color: var(--muted); }
+  .ask-go { width: 38px; height: 38px; flex: none; border: none; border-radius: 10px; background: var(--blue); color: #fff;
+    font-size: 17px; cursor: pointer; transition: filter .15s, transform .1s; }
+  .ask-go:hover { filter: brightness(1.08); } .ask-go:active { transform: scale(.94); }
+  .ghost-chat { display: inline-block; margin-top: 13px; font: inherit; font-size: 12px; color: var(--muted);
+    background: none; border: none; cursor: pointer; padding: 0; transition: color .15s; }
+  .ghost-chat:hover { color: var(--blue); }
+  .ghost-chat.off { color: var(--faint); cursor: default; pointer-events: none; }
+
+  .cards { display: grid; grid-template-columns: 1.4fr 1fr; gap: 14px; margin-bottom: 0; }
+  .apps-sec { margin-bottom: 40px; }
   @media (max-width: 820px) { .cards { grid-template-columns: 1fr; } }
+
+  /* one-time entrance — content settles in, staggered, on first paint */
+  @keyframes rise-in { from { opacity: 0; transform: translateY(14px); } }
+  @keyframes tile-in { from { opacity: 0; transform: translateY(12px) scale(0.95); } }
+  main > .hero { animation: rise-in 0.6s cubic-bezier(.22, 1, .36, 1) both; }
+  main > section { animation: rise-in 0.6s cubic-bezier(.22, 1, .36, 1) 0.09s both; }
+  main > .cards { animation: rise-in 0.6s cubic-bezier(.22, 1, .36, 1) 0.18s both; }
+  .pad.enter .tile { animation: tile-in 0.5s cubic-bezier(.22, 1, .36, 1) both; }
+  .pad.enter .tile:nth-child(1) { animation-delay: 0.20s; }
+  .pad.enter .tile:nth-child(2) { animation-delay: 0.26s; }
+  .pad.enter .tile:nth-child(3) { animation-delay: 0.32s; }
+  .pad.enter .tile:nth-child(4) { animation-delay: 0.38s; }
+  .pad.enter .tile:nth-child(5) { animation-delay: 0.44s; }
+  .pad.enter .tile:nth-child(6) { animation-delay: 0.50s; }
+  .pad.enter .tile:nth-child(n+7) { animation-delay: 0.56s; }
   .card {
     background: var(--card); border: 1px solid var(--hair); border-radius: var(--radius);
     padding: 20px 22px;
@@ -151,18 +340,27 @@
   .stat { margin-top: 12px; }
   .stat-row { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-bottom: 6px; text-transform: lowercase; }
   .stat-row b { color: var(--ink); font-weight: 700; }
-  .track { height: 6px; border-radius: 2px; background: var(--panel-2); border: 1px solid var(--hair); overflow: hidden; }
-  .track > i { display: block; height: 100%; background: var(--blue); transition: width 0.6s ease; }
+  .track { height: 7px; border-radius: 99px; background: var(--panel-2); border: 1px solid var(--hair); overflow: hidden; position: relative; }
+  .track > i { display: block; height: 100%; border-radius: 99px; position: relative;
+    background: linear-gradient(90deg, var(--blue), color-mix(in srgb, var(--blue) 55%, #ffffff));
+    background-size: 220% 100%; animation: flow 3s linear infinite;
+    box-shadow: 0 0 9px -1px color-mix(in srgb, var(--blue) 65%, transparent);
+    transition: width 0.9s cubic-bezier(.22, 1, .36, 1); }
+  /* a soft sheen sweeps across the fill — reads as "live" without being loud */
+  .track > i::after { content: ""; position: absolute; inset: 0; border-radius: inherit;
+    background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,.5) 50%, transparent 100%);
+    background-size: 55% 100%; background-repeat: no-repeat; animation: sheen 2.8s ease-in-out infinite; }
+  @keyframes flow { to { background-position: -220% 0; } }
+  @keyframes sheen { 0% { background-position: -60% 0; } 55%, 100% { background-position: 170% 0; } }
   .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
   .chips span { font-size: 11px; color: var(--muted); border: 1px solid var(--hair); border-radius: 6px; padding: 3px 9px; }
   .chips b { color: var(--ink); font-weight: 700; }
   .empty { color: var(--muted); font-size: 13px; }
 
-  .engine-row { display: flex; align-items: center; gap: 8px; margin-top: 16px;
-    padding-top: 14px; border-top: 1px solid var(--hair); font-size: 12px; }
-  .engine-row .er-label { color: var(--muted); margin-right: 2px; text-transform: lowercase; }
+  /* engine pills — used in Settings → Cloudless AI (no longer on the dashboard) */
+  .er-pills { display: flex; gap: 8px; }
   .er-pill { font: inherit; font-size: 11.5px; padding: 5px 12px; border-radius: 7px;
-    border: 1px solid var(--line-2); background: #fff; color: var(--ink); cursor: pointer; transition: all .15s; }
+    border: 1px solid var(--line-2); background: var(--control); color: var(--ink); cursor: pointer; transition: all .15s; }
   .er-pill:hover:not([disabled]) { border-color: var(--blue); }
   .er-pill.on { background: var(--blue); border-color: var(--blue); color: #fff; cursor: default; }
   .er-pill[disabled]:not(.on) { opacity: 0.5; cursor: default; }
@@ -171,8 +369,9 @@
 
   /* places */
   .place { display: flex; align-items: center; gap: 12px; padding: 9px 10px; margin: 0 -10px;
-    border-radius: 8px; cursor: pointer; transition: background 0.15s; }
-  .place:hover { background: var(--panel-2); }
+    border-radius: 8px; cursor: pointer; transition: background 0.15s, transform 0.22s cubic-bezier(.34, 1.56, .64, 1); }
+  .place:hover { background: var(--panel-2); transform: translateX(4px); }
+  .place:hover .pic { transform: scale(1.12); } .place .pic { transition: transform 0.22s cubic-bezier(.34, 1.56, .64, 1); }
   .place .pic { font-size: 18px; width: 22px; text-align: center; }
   .place .pl { font-weight: 500; }
   .place .pp { margin-left: auto; color: var(--faint); font-size: 11px; max-width: 46%;
@@ -187,16 +386,32 @@
     position: relative; width: 72px; height: 72px; margin: 0 auto 9px; border-radius: 16px;
     display: grid; place-items: center; font-size: 32px; cursor: pointer;
     background: var(--card); border: 1px solid var(--line-2);
-    transition: transform 0.15s, border-color 0.15s; user-select: none;
+    transition: transform 0.28s cubic-bezier(.34, 1.56, .64, 1), border-color 0.18s, box-shadow 0.28s;
+    user-select: none;
   }
-  .tile .ic:hover { transform: translateY(-3px); border-color: var(--ink); }
+  .tile .ic:hover { transform: translateY(-4px) scale(1.02); border-color: var(--ink);
+    box-shadow: 0 12px 24px -10px color-mix(in srgb, var(--blue) 55%, transparent); }
+  .tile .ic:active { transform: translateY(-1px) scale(.97); }
+  .tile.running .ic { border-color: color-mix(in srgb, var(--accent) 55%, var(--line-2)); }
   .tile.busy .ic { animation: pulse 1.4s ease-in-out infinite; }
   .tile.disabled .ic { opacity: 0.45; cursor: default; }
   @keyframes pulse { 50% { opacity: 0.55; } }
+  @keyframes breathe { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.78); } }
   .nm { font-size: 12.5px; font-weight: 500; }
   .meta { font-size: 11px; color: var(--muted); margin-top: 3px; min-height: 14px; }
   .meta .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%;
-    background: var(--accent); margin-right: 5px; vertical-align: middle; }
+    background: var(--accent); margin-right: 5px; vertical-align: middle;
+    animation: breathe 2s ease-in-out infinite; }
+  /* per-tile install progress — determinate when layers are known, a flowing
+     barber-pole when not (organic, not a dead static stripe) */
+  .tbar { height: 3px; width: 60px; margin: 8px auto 0; border-radius: 99px;
+    background: var(--panel-2); overflow: hidden; opacity: 0; transition: opacity 0.3s; }
+  .tile.busy .tbar { opacity: 1; }
+  .tbar > i { display: block; height: 100%; width: 0; border-radius: 99px; background: var(--blue);
+    box-shadow: 0 0 8px -1px color-mix(in srgb, var(--blue) 70%, transparent);
+    transition: width 0.5s cubic-bezier(.22, 1, .36, 1); }
+  .tile.busy .tbar.indet > i { width: 42%; transition: none; animation: indet 1.15s ease-in-out infinite; }
+  @keyframes indet { 0% { margin-left: -42%; } 100% { margin-left: 100%; } }
   .stopx {
     position: absolute; top: -7px; left: -7px; width: 20px; height: 20px; border-radius: 50%;
     border: 1px solid #fff; background: var(--ink); color: #fff; font-size: 13px; line-height: 1;
@@ -230,6 +445,13 @@
   .hw .hi { font-size: 22px; } .hw .hn { font-weight: 700; } .hw .hs { color: var(--muted); font-size: 12px; }
   .hw .verdict { margin-left: auto; font-weight: 700; font-size: 12px; }
   .verdict.ok { color: var(--accent); } .verdict.warn { color: var(--warn); }
+  .net-opt { display: flex; align-items: flex-start; gap: 13px; padding: 16px; border-radius: 10px;
+    background: var(--panel-2); border: 1px solid var(--hair); }
+  .net-opt .net-ic { font-size: 22px; flex: none; line-height: 1.3; }
+  .net-opt .net-tx { flex: 1; min-width: 0; }
+  .net-opt .net-t { font-weight: 700; font-size: 13.5px; }
+  .net-opt .net-d { color: var(--muted); font-size: 12px; line-height: 1.55; margin-top: 5px; }
+  .net-opt .switch { flex: none; margin-top: 2px; }
   .pick { display: flex; flex-direction: column; gap: 9px; }
   .pi { display: flex; align-items: center; gap: 12px; padding: 11px 13px; border-radius: 10px;
     cursor: pointer; border: 1px solid var(--hair); transition: background 0.15s, border-color 0.15s; }
@@ -241,52 +463,264 @@
   .dots { display: flex; gap: 7px; } .dots span { width: 7px; height: 7px; border-radius: 50%; background: var(--line-2); transition: width 0.3s, background 0.3s; }
   .dots span.on { background: var(--blue); width: 18px; border-radius: 3px; }
   .ob-act { margin-left: auto; display: flex; gap: 9px; }
-  .btn { padding: 9px 18px; border-radius: 9px; border: 1px solid var(--line-2); background: #fff; color: var(--ink); font-weight: 500; transition: filter 0.15s, background 0.15s; }
+  .btn { padding: 9px 18px; border-radius: 9px; border: 1px solid var(--line-2); background: var(--control); color: var(--ink); font-weight: 500; transition: filter 0.15s, background 0.15s; }
   .btn:hover { background: var(--panel-2); }
   .btn.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
   .btn.primary:hover { filter: brightness(1.08); background: var(--blue); }
   .btn.link { background: none; border: none; color: var(--muted); } .btn.link:hover { color: var(--ink); background: none; }
+
+  /* ---------- fast-launch section header ---------- */
+  .sec-row { display: flex; align-items: center; justify-content: space-between; margin: 0 0 20px; }
+  .sec-row .sec { margin: 0; }
+  .sec-act { font: inherit; font-size: 11.5px; color: var(--ink-2); background: var(--card); border: 1px solid var(--line-2);
+    border-radius: 8px; padding: 6px 12px; cursor: pointer; transition: border-color .15s, color .15s, transform .2s cubic-bezier(.34,1.56,.64,1); }
+  .sec-act:hover { border-color: var(--blue); color: var(--blue); transform: translateY(-1px); }
+  .pad-empty { grid-column: 1 / -1; color: var(--muted); font-size: 13px; padding: 14px 16px;
+    border: 1px dashed var(--line-2); border-radius: var(--radius); text-align: center; }
+  .pad-empty .link-btn { font: inherit; font-size: 13px; color: var(--blue); background: none; border: none; cursor: pointer; padding: 0; text-decoration: underline; }
+
+  /* ---------- App Launcher (full-screen, two-pane master/detail) ---------- */
+  #launcher { background: rgba(16, 18, 24, 0.5); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
+  .lp { width: min(1040px, 96vw); height: min(86vh, 820px); display: flex; flex-direction: column;
+    background: var(--card); border: 1px solid var(--line-2); border-radius: 18px; overflow: hidden; animation: rise 0.32s ease; }
+  .lp-head { display: flex; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--hair); flex: none; }
+  .lp-ttl { font-size: 15px; font-weight: 700; letter-spacing: -0.2px; }
+  .lp-x { margin-left: auto; font-size: 22px; line-height: 1; color: var(--muted); background: none; border: none; cursor: pointer; padding: 0 4px; transition: color .15s, transform .2s; }
+  .lp-x:hover { color: var(--ink); transform: rotate(90deg); }
+  .lp-cols { flex: 1; display: flex; min-height: 0; }
+
+  /* left: searchable app list */
+  .lp-side { width: 290px; flex: none; display: flex; flex-direction: column; border-right: 1px solid var(--hair); background: var(--panel-2); }
+  .lp-search { margin: 14px 14px 8px; font: inherit; font-size: 13px; padding: 9px 12px;
+    border-radius: 10px; border: 1px solid var(--line-2); background: var(--control); color: var(--ink); }
+  .lp-search:focus { outline: none; border-color: var(--blue); }
+  .lp-list { flex: 1; overflow-y: auto; padding: 4px 10px 14px; }
+  .lp-cat { font-size: 10px; font-weight: 500; letter-spacing: .6px; text-transform: lowercase; color: var(--faint); padding: 14px 8px 6px; }
+  .li { display: flex; align-items: center; gap: 11px; width: 100%; text-align: left; padding: 9px 10px; border-radius: 9px;
+    background: none; border: none; cursor: pointer; color: var(--ink); transition: background .14s; }
+  .li:hover { background: rgba(127, 127, 127, 0.12); }
+  .li.active { background: var(--blue); color: #fff; }
+  .li-ic { width: 28px; height: 28px; flex: none; border-radius: 8px; display: grid; place-items: center; font-size: 16px;
+    background: var(--card); border: 1px solid var(--line-2); }
+  .li.active .li-ic { background: rgba(255,255,255,0.18); border-color: transparent; }
+  .li-nm { flex: 1; min-width: 0; font-size: 13px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .li-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--accent); animation: breathe 2s ease-in-out infinite; }
+  .li.active .li-dot { background: #fff; }
+  .lp-empty { color: var(--muted); font-size: 12.5px; padding: 16px 10px; }
+
+  /* right: intro by default, app detail when selected */
+  .lp-detail { flex: 1; overflow-y: auto; padding: 30px 34px; min-width: 0; }
+  .lp-intro { max-width: 460px; margin: 4vh auto 0; text-align: center; animation: rise-in .4s ease both; }
+  .lp-intro .ii { width: 56px; height: 56px; border-radius: 15px; margin: 0 auto 20px; background: var(--blue); position: relative; }
+  .lp-intro .ii::after { content: ""; position: absolute; right: 9px; top: 9px; width: 9px; height: 9px; border-radius: 50%; background: var(--accent); }
+  .lp-intro h2 { margin: 0 0 10px; font-size: 20px; font-weight: 700; letter-spacing: -0.3px; }
+  .lp-intro p { margin: 0 0 22px; color: var(--muted); font-size: 13.5px; line-height: 1.6; }
+  .lp-cats { display: grid; gap: 10px; text-align: left; }
+  .lp-cc { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border-radius: 11px; background: var(--panel-2); border: 1px solid var(--hair); }
+  .lp-cc .cc-ic { font-size: 18px; line-height: 1.4; flex: none; }
+  .lp-cc .cc-d { font-size: 12.5px; } .lp-cc .cc-t { font-weight: 700; font-size: 13px; margin-bottom: 1px; }
+  .lp-cc .cc-d span { color: var(--muted); line-height: 1.5; }
+
+  .ad { animation: rise-in .32s cubic-bezier(.22, 1, .36, 1) both; }
+  .ad-head { display: flex; align-items: center; gap: 18px; margin: 0 0 22px; }
+  .ad-ic { width: 68px; height: 68px; flex: none; border-radius: 17px; display: grid; place-items: center; font-size: 36px;
+    background: var(--panel-2); border: 1px solid var(--line-2); }
+  .ad-nm { font-size: 21px; font-weight: 700; letter-spacing: -0.3px; display: flex; align-items: center; gap: 10px; }
+  .ad-cat { color: var(--muted); font-size: 12px; text-transform: lowercase; margin-top: 5px; }
+  .ad-long { color: var(--ink-2); font-size: 14.5px; line-height: 1.7; margin: 0 0 26px; }
+  .ad-sec { font-size: 11px; font-weight: 500; letter-spacing: .5px; text-transform: lowercase; color: var(--muted); margin: 0 0 14px; }
+  .ad-uses { list-style: none; padding: 0; margin: 0 0 30px; display: grid; gap: 11px; }
+  .ad-uses li { position: relative; padding-left: 24px; font-size: 14px; color: var(--ink); line-height: 1.5; }
+  .ad-uses li::before { content: ""; position: absolute; left: 5px; top: 8px; width: 6px; height: 6px; border-radius: 50%; background: var(--blue); }
+  .ad-acts { display: flex; flex-wrap: wrap; gap: 9px; padding-top: 22px; border-top: 1px solid var(--hair); }
+
+  /* status badge + action buttons (shared by the detail pane) */
+  .ac-badge { font-size: 9.5px; text-transform: uppercase; letter-spacing: .4px; padding: 2px 8px; border-radius: 99px;
+    border: 1px solid var(--line-2); color: var(--muted); }
+  .ac-badge.run { color: #fff; background: var(--accent); border-color: var(--accent); }
+  .ac-badge.soon { color: var(--faint); }
+  .ac-btn { font: inherit; font-size: 12.5px; padding: 9px 16px; border-radius: 9px; border: 1px solid var(--line-2);
+    background: var(--control); color: var(--ink); cursor: pointer; transition: all .15s; }
+  .ac-btn:hover:not([disabled]) { border-color: var(--blue); color: var(--blue); }
+  .ac-btn.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+  .ac-btn.primary:hover { filter: brightness(1.08); color: #fff; }
+  .ac-btn[disabled] { opacity: .5; cursor: default; }
+  .ac-btn.pin.on { border-color: var(--accent); color: var(--accent); }
+  .ac-btn.busy { pointer-events: none; opacity: .7; }
+
+  /* ---------- Cloudless Assistant ---------- */
+  #asst-fab { position: fixed; right: 26px; bottom: 26px; z-index: 70; width: 56px; height: 56px; border-radius: 50%;
+    border: none; cursor: pointer; background: var(--blue); display: grid; place-items: center;
+    box-shadow: 0 10px 26px -6px color-mix(in srgb, var(--blue) 70%, transparent); animation: cta 3.4s ease-in-out infinite;
+    transition: transform .25s cubic-bezier(.34,1.56,.64,1); }
+  #asst-fab:hover { transform: scale(1.08) translateY(-2px); }
+  #asst-fab.open { transform: scale(0.9); opacity: 0; pointer-events: none; }
+  .asst-spark { width: 16px; height: 16px; background: #fff; display: block;
+    clip-path: polygon(50% 0, 61% 39%, 100% 50%, 61% 61%, 50% 100%, 39% 61%, 0 50%, 39% 39%); animation: spin 9s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .asst { position: fixed; right: 26px; bottom: 26px; z-index: 71; width: min(390px, 94vw); height: min(560px, 80vh);
+    display: flex; flex-direction: column; background: var(--card); border: 1px solid var(--line-2); border-radius: 18px;
+    box-shadow: 0 30px 70px -20px rgba(0,0,0,.45); overflow: hidden; transform-origin: bottom right; animation: pop .28s cubic-bezier(.22,1,.36,1); }
+  @keyframes pop { from { opacity: 0; transform: translateY(14px) scale(.96); } }
+  .asst.hidden { display: none; }
+  /* full-chat mode: a large centered window over a dimmed backdrop */
+  #asst-backdrop { position: fixed; inset: 0; z-index: 71; background: rgba(16, 18, 24, 0.5);
+    -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); animation: fade .25s ease; }
+  #asst-backdrop.hidden { display: none; }
+  .asst.full { right: auto; bottom: auto; inset: 0; margin: auto; z-index: 72;
+    width: min(820px, 94vw); height: min(86vh, 880px); transform-origin: center; }
+  .asst.full .asst-body { padding: 22px clamp(18px, 6%, 60px); }
+  .asst.full .msg { max-width: 78%; font-size: 13.5px; }
+  .asst.full .asst-in, .asst.full .asst-chips { padding-left: clamp(16px, 6%, 58px); padding-right: clamp(14px, 6%, 58px); }
+  .asst-head { display: flex; align-items: center; gap: 11px; padding: 14px 16px; border-bottom: 1px solid var(--hair); flex: none; }
+  .asst-exp { margin-left: auto; font-size: 15px; line-height: 1; color: var(--muted); background: none; border: none; cursor: pointer; padding: 0 3px; transition: color .15s, transform .15s; }
+  .asst-exp:hover { color: var(--ink); transform: scale(1.12); }
+  .asst-mark { width: 26px; height: 26px; border-radius: 8px; flex: none; background: var(--blue); position: relative; }
+  .asst-mark::after { content: ""; position: absolute; right: 5px; top: 5px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: breathe 2.4s ease-in-out infinite; }
+  .asst-ttl { font-weight: 700; font-size: 13.5px; display: flex; flex-direction: column; line-height: 1.25; }
+  .asst-sub { font-weight: 400; font-size: 10.5px; color: var(--muted); }
+  .asst-x { margin-left: auto; font-size: 20px; line-height: 1; color: var(--muted); background: none; border: none; cursor: pointer; padding: 0 3px; transition: color .15s, transform .2s; }
+  .asst-x:hover { color: var(--ink); transform: rotate(90deg); }
+  .asst-body { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 11px; }
+  .msg { max-width: 86%; padding: 10px 13px; border-radius: 14px; font-size: 13px; line-height: 1.5; white-space: pre-wrap; word-wrap: break-word; animation: msg-in .3s cubic-bezier(.22,1,.36,1) both; }
+  @keyframes msg-in { from { opacity: 0; transform: translateY(6px); } }
+  .msg.user { align-self: flex-end; background: var(--blue); color: #fff; border-bottom-right-radius: 5px; }
+  .msg.bot { align-self: flex-start; background: var(--panel-2); color: var(--ink); border-bottom-left-radius: 5px; }
+  .msg .caret { display: inline-block; width: 7px; height: 14px; vertical-align: text-bottom; background: var(--ink-2); margin-left: 2px; animation: blink 1s steps(2) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  .typing { display: inline-flex; gap: 4px; padding: 2px 0; }
+  .typing i { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); animation: bounce 1.1s ease-in-out infinite; }
+  .typing i:nth-child(2) { animation-delay: .15s; } .typing i:nth-child(3) { animation-delay: .3s; }
+  @keyframes bounce { 0%, 100% { transform: translateY(0); opacity: .5; } 50% { transform: translateY(-4px); opacity: 1; } }
+  .msg-acts { align-self: flex-start; display: flex; flex-wrap: wrap; gap: 7px; max-width: 92%; margin-top: -3px; }
+  .msg-act { font: inherit; font-size: 11.5px; padding: 6px 12px; border-radius: 99px; border: 1px solid var(--blue);
+    background: var(--blue-soft); color: var(--blue); cursor: pointer; transition: all .15s; animation: msg-in .3s ease both; }
+  .msg-act:hover { background: var(--blue); color: #fff; }
+  .asst-chips { display: flex; flex-wrap: wrap; gap: 7px; padding: 0 16px 12px; flex: none; }
+  .asst-chip { font: inherit; font-size: 11.5px; padding: 7px 12px; border-radius: 99px; border: 1px solid var(--line-2);
+    background: var(--control); color: var(--ink-2); cursor: pointer; transition: all .15s; }
+  .asst-chip:hover { border-color: var(--blue); color: var(--blue); transform: translateY(-1px); }
+  .asst-in { display: flex; gap: 8px; padding: 12px 14px; border-top: 1px solid var(--hair); flex: none; }
+  .asst-in input { flex: 1; font: inherit; font-size: 13px; padding: 10px 13px; border-radius: 11px;
+    border: 1px solid var(--line-2); background: var(--control); color: var(--ink); }
+  .asst-in input:focus { outline: none; border-color: var(--blue); }
+  .asst-send { width: 40px; flex: none; border-radius: 11px; border: none; background: var(--blue); color: #fff; font-size: 16px; cursor: pointer; transition: filter .15s, transform .1s; }
+  .asst-send:hover { filter: brightness(1.08); } .asst-send:active { transform: scale(.94); }
+  .asst-send:disabled { opacity: .5; cursor: default; }
+  @media (max-width: 560px) { .asst { right: 3vw; bottom: 3vw; } #asst-fab { right: 18px; bottom: 18px; } }
+
+  /* respect users who ask for less motion — keep state, drop the looping life */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important; }
+  }
 </style>
 </head>
 <body>
-<div class="wall"><div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div></div>
+<div class="wall"></div>
+<canvas id="bg"></canvas>
 
 <div class="menubar">
   <div class="brand"><span class="mark"></span> Cloudless</div>
   <div class="spacer"></div>
   <div class="mi"><span class="led" id="led-gpu"></span> <span id="mi-gpu">GPU</span></div>
   <div class="mi"><span class="led" id="led-sys"></span> <span id="mi-sys">System</span></div>
+  <div class="mi mi-net" id="mi-net" title="Network status"><span class="led" id="led-net"></span> <span id="net-label">Network</span></div>
   <div id="clock">--:--</div>
+  <button class="gear" id="open-models" title="Model Manager">◈</button>
   <button class="gear" id="gear" title="Settings">⚙</button>
 </div>
+<div id="net-pop" class="net-pop hidden"></div>
 
 <main>
   <div class="hero">
-    <div class="big-time"><span id="big-clock">--:--</span><span class="accent-dot"></span></div>
-    <h1>Welcome to Cloudless</h1>
-    <p id="hero-sub">Your private, local-AI workstation.</p>
-    <button class="chat-btn prep" id="chat-btn" disabled>Setting up Cloudless AI…</button>
+    <div class="greet-row">
+      <div class="greet-txt">
+        <h1>Welcome to Cloudless</h1>
+        <p id="hero-sub">Your private, local-AI workstation.</p>
+      </div>
+      <div class="hero-time">
+        <div class="ht-clock"><span id="big-clock">--:--</span><span class="accent-dot"></span></div>
+        <div class="hero-date" id="hero-date"></div>
+        <div class="hero-zone" id="hero-zone"></div>
+      </div>
+    </div>
+    <form class="ask" id="hero-ask" autocomplete="off">
+      <span class="ask-spark"></span>
+      <input id="hero-ask-input" placeholder="What do you want to do with CloudlessOS?" autocomplete="off">
+      <button class="ask-go" type="submit" title="Ask Cloudless">→</button>
+    </form>
+    <button class="ghost-chat" id="open-full-chat">Open the full chat ↗</button>
   </div>
+
+  <section class="apps-sec">
+    <div class="sec-row">
+      <h3 class="sec">Your apps</h3>
+      <button class="sec-act" id="open-launcher" title="Browse all apps">▦ All apps</button>
+    </div>
+    <div class="pad" id="pad"></div>
+  </section>
 
   <div class="cards">
     <section class="card">
       <h2>Graphics</h2>
       <div id="gpu-body"><div class="empty">Reading GPUs…</div></div>
-      <div class="engine-row" id="engine-row"></div>
+      <button class="card-link" id="open-models-2">◈ <span id="gpu-model">Model Manager</span> →</button>
     </section>
     <section class="card">
       <h2>Places</h2>
       <div id="places-body"></div>
     </section>
   </div>
-
-  <section>
-    <h3 class="sec">Apps</h3>
-    <div class="pad" id="pad"></div>
-  </section>
 </main>
 
 <div id="toast"></div>
+
+<!-- full-screen App Launcher -->
+<div class="overlay hidden" id="launcher">
+  <div class="lp">
+    <div class="lp-head">
+      <div class="lp-ttl">App Launcher</div>
+      <button class="lp-x" id="lp-x" title="Close">×</button>
+    </div>
+    <div class="lp-cols">
+      <aside class="lp-side">
+        <input id="lp-search" class="lp-search" placeholder="Search apps…" autocomplete="off" spellcheck="false">
+        <div class="lp-list" id="lp-list"></div>
+      </aside>
+      <div class="lp-detail" id="lp-detail"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Model Manager (full-screen, opened from the dashboard) -->
+<div class="overlay hidden" id="models">
+  <div class="mm">
+    <div class="lp-head">
+      <div class="lp-ttl">Model Manager</div>
+      <button class="lp-x" id="mm-x" title="Close">×</button>
+    </div>
+    <div class="mm-body" id="mm-body"></div>
+  </div>
+</div>
+
+<!-- Cloudless Assistant -->
+<button id="asst-fab" title="Ask the Cloudless Assistant"><span class="asst-spark"></span></button>
+<div id="asst-backdrop" class="hidden"></div>
+<div id="asst" class="asst hidden">
+  <div class="asst-head">
+    <span class="asst-mark"></span>
+    <div class="asst-ttl">Cloudless Assistant<span class="asst-sub">here to help you decide</span></div>
+    <button class="asst-exp" id="asst-exp" title="Expand">⤢</button>
+    <button class="asst-x" id="asst-x" title="Close">×</button>
+  </div>
+  <div class="asst-body" id="asst-body"></div>
+  <div class="asst-chips" id="asst-chips"></div>
+  <form class="asst-in" id="asst-form" autocomplete="off">
+    <input id="asst-text" placeholder="Ask anything about CloudlessOS…" autocomplete="off">
+    <button class="asst-send" id="asst-send" title="Send" type="submit">↑</button>
+  </form>
+</div>
 
 <div class="overlay hidden" id="settings">
   <div class="set">
@@ -305,17 +739,17 @@
   <div class="ob">
     <div class="ob-body" id="ob-body"></div>
     <div class="ob-foot">
-      <div class="dots" id="ob-dots"><span></span><span></span><span></span></div>
+      <div class="dots" id="ob-dots"><span></span><span></span><span></span><span></span></div>
       <div class="ob-act" id="ob-act"></div>
     </div>
   </div>
 </div>
 
+<script src="vendor/three.min.js"></script>
 <script>
 const api = (p, o) => fetch(p, o).then(r => r.json());
-const GLYPH = { ollama: '🦙', 'open-webui': '💬', comfyui: '🎨', openclaw: '🦞', hermes: '🪽' };
+const GLYPH = { 'open-webui': '💬', comfyui: '🎨', 'ai-toolkit': '🎛️', unsloth: '🦥', openclaw: '🦞', hermes: '🪽' };
 const TILE_BG = {
-  ollama: 'linear-gradient(135deg,#ffd27a,#ff9e63)',
   'open-webui': 'linear-gradient(135deg,#74b4ff,#4f8bff)',
   comfyui: 'linear-gradient(135deg,#c79bff,#ff96d0)',
   openclaw: 'linear-gradient(135deg,#ff8e72,#e8533a)',
@@ -325,21 +759,55 @@ const PLACE_ICON = { models: '📦', outputs: '🖼️', workspace: '🗂️', d
 const glyph = id => GLYPH[id] || '⚙️';
 const tileBg = id => TILE_BG[id] || 'linear-gradient(135deg,#cfd9e8,#aab8cc)';
 const gb = mb => (mb / 1024).toFixed(1);
-let installing = 0, catalogCache = [];
+let installing = 0, catalogCache = [], gpuBuilt = 0, appsEntered = false;
 let lastRunning = {}, engineReady = false, engineActive = '', engineSwitching = false;
+let pinnedIds = [], lpQuery = '', lpView = '';
+let asstMsgs = [], asstBusy = false;
 
 /* ---- clock ---- */
 const DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 const MON = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const pad = n => String(n).padStart(2, '0');
 const greet = h => h < 5 ? 'Good night' : h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
+let userName = '';
+// Pulls the user profile + detected locale to personalize the greeting and show
+// the machine's timezone/region under the clock.
+async function refreshProfileBadge() {
+  let p; try { p = await api('/api/profile'); } catch { return; }
+  userName = (p.name || '').trim();
+  const z = document.getElementById('hero-zone'); if (!z) return;
+  const d = p.detected || {};
+  const parts = [];
+  if (d.timezone) parts.push(d.timezone.replace(/_/g, ' '));
+  if (p.countryName) parts.push(p.countryName + (p.inFrance ? ' 🇫🇷' : ''));
+  z.textContent = parts.join(' · ');
+}
 function tickClock() {
   const d = new Date();
   document.getElementById('big-clock').textContent = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
   document.getElementById('clock').textContent =
     `${DAYS[d.getDay()].slice(0,3)} ${pad(d.getDate())} ${MON[d.getMonth()].slice(0,3)}  ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  document.getElementById('hero-sub').textContent =
-    `${greet(d.getHours())} — ${DAYS[d.getDay()]}, ${pad(d.getDate())} ${MON[d.getMonth()]}`;
+  document.getElementById('hero-sub').textContent = `${greet(d.getHours())}${userName ? ', ' + userName : ''}. Your private, local-AI workstation.`;
+  document.getElementById('hero-date').textContent = `${DAYS[d.getDay()]}, ${pad(d.getDate())} ${MON[d.getMonth()]}`;
+  applyTheme(d.getHours());
+}
+
+// Theme follows the sky: warm at dawn, bright by day, warm again at dusk, dark at night.
+function themeForHour(h) {
+  if (h >= 5 && h < 8) return 'dawn';
+  if (h >= 8 && h < 18) return 'day';
+  if (h >= 18 && h < 21) return 'dusk';
+  return 'night';
+}
+let currentTheme = '';
+function applyTheme(h) {
+  const t = themeForHour(h);
+  if (t === currentTheme) return;
+  currentTheme = t;
+  // "day" is the bare :root default — no attribute keeps the CSS lean.
+  if (t === 'day') document.documentElement.removeAttribute('data-theme');
+  else document.documentElement.setAttribute('data-theme', t);
+  if (window.bgSetTheme) window.bgSetTheme();
 }
 
 /* ---- status + gpu ---- */
@@ -349,6 +817,36 @@ async function refreshStatus() {
     document.getElementById('mi-sys').textContent = h.dockerOK ? 'Ready' : 'Docker offline';
   } catch { document.getElementById('led-sys').className = 'led bad'; document.getElementById('mi-sys').textContent = 'Offline'; }
 }
+
+/* ---- connectivity (internet / local-only / offline) ---- */
+const NET_INFO = {
+  internet: { cls: 'net-online', label: 'Online', title: 'Connected to the internet',
+    msg: 'This machine can reach the internet. You can install apps, download models, and share apps online with a public link.' },
+  local: { cls: 'net-local', label: 'Local network', title: 'On your local network',
+    msg: 'Connected to your network but not the internet. Other devices here can reach your apps, but you can’t install new apps or models, or share online, until the internet is back.' },
+  offline: { cls: 'net-off', label: 'Offline', title: 'Not connected',
+    msg: 'No network detected. Your apps run only on this machine — nothing can be installed or downloaded, and no other device can reach it. Everything stays fully private.' },
+};
+let netState = 'offline', netIP = '';
+async function refreshNetStatus() {
+  let d; try { d = await api('/api/network/status'); } catch { return; }
+  netState = d.state || 'offline'; netIP = d.ip || '';
+  const info = NET_INFO[netState] || NET_INFO.offline;
+  document.getElementById('led-net').className = 'led ' + info.cls;
+  document.getElementById('net-label').textContent = info.label;
+  if (!document.getElementById('net-pop').classList.contains('hidden')) renderNetPop();
+}
+function renderNetPop() {
+  const info = NET_INFO[netState] || NET_INFO.offline;
+  const ip = (netState !== 'offline' && netIP) ? `<div class="np-ip">This machine on the network: <b>${escapeHtml(netIP)}</b></div>` : '';
+  document.getElementById('net-pop').innerHTML =
+    `<div class="np-head"><span class="np-dot ${info.cls}"></span><span class="np-title">${info.title}</span></div>
+     <div class="np-msg">${info.msg}</div>${ip}`;
+}
+function toggleNetPop() {
+  const p = document.getElementById('net-pop');
+  if (p.classList.contains('hidden')) { renderNetPop(); p.classList.remove('hidden'); } else p.classList.add('hidden');
+}
 async function renderGPUs() {
   let data; try { data = await api('/api/gpu'); } catch { return; }
   const gpus = (data && data.gpus) || [];
@@ -356,19 +854,43 @@ async function renderGPUs() {
   document.getElementById('mi-gpu').textContent = gpus.length
     ? (gpus.length === 1 ? gpus[0].name.replace('NVIDIA GeForce ', '') : gpus.length + ' GPUs') : 'No GPU';
   const body = document.getElementById('gpu-body');
-  if (!gpus.length) { body.innerHTML = '<div class="empty">No NVIDIA GPU detected on this machine.</div>'; return; }
-  body.innerHTML = gpus.map(g => {
-    const vram = g.memTotalMB > 0 ? Math.round(g.memUsedMB / g.memTotalMB * 100) : 0;
-    const power = g.powerW >= 0 ? `${Math.round(g.powerW)} / ${Math.round(g.powerLimitW)} W` : '—';
-    return `<div class="gpu">
-      <div class="gpu-name">${g.name}<span class="idx">#${g.index}</span></div>
-      <div class="stat"><div class="stat-row"><span>Memory</span><b>${gb(g.memUsedMB)} / ${gb(g.memTotalMB)} GB</b></div>
-        <div class="track"><i style="width:${vram}%"></i></div></div>
-      <div class="stat"><div class="stat-row"><span>Utilization</span><b>${g.utilPct}%</b></div>
-        <div class="track"><i style="width:${Math.max(0, g.utilPct)}%"></i></div></div>
-      <div class="chips"><span>${g.tempC}°C</span><span><b>${power}</b></span><span>Driver ${g.driver}</span></div>
-    </div>`;
-  }).join('');
+  if (!gpus.length) { body.innerHTML = '<div class="empty">No NVIDIA GPU detected on this machine.</div>'; gpuBuilt = 0; return; }
+  const calc = g => ({
+    vram: g.memTotalMB > 0 ? Math.round(g.memUsedMB / g.memTotalMB * 100) : 0,
+    util: Math.max(0, g.utilPct),
+    mem: `${gb(g.memUsedMB)} / ${gb(g.memTotalMB)} GB`,
+    power: g.powerW >= 0 ? `${Math.round(g.powerW)} / ${Math.round(g.powerLimitW)} W` : '—',
+  });
+  // Rebuild structure only when the GPU set changes; otherwise update values
+  // in place so the bars *glide* to their new width (organic, not a jump-cut).
+  if (gpuBuilt !== gpus.length) {
+    body.innerHTML = gpus.map(g => {
+      const c = calc(g);
+      return `<div class="gpu">
+        <div class="gpu-name">${g.name}<span class="idx">#${g.index}</span></div>
+        <div class="stat"><div class="stat-row"><span>Memory</span><b data-k="mem">${c.mem}</b></div>
+          <div class="track"><i data-k="vram" style="width:0%"></i></div></div>
+        <div class="stat"><div class="stat-row"><span>Utilization</span><b data-k="util">${g.utilPct}%</b></div>
+          <div class="track"><i data-k="utilbar" style="width:0%"></i></div></div>
+        <div class="chips"><span data-k="temp">${g.tempC}°C</span><span><b data-k="pw">${c.power}</b></span><span>Driver ${g.driver}</span></div>
+      </div>`;
+    }).join('');
+    gpuBuilt = gpus.length;
+    requestAnimationFrame(() => updateGPUValues(gpus, calc)); // fill from 0 → value
+  } else {
+    updateGPUValues(gpus, calc);
+  }
+}
+function updateGPUValues(gpus, calc) {
+  const blocks = document.querySelectorAll('#gpu-body .gpu');
+  gpus.forEach((g, i) => {
+    const el = blocks[i]; if (!el) return;
+    const c = calc(g);
+    const set = (k, v) => { const n = el.querySelector(`[data-k="${k}"]`); if (n) n.textContent = v; };
+    const wid = (k, v) => { const n = el.querySelector(`[data-k="${k}"]`); if (n) n.style.width = v + '%'; };
+    wid('vram', c.vram); wid('utilbar', c.util);
+    set('mem', c.mem); set('util', g.utilPct + '%'); set('temp', g.tempC + '°C'); set('pw', c.power);
+  });
 }
 
 /* ---- places ---- */
@@ -385,36 +907,185 @@ async function renderPlaces() {
   });
 }
 
-/* ---- launchpad ---- */
+/* ---- dashboard fast-launch (pinned apps only) ---- */
+function openApp(app) {
+  const port = app.ports ? Object.keys(app.ports)[0] : '';
+  window.open(`http://localhost:${port}${app.openPath || '/'}`, '_blank');
+}
 async function renderApps() {
-  const [catalog, apps] = await Promise.all([api('/api/catalog'), api('/api/apps')]);
+  const [catalog, apps, pins] = await Promise.all([
+    api('/api/catalog'), api('/api/apps'), api('/api/pins').catch(() => ({ pinned: [] }))]);
   catalogCache = catalog;
   const running = {}; apps.forEach(c => running[c.name.replace(/^cloudless-/, '')] = c.state);
   lastRunning = running;
-  updateChat();
-  const pad = document.getElementById('pad');
-  pad.innerHTML = catalog.filter(app => !app.service).map(app => {
-    const isRun = running[app.id] === 'running';
-    const cls = 'tile' + (isRun ? ' running' : '') + (app.image ? '' : ' disabled');
-    const meta = isRun ? '<span class="dot"></span>Running' : (app.image ? '' : 'Coming soon');
-    return `<div class="${cls}" data-id="${app.id}">
-      <div class="ic">${glyph(app.id)}<button class="stopx" title="Stop">×</button></div>
-      <div class="nm">${app.name}</div><div class="meta">${meta}</div></div>`;
-  }).join('');
+  pinnedIds = (pins && pins.pinned) || [];
 
-  pad.querySelectorAll('.tile').forEach(tile => {
-    const app = catalog.find(a => a.id === tile.dataset.id);
-    const isRun = running[app.id] === 'running';
-    tile.querySelector('.ic').onclick = () => {
-      if (isRun) { const port = app.ports ? Object.keys(app.ports)[0] : ''; window.open(`http://localhost:${port}${app.openPath || '/'}`, '_blank'); }
-      else if (app.image) startInstall(app, tile);
-    };
-    const stop = tile.querySelector('.stopx');
-    if (stop) stop.onclick = async e => { e.stopPropagation(); try { await api(`/api/apps/${app.id}/stop`, { method: 'POST' }); } catch {} renderApps(); };
+  const pad = document.getElementById('pad');
+  const pinned = pinnedIds.map(id => catalog.find(a => a.id === id)).filter(Boolean);
+  if (!pinned.length) {
+    pad.classList.remove('enter');
+    pad.innerHTML = `<div class="pad-empty">No fast-launch apps yet. <button class="link-btn" id="empty-launcher">Open the App Launcher</button> to pin your favourites.</div>`;
+    document.getElementById('empty-launcher').onclick = openLauncher;
+  } else {
+    pad.innerHTML = pinned.map(app => {
+      const isRun = running[app.id] === 'running';
+      const cls = 'tile' + (isRun ? ' running' : '') + (app.image ? '' : ' disabled');
+      const meta = isRun ? '<span class="dot"></span>Running' : (app.image ? '' : 'Coming soon');
+      return `<div class="${cls}" data-id="${app.id}">
+        <div class="ic">${glyph(app.id)}<button class="stopx" title="Stop">×</button></div>
+        <div class="nm">${app.name}</div><div class="meta">${meta}</div>
+        <div class="tbar indet"><i></i></div></div>`;
+    }).join('');
+    if (!appsEntered) { appsEntered = true; pad.classList.add('enter'); setTimeout(() => pad.classList.remove('enter'), 1400); }
+    pad.querySelectorAll('.tile').forEach(tile => {
+      const app = catalog.find(a => a.id === tile.dataset.id);
+      const isRun = running[app.id] === 'running';
+      tile.querySelector('.ic').onclick = () => { if (isRun) openApp(app); else if (app.image) startInstall(app, tile); };
+      const stop = tile.querySelector('.stopx');
+      if (stop) stop.onclick = async e => { e.stopPropagation(); try { await api(`/api/apps/${app.id}/stop`, { method: 'POST' }); } catch {} renderApps(); };
+    });
+  }
+  // NOTE: renderApps() (the 8s /api/apps poll) deliberately does NOT touch the
+  // launcher. The launcher is redrawn ONLY by explicit user interaction
+  // (open / select / search / an action) via refreshLauncher(). This makes
+  // poll-driven flicker structurally impossible.
+}
+
+// Call this after a user action that changes app state, to redraw the launcher
+// if it's open. The background poll never calls it.
+function refreshLauncher() { if (launcherOpen()) renderLauncher(); }
+
+/* ---- App Launcher (full-screen, by category, with per-app pages) ---- */
+const LP_CATS = ['Chat & interfaces', 'Image & video', 'Training & fine-tuning', 'Agents & automation'];
+const LP_CAT_BLURBS = [
+  ['Chat & interfaces', 'Talk to your local models in a full chat UI.', '💬'],
+  ['Image & video', 'Generate and edit images on your own GPU.', '🎨'],
+  ['Training & fine-tuning', 'Train and fine-tune your own models on your GPU.', '🎓'],
+  ['Agents & automation', 'Autonomous helpers that take actions for you.', '🤖'],
+];
+function launcherOpen() { return !document.getElementById('launcher').classList.contains('hidden'); }
+function openLauncher() {
+  lpView = ''; // open to the intro
+  document.getElementById('launcher').classList.remove('hidden');
+  document.getElementById('lp-search').value = lpQuery;
+  renderLauncher();
+  setTimeout(() => document.getElementById('lp-search').focus(), 60);
+}
+function closeLauncher() { document.getElementById('launcher').classList.add('hidden'); }
+function selectApp(id) { lpView = id; renderLauncher(); document.getElementById('lp-detail').scrollTop = 0; }
+
+function renderLauncher() {
+  renderAppList();
+  const el = document.getElementById('lp-detail');
+  const app = lpView && catalogCache.find(a => a.id === lpView && !a.service);
+  if (app) renderAppDetail(el, app); else renderAppIntro(el);
+}
+
+// left pane: searchable app list grouped by category
+function renderAppList() {
+  const q = lpQuery.trim().toLowerCase();
+  const match = a => !q || (a.name + ' ' + (a.tagline || '') + ' ' + (a.description || '') + ' ' + (a.category || '')).toLowerCase().includes(q);
+  const apps = catalogCache.filter(a => !a.service && match(a));
+  const list = document.getElementById('lp-list');
+  if (!apps.length) { list.innerHTML = `<div class="lp-empty">No apps match “${escapeHtml(lpQuery)}”.</div>`; return; }
+  const cats = {};
+  apps.forEach(a => { const c = a.category || 'Other'; (cats[c] = cats[c] || []).push(a); });
+  const order = LP_CATS.filter(c => cats[c]).concat(Object.keys(cats).filter(c => !LP_CATS.includes(c)));
+  list.innerHTML = order.map(cat =>
+    `<div class="lp-cat">${escapeHtml(cat)}</div>` + cats[cat].map(a => {
+      const isRun = lastRunning[a.id] === 'running';
+      return `<button class="li ${a.id === lpView ? 'active' : ''}" data-id="${a.id}">
+        <span class="li-ic">${glyph(a.id)}</span><span class="li-nm">${escapeHtml(a.name)}</span>
+        ${isRun ? '<span class="li-dot" title="running"></span>' : ''}</button>`;
+    }).join('')).join('');
+  list.querySelectorAll('.li').forEach(b => b.onclick = () => selectApp(b.dataset.id));
+}
+
+// right pane (default): what the launcher is about
+function renderAppIntro(el) {
+  el.innerHTML = `
+    <div class="lp-intro">
+      <div class="ii"></div>
+      <h2>Your local AI apps</h2>
+      <p>Everything here runs privately on your own GPU — no cloud, no accounts. Pick an app on the left to see what it does, install it in one click, and pin your favourites to the dashboard.</p>
+      <div class="lp-cats">${LP_CAT_BLURBS.map(([t, d, ic]) =>
+        `<div class="lp-cc"><span class="cc-ic">${ic}</span><div class="cc-d"><div class="cc-t">${escapeHtml(t)}</div><span>${escapeHtml(d)}</span></div></div>`).join('')}</div>
+    </div>`;
+}
+
+function statusBadge(a) {
+  return lastRunning[a.id] === 'running' ? '<span class="ac-badge run">running</span>'
+    : (a.image ? '' : '<span class="ac-badge soon">soon</span>');
+}
+function appActions(a) {
+  const isRun = lastRunning[a.id] === 'running';
+  const pinned = pinnedIds.includes(a.id);
+  let acts = '';
+  if (isRun) acts += `<button class="ac-btn primary" data-do="open">Open</button><button class="ac-btn" data-do="stop">Stop</button>`;
+  else if (a.image) acts += `<button class="ac-btn primary" data-do="install">Install</button>`;
+  else acts += `<button class="ac-btn" disabled>Coming soon</button>`;
+  if (a.image) acts += `<button class="ac-btn" data-do="config">Configure</button>`;
+  acts += `<button class="ac-btn pin ${pinned ? 'on' : ''}" data-do="pin">${pinned ? '★ Pinned' : '☆ Pin'}</button>`;
+  return acts;
+}
+// wire every [data-do] button inside `scope` for app `a`
+function wireActions(scope, a) {
+  scope.querySelectorAll('[data-do]').forEach(btn => btn.onclick = async e => {
+    e.stopPropagation();
+    const act = btn.dataset.do, id = a.id;
+    if (act === 'open') openApp(a);
+    else if (act === 'install') installApp(id, btn);
+    else if (act === 'config') { closeLauncher(); openSettingsApp(id); }
+    else if (act === 'stop') { btn.classList.add('busy'); try { await api(`/api/apps/${id}/stop`, { method: 'POST' }); toast(a.name + ' stopped'); } catch {} await renderApps(); refreshLauncher(); }
+    else if (act === 'pin') { btn.classList.add('busy');
+      try { const r = await api(`/api/apps/${id}/pin`, { method: 'POST' }); pinnedIds = r.pinned || pinnedIds;
+        toast(r.pinnedNow ? a.name + ' pinned to dashboard' : a.name + ' unpinned'); } catch {}
+      renderApps(); refreshLauncher(); }
   });
+}
+// right pane: the selected app's full page
+function renderAppDetail(el, a) {
+  const ex = (a.examples || []).map(x => `<li>${escapeHtml(x)}</li>`).join('');
+  el.innerHTML = `
+    <div class="ad">
+      <div class="ad-head">
+        <div class="ad-ic">${glyph(a.id)}</div>
+        <div class="ad-id">
+          <div class="ad-nm">${escapeHtml(a.name)} ${statusBadge(a)}</div>
+          <div class="ad-cat">${escapeHtml(a.category || '')}</div>
+        </div>
+      </div>
+      <p class="ad-long">${escapeHtml(a.long || a.description || '')}</p>
+      ${ex ? `<div class="ad-sec">Examples of what you can do</div><ul class="ad-uses">${ex}</ul>` : ''}
+      <div class="ad-acts">${appActions(a)}</div>
+    </div>`;
+  wireActions(el.querySelector('.ad-acts'), a);
+}
+function openSettingsApp(id) { setPage = 'app:' + id; openSettings(); }
+
+// install from anywhere (launcher button or assistant action); btn optional for inline progress
+function installApp(id, btn) {
+  const app = catalogCache.find(a => a.id === id); if (!app) return;
+  if (lastRunning[id] === 'running') { openApp(app); return; }
+  if (!app.image) { toast(app.name + ' is not installable yet'); return; }
+  if (btn) { btn.classList.add('busy'); btn.textContent = 'Installing…'; } else toast('Installing ' + app.name + '…');
+  installing++;
+  api(`/api/apps/${id}/start`, { method: 'POST' }).then(res => {
+    if (!res.jobId) { installing--; renderApps().then(refreshLauncher); return; }
+    const es = new EventSource(`/api/jobs/${res.jobId}/events`); let ended = false;
+    const fin = ok => { if (ended) return; ended = true; es.close(); installing--; toast(app.name + (ok ? ' installed' : ' failed'), !ok); renderApps().then(refreshLauncher); };
+    es.onmessage = e => { const u = JSON.parse(e.data);
+      if (btn) { if (u.phase === 'pulling') btn.textContent = u.layersTotal > 0 ? `Downloading ${u.layersDone}/${u.layersTotal}` : 'Preparing…';
+        else if (u.phase === 'building') btn.textContent = 'Building…'; else if (u.phase === 'starting') btn.textContent = 'Starting…'; }
+      if (u.phase === 'error') return fin(false);
+      if (u.done) fin(u.phase === 'running');
+    };
+    es.onerror = () => fin(true);
+  }).catch(() => { installing--; if (btn) { btn.classList.remove('busy'); btn.textContent = 'Install'; } toast('Install failed', true); });
 }
 function startInstall(app, tile) {
   tile.classList.add('busy'); tile.querySelector('.meta').textContent = 'Preparing…';
+  const bar = tile.querySelector('.tbar'); if (bar) { bar.classList.add('indet'); bar.querySelector('i').style.width = ''; }
   api(`/api/apps/${app.id}/start`, { method: 'POST' })
     .then(res => { if (res.jobId) trackJob(res.jobId, tile); else renderApps(); })
     .catch(() => renderApps());
@@ -422,14 +1093,20 @@ function startInstall(app, tile) {
 function trackJob(jobId, tile) {
   installing++;
   const meta = tile.querySelector('.meta');
+  const bar = tile.querySelector('.tbar'), fill = bar && bar.querySelector('i');
+  const det = pct => { if (!bar) return; bar.classList.remove('indet'); fill.style.width = Math.max(4, Math.min(100, pct)) + '%'; };
+  const indet = () => { if (!bar) return; bar.classList.add('indet'); fill.style.width = ''; };
   const es = new EventSource(`/api/jobs/${jobId}/events`); let ended = false;
   const done = r => { if (ended) return; ended = true; es.close(); installing--; if (r) renderApps(); else tile.classList.remove('busy'); };
   es.onmessage = e => { const u = JSON.parse(e.data);
-    if (u.phase === 'pulling') meta.textContent = u.layersTotal > 0 ? `Downloading ${u.layersDone}/${u.layersTotal}` : 'Preparing…';
-    else if (u.phase === 'building') meta.textContent = 'Building…';
-    else if (u.phase === 'starting') meta.textContent = 'Starting…';
+    if (u.phase === 'pulling') {
+      if (u.layersTotal > 0) { meta.textContent = `Downloading ${u.layersDone}/${u.layersTotal}`; det(u.layersDone / u.layersTotal * 100); }
+      else { meta.textContent = 'Preparing…'; indet(); }
+    }
+    else if (u.phase === 'building') { meta.textContent = 'Building…'; indet(); }
+    else if (u.phase === 'starting') { meta.textContent = 'Starting…'; det(96); }
     else if (u.phase === 'error') { meta.textContent = 'Failed'; toast('Install failed: ' + (u.error || 'error'), true); return done(false); }
-    if (u.done) done(u.phase === 'running');
+    if (u.done) { if (u.phase === 'running') det(100); done(u.phase === 'running'); }
   };
   es.onerror = () => done(true);
 }
@@ -438,50 +1115,35 @@ function installById(id) {
   const tile = document.querySelector(`.tile[data-id="${id}"]`);
   if (app && tile) startInstall(app, tile);
 }
-function updateChat() {
-  const b = document.getElementById('chat-btn');
-  if (lastRunning['open-webui'] === 'running' && engineReady) {
-    b.disabled = false; b.classList.remove('prep');
-    b.textContent = 'Chat with your Cloudless AI';
-    b.onclick = () => window.open('http://localhost:3000/', '_blank');
-  } else {
-    b.disabled = true; b.classList.add('prep');
-    b.textContent = engineSwitching ? 'Switching engine…'
-      : (lastRunning['open-webui'] === 'running' ? 'Starting inference engine…' : 'Setting up Cloudless AI…');
-    b.onclick = null;
-  }
-}
+// The hero "ask" bar and "Open the full chat" link both open the Cloudless
+// Assistant (the local-engine chat) — wired statically at boot, no gating needed.
 
 /* ---- inference engine switch ---- */
+// renderEngine() runs on the 4s poll, so it ONLY updates state — it must never
+// rebuild Settings (that would flicker the panel and wipe form input every poll).
+// Settings is redrawn solely by user actions (open / nav click / switch / job done).
 async function renderEngine() {
   let d; try { d = await api('/api/engine'); } catch { return; }
   engineReady = !!d.ready; engineActive = d.active || '';
-  const row = document.getElementById('engine-row');
-  const pills = (d.engines || []).map(e =>
-    `<button class="er-pill ${e.active ? 'on' : ''}" data-id="${e.id}" ${e.active || engineSwitching ? 'disabled' : ''}>${e.name.replace(' Engine', '')}</button>`
-  ).join('');
-  const state = engineSwitching ? 'switching…' : (d.ready ? 'ready' : (engineActive ? 'loading…' : 'stopped'));
-  row.innerHTML = `<span class="er-label">Engine</span>${pills}<span class="er-state ${d.ready && !engineSwitching ? 'ready' : ''}">${state}</span>`;
-  row.querySelectorAll('.er-pill:not(.on)').forEach(b => b.onclick = () => switchEngine(b.dataset.id));
-  updateChat();
 }
 function switchEngine(id) {
   if (engineSwitching) return;
-  engineSwitching = true; engineReady = false; renderEngine();
+  engineSwitching = true; engineReady = false;
+  if (settingsOpen()) renderSettings(); // reflect "switching…" immediately (user action)
   api(`/api/engine/${id}`, { method: 'POST' })
     .then(res => { if (res.jobId) trackEngineJob(res.jobId); else endSwitch(); })
     .catch(() => endSwitch());
 }
 function endSwitch() {
   engineSwitching = false; renderEngine();
-  if (!document.getElementById('settings').classList.contains('hidden')) renderSettings();
+  if (settingsOpen()) renderSettings();
 }
 function trackEngineJob(jobId) {
   const es = new EventSource(`/api/jobs/${jobId}/events`); let ended = false;
   const fin = () => { if (ended) return; ended = true; es.close(); endSwitch(); };
   es.onmessage = e => {
     const u = JSON.parse(e.data);
-    const st = document.querySelector('#engine-row .er-state');
+    const st = document.querySelector('#settings .er-state'); // engine switch lives in Settings
     if (st && u.message) st.textContent = u.message;
     if (u.done) fin();
   };
@@ -500,7 +1162,7 @@ function toast(msg, isErr) {
 function showOnboarding() {
   const ov = document.getElementById('onboarding'), body = document.getElementById('ob-body');
   const dots = document.getElementById('ob-dots').children, act = document.getElementById('ob-act');
-  let sel = null; ov.classList.remove('hidden');
+  let sel = null, localNet = true; ov.classList.remove('hidden');
   const setDots = i => { for (let k = 0; k < dots.length; k++) dots[k].classList.toggle('on', k === i); };
   async function step(i) {
     setDots(i);
@@ -521,16 +1183,29 @@ function showOnboarding() {
             <div class="hs">${gb(g.memTotalMB)} GB VRAM · driver ${g.driver}</div></div><div class="verdict ok">✓ Ready</div>`;
         } else { hw.innerHTML = `<div class="hi">🖥️</div><div><div class="hn">No GPU detected</div><div class="hs">apps run on CPU (slower)</div></div><div class="verdict warn">Limited</div>`; }
       } catch {}
+    } else if (i === 2) {
+      body.innerHTML = `<h2>Local network</h2><p class="lead">Reach your AI from your other devices at home.</p>
+        <div class="net-opt"><div class="net-ic">📡</div>
+          <div class="net-tx"><div class="net-t">Make this machine reachable on your network</div>
+            <div class="net-d">When on, you can open your apps — like the chat — from your phone, tablet or laptop on the
+            same Wi-Fi, not just this computer. Everything still runs on your hardware; nothing goes to the cloud.
+            You can change this anytime in Settings.</div></div>
+          <label class="switch"><input type="checkbox" id="ob-lan" checked><span class="track2"></span></label></div>`;
+      act.innerHTML = `<button class="btn link" id="bk">Back</button><button class="btn primary" id="nx">Continue</button>`;
+      document.getElementById('bk').onclick = () => step(1);
+      document.getElementById('nx').onclick = () => step(3);
+      const t = document.getElementById('ob-lan'); t.checked = localNet;
+      t.onchange = () => { localNet = t.checked; };
     } else {
-      const picks = catalogCache.filter(a => a.image && !a.service).slice(0, 3);
+      const picks = catalogCache.filter(a => a.image && !a.service && !a.hidden).slice(0, 3);
       body.innerHTML = `<h2>Your first app</h2><p class="lead">Install one now, or explore Launchpad yourself.</p>
         <div class="pick">${picks.map(a => `<div class="pi" data-id="${a.id}">
           <span class="pic">${glyph(a.id)}</span>
           <div><div class="t">${a.name}${a.verified ? ' · recommended' : ''}</div><div class="d">${a.description}</div></div>
           <span class="ck">✓</span></div>`).join('')}</div>`;
       act.innerHTML = `<button class="btn link" id="bk">Back</button><button class="btn primary" id="fin">Finish</button>`;
-      document.getElementById('bk').onclick = () => step(1);
-      document.getElementById('fin').onclick = () => finishOnboarding(sel);
+      document.getElementById('bk').onclick = () => step(2);
+      document.getElementById('fin').onclick = () => finishOnboarding(sel, localNet);
       body.querySelectorAll('.pi').forEach(el => el.onclick = () => {
         const was = el.classList.contains('sel');
         body.querySelectorAll('.pi').forEach(x => x.classList.remove('sel'));
@@ -541,7 +1216,8 @@ function showOnboarding() {
   }
   step(0);
 }
-function finishOnboarding(pendingId) {
+function finishOnboarding(pendingId, localNet) {
+  api('/api/network/local', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enable: localNet !== false }) }).catch(() => {});
   api('/api/onboarding/complete', { method: 'POST' }).catch(() => {});
   const ov = document.getElementById('onboarding'); ov.classList.add('out');
   setTimeout(() => { ov.classList.add('hidden'); ov.classList.remove('out'); }, 360);
@@ -553,15 +1229,16 @@ function openSettings() { document.getElementById('settings').classList.remove('
 function closeSettings() { document.getElementById('settings').classList.add('hidden'); }
 function settingsOpen() { return !document.getElementById('settings').classList.contains('hidden'); }
 
-let setPage = 'ai';
+let setPage = 'hardware';
 async function renderSettings() {
   let catalog;
   try { catalog = await api('/api/catalog'); catalogCache = catalog; } catch { catalog = catalogCache || []; }
   const apps = catalog.filter(a => !a.service);
-  if (setPage.startsWith('app:') && !apps.some(a => 'app:' + a.id === setPage)) setPage = 'ai';
+  if (setPage.startsWith('app:') && !apps.some(a => 'app:' + a.id === setPage)) setPage = 'hardware';
 
   const groups = [
-    { label: 'cloudless', items: [{ id: 'ai', ic: '✦', label: 'Cloudless AI' }, { id: 'hardware', ic: '▤', label: 'Hardware' }] },
+    { label: 'you', items: [{ id: 'profile', ic: '◐', label: 'Profile' }] },
+    { label: 'cloudless', items: [{ id: 'hardware', ic: '▤', label: 'Machine' }, { id: 'engine', ic: '✦', label: 'Inference engine' }] },
     { label: 'apps', items: apps.map(a => ({ id: 'app:' + a.id, ic: glyph(a.id), label: a.name })) },
     { label: 'system', items: [{ id: 'general', ic: '⦿', label: 'General' }] },
   ];
@@ -570,51 +1247,311 @@ async function renderSettings() {
       `<div class="nav-item ${it.id === setPage ? 'active' : ''}" data-page="${it.id}"><span class="nav-ic">${it.ic}</span>${it.label}</div>`).join('')).join('');
   document.querySelectorAll('#set-nav .nav-item').forEach(n => n.onclick = () => { setPage = n.dataset.page; renderSettings(); });
 
-  let title = { ai: 'Cloudless AI', hardware: 'Hardware', general: 'General' }[setPage] || '';
+  let title = { profile: 'Profile', hardware: 'Machine', engine: 'Inference engine', general: 'General' }[setPage] || '';
   if (setPage.startsWith('app:')) { const a = apps.find(x => 'app:' + x.id === setPage); title = a ? a.name : ''; }
   document.getElementById('set-page-title').textContent = title;
 
   const c = document.getElementById('set-content');
-  if (setPage === 'ai') renderAIPage(c);
+  if (setPage === 'profile') renderProfilePage(c);
   else if (setPage === 'hardware') renderHardwarePage(c);
+  else if (setPage === 'engine') renderEnginePage(c);
   else if (setPage === 'general') renderGeneralPage(c);
   else if (setPage.startsWith('app:')) renderAppPage(c, setPage.slice(4));
+  else renderHardwarePage(c);
 }
-
-async function renderAIPage(c) {
+// Country options for the profile region override (Auto-detect + a focused list).
+const REGION_OPTS = [['', 'Auto-detect'], ['FR', 'France'], ['BE', 'Belgium'], ['CH', 'Switzerland'], ['CA', 'Canada'],
+  ['GB', 'United Kingdom'], ['DE', 'Germany'], ['ES', 'Spain'], ['IT', 'Italy'], ['NL', 'Netherlands'],
+  ['US', 'United States'], ['JP', 'Japan'], ['IN', 'India'], ['AU', 'Australia'], ['BR', 'Brazil']];
+async function renderProfilePage(c) {
   c.innerHTML = '<div class="set-hint">Loading…</div>';
-  let settings, engine;
-  try { [settings, engine] = await Promise.all([api('/api/settings'), api('/api/engine')]); } catch { return; }
+  let p; try { p = await api('/api/profile'); } catch { c.innerHTML = '<div class="set-hint">Could not load profile.</div>'; return; }
+  const d = p.detected || {};
+  const detName = p.countryName || 'Unknown';
+  const srcWord = { override: 'set by you', locale: 'from system language', timezone: 'from timezone' }[p.countrySource] || 'not detected';
+  const flag = p.inFrance ? ' 🇫🇷' : '';
+  const opts = REGION_OPTS.map(([v, l]) => {
+    const label = v === '' ? `Auto-detect${d.country ? ' (' + (d.countryName || d.country) + ')' : ''}` : l;
+    return `<option value="${v}" ${v === (p.region || '') ? 'selected' : ''}>${label}</option>`;
+  }).join('');
+  c.innerHTML = `
+    <div class="set-block"><h3>profile</h3>
+      <div class="fld"><span class="fld-label">Your name</span><input id="pf-name" class="fld-input" value="${escapeAttr(p.name || '')}" placeholder="e.g. Samuel" spellcheck="false"></div>
+      <div class="fld-help">Used to greet you on the home screen. Stays on this machine.</div>
+      <div class="fld"><span class="fld-label">Region</span><select id="pf-region" class="fld-input">${opts}</select></div>
+      <div class="fld-help">Cloudless tailors recommendations to your region — e.g. it highlights Mistral's French-built models in France. Leave on Auto-detect to follow the machine.</div>
+      <div class="set-row" style="margin-top:6px"><span class="row-actions"><button class="btn primary" id="pf-save">Save</button></span></div>
+    </div>
+    <div class="set-block"><h3>location &amp; time${flag}</h3>
+      <div class="set-row"><span class="srow-label">region</span><span><b>${escapeHtml(detName)}</b> <span class="set-hint" style="margin:0">· ${srcWord}</span></span></div>
+      <div class="set-row"><span class="srow-label">timezone</span><span>${escapeHtml(d.timezone || 'unknown')} <span class="set-hint" style="margin:0">(UTC ${escapeHtml(d.utcOffset || '')})</span></span></div>
+      <div class="set-row"><span class="srow-label">language</span><span>${escapeHtml(d.locale || 'not set')}</span></div>
+      <div class="fld-help">Detected locally from your system clock and language — nothing is looked up over the internet.</div>
+      ${p.inFrance ? '<div class="md-banner rec" style="margin-top:10px">France detected — Mistral models are recommended in the Model Manager.</div>' : ''}
+    </div>`;
+  const save = () => {
+    const name = document.getElementById('pf-name').value.trim();
+    const region = document.getElementById('pf-region').value;
+    api('/api/profile', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, region }) })
+      .then(() => { toast('Profile saved'); refreshProfileBadge(); mmLM = null; renderProfilePage(c); }).catch(() => toast('Failed', true));
+  };
+  document.getElementById('pf-save').onclick = save;
+  document.getElementById('pf-region').onchange = save;
+}
+async function renderEnginePage(c) {
+  c.innerHTML = '<div class="set-hint">Loading…</div>';
+  let engine; try { engine = await api('/api/engine'); } catch { return; }
   const pills = (engine.engines || []).map(e =>
     `<button class="er-pill ${e.active ? 'on' : ''}" data-eng="${e.id}" ${e.active || engineSwitching ? 'disabled' : ''}>${e.name.replace(' Engine', '')}</button>`).join('');
-  c.innerHTML = `
-    <div class="set-block"><h3>inference engine</h3>
-      <div class="set-row"><div class="er-pills">${pills}</div><span class="er-state ${engine.ready ? 'ready' : ''}">${engineSwitching ? 'switching…' : (engine.ready ? 'ready' : '…')}</span></div>
-      <div class="fld-help">Switch the engine powering Cloudless AI. One runs at a time; switching reloads the model.</div>
-    </div>
-    <div class="set-block"><h3>model</h3>
-      <div class="fld"><span class="fld-label">Model</span><div class="model-edit"><input id="set-model" class="fld-input" value="${escapeAttr(settings.model)}" spellcheck="false"><button class="btn primary" id="set-model-apply">Apply</button></div></div>
-      <div class="fld-help">A Hugging Face model id. Applying restarts the engine and may download weights.</div>
-    </div>`;
+  c.innerHTML = `<div class="set-block"><h3>inference engine</h3>
+    <div class="set-row"><div class="er-pills">${pills}</div><span class="er-state ${engine.ready ? 'ready' : ''}">${engineSwitching ? 'switching…' : (engine.ready ? 'ready' : '…')}</span></div>
+    <div class="fld-help">The engine that powers Cloudless AI (vLLM or SGLang). One runs at a time; switching briefly reloads the model. Most people never need to change this — pick models in the Model Manager.</div></div>`;
   c.querySelectorAll('.er-pill:not(.on)').forEach(b => b.onclick = () => { switchEngine(b.dataset.eng); toast('Switching engine…'); });
-  document.getElementById('set-model-apply').onclick = () => {
-    const m = document.getElementById('set-model').value.trim(); if (!m) return;
-    toast('Applying model… (may download)');
-    api('/api/settings/model', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: m }) })
-      .then(r => { if (r.jobId) trackJobToast(r.jobId, 'Model'); }).catch(() => toast('Failed', true));
-  };
 }
 
+const FIT_LABEL = { fits: 'fits your GPU', tight: 'tight fit', over: 'needs more VRAM', unknown: '' };
+function applyModel(id) { // advanced custom-id apply (explicit; no warning)
+  toast('Switching model… (may download weights)');
+  api('/api/settings/model', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: id }) })
+    .then(r => { if (r.jobId) trackJobToast(r.jobId, 'Model'); }).catch(() => toast('Failed', true));
+}
+function modelCard(m) {
+  const caps = (m.recommended ? '<span class="mdl-cap rec">★ recommended</span>' : '')
+    + (m.vision ? '<span class="mdl-cap vis">vision</span>' : '') + (m.toolCalling ? '<span class="mdl-cap">tools</span>' : '')
+    + (m.gated ? '<span class="mdl-cap gated">gated</span>' : '');
+  const tags = (m.tags || []).map(t => `<span class="mdl-t">${escapeHtml(t)}</span>`).join('');
+  const status = m.active ? '<span class="mdl-active">● loaded</span>' : (m.downloaded ? '<span class="mdl-disk">on disk</span>' : '');
+  return `<button class="mdl ${m.active ? 'on' : ''}${m.recommended ? ' rec' : ''} fit-${m.fit}" data-mid="${escapeAttr(m.id)}">
+      <div class="mdl-top"><span class="mdl-name">${escapeHtml(m.name)}</span>${status}</div>
+      <div class="mdl-meta">${escapeHtml(m.params || '')}${m.quant ? ' · ' + escapeHtml(m.quant) : ''}${m.contextK ? ' · ' + m.contextK + 'K ctx' : ''}${m.minVramGB ? ' · ~' + m.minVramGB + ' GB' : ''}</div>
+      <div class="mdl-notes">${escapeHtml(m.description || '')}</div>
+      <div class="mdl-tags">${caps}${tags}</div>
+      <div class="mdl-foot"><span class="mdl-fit fit-${m.fit}">${FIT_LABEL[m.fit] || ''}</span><span class="mdl-use">details ›</span></div>
+    </button>`;
+}
+function diffCard(m) {
+  const tags = (m.tags || []).map(t => `<span class="mdl-t">${escapeHtml(t)}</span>`).join('');
+  const base = m.base ? `<span class="mdl-cap">${escapeHtml(m.base)}</span>` : '';
+  const status = m.downloaded ? '<span class="mdl-active">● downloaded</span>' : '';
+  return `<button class="mdl ${m.downloaded ? 'on' : ''} fit-${m.fit}" data-did="${escapeAttr(m.id)}">
+      <div class="mdl-top"><span class="mdl-name">${escapeHtml(m.name)}</span>${status}</div>
+      <div class="mdl-meta">${escapeHtml(m.type || 'checkpoint')}${m.sizeGB ? ' · ' + m.sizeGB + ' GB' : ''}${m.minVramGB ? ' · ~' + m.minVramGB + ' GB VRAM' : ''}</div>
+      <div class="mdl-notes">${escapeHtml(m.description || '')}</div>
+      <div class="mdl-tags">${base}${tags}</div>
+      <div class="mdl-foot"><span class="mdl-fit fit-${m.fit}">${FIT_LABEL[m.fit] || ''}</span><span class="mdl-use">details ›</span></div>
+    </button>`;
+}
+function modelSection(title, list, cardFn) {
+  if (!list || !list.length) return '';
+  return `<div class="mdl-sec">${escapeHtml(title)}</div><div class="mdl-grid">${list.map(cardFn).join('')}</div>`;
+}
+function downloadModel(m) {
+  toast('Downloading ' + m.name + '… (runs in background)');
+  api('/api/models/download', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: m.id }) })
+    .then(r => { if (r.jobId) trackJobToast(r.jobId, m.name); }).catch(() => toast('Failed', true));
+}
+function downloadDiffusion(m) {
+  toast('Downloading ' + m.name + '… (large file, runs in background)');
+  api(`/api/diffusion/${m.id}/download`, { method: 'POST' }).then(r => { if (r.jobId) trackJobToast(r.jobId, m.name); }).catch(() => toast('Failed', true));
+}
+function launchModel(m) {
+  const curId = (mmLM && mmLM.current) || '';
+  const curName = (mmCache['lm:' + curId] && mmCache['lm:' + curId].name) || (curId.split('/').pop()) || 'the current model';
+  let msg = `Launch “${m.name}”?\n\nThis restarts the inference engine to load it. The model loaded now (${curName}) will be unloaded and any chats in progress interrupted — expect roughly 30–60 seconds of downtime.`;
+  if (m.fit === 'over') msg += `\n\n⚠ This model needs more VRAM (~${m.minVramGB} GB) than your GPU reports — it may fail to load.`;
+  if (!confirm(msg)) return;
+  toast('Launching ' + m.name + '… (engine restarting)');
+  api('/api/settings/model', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: m.id }) })
+    .then(r => { if (r.jobId) trackJobToast(r.jobId, 'Model'); }).catch(() => toast('Failed', true));
+  mmDetail = null; renderModelManager();
+}
+/* ---- Model Manager (standalone, opened from the dashboard) ---- */
+let mmTab = 'language', mmDetail = null, mmLM = null, mmDiff = null;
+let mmFilter = { q: '', fits: false, vision: false, tools: false };
+const mmCache = {};
+function modelsOpen() { return !document.getElementById('models').classList.contains('hidden'); }
+function openModelManager() { mmDetail = null; document.getElementById('models').classList.remove('hidden'); renderModelManager(); }
+function closeModelManager() { document.getElementById('models').classList.add('hidden'); }
+function openModelDetail(type, id) { mmDetail = { type, id }; renderModelManager(); }
+function modelMatches(m, lm) {
+  const f = mmFilter;
+  if (f.fits && m.fit === 'over') return false;
+  if (lm && f.vision && !m.vision) return false;
+  if (lm && f.tools && !m.toolCalling) return false;
+  if (f.q) {
+    const hay = [m.name, m.id, m.family, m.params, m.base, m.type, (m.tags || []).join(' '), m.description].filter(Boolean).join(' ').toLowerCase();
+    if (!hay.includes(f.q.toLowerCase())) return false;
+  }
+  return true;
+}
+function renderModelManager() {
+  const c = document.getElementById('mm-body'); if (!c) return;
+  if (mmDetail) { renderModelDetail(c); return; }
+  c.innerHTML = `<div class="mm-tabs">
+      <button class="mm-tab ${mmTab === 'language' ? 'on' : ''}" data-tab="language">Language models</button>
+      <button class="mm-tab ${mmTab === 'image' ? 'on' : ''}" data-tab="image">Image models</button>
+    </div><div id="mm-tab-body"><div class="set-hint">Loading…</div></div>`;
+  c.querySelectorAll('.mm-tab').forEach(b => b.onclick = () => { if (mmTab === b.dataset.tab) return; mmTab = b.dataset.tab; mmFilter = { q: '', fits: false, vision: false, tools: false }; renderModelManager(); });
+  const body = document.getElementById('mm-tab-body');
+  if (mmTab === 'image') renderImageModels(body); else renderLanguageModels(body);
+}
+async function renderLanguageModels(c) {
+  if (mmLM) paintLanguageModels(c, mmLM); // paint cached data instantly — no "Loading…" flash on back
+  else c.innerHTML = '<div class="set-hint">Loading…</div>';
+  let mdl;
+  try { mdl = await api('/api/models'); } catch { return; }
+  mmLM = mdl;
+  (mdl.yours || []).concat(mdl.highlights || []).forEach(m => { mmCache['lm:' + m.id] = m; });
+  if (!mmDetail && document.body.contains(c)) paintLanguageModels(c, mdl);
+}
+function paintLanguageModels(c, mdl) { paintModelList(c, mdl, 'lm'); }
+async function renderImageModels(c) {
+  if (mmDiff) paintImageModels(c, mmDiff); // paint cached data instantly — no "Loading…" flash on back
+  else c.innerHTML = '<div class="set-hint">Loading…</div>';
+  let d; try { d = await api('/api/diffusion'); } catch { if (!mmDiff) c.innerHTML = '<div class="set-hint">Could not load image models.</div>'; return; }
+  mmDiff = d;
+  (d.yours || []).concat(d.highlights || []).forEach(m => { mmCache['diff:' + m.id] = m; });
+  if (!mmDetail && document.body.contains(c)) paintImageModels(c, d);
+}
+function paintImageModels(c, d) { paintModelList(c, d, 'diff'); }
+// Shared list renderer for both tabs: summary + search + filter chips + filtered sections.
+function paintModelList(c, data, kind) {
+  const lm = kind === 'lm', gpu = data.gpuVRAMGB || 0;
+  const summary = gpu > 0
+    ? `${lm ? 'Your GPU' : 'Used by ComfyUI · your GPU'}: <b>${gpu} GB</b> · <span class="mm-sum-fit">green fits comfortably</span>`
+    : (lm ? 'No GPU detected — models run on CPU (slow)' : 'No GPU detected');
+  const chips = `<button class="mm-chip ${mmFilter.fits ? 'on' : ''}" data-f="fits">Fits my GPU</button>`
+    + (lm ? `<button class="mm-chip ${mmFilter.vision ? 'on' : ''}" data-f="vision">Vision</button><button class="mm-chip ${mmFilter.tools ? 'on' : ''}" data-f="tools">Tool-calling</button>` : '');
+  const advanced = lm ? `
+      <button class="adv-toggle" data-mdladv style="margin-top:20px">Advanced — use a custom Hugging Face model</button>
+      <div class="adv hidden" id="mdl-adv">
+        <div class="fld"><span class="fld-label">Model id</span><div class="model-edit"><input id="set-model" class="fld-input" value="${escapeAttr(data.current || '')}" placeholder="org/model-name" spellcheck="false"><button class="btn primary" id="set-model-apply">Launch</button></div></div>
+        <div class="fld-help">Any vLLM-compatible Hugging Face id. Gated models need a token; launching restarts the engine and may download weights.</div>
+      </div>` : '';
+  c.innerHTML = `
+    <div class="mm-bar">
+      <div class="mm-sum">${summary}</div>
+      <div class="mm-search"><span class="mm-search-ic">⌕</span><input id="mm-q" placeholder="Search ${lm ? 'language' : 'image'} models…" value="${escapeAttr(mmFilter.q)}" spellcheck="false"></div>
+    </div>
+    <div class="mm-filters">${chips}</div>
+    <div id="mm-list"></div>
+    ${advanced}`;
+  const cardFn = lm ? modelCard : diffCard;
+  const fill = () => {
+    const list = document.getElementById('mm-list'); if (!list) return;
+    const fy = (data.yours || []).filter(m => modelMatches(m, lm));
+    const fh = (data.highlights || []).filter(m => modelMatches(m, lm));
+    if (!fy.length && !fh.length) {
+      const filtered = mmFilter.q || mmFilter.fits || mmFilter.vision || mmFilter.tools;
+      list.innerHTML = `<div class="mm-empty">${filtered ? 'No models match your filters.' : (lm ? 'No models available.' : 'No image models available.')}${filtered ? ' <button class="lnk" id="mm-clearf">Clear filters</button>' : ''}</div>`;
+      const cf = document.getElementById('mm-clearf');
+      if (cf) cf.onclick = () => { mmFilter = { q: '', fits: false, vision: false, tools: false }; paintModelList(c, data, kind); };
+      return;
+    }
+    let sections = modelSection(lm ? 'Your models' : 'Your image models', fy, cardFn);
+    const rec = fh.filter(m => m.recommended);
+    if (lm && rec.length) {
+      const rg = data.region || {};
+      const label = 'Recommended in ' + (rg.countryName || 'your region') + (rg.inFrance ? ' 🇫🇷' : '');
+      sections += modelSection(label, rec, cardFn);
+      sections += modelSection('Cloudless highlights', fh.filter(m => !m.recommended), cardFn);
+    } else {
+      sections += modelSection('Cloudless highlights', fh, cardFn);
+    }
+    list.innerHTML = sections;
+    list.querySelectorAll('.mdl[data-mid], .mdl[data-did]').forEach(b => b.onclick = () => openModelDetail(kind, b.dataset.mid || b.dataset.did));
+  };
+  fill();
+  const q = document.getElementById('mm-q');
+  if (q) q.oninput = () => { mmFilter.q = q.value; fill(); };
+  c.querySelectorAll('.mm-chip').forEach(ch => ch.onclick = () => { mmFilter[ch.dataset.f] = !mmFilter[ch.dataset.f]; ch.classList.toggle('on'); fill(); });
+  if (lm) {
+    const adv = c.querySelector('[data-mdladv]'); if (adv) adv.onclick = () => document.getElementById('mdl-adv').classList.toggle('hidden');
+    const ap = document.getElementById('set-model-apply'); if (ap) ap.onclick = () => { const v = document.getElementById('set-model').value.trim(); if (v) applyModel(v); };
+  }
+}
+function renderModelDetail(c) {
+  const { type, id } = mmDetail;
+  const m = mmCache[type + ':' + id];
+  if (!m) { mmDetail = null; renderModelManager(); return; }
+  const lm = type === 'lm';
+  const gpu = ((lm ? mmLM : mmDiff) || {}).gpuVRAMGB || 0;
+  const caps = (m.recommended ? '<span class="mdl-cap rec">★ recommended</span>' : '')
+    + (lm ? ((m.vision ? '<span class="mdl-cap vis">vision</span>' : '') + (m.toolCalling ? '<span class="mdl-cap">tools</span>' : '') + (m.gated ? '<span class="mdl-cap gated">gated</span>' : ''))
+    : (m.base ? `<span class="mdl-cap">${escapeHtml(m.base)}</span>` : ''));
+  const tags = (m.tags || []).map(t => `<span class="mdl-t">${escapeHtml(t)}</span>`).join('');
+  const spec = (k, v) => v ? `<div class="md-spec"><span class="md-k">${k}</span><span class="md-v">${escapeHtml(String(v))}</span></div>` : '';
+  const specs = lm
+    ? spec('Parameters', m.params) + spec('Quantization', m.quant || 'none') + spec('Context', m.contextK ? m.contextK + 'K tokens' : '') + spec('VRAM needed', m.minVramGB ? '~' + m.minVramGB + ' GB' : '') + spec('License', m.license)
+    : spec('Base', m.base) + spec('Type', m.type || 'checkpoint') + spec('Download size', m.sizeGB ? m.sizeGB + ' GB' : '') + spec('VRAM needed', m.minVramGB ? '~' + m.minVramGB + ' GB' : '') + spec('License', m.license);
+  let banner = '', actions = '';
+  if (lm) {
+    if (m.active) { banner = '<div class="md-banner loaded">This model is loaded in vLLM right now.</div>'; actions = '<button class="btn" data-redl>Re-download weights</button>'; }
+    else if (m.downloaded) { banner = '<div class="md-banner ready">Downloaded and ready to launch.</div>'; actions = '<button class="btn primary" data-launch>Launch</button>'; }
+    else { banner = '<div class="md-banner note">This model isn’t downloaded on your Cloudless system yet — download it, then you can launch it.</div>'; actions = '<button class="btn primary" data-dl>Download</button>'; }
+  } else {
+    if (m.downloaded) { banner = '<div class="md-banner ready">Downloaded — choose it in ComfyUI’s checkpoint menu.</div>'; }
+    else { banner = '<div class="md-banner note">This model isn’t downloaded on your Cloudless system yet.</div>'; actions = '<button class="btn primary" data-dl>Download</button>'; }
+  }
+  const fit = (m.fit && m.fit !== 'unknown' && m.minVramGB) ? `<div class="md-fit"><span class="mdl-fit fit-${m.fit}">${FIT_LABEL[m.fit]}</span>${gpu ? ` — your GPU has ${gpu} GB, this needs ~${m.minVramGB} GB` : ''}.</div>` : '';
+  const recNote = m.recommended ? `<div class="md-banner rec">★ ${escapeHtml(m.recommendBy || 'Recommended for your region')} — a French-built model from Mistral AI.</div>` : '';
+  const gatedNote = (lm && m.gated && !m.downloaded) ? `<div class="md-fit" style="color:var(--warn)">⚠ This model's Hugging Face repo is gated — you'll need a free Hugging Face account to accept its terms before it can download.</div>` : '';
+  c.innerHTML = `
+    <button class="lp-back" id="mm-back">← All models</button>
+    <div class="md-detail">
+      <div class="md-hero">
+        <div class="md-ic2">${lm ? '🧠' : '🎨'}</div>
+        <div class="md-hd">
+          <div class="md-nm">${escapeHtml(m.name)}</div>
+          <div class="md-sub">${escapeHtml(lm ? m.id : (m.file || ''))}</div>
+          ${(caps || tags) ? `<div class="mdl-tags md-caps">${caps}${tags}</div>` : ''}
+        </div>
+      </div>
+      ${recNote}
+      ${banner}
+      ${gatedNote}
+      ${m.description ? `<p class="md-desc">${escapeHtml(m.description)}</p>` : ''}
+      <div class="md-specgrid">${specs}</div>
+      ${fit}
+      <div class="md-acts">${actions}</div>
+    </div>`;
+  document.getElementById('mm-back').onclick = () => { mmDetail = null; renderModelManager(); };
+  const lb = c.querySelector('[data-launch]'); if (lb) lb.onclick = () => launchModel(m);
+  const db = c.querySelector('[data-dl]'); if (db) db.onclick = () => { (lm ? downloadModel : downloadDiffusion)(m); mmDetail = null; renderModelManager(); };
+  const rb = c.querySelector('[data-redl]'); if (rb) rb.onclick = () => downloadModel(m);
+}
+
+function fmtUptime(sec) {
+  sec = Math.max(0, sec | 0);
+  const d = Math.floor(sec / 86400), h = Math.floor((sec % 86400) / 3600), m = Math.floor((sec % 3600) / 60);
+  if (d) return `${d}d ${h}h`; if (h) return `${h}h ${m}m`; return `${m}m`;
+}
 async function renderHardwarePage(c) {
   c.innerHTML = '<div class="set-hint">Loading…</div>';
-  let gpu, folders;
-  try { [gpu, folders] = await Promise.all([api('/api/gpu'), api('/api/folders')]); } catch { return; }
+  let gpu, folders, sys;
+  try { [gpu, folders, sys] = await Promise.all([api('/api/gpu'), api('/api/folders'), api('/api/system').catch(() => null)]); } catch { return; }
   const gpus = gpu.gpus || [];
   const gpuHtml = gpus.length ? gpus.map(g =>
     `<div class="hw-card"><div class="gpu-name">${g.name}<span class="idx">#${g.index}</span></div>
       <div class="chips"><span>vram <b>${gb(g.memUsedMB)} / ${gb(g.memTotalMB)} gb</b></span><span>util <b>${g.utilPct}%</b></span><span>temp <b>${g.tempC}°c</b></span><span>power <b>${g.powerW >= 0 ? Math.round(g.powerW) + ' w' : 'n/a'}</b></span><span>driver <b>${g.driver}</b></span></div></div>`).join('')
     : '<div class="set-hint">No NVIDIA GPU detected.</div>';
-  c.innerHTML = `<div class="set-block"><h3>graphics</h3>${gpuHtml}</div>
+  let sysHtml = '';
+  if (sys && sys.system) {
+    const s = sys.system, l = sys.locale || {};
+    const row = (k, v) => v ? `<div class="set-row"><span class="srow-label">${k}</span><span>${escapeHtml(String(v))}</span></div>` : '';
+    sysHtml = `<div class="set-block"><h3>system</h3>
+      ${row('device', s.hostname)}
+      ${row('os', s.os)}
+      ${row('kernel', s.kernel)}
+      ${row('cpu', s.cpu + (s.cores ? ' · ' + s.cores + ' cores' : ''))}
+      ${row('memory', s.memTotalMB ? (s.memTotalMB / 1024).toFixed(1) + ' GB RAM' : '')}
+      ${row('arch', s.arch)}
+      ${row('uptime', fmtUptime(s.uptimeSec))}
+      ${row('timezone', (l.timezone || 'unknown') + (l.utcOffset ? ' (UTC ' + l.utcOffset + ')' : ''))}
+      ${row('region', l.countryName || l.country || 'unknown')}
+    </div>`;
+  }
+  c.innerHTML = `${sysHtml}<div class="set-block"><h3>graphics</h3>${gpuHtml}</div>
     <div class="set-block"><h3>places</h3>${folders.map(p => `<button class="place" data-folder="${p.id}"><span class="pic">${PLACE_ICON[p.id] || '📁'}</span><span class="pl">${p.label}</span><span class="pp" title="${p.path}">${p.path}</span></button>`).join('')}</div>`;
   c.querySelectorAll('[data-folder]').forEach(b => b.onclick = async () => {
     try { const r = await api(`/api/folders/${b.dataset.folder}/open`, { method: 'POST' }); toast(r.opened ? 'Opened ' + b.querySelector('.pl').textContent : (r.error || 'Could not open folder'), !r.opened); } catch { toast('Could not open folder', true); }
@@ -652,10 +1589,10 @@ function fieldControl(f) {
 }
 async function renderAppPage(c, id) {
   c.innerHTML = '<div class="set-hint">Loading…</div>';
-  let st, cfg, running = false, catalog;
+  let st, cfg, running = false, catalog, tun = { supported: false }, lan = { supported: false };
   try {
-    const [s, cf, appsList, cat] = await Promise.all([api(`/api/apps/${id}/settings`), api(`/api/apps/${id}/config`), api('/api/apps'), api('/api/catalog')]);
-    st = s; cfg = cf; catalog = cat;
+    const [s, cf, appsList, cat, tn, ln] = await Promise.all([api(`/api/apps/${id}/settings`), api(`/api/apps/${id}/config`), api('/api/apps'), api('/api/catalog'), api(`/api/apps/${id}/tunnel`).catch(() => ({ supported: false })), api(`/api/apps/${id}/lan`).catch(() => ({ supported: false }))]);
+    st = s; cfg = cf; catalog = cat; tun = tn || tun; lan = ln || lan;
     running = appsList.some(x => x.name === 'cloudless-' + id && x.state === 'running');
   } catch { return toast('Could not load app', true); }
   const app = (catalog || []).find(a => a.id === id) || {};
@@ -674,11 +1611,23 @@ async function renderAppPage(c, id) {
           <div class="cfg-actions"><button class="btn" data-rawsave>Save raw &amp; apply</button></div>
         </div></div>`
     : '';
+  const local = (lan && lan.supported) ? `<div class="set-block"><h3>local network</h3>
+      <div class="set-row"><span>Serve ${escapeHtml(app.name || id)} to other devices on your network</span>
+        <span class="row-actions"><label class="switch"><input type="checkbox" id="lan-toggle" ${lan.enabled ? 'checked' : ''}><span class="track2"></span></label></span></div>
+      <div class="fld-help">By default this app only runs on this machine (localhost). Turn this on to open it from phones, tablets or laptops on the same Wi-Fi / network — they reach it at <b>http://${escapeHtml(lan.ip || 'this-machine')}:${lan.port || ''}</b>. Anyone on your network can reach it.</div>
+      <div id="lan-out" class="tun-out hidden"></div></div>` : '';
+  const share = (tun && tun.supported) ? `<div class="set-block"><h3>share online</h3>
+      <div class="set-row"><span>Make ${escapeHtml(app.name || id)} reachable from the internet</span>
+        <span class="row-actions"><label class="switch"><input type="checkbox" id="tun-toggle" ${tun.enabled ? 'checked' : ''}><span class="track2"></span></label></span></div>
+      <div class="fld-help">Creates a public Cloudflare link to this app. <b>Anyone with the link can use it</b> — only share it with people you trust.</div>
+      <div id="tun-out" class="tun-out hidden"></div></div>` : '';
+  const updates = `<div class="set-block" id="upd-block"><h3>updates</h3>
+      <div id="upd-body" class="upd-body"><span class="upd-muted">Checking for updates…</span></div></div>`;
   const manage = `<div class="set-block"><h3>manage</h3>
       <div class="set-row"><span>Reset to defaults</span><span class="row-actions"><button class="btn" data-appreset>Reset</button></span></div>
       <div class="set-row"><span>Uninstall</span><span class="row-actions"><button class="btn danger" data-appuninstall>Uninstall</button></span></div>
     </div>`;
-  c.innerHTML = `<div class="app-head"><div class="app-status"><span class="led ${running ? 'ok' : ''}"></span>${running ? 'running' : 'stopped'}</div>${openBtn}</div>${form}${adv}${manage}`;
+  c.innerHTML = `<div class="app-head"><div class="app-status"><span class="led ${running ? 'ok' : ''}"></span>${running ? 'running' : 'stopped'}</div>${openBtn}</div>${updates}${form}${adv}${local}${share}${manage}`;
 
   const save = c.querySelector('[data-fldsave]');
   if (save) save.onclick = () => {
@@ -706,13 +1655,119 @@ async function renderAppPage(c, id) {
   c.querySelector('[data-appuninstall]').onclick = async () => {
     if (!confirm(`Uninstall ${app.name || id}? Removes its container and image.`)) return;
     toast('Uninstalling ' + id + '…');
-    try { await api(`/api/apps/${id}/uninstall`, { method: 'POST' }); toast(id + ' uninstalled'); renderApps(); setPage = 'ai'; renderSettings(); } catch { toast('Failed', true); }
+    try { await api(`/api/apps/${id}/uninstall`, { method: 'POST' }); toast(id + ' uninstalled'); renderApps(); setPage = 'general'; renderSettings(); } catch { toast('Failed', true); }
   };
+
+  const lanToggle = c.querySelector('#lan-toggle');
+  if (lanToggle) {
+    const out = c.querySelector('#lan-out');
+    if (lan.enabled && lan.url) lanRender(out, lan);
+    lanToggle.onchange = async () => {
+      const enable = lanToggle.checked;
+      lanToggle.disabled = true;
+      out.classList.remove('hidden');
+      out.innerHTML = `<div class="tun-status">${enable ? 'Opening on your network…' : 'Turning off…'}</div>`;
+      try {
+        const r = await api(`/api/apps/${id}/lan`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enable }) });
+        if (!enable) { out.classList.add('hidden'); out.innerHTML = ''; toast('Local network access off'); }
+        else if (r.url) { lanRender(out, r); toast('Now reachable on your network'); }
+        else { out.innerHTML = `<div class="tun-status err">Couldn't detect this machine's network address.</div>`; lanToggle.checked = false; }
+      } catch { out.innerHTML = `<div class="tun-status err">Couldn't ${enable ? 'enable' : 'disable'} local network access. Is the app running?</div>`; lanToggle.checked = !enable; }
+      lanToggle.disabled = false;
+    };
+  }
+
+  const tunToggle = c.querySelector('#tun-toggle');
+  if (tunToggle) {
+    const out = c.querySelector('#tun-out');
+    if (tun.enabled && tun.url) tunRender(out, tun.url);
+    tunToggle.onchange = async () => {
+      const enable = tunToggle.checked;
+      tunToggle.disabled = true;
+      out.classList.remove('hidden');
+      out.innerHTML = `<div class="tun-status">${enable ? 'Creating public link… (a few seconds)' : 'Removing link…'}</div>`;
+      try {
+        const r = await api(`/api/apps/${id}/tunnel`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enable }) });
+        if (!enable) { out.classList.add('hidden'); out.innerHTML = ''; toast('Public link removed'); }
+        else if (r.url) { tunRender(out, r.url); toast('Public link ready'); }
+        else { out.innerHTML = `<div class="tun-status">Link is starting — reopen this page in a moment to get the URL.</div>`; }
+      } catch { out.innerHTML = `<div class="tun-status err">Couldn't ${enable ? 'create' : 'remove'} the link. Is the app running?</div>`; tunToggle.checked = !enable; }
+      tunToggle.disabled = false;
+    };
+  }
+
+  loadUpdate(id); // async — the registry digest check takes a moment
+}
+
+/* ---- app updates (D30) ---- */
+async function loadUpdate(id) {
+  const body = document.getElementById('upd-body'); if (!body) return;
+  let d; try { d = await api(`/api/apps/${id}/update`); } catch { body.innerHTML = '<span class="upd-muted">Could not check for updates.</span>'; return; }
+  renderUpdate(id, d);
+}
+function renderUpdate(id, d) {
+  const block = document.getElementById('upd-block'), body = document.getElementById('upd-body');
+  if (!block || !body) return;
+  if (!d.installed) { block.classList.add('hidden'); return; } // not installed → use Install, not Update
+  block.classList.remove('hidden');
+  const recheck = `<button class="btn" data-updcheck>Check again</button>`;
+  if (d.build) {
+    body.innerHTML = `<div class="upd-row"><span class="upd-muted">Built locally — update by rebuilding it.</span><button class="btn" data-updrebuild>Rebuild</button></div>`;
+    body.querySelector('[data-updrebuild]').onclick = () => { toast('Rebuilding ' + id + '…'); api(`/api/apps/${id}/reset`, { method: 'POST' }).then(r => { if (r.jobId) trackJobToast(r.jobId, id + ' rebuild'); }).catch(() => toast('Failed', true)); };
+  } else if (d.checkError) {
+    body.innerHTML = `<div class="upd-row"><span class="upd-muted">${escapeHtml(d.checkError)}</span>${recheck}</div>`;
+  } else if (d.hasUpdate) {
+    body.innerHTML = `<div class="upd-row"><span class="upd-new">● Update available</span><button class="btn primary" data-updnow>Update now</button></div>
+      <div class="fld-help">A newer version is ready. Updating restarts ${escapeHtml(id)} on the new image — your data and settings are kept.</div>${updSource(d)}`;
+    body.querySelector('[data-updnow]').onclick = () => {
+      body.innerHTML = '<span class="upd-muted">Updating… this can take a few minutes.</span>';
+      toast('Updating ' + id + '…');
+      api(`/api/apps/${id}/update`, { method: 'POST' }).then(r => { if (r.jobId) trackJobToast(r.jobId, id + ' update'); else loadUpdate(id); }).catch(() => { toast('Update failed', true); loadUpdate(id); });
+    };
+  } else {
+    body.innerHTML = `<div class="upd-row"><span class="upd-ok">✓ Up to date</span>${recheck}</div>${updSource(d)}`;
+  }
+  const cb = body.querySelector('[data-updcheck]');
+  if (cb) cb.onclick = () => { body.innerHTML = '<span class="upd-muted">Checking…</span>'; loadUpdate(id); };
+}
+function updSource(d) {
+  if (d.source === 'cloudless') {
+    const ch = d.channel ? ' · ' + escapeHtml(d.channel) : '';
+    const v = d.verified ? '✓ tested on Cloudless hardware' : 'pinned, not yet hardware-tested';
+    return `<div class="upd-src">Cloudless validated${ch} — ${v}</div>`;
+  }
+  if (d.source === 'upstream') return `<div class="upd-src">Tracking the upstream image directly.</div>`;
+  return '';
+}
+// public-link result row (clickable URL + copy + open)
+function tunRow(url) {
+  return `<div class="tun-row"><span class="tun-dot" title="live"></span>
+    <a class="tun-link" href="${url}" target="_blank">${escapeHtml(url.replace(/^https:\/\//, ''))}</a>
+    <button class="btn" data-tuncopy>Copy</button><a href="${url}" target="_blank"><button class="btn">Open</button></a></div>`;
+}
+function tunRender(out, url) {
+  out.classList.remove('hidden');
+  out.innerHTML = tunRow(url);
+  const cp = out.querySelector('[data-tuncopy]');
+  if (cp) cp.onclick = () => navigator.clipboard.writeText(url).then(() => toast('Link copied')).catch(() => toast('Copy failed', true));
+}
+// local-network address row (clickable URL + copy + open + how-to)
+function lanRow(o) {
+  return `<div class="tun-row"><span class="tun-dot" title="live"></span>
+      <a class="tun-link" href="${o.url}" target="_blank">${escapeHtml((o.ip || '') + ':' + o.port)}</a>
+      <button class="btn" data-lancopy>Copy</button><a href="${o.url}" target="_blank"><button class="btn">Open</button></a></div>
+    <div class="fld-help" style="margin-top:8px">On another device on the same network, open <b>${escapeHtml(o.url)}</b> in its browser.</div>`;
+}
+function lanRender(out, o) {
+  out.classList.remove('hidden');
+  out.innerHTML = lanRow(o);
+  const cp = out.querySelector('[data-lancopy]');
+  if (cp) cp.onclick = () => navigator.clipboard.writeText(o.url).then(() => toast('Address copied')).catch(() => toast('Copy failed', true));
 }
 
 function trackJobToast(jobId, label) {
   const es = new EventSource(`/api/jobs/${jobId}/events`); let ended = false;
-  const fin = (ok) => { if (ended) return; ended = true; es.close(); toast(label + (ok ? ' done' : ' failed'), !ok); renderApps(); renderEngine(); if (settingsOpen()) renderSettings(); };
+  const fin = (ok) => { if (ended) return; ended = true; es.close(); toast(label + (ok ? ' done' : ' failed'), !ok); renderApps(); renderEngine(); if (settingsOpen()) renderSettings(); if (modelsOpen()) { renderModelManager(); refreshActiveModel(); } };
   es.onmessage = e => {
     const u = JSON.parse(e.data);
     if (u.phase === 'error') return fin(false);
@@ -726,11 +1781,227 @@ document.getElementById('gear').onclick = openSettings;
 document.getElementById('set-x').onclick = closeSettings;
 document.getElementById('settings').addEventListener('click', e => { if (e.target.id === 'settings') closeSettings(); });
 
+/* ---- connectivity popover wiring ---- */
+document.getElementById('mi-net').onclick = e => { e.stopPropagation(); toggleNetPop(); };
+document.addEventListener('click', e => {
+  const p = document.getElementById('net-pop');
+  if (!p.classList.contains('hidden') && !p.contains(e.target) && !e.target.closest('#mi-net')) p.classList.add('hidden');
+});
+
+/* ---- App Launcher wiring ---- */
+document.getElementById('open-launcher').onclick = openLauncher;
+document.getElementById('lp-x').onclick = closeLauncher;
+document.getElementById('launcher').addEventListener('click', e => { if (e.target.id === 'launcher') closeLauncher(); });
+document.getElementById('lp-search').addEventListener('input', e => { lpQuery = e.target.value; renderLauncher(); });
+
+/* ---- Model Manager wiring ---- */
+document.getElementById('open-models').onclick = openModelManager;
+document.getElementById('open-models-2').onclick = openModelManager;
+document.getElementById('mm-x').onclick = closeModelManager;
+document.getElementById('models').addEventListener('click', e => { if (e.target.id === 'models') closeModelManager(); });
+async function refreshActiveModel() {
+  const el = document.getElementById('gpu-model'); if (!el) return;
+  try {
+    const [s, e] = await Promise.all([api('/api/settings'), api('/api/engine').catch(() => ({}))]);
+    const name = (s.model || '').split('/').pop();
+    if (!name) { el.textContent = 'Model Manager'; el.title = ''; return; }
+    el.textContent = name + (e && e.ready === false ? ' · loading…' : ' · loaded');
+    el.title = 'Loaded in vLLM: ' + (s.model || '');
+  } catch {}
+}
+
+/* ---- Cloudless Assistant ---- */
+const ASST_CHIPS = ['I want to use AI agents', 'I want to build images', 'I want to analyze images', 'Just chat with the AI'];
+const ASST_GREETING = "Hi — I'm your Cloudless assistant. Everything here runs privately on your own GPU. What would you like to do with CloudlessOS?";
+function setAsstFull(on) {
+  document.getElementById('asst').classList.toggle('full', on);
+  document.getElementById('asst-backdrop').classList.toggle('hidden', !on);
+  const ex = document.getElementById('asst-exp');
+  ex.textContent = on ? '⤡' : '⤢'; ex.title = on ? 'Collapse' : 'Expand';
+}
+function openAsst(full) {
+  document.getElementById('asst').classList.remove('hidden');
+  document.getElementById('asst-fab').classList.add('open');
+  setAsstFull(!!full);
+  if (!asstMsgs.length) asstMsgs.push({ role: 'assistant', content: ASST_GREETING });
+  asstRender(); renderChips();
+  setTimeout(() => document.getElementById('asst-text').focus(), 60);
+}
+function closeAsst() {
+  document.getElementById('asst').classList.add('hidden');
+  document.getElementById('asst-fab').classList.remove('open');
+  setAsstFull(false);
+}
+function renderChips() {
+  const wrap = document.getElementById('asst-chips');
+  if (asstMsgs.length > 1 || asstBusy) { wrap.innerHTML = ''; return; } // starters only at the very start
+  wrap.innerHTML = ASST_CHIPS.map(c => `<button class="asst-chip">${escapeHtml(c)}</button>`).join('');
+  wrap.querySelectorAll('.asst-chip').forEach((b, i) => b.onclick = () => asstSend(ASST_CHIPS[i]));
+}
+function stripTags(t) { return t.replace(/\[\[do:[^\]]*\]\]/g, '').replace(/\n{3,}/g, '\n\n').trim(); }
+function asstRender() {
+  const body = document.getElementById('asst-body');
+  body.innerHTML = asstMsgs.map((m, mi) => {
+    if (m.role === 'user') return `<div class="msg user">${escapeHtml(m.content)}</div>`;
+    const txt = stripTags(m.content);
+    const inner = (m.streaming && !txt) ? '<span class="typing"><i></i><i></i><i></i></span>'
+      : escapeHtml(txt) + (m.streaming ? '<span class="caret"></span>' : '');
+    let html = `<div class="msg bot">${inner}</div>`;
+    if (m.actions && m.actions.length) html += `<div class="msg-acts">${m.actions.map((a, ai) =>
+      `<button class="msg-act" data-mi="${mi}" data-ai="${ai}">${escapeHtml(a.label)}</button>`).join('')}</div>`;
+    return html;
+  }).join('');
+  body.querySelectorAll('.msg-act').forEach(btn => btn.onclick = () => asstAction(asstMsgs[+btn.dataset.mi].actions[+btn.dataset.ai]));
+  body.scrollTop = body.scrollHeight;
+}
+async function asstSend(text) {
+  text = (text || '').trim(); if (!text || asstBusy) return;
+  asstBusy = true;
+  const input = document.getElementById('asst-text'); input.value = '';
+  document.getElementById('asst-send').disabled = true;
+  asstMsgs.push({ role: 'user', content: text });
+  const bot = { role: 'assistant', content: '', streaming: true };
+  asstMsgs.push(bot);
+  renderChips(); asstRender();
+  const payload = { messages: asstMsgs.filter(m => !m.streaming).map(m => ({ role: m.role, content: m.content })) };
+  try {
+    const res = await fetch('/api/assistant/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    if (!res.ok || !res.body) throw new Error('stream');
+    const reader = res.body.getReader(); const dec = new TextDecoder(); let buf = '';
+    for (;;) {
+      const { value, done } = await reader.read(); if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let idx;
+      while ((idx = buf.indexOf('\n\n')) >= 0) {
+        const line = buf.slice(0, idx).split('\n').find(l => l.startsWith('data:'));
+        buf = buf.slice(idx + 2);
+        if (!line) continue;
+        let u; try { u = JSON.parse(line.slice(line.indexOf(':') + 1).trim()); } catch { continue; }
+        if (u.delta) { bot.content += u.delta; asstRender(); }
+        if (u.done) { bot.actions = u.actions || []; }
+      }
+    }
+  } catch { bot.content = bot.content || 'Sorry — I could not reach the engine right now. Give it a moment and try again.'; }
+  bot.streaming = false; asstBusy = false;
+  document.getElementById('asst-send').disabled = false;
+  asstRender();
+}
+function asstAction(a) {
+  if (!a) return;
+  if (a.kind === 'engine') { switchEngine(a.id); toast('Switching engine…'); }
+  else if (a.kind === 'open') { const app = catalogCache.find(x => x.id === a.id); if (app) openApp(app); }
+  else if (a.kind === 'install') installApp(a.id);
+}
+document.getElementById('asst-fab').onclick = () => openAsst();           // docked
+document.getElementById('asst-x').onclick = closeAsst;
+document.getElementById('asst-exp').onclick = () => setAsstFull(!document.getElementById('asst').classList.contains('full'));
+document.getElementById('asst-backdrop').onclick = () => setAsstFull(false); // collapse to docked
+document.getElementById('open-full-chat').onclick = () => openAsst(true);   // the assistant IS the full chat (not Open WebUI)
+document.getElementById('asst-form').addEventListener('submit', e => { e.preventDefault(); asstSend(document.getElementById('asst-text').value); });
+// hero prompt bar → open the assistant (and send if the user typed something)
+document.getElementById('hero-ask').addEventListener('submit', e => {
+  e.preventDefault();
+  const inp = document.getElementById('hero-ask-input');
+  const q = inp.value.trim(); inp.value = '';
+  openAsst();
+  if (q) asstSend(q);
+});
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  const np = document.getElementById('net-pop');
+  if (!np.classList.contains('hidden')) np.classList.add('hidden');
+  else if (modelsOpen()) closeModelManager();
+  else if (launcherOpen()) closeLauncher();
+  else if (!document.getElementById('asst').classList.contains('hidden')) closeAsst();
+  else if (settingsOpen()) closeSettings();
+});
+
+/* ---- three.js background: a slow, breathing instrument field ----
+   A wide grid of points drifting on layered sine waves — quiet, not busy.
+   Colour + presence come from the active theme's --sky / --sky-alpha vars,
+   so the field warms at dawn/dusk and glows blue at night. */
+function initBackground() {
+  const canvas = document.getElementById('bg');
+  if (!canvas || typeof THREE === 'undefined') return;
+  let renderer;
+  try { renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true }); }
+  catch (e) { canvas.style.display = 'none'; return; } // no WebGL → flat base, no harm
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 1000);
+  camera.position.set(0, 7.5, 14);
+  camera.lookAt(0, 0, -4);
+
+  const COLS = 64, ROWS = 40, GAP = 0.9;
+  const count = COLS * ROWS;
+  const positions = new Float32Array(count * 3);
+  const base = new Float32Array(count * 2); // x,z home for each point
+  let i = 0;
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const x = (c - COLS / 2) * GAP;
+      const z = (r - ROWS / 2) * GAP;
+      base[i * 2] = x; base[i * 2 + 1] = z;
+      positions[i * 3] = x; positions[i * 3 + 1] = 0; positions[i * 3 + 2] = z;
+      i++;
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  const mat = new THREE.PointsMaterial({ size: 0.07, transparent: true, depthWrite: false });
+  const field = new THREE.Points(geo, mat);
+  field.rotation.x = -0.18;
+  scene.add(field);
+
+  function readVar(name, fallback) {
+    const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    return v || fallback;
+  }
+  function syncTheme() {
+    const rgb = readVar('--sky', '31, 107, 255').split(',').map(n => parseFloat(n) / 255);
+    mat.color.setRGB(rgb[0] || 0.12, rgb[1] || 0.42, rgb[2] || 1);
+    mat.opacity = parseFloat(readVar('--sky-alpha', '0.16')) || 0.16;
+  }
+  window.bgSetTheme = syncTheme;
+  syncTheme();
+
+  function resize() {
+    const w = window.innerWidth, h = window.innerHeight;
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h; camera.updateProjectionMatrix();
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  const pos = geo.attributes.position.array;
+  let t = 0, raf = 0;
+  function frame() {
+    t += 0.012;
+    for (let k = 0; k < count; k++) {
+      const x = base[k * 2], z = base[k * 2 + 1];
+      pos[k * 3 + 1] = Math.sin(x * 0.35 + t) * 0.6 + Math.cos(z * 0.4 - t * 0.7) * 0.6;
+    }
+    geo.attributes.position.needsUpdate = true;
+    field.rotation.z = Math.sin(t * 0.05) * 0.04;
+    renderer.render(scene, camera);
+    raf = requestAnimationFrame(frame);
+  }
+  // Pause when the tab is hidden — no point spinning the GPU in the background.
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { cancelAnimationFrame(raf); raf = 0; }
+    else if (!raf) frame();
+  });
+  frame();
+}
+
 /* ---- boot ---- */
+initBackground();
 tickClock(); setInterval(tickClock, 1000);
-refreshStatus(); renderGPUs(); renderPlaces(); renderApps(); renderEngine();
+refreshStatus(); renderGPUs(); renderPlaces(); renderApps(); renderEngine(); refreshNetStatus(); refreshActiveModel(); refreshProfileBadge();
 setInterval(() => { refreshStatus(); renderGPUs(); if (!engineSwitching) renderEngine(); }, 4000);
 setInterval(() => { if (installing === 0) renderApps(); }, 8000);
+setInterval(refreshNetStatus, 20000);
 api('/api/onboarding').then(o => { if (!o || !o.completed) renderApps().then(showOnboarding); }).catch(() => {});
 </script>
 </body>

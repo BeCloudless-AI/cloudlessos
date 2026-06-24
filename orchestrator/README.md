@@ -9,12 +9,13 @@ and serves the web UI that drives them. This is the Phase 0 prototype (see
 ```
 cmd/cloudlessd/      entrypoint (HTTP server + graceful shutdown)
 internal/engine/     container runtime abstraction + Docker (CLI) implementation
-internal/catalog/    curated app recipes (Ollama, Open WebUI, ComfyUI)
+internal/catalog/    curated app recipes (engines, Open WebUI, ComfyUI, trainers, agents)
 internal/jobs/       async install jobs + progress fan-out (SSE)
 internal/hardware/   host GPU stats via nvidia-smi
 internal/places/     well-known folders + open-in-file-manager
 internal/provision/  pre-install bundled apps on startup (shared network + default model)
 internal/apps/       embedded Dockerfiles for locally-built apps (OpenClaw, Hermes)
+internal/assistant/  built-in guide: system prompt from live state + catalog, engine chat
 internal/state/      per-user persisted state (first-run/onboarding)
 internal/api/        local HTTP API + embedded web UI (internal/api/web/)
                      web/vendor/ holds offline-vendored Three.js + Red Hat Mono
@@ -33,6 +34,9 @@ go run ./cmd/cloudlessd
 
 Requires Docker + the NVIDIA Container Toolkit (see `../scripts/setup-wsl-docker.sh`).
 The daemon binds `127.0.0.1:8765` by default (override with `CLOUDLESS_ADDR`).
+`CLOUDLESS_MANIFEST_URL` points at the Cloudless validated-versions manifest (pins each
+app/infra image to a tested digest + the default model revision); unset/unreachable → catalog
+tags. `CLOUDLESS_NO_PROVISION=1` skips startup provisioning (for a side-by-side test daemon).
 
 ## API
 
@@ -53,6 +57,18 @@ The daemon binds `127.0.0.1:8765` by default (override with `CLOUDLESS_ADDR`).
 | POST   | /api/folders/{id}/open    | create if needed + open in file manager  |
 | GET    | /api/engine               | active inference engine + readiness      |
 | POST   | /api/engine/{id}          | switch engine (vllm/sglang); async job   |
+| GET    | /api/pins                 | dashboard "fast launch" app ids          |
+| POST   | /api/apps/{id}/pin        | pin/unpin an app on the dashboard        |
+| GET    | /api/apps/{id}/tunnel     | share-online status (`supported`,`url`)  |
+| POST   | /api/apps/{id}/tunnel     | enable/disable a Cloudflare quick tunnel |
+| GET    | /api/apps/{id}/lan        | local-network status (`ip`,`port`,`url`) |
+| POST   | /api/apps/{id}/lan        | enable/disable LAN serving (socat sidecar)|
+| GET    | /api/network/local        | machine-wide LAN preference (default on)  |
+| POST   | /api/network/local        | set LAN preference + apply to all web apps|
+| GET    | /api/network/status       | connectivity: internet / local / offline  |
+| GET    | /api/apps/{id}/update     | update check (local vs remote image digest)|
+| POST   | /api/apps/{id}/update     | pull latest + recreate on same volumes; async|
+| POST   | /api/assistant/chat       | grounded assistant reply (SSE stream)    |
 | GET    | /api/settings             | current model + default                  |
 | POST   | /api/settings/model       | set model + restart engine; async job    |
 | POST   | /api/apps/{id}/reset      | remove + (rebuild) + reinstall; async    |
@@ -93,9 +109,9 @@ The active engine owns the `cloudless-ai` alias on fixed port 8000 and serves mo
 `POST /api/engine/{vllm|sglang}` or the engine pills in the UI; the choice persists and
 exactly one engine runs at a time.
 
-Ollama is kept as an optional, non-default engine (not auto-provisioned). **OpenClaw** and
-**Hermes** are AI agents with no upstream image, so they're **built locally** from embedded
-Dockerfiles (`internal/apps/`) on first install and pre-wired to Cloudless AI (D14). Reset
+**OpenClaw** and **Hermes** are AI agents with no upstream image, so they're **built locally**
+from embedded Dockerfiles (`internal/apps/`) on first install and pre-wired to Cloudless AI
+(D14). Reset
 everything with `../scripts/reset-apps.sh`.
 
 ## Known Phase 0 limitations (intentional)

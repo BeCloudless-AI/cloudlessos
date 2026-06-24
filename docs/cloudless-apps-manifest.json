@@ -1,0 +1,99 @@
+{
+  "manifestVersion": 1,
+  "channel": "stable",
+  "updated": "2026-06-21",
+  "description": "Cloudless validated versions. `apps` and `infra` pin Docker images (daemon pulls <image>@<digest>, overriding the catalog tag); `models` pins Hugging Face weights by revision. Anything not listed falls back to the catalog/default. The agents openclaw/hermes are Cloudless-built images on Docker Hub (rebuild from internal/apps/<name> and re-push, then update the digest here). Set `verified:true` only for things tested on Cloudless hardware; to ship a new validated version, move the current digest/revision to `rollback` and replace it.",
+  "apps": {
+    "vllm": {
+      "image": "vllm/vllm-openai",
+      "tag": "latest",
+      "digest": "sha256:6d8429e38e3747723ca07ee1b17972e09bb9c51c4032b266f24fb1cc3b22ed8f",
+      "verified": true,
+      "notes": "Inference engine. Validated on RTX 5090 / Blackwell (D12).",
+      "rollback": null
+    },
+    "sglang": {
+      "image": "lmsysorg/sglang",
+      "tag": "latest",
+      "digest": "sha256:1c64fde976bdf0d56474a30bccbcfc19667e5b3ab34c826a534c9d6aaca41212",
+      "verified": true,
+      "notes": "Alternative inference engine. Validated on RTX 5090 / Blackwell (D13).",
+      "rollback": null
+    },
+    "open-webui": {
+      "image": "ghcr.io/open-webui/open-webui",
+      "tag": "main",
+      "digest": "sha256:7f1b0a1a50cfbac23da3b16f96bc968fd757b26dc9e54e93813d61768ea9184e",
+      "verified": true,
+      "notes": "Chat UI. Verified working with the Cloudless engine.",
+      "rollback": null
+    },
+    "comfyui": {
+      "image": "mmartial/comfyui-nvidia-docker",
+      "tag": "latest",
+      "digest": "sha256:144dd59ffc29a7c384020eededde1dbfb66d81c6e072c912d51e58becfd3cd00",
+      "verified": false,
+      "notes": "Image generation. Pinned from upstream; NOT yet validated on Blackwell (sm_120).",
+      "rollback": null
+    },
+    "ai-toolkit": {
+      "image": "ostris/aitoolkit",
+      "tag": "latest",
+      "digest": "sha256:323bfd0150a1c6a2a1c52630fb9660f31cf67fdca9193b609c6616c413e4b48f",
+      "verified": false,
+      "notes": "Ostris image-model trainer. Pinned from upstream; not yet validated on Cloudless hardware.",
+      "rollback": null
+    },
+    "unsloth": {
+      "image": "unsloth/unsloth",
+      "tag": "latest",
+      "digest": "sha256:f21629b9ae4ed11231768edfaed0f40d41d85d6ea9a71e8096a3d96ea0311772",
+      "verified": false,
+      "notes": "LLM fine-tuning (Jupyter). Pinned from upstream; not yet validated on Cloudless hardware.",
+      "rollback": null
+    },
+    "openclaw": {
+      "image": "samuelcardillo/cloudless-openclaw",
+      "tag": "v1",
+      "digest": "sha256:ff309212f63110172eb759ac2d6e146d04ba9b82d7a653c3b7451a890013516f",
+      "verified": true,
+      "notes": "Autonomous agent, built by Cloudless. Runs and reaches the engine (D16). Rebuild from internal/apps/openclaw and re-push to update.",
+      "rollback": null
+    },
+    "hermes": {
+      "image": "samuelcardillo/cloudless-hermes",
+      "tag": "v1",
+      "digest": "sha256:e62df417986ba86793b25a5e54e3c9c0fb840cc9d99d08821f41c3b888756e28",
+      "verified": false,
+      "notes": "Personal agent, built by Cloudless. Messaging (Telegram/Discord) integration not yet hardware-verified. Rebuild from internal/apps/hermes and re-push to update.",
+      "rollback": null
+    }
+  },
+  "infra": {
+    "cloudflared": {
+      "image": "cloudflare/cloudflared",
+      "tag": "latest",
+      "digest": "sha256:6d91c121b803126f7a5344005d17a9324788fc09d305b6e2560ec6040a7ae283",
+      "verified": true,
+      "notes": "Cloudflare quick-tunnel client for the 'share online' feature. Verified live (HTTP 200 round-trip).",
+      "rollback": null
+    },
+    "socat": {
+      "image": "alpine/socat",
+      "tag": "latest",
+      "digest": "sha256:7f9a06753033f2b7de18edc2353f2c15153413d95a039163c6db270fc7a6c3b0",
+      "verified": true,
+      "notes": "TCP forwarder for the 'local network' feature.",
+      "rollback": null
+    }
+  },
+  "models": {
+    "default": {
+      "repo": "Qwen/Qwen2.5-1.5B-Instruct",
+      "revision": "989aa7980e4cf806f80c7fef2b1adb7bc71aa306",
+      "verified": true,
+      "notes": "Default Cloudless AI model served by the engine. Validated on Blackwell (D12).",
+      "rollback": null
+    }
+  }
+}

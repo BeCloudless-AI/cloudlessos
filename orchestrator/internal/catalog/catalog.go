@@ -25,8 +25,18 @@ func envOr(k, d string) string {
 // from the state dir (seeded from the app's embedded default).
 type ConfigFile struct {
 	File string `json:"file"` // filename in the app's embedded context + state dir
-	Path string `json:"-"`    // mount path inside the container
+	Path string `json:"-"`    // mount path inside the container ("" when Env)
 	Lang string `json:"lang"` // json5 | yaml | env (UI hint)
+	Env  bool   `json:"-"`    // inject this env file's KEY=VALUE into the container ENV instead of mounting it (for apps that read process env, e.g. Open WebUI)
+}
+
+// AdminInfo explains how an app is administered beyond Cloudless's own settings —
+// shown as an info panel on the app's settings page (e.g. "use the app's own admin
+// panel"), optionally with default admin credentials.
+type AdminInfo struct {
+	Note string `json:"note"`           // where/how to manage the app (its own admin UI)
+	User string `json:"user,omitempty"` // default admin username/email
+	Pass string `json:"pass,omitempty"` // default admin password
 }
 
 // Field is an intuitive (form) config parameter, mapped into a config file.
@@ -68,6 +78,7 @@ type App struct {
 	Build       string            `json:"-"`          // embedded build-context name (build instead of pull)
 	Config      []ConfigFile      `json:"config,omitempty"` // editable config files (mounted)
 	Settings    []Field           `json:"-"`                // form fields (via /api/apps/{id}/settings)
+	Admin       *AdminInfo        `json:"-"`                // how the app is administered beyond Cloudless settings
 }
 
 // ContainerName is the orchestrator-managed container name for this app.
@@ -258,6 +269,7 @@ var apps = []App{
 			"--mem-fraction-static", "0.5",
 			"--context-length", "32768", // match vLLM; agents send big prompts
 			"--tool-call-parser", "qwen25", // agents need tool calling
+			"--enable-metrics",             // expose Prometheus /metrics for the inference dashboard (vLLM has it on by default)
 		},
 		Volumes:   map[string]string{"cloudless-hf": "/root/.cache/huggingface"},
 		GPUs:      "all",
@@ -285,11 +297,35 @@ var apps = []App{
 		Image:       "ghcr.io/open-webui/open-webui:main",
 		Ports:       map[int]int{3000: 8080},
 		Env: map[string]string{
-			"WEBUI_NAME":          "Cloudless AI",
-			"WEBUI_AUTH":          "False", // local appliance: no login wall
+			"WEBUI_NAME": "Cloudless AI",
+			// Auth defaults (overridable in Settings, which writes webui.env and is
+			// injected as container env): off by default = no login wall on a personal
+			// appliance; sign-ups allowed so the first account can be created.
+			"WEBUI_AUTH":          "False",
+			"ENABLE_SIGNUP":       "True",
 			"ENABLE_OLLAMA_API":   "False",
 			"OPENAI_API_BASE_URL": EngineEndpoint, // stable alias -> active engine (D15)
 			"OPENAI_API_KEY":      "cloudless",    // engines ignore it unless --api-key is set
+		},
+		// webui.env is injected into the container ENV (Open WebUI reads process env),
+		// not mounted. The Settings toggles write WEBUI_AUTH / ENABLE_SIGNUP here.
+		Config: []ConfigFile{{File: "webui.env", Lang: "env", Env: true}},
+		Settings: []Field{
+			{Key: "requireAuth", Label: "Require an account to use it", Type: "toggle", Default: "false",
+				Help: "Off: anyone who opens Open WebUI can use it, no login. On: people must sign in with an account — the first account created becomes the administrator.",
+				File: "webui.env", Path: "WEBUI_AUTH"},
+			{Key: "allowSignup", Label: "Allow new sign-ups", Type: "toggle", Default: "true",
+				Help: "Let people create their own accounts. Turn off once your accounts exist to lock new sign-ups.",
+				File: "webui.env", Path: "ENABLE_SIGNUP"},
+		},
+		Admin: &AdminInfo{
+			// Open WebUI auto-creates this admin account the first time it runs with login
+			// off (its built-in default); enabling login lets you sign in with it. If the
+			// app instead asks you to create the admin, use the same details. These are
+			// well-known defaults — change the password immediately in the Admin Panel.
+			Note: "Everything else about Open WebUI — users, model access, permissions, document/RAG settings and more — is managed inside Open WebUI's own Admin Panel (open the app, then top-right menu → Admin Panel). When you turn on account login, sign in with the built-in admin below (if Open WebUI asks you to create the admin instead, use the same details), then change the password right away — these are well-known defaults.",
+			User: "admin@localhost",
+			Pass: "admin",
 		},
 		// Persist chats/settings/accounts so updates (new image, same volume) don't reset them.
 		Volumes:    map[string]string{"cloudless-open-webui": "/app/backend/data"},

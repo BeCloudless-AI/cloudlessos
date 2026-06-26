@@ -95,6 +95,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/folders", s.folders)
 	mux.HandleFunc("POST /api/folders/{id}/open", s.openFolder)
 	mux.HandleFunc("GET /api/engine", s.engineState)
+	mux.HandleFunc("GET /api/engine/metrics", s.engineMetricsHandler)
+	mux.HandleFunc("POST /api/engine/restart", s.engineRestart)
 	mux.HandleFunc("POST /api/engine/{id}", s.engineSwitch)
 	mux.HandleFunc("GET /api/pins", s.pinsGet)
 	mux.HandleFunc("POST /api/apps/{id}/pin", s.pinToggle)
@@ -105,6 +107,11 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/network/local", s.localNetGet)
 	mux.HandleFunc("POST /api/network/local", s.localNetSet)
 	mux.HandleFunc("GET /api/network/status", s.networkStatus)
+	mux.HandleFunc("GET /api/gateway", s.gatewayGet)
+	mux.HandleFunc("POST /api/keys", s.keyCreate)
+	mux.HandleFunc("DELETE /api/keys/{id}", s.keyDelete)
+	mux.HandleFunc("POST /api/gateway/lan", s.gatewayLanSet)
+	mux.HandleFunc("POST /api/gateway/tunnel", s.gatewayTunnelSet)
 	mux.HandleFunc("GET /api/apps/{id}/update", s.updateGet)
 	mux.HandleFunc("POST /api/apps/{id}/update", s.updateApply)
 	mux.HandleFunc("POST /api/assistant/chat", s.assistantChat)
@@ -202,6 +209,25 @@ func (s *Server) engineSwitch(w http.ResponseWriter, r *http.Request) {
 	}
 	job := s.jobs.Create("engine:" + app.ID)
 	go s.runSwitch(job, app)
+	writeJSON(w, http.StatusAccepted, map[string]string{"jobId": job.ID, "engine": app.ID})
+}
+
+// engineRestart recreates the active engine container with its current catalog spec
+// (e.g. to pick up SGLang's --enable-metrics). Unlike a switch, it always recreates.
+func (s *Server) engineRestart(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	active := s.activeEngine(ctx)
+	cancel()
+	if active == "" {
+		active = catalog.DefaultEngine()
+	}
+	app, ok := catalog.Get(active)
+	if !ok || !app.Engine {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no engine"})
+		return
+	}
+	job := s.jobs.Create("engine:" + app.ID)
+	go s.applyEngine(job, app)
 	writeJSON(w, http.StatusAccepted, map[string]string{"jobId": job.ID, "engine": app.ID})
 }
 
@@ -506,6 +532,9 @@ func (s *Server) configVolumes(app catalog.App) map[string]string {
 	vols := map[string]string{}
 	dir := s.appConfigDir(app.ID)
 	for _, cf := range app.Config {
+		if cf.Env {
+			continue // injected into container ENV by appSpec, not mounted
+		}
 		host := filepath.Join(dir, cf.File)
 		if _, err := os.Stat(host); err != nil {
 			def, derr := apps.ReadDefault(app.ID, cf.File)
@@ -538,6 +567,19 @@ func (s *Server) appSpec(app catalog.App) engine.RunSpec {
 	}
 	if len(merged) > 0 {
 		rs.Volumes = merged
+	}
+	// Env-injected config files (e.g. Open WebUI's webui.env) overlay the catalog
+	// env. Clone first — rs.Env aliases the shared catalog map. Same logic runs in
+	// the boot provisioner, so the setting survives a reboot.
+	if ov := apps.EnvOverrides(s.appConfigDir(app.ID), app); len(ov) > 0 {
+		env := map[string]string{}
+		for k, v := range rs.Env {
+			env[k] = v
+		}
+		for k, v := range ov {
+			env[k] = v
+		}
+		rs.Env = env
 	}
 	return rs
 }
@@ -763,7 +805,7 @@ func (s *Server) appSettingsGet(w http.ResponseWriter, r *http.Request) {
 	for _, f := range app.Settings {
 		out = append(out, field{f.Key, f.Label, f.Help, f.Type, f.Options, f.Default, s.readField(app, f)})
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"fields": out})
+	writeJSON(w, http.StatusOK, map[string]any{"fields": out, "admin": app.Admin})
 }
 
 func (s *Server) appSettingsSet(w http.ResponseWriter, r *http.Request) {

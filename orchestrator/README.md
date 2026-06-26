@@ -33,7 +33,9 @@ go run ./cmd/cloudlessd
 ```
 
 Requires Docker + the NVIDIA Container Toolkit (see `../scripts/setup-wsl-docker.sh`).
-The daemon binds `127.0.0.1:8765` by default (override with `CLOUDLESS_ADDR`).
+The daemon binds `127.0.0.1:8765` by default (override with `CLOUDLESS_ADDR`). A second
+listener — the **Cloudless Proxy** (OpenAI-compatible API gateway, key-authenticated) —
+binds `127.0.0.1:8766` (`CLOUDLESS_GATEWAY_ADDR`); manage keys in Settings → API access (D36).
 `CLOUDLESS_MANIFEST_URL` points at the Cloudless validated-versions manifest (pins each
 app/infra image to a tested digest + the default model revision); unset/unreachable → catalog
 tags. `CLOUDLESS_NO_PROVISION=1` skips startup provisioning (for a side-by-side test daemon).
@@ -69,6 +71,11 @@ tags. `CLOUDLESS_NO_PROVISION=1` skips startup provisioning (for a side-by-side 
 | GET    | /api/apps/{id}/update     | update check (local vs remote image digest)|
 | POST   | /api/apps/{id}/update     | pull latest + recreate on same volumes; async|
 | POST   | /api/assistant/chat       | grounded assistant reply (SSE stream)    |
+| GET    | /api/gateway              | Cloudless Proxy status: keys, served model, LAN/tunnel |
+| POST   | /api/keys                 | generate an API key (full secret returned once) |
+| DELETE | /api/keys/{id}            | revoke an API key                        |
+| POST   | /api/gateway/lan          | expose the gateway on the LAN (socat)    |
+| POST   | /api/gateway/tunnel       | expose the gateway online (cloudflared)  |
 | GET    | /api/settings             | current model + default                  |
 | POST   | /api/settings/model       | set model + restart engine; async job    |
 | POST   | /api/apps/{id}/reset      | remove + (rebuild) + reinstall; async    |

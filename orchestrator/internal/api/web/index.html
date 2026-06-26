@@ -126,6 +126,30 @@
   .app-status { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
   .app-status .led { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); }
   .app-status .led.ok { background: var(--accent); }
+  /* app admin credentials block (e.g. Open WebUI) */
+  .adm-creds { background: var(--panel-2); border: 1px solid var(--hair); border-radius: 10px; padding: 11px 14px; }
+  .adm-row { display: flex; align-items: center; gap: 12px; padding: 3px 0; font-size: 13px; }
+  .sec-warn { margin-top: 9px; padding: 9px 12px; border-radius: 9px; font-size: 12px; line-height: 1.5;
+    color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--warn) 32%, transparent); }
+  .adm-k { width: 110px; color: var(--muted); flex: none; }
+  .adm-v { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; background: var(--card);
+    border: 1px solid var(--hair); border-radius: 6px; padding: 2px 8px; color: var(--ink); user-select: all; }
+  /* API access page */
+  .code-box { margin-top: 12px; background: var(--panel-2); border: 1px solid var(--hair); border-radius: 10px; overflow-x: auto; }
+  .code-box pre { margin: 0; padding: 13px 15px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px; line-height: 1.55; color: var(--ink-2); white-space: pre; }
+  .key-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--hair); }
+  .key-row:last-child { border-bottom: none; }
+  .key-main { display: flex; align-items: center; gap: 9px; min-width: 0; }
+  .key-name { font-weight: 600; font-size: 13.5px; color: var(--ink); }
+  .key-prefix { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; color: var(--muted); }
+  .key-meta { margin-left: auto; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .key-reveal { background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent); border-radius: 10px; padding: 11px 13px; }
+  .kr-top { font-size: 12px; color: var(--ink-2); margin-bottom: 8px; }
+  .kr-key { display: flex; align-items: center; gap: 9px; }
+  .kr-key code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12.5px; background: var(--card); border: 1px solid var(--hair); border-radius: 7px; padding: 7px 10px; color: var(--ink); user-select: all; }
   .app-head a { margin-left: auto; }
   /* share-online (Cloudflare quick tunnel) result */
   .tun-out { margin-top: 12px; } .tun-out.hidden { display: none; }
@@ -271,6 +295,27 @@
   .md-fit { font-size: 12.5px; color: var(--ink-2); margin: 0 0 18px; }
   .md-fit .mdl-fit { margin-right: 5px; }
   .md-acts { display: flex; flex-wrap: wrap; gap: 9px; padding-top: 20px; border-top: 1px solid var(--hair); }
+
+  /* ---------- inference activity dashboard ---------- */
+  .inf-eng { margin-left: 10px; font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+  .inf-empty { color: var(--muted); font-size: 13.5px; text-align: center; padding: 60px 20px; line-height: 1.6; }
+  .inf-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 18px; }
+  .inf-tile { background: var(--card); border: 1px solid var(--hair); border-radius: 13px; padding: 14px 16px; }
+  .inf-tile .it-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); }
+  .inf-tile .it-val { font-size: 27px; font-weight: 800; letter-spacing: -0.8px; color: var(--ink); font-variant-numeric: tabular-nums; line-height: 1.15; margin-top: 5px; }
+  .inf-tile .it-val .it-unit { font-size: 12.5px; font-weight: 600; color: var(--muted); letter-spacing: 0; margin-left: 4px; }
+  .inf-tile.accent .it-val { color: var(--blue); }
+  .inf-tile.warm .it-val { color: var(--accent); }
+  .inf-charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+  .inf-card { background: var(--card); border: 1px solid var(--hair); border-radius: 14px; padding: 15px 17px 10px; }
+  .inf-card .ic-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px; }
+  .inf-card .ic-title { font-size: 11px; font-weight: 500; letter-spacing: .5px; text-transform: lowercase; color: var(--muted); }
+  .inf-card .ic-now { font-size: 17px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .inf-card .ic-now small { font-size: 11px; font-weight: 600; color: var(--muted); margin-left: 3px; }
+  .inf-legend { display: flex; gap: 14px; margin-top: 7px; font-size: 10.5px; color: var(--muted); }
+  .inf-legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .inf-legend i { width: 9px; height: 3px; border-radius: 2px; display: inline-block; }
+  .inf-canvas { width: 100%; height: 88px; display: block; }
 
   /* ---------- layout ---------- */
   main { max-width: 1140px; margin: 0 auto; padding: 38px 26px 90px; }
@@ -627,6 +672,7 @@
   <div class="mi"><span class="led" id="led-sys"></span> <span id="mi-sys">System</span></div>
   <div class="mi mi-net" id="mi-net" title="Network status"><span class="led" id="led-net"></span> <span id="net-label">Network</span></div>
   <div id="clock">--:--</div>
+  <button class="gear" id="open-inference" title="Inference activity">▥</button>
   <button class="gear" id="open-models" title="Model Manager">◈</button>
   <button class="gear" id="gear" title="Settings">⚙</button>
 </div>
@@ -666,6 +712,7 @@
       <h2>Graphics</h2>
       <div id="gpu-body"><div class="empty">Reading GPUs…</div></div>
       <button class="card-link" id="open-models-2">◈ <span id="gpu-model">Model Manager</span> →</button>
+      <button class="card-link" id="open-inference-2">▥ Inference activity →</button>
     </section>
     <section class="card">
       <h2>Places</h2>
@@ -701,6 +748,17 @@
       <button class="lp-x" id="mm-x" title="Close">×</button>
     </div>
     <div class="mm-body" id="mm-body"></div>
+  </div>
+</div>
+
+<!-- Inference activity (full-screen, opened from the dashboard) -->
+<div class="overlay hidden" id="inference">
+  <div class="mm">
+    <div class="lp-head">
+      <div class="lp-ttl">Inference activity<span class="inf-eng" id="inf-eng"></span></div>
+      <button class="lp-x" id="inf-x" title="Close">×</button>
+    </div>
+    <div class="mm-body" id="inf-body"></div>
   </div>
 </div>
 
@@ -760,7 +818,7 @@ const glyph = id => GLYPH[id] || '⚙️';
 const tileBg = id => TILE_BG[id] || 'linear-gradient(135deg,#cfd9e8,#aab8cc)';
 const gb = mb => (mb / 1024).toFixed(1);
 let installing = 0, catalogCache = [], gpuBuilt = 0, appsEntered = false;
-let lastRunning = {}, engineReady = false, engineActive = '', engineSwitching = false;
+let lastRunning = {}, engineReady = false, engineActive = '', engineSwitching = false, activeEngineName = 'the engine';
 let pinnedIds = [], lpQuery = '', lpView = '';
 let asstMsgs = [], asstBusy = false;
 
@@ -908,9 +966,13 @@ async function renderPlaces() {
 }
 
 /* ---- dashboard fast-launch (pinned apps only) ---- */
+// Build an app's URL from the host the dashboard was actually loaded on, NOT a
+// hardcoded "localhost": when you reach Cloudless from another device via its LAN
+// IP, the app lives at that same IP — "localhost" would point at your own device.
+function appURL(port, path) { return `http://${location.hostname}:${port}${path || '/'}`; }
 function openApp(app) {
   const port = app.ports ? Object.keys(app.ports)[0] : '';
-  window.open(`http://localhost:${port}${app.openPath || '/'}`, '_blank');
+  window.open(appURL(port, app.openPath), '_blank');
 }
 async function renderApps() {
   const [catalog, apps, pins] = await Promise.all([
@@ -1125,6 +1187,7 @@ function installById(id) {
 async function renderEngine() {
   let d; try { d = await api('/api/engine'); } catch { return; }
   engineReady = !!d.ready; engineActive = d.active || '';
+  setActiveEngine(d);
 }
 function switchEngine(id) {
   if (engineSwitching) return;
@@ -1238,7 +1301,7 @@ async function renderSettings() {
 
   const groups = [
     { label: 'you', items: [{ id: 'profile', ic: '◐', label: 'Profile' }] },
-    { label: 'cloudless', items: [{ id: 'hardware', ic: '▤', label: 'Machine' }, { id: 'engine', ic: '✦', label: 'Inference engine' }] },
+    { label: 'cloudless', items: [{ id: 'hardware', ic: '▤', label: 'Machine' }, { id: 'engine', ic: '✦', label: 'Inference engine' }, { id: 'api', ic: '⚿', label: 'API access' }] },
     { label: 'apps', items: apps.map(a => ({ id: 'app:' + a.id, ic: glyph(a.id), label: a.name })) },
     { label: 'system', items: [{ id: 'general', ic: '⦿', label: 'General' }] },
   ];
@@ -1247,13 +1310,14 @@ async function renderSettings() {
       `<div class="nav-item ${it.id === setPage ? 'active' : ''}" data-page="${it.id}"><span class="nav-ic">${it.ic}</span>${it.label}</div>`).join('')).join('');
   document.querySelectorAll('#set-nav .nav-item').forEach(n => n.onclick = () => { setPage = n.dataset.page; renderSettings(); });
 
-  let title = { profile: 'Profile', hardware: 'Machine', engine: 'Inference engine', general: 'General' }[setPage] || '';
+  let title = { profile: 'Profile', hardware: 'Machine', engine: 'Inference engine', api: 'API access', general: 'General' }[setPage] || '';
   if (setPage.startsWith('app:')) { const a = apps.find(x => 'app:' + x.id === setPage); title = a ? a.name : ''; }
   document.getElementById('set-page-title').textContent = title;
 
   const c = document.getElementById('set-content');
   if (setPage === 'profile') renderProfilePage(c);
   else if (setPage === 'hardware') renderHardwarePage(c);
+  else if (setPage === 'api') renderApiPage(c);
   else if (setPage === 'engine') renderEnginePage(c);
   else if (setPage === 'general') renderGeneralPage(c);
   else if (setPage.startsWith('app:')) renderAppPage(c, setPage.slice(4));
@@ -1297,6 +1361,102 @@ async function renderProfilePage(c) {
   };
   document.getElementById('pf-save').onclick = save;
   document.getElementById('pf-region').onchange = save;
+}
+/* ---- API access (Cloudless Proxy) ---- */
+function apiKeyRow(k) {
+  const used = k.lastUsed ? 'last used ' + new Date(k.lastUsed).toLocaleDateString() : 'never used';
+  return `<div class="key-row">
+      <div class="key-main"><span class="key-name">${escapeHtml(k.name)}</span><code class="key-prefix">${escapeHtml(k.prefix)}…</code></div>
+      <div class="key-meta">${k.requests} request${k.requests === 1 ? '' : 's'} · ${used}</div>
+      <button class="btn danger" data-revoke="${escapeAttr(k.id)}">Revoke</button>
+    </div>`;
+}
+function apiWireRevokes(container) {
+  container.querySelectorAll('[data-revoke]').forEach(b => b.onclick = async () => {
+    if (!confirm('Revoke this key? Anything using it will stop working immediately.')) return;
+    try { await api('/api/keys/' + b.dataset.revoke, { method: 'DELETE' }); toast('Key revoked'); apiRefreshKeys(); }
+    catch { toast('Failed', true); }
+  });
+}
+async function apiRefreshKeys() {
+  let g; try { g = await api('/api/gateway'); } catch { return; }
+  const list = document.getElementById('key-list'); if (!list) return;
+  const keys = g.keys || [];
+  list.innerHTML = keys.length ? keys.map(apiKeyRow).join('') : '<div class="set-hint">No keys yet. Generate one to start serving your AI as an API.</div>';
+  apiWireRevokes(list);
+}
+function apiTunRender(out, url) {
+  out.classList.remove('hidden');
+  out.innerHTML = `<div class="tun-row"><span class="tun-dot"></span><a class="tun-link" href="${escapeAttr(url)}" target="_blank">${escapeHtml(url)}/v1</a></div>
+    <div class="fld-help" style="margin-top:6px">Give this base URL + a key to whoever you want to serve.</div>`;
+}
+async function renderApiPage(c) {
+  c.innerHTML = '<div class="set-hint">Loading…</div>';
+  let g; try { g = await api('/api/gateway'); } catch { c.innerHTML = '<div class="set-hint">Could not load API access.</div>'; return; }
+  const keys = g.keys || [];
+  const curl = `curl ${g.localURL}/chat/completions \\\n  -H "Authorization: Bearer YOUR_KEY" \\\n  -H "Content-Type: application/json" \\\n  -d '{"model":"${g.servedName}","messages":[{"role":"user","content":"Hello!"}]}'`;
+  c.innerHTML = `
+    <div class="set-block"><h3>your AI as an API</h3>
+      <div class="fld-help" style="margin:0 0 12px">Cloudless serves your local model as a drop-in <b>OpenAI-compatible API</b>. Point any OpenAI client at the base URL below and authenticate with a key you generate here — it all still runs on your GPU.</div>
+      <div class="adm-creds">
+        <div class="adm-row"><span class="adm-k">Base URL</span><code class="adm-v">${escapeHtml(g.localURL)}</code></div>
+        <div class="adm-row"><span class="adm-k">Model name</span><code class="adm-v">${escapeHtml(g.servedName)}</code></div>
+        <div class="adm-row"><span class="adm-k">Backed by</span><span>${escapeHtml(g.model || '—')}</span></div>
+      </div>
+      <div class="code-box"><pre>${escapeHtml(curl)}</pre></div>
+    </div>
+    <div class="set-block"><h3>keys</h3>
+      <div id="key-list">${keys.length ? keys.map(apiKeyRow).join('') : '<div class="set-hint">No keys yet. Generate one to start serving your AI as an API.</div>'}</div>
+      <div id="key-new" class="tun-out hidden"></div>
+      <div class="cfg-actions" style="justify-content:flex-start"><button class="btn primary" id="key-gen">Generate new key</button></div>
+    </div>
+    <div class="set-block"><h3>serve it to others</h3>
+      <div class="set-row"><span>On your local network</span>
+        <span class="row-actions"><label class="switch"><input type="checkbox" id="gw-lan" ${g.lan && g.lan.enabled ? 'checked' : ''}><span class="track2"></span></label></span></div>
+      <div class="fld-help">Lets other devices on your Wi-Fi reach the API${g.lan && g.lan.url ? ` at <b>${escapeHtml(g.lan.url)}</b>` : ''}. A key is still required.</div>
+      <div class="set-row"><span>On the internet (public link)</span>
+        <span class="row-actions"><label class="switch"><input type="checkbox" id="gw-tun" ${g.tunnel && g.tunnel.enabled ? 'checked' : ''}><span class="track2"></span></label></span></div>
+      <div id="gw-tun-out" class="tun-out hidden"></div>
+      <div class="sec-warn">⚠ Anyone you give a key to can use your AI and your GPU from anywhere this is reachable. Share keys only with people you trust, and revoke them if needed.</div>
+    </div>`;
+  apiWireRevokes(document.getElementById('key-list'));
+  const tout = document.getElementById('gw-tun-out');
+  if (g.tunnel && g.tunnel.enabled && g.tunnel.url) apiTunRender(tout, g.tunnel.url);
+
+  document.getElementById('key-gen').onclick = async () => {
+    const raw = prompt('Name this key (e.g. "My website" or "Phone app"):'); if (raw === null) return;
+    toast('Generating key…');
+    try {
+      const r = await api('/api/keys', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: raw.trim() }) });
+      const box = document.getElementById('key-new');
+      box.classList.remove('hidden');
+      box.innerHTML = `<div class="key-reveal"><div class="kr-top">New key${r.name ? ' · ' + escapeHtml(r.name) : ''} — copy it now, you won't be able to see it again:</div>
+        <div class="kr-key"><code id="kr-secret">${escapeHtml(r.key)}</code><button class="btn" id="kr-copy">Copy</button></div></div>`;
+      document.getElementById('kr-copy').onclick = () => { try { navigator.clipboard.writeText(r.key); toast('Copied'); } catch { toast('Select and copy it'); } };
+      apiRefreshKeys();
+    } catch { toast('Failed', true); }
+  };
+  const lan = document.getElementById('gw-lan');
+  lan.onchange = async () => {
+    const enable = lan.checked; lan.disabled = true;
+    try { const r = await api('/api/gateway/lan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enable }) });
+      toast(enable ? (r.url ? 'API on your network: ' + r.url : 'Enabled') : 'Local network access off'); renderApiPage(c);
+    } catch { toast('Failed (is the daemon reachable?)', true); lan.checked = !enable; }
+    lan.disabled = false;
+  };
+  const tun = document.getElementById('gw-tun');
+  tun.onchange = async () => {
+    const enable = tun.checked; tun.disabled = true;
+    tout.classList.remove('hidden');
+    tout.innerHTML = `<div class="tun-status">${enable ? 'Creating public link… (a few seconds)' : 'Removing link…'}</div>`;
+    try {
+      const r = await api('/api/gateway/tunnel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enable }) });
+      if (!enable) { tout.classList.add('hidden'); tout.innerHTML = ''; toast('Public link removed'); }
+      else if (r.url) { apiTunRender(tout, r.url); toast('Public API link ready'); }
+      else { tout.innerHTML = `<div class="tun-status">Link is starting — reopen this page in a moment to get the URL.</div>`; }
+    } catch { tout.innerHTML = `<div class="tun-status err">Couldn't ${enable ? 'create' : 'remove'} the link.</div>`; tun.checked = !enable; }
+    tun.disabled = false;
+  };
 }
 async function renderEnginePage(c) {
   c.innerHTML = '<div class="set-hint">Loading…</div>';
@@ -1426,7 +1586,7 @@ function paintModelList(c, data, kind) {
       <button class="adv-toggle" data-mdladv style="margin-top:20px">Advanced — use a custom Hugging Face model</button>
       <div class="adv hidden" id="mdl-adv">
         <div class="fld"><span class="fld-label">Model id</span><div class="model-edit"><input id="set-model" class="fld-input" value="${escapeAttr(data.current || '')}" placeholder="org/model-name" spellcheck="false"><button class="btn primary" id="set-model-apply">Launch</button></div></div>
-        <div class="fld-help">Any vLLM-compatible Hugging Face id. Gated models need a token; launching restarts the engine and may download weights.</div>
+        <div class="fld-help">Any compatible Hugging Face id (vLLM / SGLang). Gated models need a token; launching restarts the engine and may download weights.</div>
       </div>` : '';
   c.innerHTML = `
     <div class="mm-bar">
@@ -1486,7 +1646,7 @@ function renderModelDetail(c) {
     : spec('Base', m.base) + spec('Type', m.type || 'checkpoint') + spec('Download size', m.sizeGB ? m.sizeGB + ' GB' : '') + spec('VRAM needed', m.minVramGB ? '~' + m.minVramGB + ' GB' : '') + spec('License', m.license);
   let banner = '', actions = '';
   if (lm) {
-    if (m.active) { banner = '<div class="md-banner loaded">This model is loaded in vLLM right now.</div>'; actions = '<button class="btn" data-redl>Re-download weights</button>'; }
+    if (m.active) { banner = `<div class="md-banner loaded">This model is loaded in ${escapeHtml(activeEngineName)} right now.</div>`; actions = '<button class="btn" data-redl>Re-download weights</button>'; }
     else if (m.downloaded) { banner = '<div class="md-banner ready">Downloaded and ready to launch.</div>'; actions = '<button class="btn primary" data-launch>Launch</button>'; }
     else { banner = '<div class="md-banner note">This model isn’t downloaded on your Cloudless system yet — download it, then you can launch it.</div>'; actions = '<button class="btn primary" data-dl>Download</button>'; }
   } else {
@@ -1597,12 +1757,29 @@ async function renderAppPage(c, id) {
   } catch { return toast('Could not load app', true); }
   const app = (catalog || []).find(a => a.id === id) || {};
   const port = app.ports ? Object.keys(app.ports)[0] : '';
-  const openBtn = (running && port) ? `<a href="http://localhost:${port}${app.openPath || '/'}" target="_blank"><button class="btn primary">Open</button></a>` : '';
+  const openBtn = (running && port) ? `<a href="${appURL(port, app.openPath)}" target="_blank"><button class="btn primary">Open</button></a>` : '';
   const fields = st.fields || [];
+  // Security: an app exposed publicly (cloudflared) with no login means anyone with the
+  // link can use it. Warn when this app has an account system that's off / wide open.
+  const authField = fields.find(f => f.key === 'requireAuth');
+  const signupField = fields.find(f => f.key === 'allowSignup');
+  const shareWarn = !authField ? ''
+    : authField.value !== 'true'
+      ? `${app.name || id} has no login right now — anyone with the public link can use your AI and your GPU, with no account. Turn on “Require an account to use it” above before sharing, or only share with people you fully trust.`
+      : (signupField && signupField.value === 'true')
+        ? `Account login is on, but new sign-ups are open — anyone with the public link could create their own account. Turn off “Allow new sign-ups” once your accounts exist.`
+        : '';
   const form = fields.length
     ? `<div class="set-block"><h3>configuration</h3><div class="fld-form">${fields.map(fieldControl).join('')}</div>
         <div class="cfg-actions"><button class="btn primary" data-fldsave>Save &amp; apply</button></div></div>`
     : '';
+  const admin = st.admin ? `<div class="set-block"><h3>administration</h3>
+      <div class="fld-help" style="margin:0 0 ${(st.admin.user || st.admin.pass) ? '12' : '0'}px">${escapeHtml(st.admin.note || '')}</div>
+      ${(st.admin.user || st.admin.pass) ? `<div class="adm-creds">
+        ${st.admin.user ? `<div class="adm-row"><span class="adm-k">Default admin</span><code class="adm-v">${escapeHtml(st.admin.user)}</code></div>` : ''}
+        ${st.admin.pass ? `<div class="adm-row"><span class="adm-k">Password</span><code class="adm-v">${escapeHtml(st.admin.pass)}</code></div>` : ''}
+        <div class="fld-help" style="margin:8px 0 0">⚠ Change these in the app's Admin Panel after your first sign-in.</div>
+      </div>` : ''}</div>` : '';
   const adv = (cfg.files && cfg.files.length)
     ? `<div class="set-block"><button class="adv-toggle" data-adv>Advanced — raw config</button>
         <div class="adv hidden" id="adv-box">
@@ -1620,6 +1797,7 @@ async function renderAppPage(c, id) {
       <div class="set-row"><span>Make ${escapeHtml(app.name || id)} reachable from the internet</span>
         <span class="row-actions"><label class="switch"><input type="checkbox" id="tun-toggle" ${tun.enabled ? 'checked' : ''}><span class="track2"></span></label></span></div>
       <div class="fld-help">Creates a public Cloudflare link to this app. <b>Anyone with the link can use it</b> — only share it with people you trust.</div>
+      ${shareWarn ? `<div class="sec-warn">⚠ ${escapeHtml(shareWarn)}</div>` : ''}
       <div id="tun-out" class="tun-out hidden"></div></div>` : '';
   const updates = `<div class="set-block" id="upd-block"><h3>updates</h3>
       <div id="upd-body" class="upd-body"><span class="upd-muted">Checking for updates…</span></div></div>`;
@@ -1627,7 +1805,7 @@ async function renderAppPage(c, id) {
       <div class="set-row"><span>Reset to defaults</span><span class="row-actions"><button class="btn" data-appreset>Reset</button></span></div>
       <div class="set-row"><span>Uninstall</span><span class="row-actions"><button class="btn danger" data-appuninstall>Uninstall</button></span></div>
     </div>`;
-  c.innerHTML = `<div class="app-head"><div class="app-status"><span class="led ${running ? 'ok' : ''}"></span>${running ? 'running' : 'stopped'}</div>${openBtn}</div>${updates}${form}${adv}${local}${share}${manage}`;
+  c.innerHTML = `<div class="app-head"><div class="app-status"><span class="led ${running ? 'ok' : ''}"></span>${running ? 'running' : 'stopped'}</div>${openBtn}</div>${updates}${form}${admin}${adv}${local}${share}${manage}`;
 
   const save = c.querySelector('[data-fldsave]');
   if (save) save.onclick = () => {
@@ -1683,6 +1861,9 @@ async function renderAppPage(c, id) {
     if (tun.enabled && tun.url) tunRender(out, tun.url);
     tunToggle.onchange = async () => {
       const enable = tunToggle.checked;
+      if (enable && shareWarn && !confirm(`⚠ Security warning\n\n${shareWarn}\n\nCreate the public link anyway?`)) {
+        tunToggle.checked = false; return;
+      }
       tunToggle.disabled = true;
       out.classList.remove('hidden');
       out.innerHTML = `<div class="tun-status">${enable ? 'Creating public link… (a few seconds)' : 'Removing link…'}</div>`;
@@ -1799,14 +1980,133 @@ document.getElementById('open-models').onclick = openModelManager;
 document.getElementById('open-models-2').onclick = openModelManager;
 document.getElementById('mm-x').onclick = closeModelManager;
 document.getElementById('models').addEventListener('click', e => { if (e.target.id === 'models') closeModelManager(); });
+
+/* ---- Inference activity dashboard ---- */
+let infOpen = false, infTimer = null, infPrev = null, infBuf = null;
+const INF_CAP = 60; // samples kept for the charts (~1 min at 1s/sample)
+const cssRgb = v => { const h = getComputedStyle(document.documentElement).getPropertyValue(v).trim().replace('#', '');
+  if (h.length === 3) return [0, 1, 2].map(i => parseInt(h[i] + h[i], 16));
+  if (h.length >= 6) return [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16)); return [130, 130, 130]; };
+function infReset() { infPrev = null; infBuf = { pTok: [], gTok: [], run: [], wait: [], kv: [] }; }
+function openInference() {
+  document.getElementById('inference').classList.remove('hidden'); infOpen = true; infReset();
+  document.getElementById('inf-body').innerHTML = '<div class="inf-empty">Connecting to the inference engine…</div>';
+  infPoll(); infTimer = setInterval(infPoll, 1000);
+}
+function closeInference() {
+  document.getElementById('inference').classList.add('hidden'); infOpen = false;
+  if (infTimer) { clearInterval(infTimer); infTimer = null; }
+}
+function infPush(a, v) { a.push(v); if (a.length > INF_CAP) a.shift(); }
+async function infPoll() {
+  if (!infOpen) return;
+  let m; try { m = await api('/api/engine/metrics'); } catch { return; }
+  const engEl = document.getElementById('inf-eng');
+  if (!m.available) {
+    if (engEl) engEl.textContent = m.engine ? (m.engine + (m.ready ? ' · ready' : '')) : '';
+    const btn = m.canEnable ? '<button class="btn primary" id="inf-enable" style="margin-top:18px">Turn on live metrics (restarts the engine)</button>' : '';
+    document.getElementById('inf-body').innerHTML = `<div class="inf-empty">${escapeHtml(m.hint || 'Live metrics aren’t available yet.')}<br>Send a request — chat with your AI, or hit the API — and activity will appear here in real time.${btn}</div>`;
+    const eb = document.getElementById('inf-enable');
+    if (eb) eb.onclick = () => {
+      eb.disabled = true; eb.textContent = 'Restarting engine…';
+      api('/api/engine/restart', { method: 'POST' }).then(r => { if (r.jobId) trackJobToast(r.jobId, 'Engine'); toast('Restarting engine to enable metrics…'); }).catch(() => { toast('Failed', true); eb.disabled = false; });
+    };
+    infPrev = null; return;
+  }
+  if (engEl) engEl.textContent = m.engine || '';
+  const now = performance.now();
+  let pRate = 0, gRate = 0, ttft = null, tpot = null;
+  if (infPrev) {
+    const dt = (now - infPrev.t) / 1000;
+    if (dt > 0) { pRate = Math.max(0, (m.promptTokens - infPrev.promptTokens) / dt); gRate = Math.max(0, (m.genTokens - infPrev.genTokens) / dt); }
+    const dc1 = m.ttftCount - infPrev.ttftCount; if (dc1 > 0) ttft = (m.ttftSum - infPrev.ttftSum) / dc1 * 1000;
+    const dc2 = m.tpotCount - infPrev.tpotCount; if (dc2 > 0) tpot = (m.tpotSum - infPrev.tpotSum) / dc2 * 1000;
+  }
+  if (m.genThroughput && gRate === 0) gRate = m.genThroughput; // SGLang reports tok/s directly
+  infPrev = { t: now, promptTokens: m.promptTokens, genTokens: m.genTokens, ttftSum: m.ttftSum, ttftCount: m.ttftCount, tpotSum: m.tpotSum, tpotCount: m.tpotCount };
+  infPush(infBuf.pTok, pRate); infPush(infBuf.gTok, gRate); infPush(infBuf.run, m.running); infPush(infBuf.wait, m.waiting); infPush(infBuf.kv, m.kvCache * 100);
+  infRender(m, { pRate, gRate, ttft, tpot });
+}
+const infRate = v => v >= 1000 ? (v / 1000).toFixed(1) + 'k' : String(Math.round(v));
+function infSetVal(id, v) { const el = document.getElementById('v-' + id); if (el) el.textContent = v; }
+function infSkeleton() {
+  const tile = (id, label, unit, cls) => `<div class="inf-tile ${cls || ''}"><div class="it-label">${label}</div><div class="it-val"><span id="v-${id}">0</span><span class="it-unit">${unit}</span></div></div>`;
+  const card = (id, title, legend) => `<div class="inf-card"><div class="ic-head"><span class="ic-title">${title}</span><span class="ic-now" id="now-${id}">—</span></div><canvas class="inf-canvas" id="c-${id}"></canvas>${legend || ''}</div>`;
+  return `<div class="inf-stats">
+      ${tile('run', 'Decoding now', 'reqs', 'accent')}
+      ${tile('wait', 'Queued', 'reqs')}
+      ${tile('kv', 'KV cache', '%')}
+      ${tile('gtps', 'Output', 'tok/s', 'accent')}
+      ${tile('ptps', 'Prefill', 'tok/s', 'warm')}
+      ${tile('ttft', 'First token', 'ms')}
+      ${tile('tpot', 'Per token', 'ms')}
+    </div>
+    <div class="inf-charts">
+      ${card('tput', 'throughput', '<div class="inf-legend"><span><i style="background:var(--accent)"></i>prefill</span><span><i style="background:var(--blue)"></i>decode</span></div>')}
+      ${card('active', 'active requests', '<div class="inf-legend"><span><i style="background:var(--blue)"></i>running</span><span><i style="background:var(--muted)"></i>queued</span></div>')}
+      ${card('kv', 'kv cache', '')}
+    </div>`;
+}
+function infRender(m, r) {
+  if (!document.getElementById('inf-stats')) document.getElementById('inf-body').innerHTML = infSkeleton();
+  infSetVal('run', infRate(m.running)); infSetVal('wait', infRate(m.waiting)); infSetVal('kv', (m.kvCache * 100).toFixed(0));
+  infSetVal('gtps', infRate(r.gRate)); infSetVal('ptps', infRate(r.pRate));
+  infSetVal('ttft', r.ttft == null ? '—' : Math.round(r.ttft)); infSetVal('tpot', r.tpot == null ? '—' : Math.round(r.tpot));
+  const blue = cssRgb('--blue'), accent = cssRgb('--accent'), muted = cssRgb('--muted');
+  infChart('c-tput', [{ rgb: accent, data: infBuf.pTok }, { rgb: blue, data: infBuf.gTok }]);
+  document.getElementById('now-tput').innerHTML = `${infRate(r.gRate)}<small>tok/s out</small>`;
+  infChart('c-active', [{ rgb: blue, data: infBuf.run }, { rgb: muted, data: infBuf.wait }]);
+  document.getElementById('now-active').innerHTML = `${infRate(m.running)}<small>running</small>`;
+  infChart('c-kv', [{ rgb: accent, data: infBuf.kv }], 100);
+  document.getElementById('now-kv').innerHTML = `${(m.kvCache * 100).toFixed(0)}<small>%</small>`;
+}
+// Dependency-free area+line chart on a <canvas>. series newest-at-right, right-aligned.
+function infChart(id, series, fixedMax) {
+  const cv = document.getElementById(id); if (!cv) return;
+  const dpr = window.devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight;
+  if (!w || !h) return;
+  if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+  const ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h);
+  let max = fixedMax || 0;
+  if (!fixedMax) series.forEach(s => s.data.forEach(v => { if (v > max) max = v; }));
+  max = Math.max(max, 1) * 1.15;
+  const n = Math.max(2, ...series.map(s => s.data.length)), pad = 3;
+  const xOf = i => pad + (w - 2 * pad) * (n <= 1 ? 0 : i / (n - 1));
+  const yOf = v => h - pad - (h - 2 * pad) * Math.min(1, v / max);
+  const hair = getComputedStyle(document.documentElement).getPropertyValue('--hair').trim();
+  ctx.strokeStyle = hair; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(pad, h - pad - 0.5); ctx.lineTo(w - pad, h - pad - 0.5); ctx.stroke();
+  series.forEach(s => {
+    const d = s.data; if (!d.length) return; const off = n - d.length;
+    const line = `rgb(${s.rgb[0]},${s.rgb[1]},${s.rgb[2]})`;
+    ctx.beginPath(); d.forEach((v, i) => { const x = xOf(i + off), y = yOf(v); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+    ctx.lineTo(xOf(d.length - 1 + off), h - pad); ctx.lineTo(xOf(off), h - pad); ctx.closePath();
+    const g = ctx.createLinearGradient(0, 0, 0, h);
+    g.addColorStop(0, `rgba(${s.rgb[0]},${s.rgb[1]},${s.rgb[2]},0.26)`); g.addColorStop(1, `rgba(${s.rgb[0]},${s.rgb[1]},${s.rgb[2]},0)`);
+    ctx.fillStyle = g; ctx.fill();
+    ctx.beginPath(); d.forEach((v, i) => { const x = xOf(i + off), y = yOf(v); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
+    ctx.strokeStyle = line; ctx.lineWidth = 1.8; ctx.lineJoin = 'round'; ctx.stroke();
+    ctx.beginPath(); ctx.arc(xOf(d.length - 1 + off), yOf(d[d.length - 1]), 2.4, 0, 7); ctx.fillStyle = line; ctx.fill();
+  });
+}
+document.getElementById('open-inference').onclick = openInference;
+document.getElementById('open-inference-2').onclick = openInference;
+document.getElementById('inf-x').onclick = closeInference;
+document.getElementById('inference').addEventListener('click', e => { if (e.target.id === 'inference') closeInference(); });
+// Keep activeEngineName in sync wherever /api/engine is fetched, so the UI never
+// hardcodes "vLLM" when SGLang is the running engine.
+function setActiveEngine(e) {
+  const a = (e && e.engines || []).find(x => x.active);
+  if (a) activeEngineName = a.name.replace(/ Engine$/, '');
+}
 async function refreshActiveModel() {
   const el = document.getElementById('gpu-model'); if (!el) return;
   try {
     const [s, e] = await Promise.all([api('/api/settings'), api('/api/engine').catch(() => ({}))]);
+    setActiveEngine(e);
     const name = (s.model || '').split('/').pop();
     if (!name) { el.textContent = 'Model Manager'; el.title = ''; return; }
     el.textContent = name + (e && e.ready === false ? ' · loading…' : ' · loaded');
-    el.title = 'Loaded in vLLM: ' + (s.model || '');
+    el.title = 'Loaded in ' + activeEngineName + ': ' + (s.model || '');
   } catch {}
 }
 

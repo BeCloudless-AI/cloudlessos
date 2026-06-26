@@ -4,6 +4,9 @@
 package state
 
 import (
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -17,6 +20,18 @@ type Profile struct {
 	Region string `json:"region,omitempty"` // ISO-3166 alpha-2 override, e.g. "FR"; "" = auto-detect
 }
 
+// APIKey is a user-generated credential for the Cloudless Proxy (the OpenAI-compatible
+// gateway). The full key is shown ONCE at creation; only its SHA-256 hash is stored.
+type APIKey struct {
+	ID       string `json:"id"`      // short opaque id (for revoke)
+	Name     string `json:"name"`    // user label, e.g. "My website"
+	Prefix   string `json:"prefix"`  // first chars, shown to identify the key (e.g. "sk-cloudless-ab12cd")
+	Hash     string `json:"hash"`    // sha256(fullKey) hex — the secret is never stored
+	Created  string `json:"created"` // RFC3339
+	LastUsed string `json:"lastUsed,omitempty"`
+	Requests int64  `json:"requests"` // lifetime request count through the gateway
+}
+
 // State is the persisted state.
 type State struct {
 	FirstSeen   string   `json:"firstSeen"`             // RFC3339; when the daemon first initialized this store
@@ -28,6 +43,7 @@ type State struct {
 	LocalNet    bool     `json:"localNet"`              // serve apps on the local network (LAN)
 	LocalNetSet bool     `json:"localNetSet,omitempty"` // user has chosen (else default ON)
 	Profile     Profile  `json:"profile"`               // user-controlled profile
+	APIKeys     []APIKey `json:"apiKeys,omitempty"`     // Cloudless Proxy credentials
 }
 
 // Store is a file-backed state store, safe for concurrent use.
@@ -37,6 +53,7 @@ type Store struct {
 	st       State
 	persist  bool
 	firstRun bool
+	dirty    bool // usage counters changed in memory, awaiting a lazy flush
 }
 
 // DefaultDir resolves the per-user state directory:
@@ -185,6 +202,98 @@ func (s *Store) SetProfile(p Profile) error {
 	defer s.mu.Unlock()
 	s.st.Profile = p
 	return s.save()
+}
+
+// APIKeys returns a copy of the stored API keys (with hashes; callers should not
+// expose Hash to clients).
+func (s *Store) APIKeys() []APIKey {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]APIKey(nil), s.st.APIKeys...)
+}
+
+// AddAPIKey creates a new gateway key, returning the FULL secret (shown once) plus
+// the stored record (hash only). The secret is never persisted in plaintext.
+func (s *Store) AddAPIKey(name string) (secret string, key APIKey, err error) {
+	raw := make([]byte, 24)
+	if _, err = rand.Read(raw); err != nil {
+		return "", APIKey{}, err
+	}
+	idb := make([]byte, 6)
+	if _, err = rand.Read(idb); err != nil {
+		return "", APIKey{}, err
+	}
+	secret = "sk-cloudless-" + hex.EncodeToString(raw)
+	sum := sha256.Sum256([]byte(secret))
+	key = APIKey{
+		ID:      hex.EncodeToString(idb),
+		Name:    name,
+		Prefix:  secret[:20], // "sk-cloudless-" + 7 hex chars
+		Hash:    hex.EncodeToString(sum[:]),
+		Created: now(),
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.st.APIKeys = append(s.st.APIKeys, key)
+	return secret, key, s.save()
+}
+
+// DeleteAPIKey removes (revokes) a key by id.
+func (s *Store) DeleteAPIKey(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := s.st.APIKeys[:0]
+	for _, k := range s.st.APIKeys {
+		if k.ID != id {
+			out = append(out, k)
+		}
+	}
+	s.st.APIKeys = out
+	return s.save()
+}
+
+// ValidateAPIKey reports whether `secret` matches a stored key (by hash compare),
+// returning the matched key's id.
+func (s *Store) ValidateAPIKey(secret string) (id string, ok bool) {
+	if secret == "" {
+		return "", false
+	}
+	sum := sha256.Sum256([]byte(secret))
+	h := hex.EncodeToString(sum[:])
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, k := range s.st.APIKeys {
+		if k.Hash == h {
+			return k.ID, true
+		}
+	}
+	return "", false
+}
+
+// RecordUsage bumps a key's request count + last-used time IN MEMORY, marking the
+// store dirty for a lazy flush (PersistIfDirty) — so per-request proxying doesn't
+// hit the disk on every call.
+func (s *Store) RecordUsage(id string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.st.APIKeys {
+		if s.st.APIKeys[i].ID == id {
+			s.st.APIKeys[i].Requests++
+			s.st.APIKeys[i].LastUsed = now()
+			s.dirty = true
+			return
+		}
+	}
+}
+
+// PersistIfDirty flushes in-memory usage counters to disk if any changed.
+func (s *Store) PersistIfDirty() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.dirty {
+		_ = s.save()
+		s.dirty = false
+	}
 }
 
 // FirstRun reports whether this process saw no prior state file at startup.

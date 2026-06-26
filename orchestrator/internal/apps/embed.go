@@ -7,6 +7,9 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
+
+	"github.com/cloudless/orchestrator/internal/catalog"
 )
 
 //go:embed openclaw hermes
@@ -16,6 +19,39 @@ var buildFS embed.FS
 // (e.g. ReadDefault("openclaw", "openclaw.json")).
 func ReadDefault(appID, file string) ([]byte, error) {
 	return buildFS.ReadFile(appID + "/" + file)
+}
+
+// EnvOverrides reads the app's env-injected config files (ConfigFile.Env) from
+// configDir (the app's state dir; falling back to the embedded default), parses
+// their KEY=VALUE lines, and returns them to overlay onto the container env. This
+// is the single source of truth used by BOTH the API (on a settings change) and
+// the boot provisioner, so an env setting like WEBUI_AUTH survives a reboot.
+// Best-effort: unreadable files yield no overrides.
+func EnvOverrides(configDir string, app catalog.App) map[string]string {
+	out := map[string]string{}
+	for _, cf := range app.Config {
+		if !cf.Env {
+			continue
+		}
+		content := ""
+		if b, err := os.ReadFile(filepath.Join(configDir, cf.File)); err == nil {
+			content = string(b)
+		} else if b, err := ReadDefault(app.ID, cf.File); err == nil {
+			content = string(b)
+		}
+		for _, line := range strings.Split(content, "\n") {
+			line = strings.TrimSpace(line)
+			if line == "" || strings.HasPrefix(line, "#") {
+				continue
+			}
+			if k, v, ok := strings.Cut(line, "="); ok {
+				if k = strings.TrimSpace(k); k != "" {
+					out[k] = strings.TrimSpace(v)
+				}
+			}
+		}
+	}
+	return out
 }
 
 // Materialize writes the embedded build context named `name` (e.g. "openclaw")

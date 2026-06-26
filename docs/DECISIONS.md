@@ -923,6 +923,103 @@ all detected **locally**, with **no IP/geo network lookup** (keeps the privacy p
 
 ---
 
+## D35 — Open WebUI: optional account login + "manage in its admin panel"
+**Date:** 2026-06-24 · **Status:** Accepted (built)
+
+Open WebUI ran with `WEBUI_AUTH=False` (no login wall — fine for a single-user
+appliance). Added Cloudless settings to **require accounts** and to explain that the
+rest of OWUI is managed in OWUI's own admin panel, with default admin credentials.
+
+- **Env-injected config (new `ConfigFile.Env`).** OWUI reads its config from process
+  env, not a mounted file — so a config file flagged `Env:true` is parsed and **overlaid
+  onto the container env** instead of mounted. Implemented once in `apps.EnvOverrides`
+  and applied by **both** `api.appSpec` (settings change → `restartApp`) **and**
+  `provision` (boot) — so the choice **survives a reboot** (provision builds from
+  `app.Spec()`, which would otherwise ignore it).
+- **Settings (generic form):** `requireAuth` → `WEBUI_AUTH`, `allowSignup` →
+  `ENABLE_SIGNUP`, written to `webui.env`. Defaults: off / on (matches the prior
+  no-login default; sign-ups on so the first admin can be created).
+- **Admin info (new `App.Admin`):** an "administration" panel on the app's settings page
+  explaining OWUI's Admin Panel (app → top-right → Admin Panel) and showing the **default
+  admin credentials** with a "change immediately" warning. Returned by `appSettingsGet` as `admin`.
+- **Credentials must match OWUI's real built-in account (bug fixed).** First attempt showed
+  invented creds (`admin@cloudless.local` / `cloudless`) — login failed, because OWUI never
+  created that account. Per OWUI source, running with `WEBUI_AUTH=False` (our default) makes
+  the `signin` path **auto-create and persist a real admin** hardcoded as **`admin@localhost`
+  / `admin`** (first user → promoted to admin). So that account already exists in the volume;
+  enabling login lets you sign in with it. We therefore surface exactly `admin@localhost` /
+  `admin` (with a strong "change it now" note). Seeding a *different* admin via the signup API
+  is impossible here — a user already exists, so the first-user-admin rule no longer applies.
+- **Share-online safety gate.** Exposing an app publicly via cloudflared while it has no
+  login is dangerous (anyone with the link uses your AI + GPU). The app settings page now
+  derives a `shareWarn` from the auth fields: if `requireAuth` is off (or it's on but
+  `allowSignup` is open), the "share online" block shows an inline ⚠ caution **and**
+  enabling the tunnel triggers a blocking confirm. Generic — keyed off the `requireAuth`
+  field, so any future app that declares one is covered.
+- **Verified:** settings GET returns the toggles + admin block; toggling `requireAuth`
+  writes `WEBUI_AUTH=true` to `webui.env` and reads back true; build/vet/`node --check`
+  clean; settings page + share warning rendered via `scripts/owui-harness.ps1`.
+
+---
+
+## D36 — Cloudless Proxy: serve your model as an OpenAI API with your own keys
+**Date:** 2026-06-26 · **Status:** Accepted (built)
+
+Users wanted to **serve the local model to other people** with API keys they control.
+Rather than ship LiteLLM (extra container, Python, DB, and not fully free), we built a
+thin **in-daemon gateway** — we have exactly one backend (the active engine, already
+OpenAI-compatible behind the `cloudless-ai` alias), so "act like LiteLLM" reduces to
+auth + key management in front of one endpoint (~a few hundred lines of stdlib Go).
+
+- **Separate listener.** A second `http.Server` on **`127.0.0.1:8766`** (`CLOUDLESS_GATEWAY_ADDR`),
+  distinct from the no-auth dashboard (`:8765`) so it can be exposed independently. `/v1/*`
+  is key-checked then **`httputil.ReverseProxy`**'d to the engine (`127.0.0.1:8000`), with
+  `FlushInterval=-1` so token streaming (SSE) passes through. It **rewrites the request
+  `model`** to the served name (`cloudless`), so any OpenAI client "just works".
+- **Keys in `state`.** `APIKey{id,name,prefix,hash,created,lastUsed,requests}` — the full
+  secret (`sk-cloudless-…`) is shown **once** at creation; only its **SHA-256 hash** is stored.
+  `AddAPIKey`/`DeleteAPIKey`/`ValidateAPIKey`. Per-request usage is counted in memory
+  (`RecordUsage`) and flushed lazily (`PersistIfDirty`, 20s ticker + on shutdown) so the
+  proxy never hits disk per call.
+- **Exposure reuses the app machinery** (per the chosen path): the same host-networked
+  **socat** (LAN) and **cloudflared** (public link) sidecars, pointed at the gateway port —
+  `gatewayLanName`/`gatewayTunnelName`. The proxy stays key-protected regardless.
+- **UI:** Settings → **API access** — base URL + served model + a copy-paste `curl`, key
+  list (name / prefix / request count / last used / revoke), one-time key reveal, and the
+  LAN + "public link" toggles with a security warning (anyone with a key can use your GPU).
+- **Deliberately out of v1** (noted for later): per-key rate limits, budgets, token metering,
+  multi-model routing, and a stable bring-your-own-domain tunnel. Easy to layer on the key store.
+- **Verified end-to-end:** no key → 401, bad key → 401, valid key → proxied to the engine
+  → 200, request count incremented, revoke → 401 immediately; build/vet/`node --check` clean;
+  API-access page rendered via `scripts/api-harness.ps1`.
+
+---
+
+## D37 — Inference activity dashboard (live engine metrics + charts)
+**Date:** 2026-06-27 · **Status:** Accepted (built)
+
+A real-time view of what the inference engine is doing — prefill/decode throughput,
+running vs queued requests, KV-cache use, TTFT/TPOT — with readable numbers and charts.
+
+- **Source = the engine's Prometheus `/metrics`** (host `127.0.0.1:8000/metrics`), scraped
+  by `GET /api/engine/metrics` and **normalized** across engines: vLLM exposes `vllm:*` by
+  default; **SGLang needs `--enable-metrics`** (added to its catalog command) and exposes
+  `sglang:*`. The handler maps both families onto one snapshot (running/waiting, KV cache,
+  cumulative prompt/gen tokens, TTFT/TPOT sum+count, SGLang's direct `gen_throughput`).
+  Unreachable/!prometheus → `{available:false, hint}`. Parser unit-tested for both engines.
+- **No chart dependency.** The dashboard is a full-screen overlay (◈-style, opened from a
+  menubar **▥** button + a Graphics-card link) that polls every 1s, derives **rates from
+  counter deltas** (tok/s, TTFT/TPOT ms) client-side, keeps a 60-sample rolling buffer, and
+  draws area+line charts on a **`<canvas>`** (stdlib-only ethos — no Chart.js). Tiles:
+  Decoding / Queued / KV cache / Output tok/s / Prefill tok/s / First-token / Per-token.
+- **Activation:** vLLM works immediately. **SGLang** must have its container **recreated** to
+  pick up `--enable-metrics` (switch engine, or change model — a daemon restart alone won't
+  recreate an already-running engine); until then the dashboard shows a friendly empty state.
+- **Verified:** parser tests pass (vLLM + SGLang sample exposition); build/vet/`node --check`
+  clean; the real `infChart` canvas code rendered against sample data via `scripts/inf-harness.ps1`.
+
+---
+
 ## Open questions (not yet decided)
 
 - **Open-source CloudlessOS?** Leaning yes (trust/community for a privacy brand, like

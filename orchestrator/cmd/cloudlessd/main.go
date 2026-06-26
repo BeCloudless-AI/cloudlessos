@@ -51,6 +51,27 @@ func main() {
 		}
 	}()
 
+	// Cloudless Proxy: the OpenAI-compatible, key-authenticated gateway on its own
+	// port (separate from the no-auth dashboard so it can be exposed independently).
+	gwAddr := envOr("CLOUDLESS_GATEWAY_ADDR", "127.0.0.1:8766")
+	gatewayServer := &http.Server{Addr: gwAddr, Handler: srv.GatewayHandler(), ReadHeaderTimeout: 10 * time.Second}
+	go func() {
+		log.Printf("cloudless proxy (API gateway) listening on http://%s", gwAddr)
+		if err := gatewayServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Printf("gateway error: %v", err)
+		}
+	}()
+
+	// Flush gateway usage counters to disk periodically (per-request updates are
+	// debounced in memory via RecordUsage/PersistIfDirty).
+	flush := time.NewTicker(20 * time.Second)
+	defer flush.Stop()
+	go func() {
+		for range flush.C {
+			st.PersistIfDirty()
+		}
+	}()
+
 	// Pre-install the bundled apps (vLLM engine, Open WebUI, ComfyUI) in the
 	// background. The served model is set via CLOUDLESS_DEFAULT_MODEL (catalog).
 	// Set CLOUDLESS_NO_PROVISION=1 to skip this (e.g. a second daemon on another
@@ -68,8 +89,10 @@ func main() {
 	<-stop
 
 	log.Println("shutting down...")
+	st.PersistIfDirty() // save any unflushed gateway usage
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+	_ = gatewayServer.Shutdown(ctx)
 	_ = httpServer.Shutdown(ctx)
 }
 

@@ -7,8 +7,10 @@ package provision
 import (
 	"context"
 	"net"
+	"path/filepath"
 	"sync"
 
+	"github.com/cloudless/orchestrator/internal/apps"
 	"github.com/cloudless/orchestrator/internal/catalog"
 	"github.com/cloudless/orchestrator/internal/engine"
 	"github.com/cloudless/orchestrator/internal/manifest"
@@ -132,6 +134,18 @@ func Run(ctx context.Context, eng engine.Engine, st *state.Store, mf *manifest.S
 		_ = eng.Remove(ctx, app.ContainerName())
 		spec := app.Spec()
 		spec.Image = img
+		// Overlay env-injected config (e.g. Open WebUI's WEBUI_AUTH) so a setting
+		// chosen in the UI persists across reboots (same logic as the API's appSpec).
+		if ov := apps.EnvOverrides(filepath.Join(st.Dir(), "apps", app.ID), app); len(ov) > 0 {
+			env := map[string]string{}
+			for k, v := range spec.Env {
+				env[k] = v
+			}
+			for k, v := range ov {
+				env[k] = v
+			}
+			spec.Env = env
+		}
 		if _, err := eng.Run(ctx, spec); err != nil {
 			logf(app.ID + ": start failed: " + err.Error())
 			continue

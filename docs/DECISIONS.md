@@ -1017,6 +1017,46 @@ running vs queued requests, KV-cache use, TTFT/TPOT — with readable numbers an
   recreate an already-running engine); until then the dashboard shows a friendly empty state.
 - **Verified:** parser tests pass (vLLM + SGLang sample exposition); build/vet/`node --check`
   clean; the real `infChart` canvas code rendered against sample data via `scripts/inf-harness.ps1`.
+- **Design pass (v2):** reworked into a clearer hierarchy — a **status line** (engine · model ·
+  live), a **hero panel** with the headline output tok/s + a large smooth area chart (output
+  only; prompt is bursty and would squash the line, so it's shown as a number), and a
+  **metric grid**: active requests (sparkline), a **radial KV-cache gauge**, and TTFT/TPOT with
+  plain-English captions ("how fast a reply starts", "speed of each token"). Charts gained
+  quadratic smoothing; `/api/engine/metrics` now also returns the served `model` for the header.
+- **Beauty pass (v4):** a persistent **status pill** in the overlay header (● engine · model ·
+  live, synced across tabs); a **gradient hero** with a **glowing** output line + bold peak/prompt
+  figures; **hover-lifting** metric cards; a **gradient + glow radial gauge** for KV cache; and
+  **engine comparison cards with icon tiles** (🚀 vLLM / 🧩 SGLang / 🦙 llama.cpp) + a gradient
+  active state. The metrics endpoint returns the served `model` so the header reads engine + model.
+- **Inference hub (v3):** the overlay became the single home for everything inference — a
+  **tabbed** surface: **Activity** (the live metrics), **Engine** (the engine switch, moved out
+  of Settings), and **API access** (keys + gateway exposure, moved out of Settings). Reuses
+  `renderEnginePage`/`renderApiPage` into the tab panel; metrics polling is gated to the Activity
+  tab; the engine-switch re-render now targets `#inf-panel`. Settings keeps only Profile / Machine
+  / General. Renamed "Inference activity" → "Inference" (menubar ▥, Graphics-card link, title).
+
+---
+
+## D38 — Third engine (llama.cpp), CPU/RAM on the dashboard, engine comparison
+**Date:** 2026-06-27 · **Status:** Accepted (built; llama.cpp recipe unverified)
+
+- **llama.cpp as a third engine.** Added to the catalog (`ghcr.io/ggml-org/llama.cpp:server-cuda`,
+  `llama-server` flags: `-hf <gguf>`, `--alias cloudless`, `-ngl 999`, `--jinja`, `--metrics`),
+  Prefetch + Service + Engine like SGLang. Its value: **CPU+GPU with RAM offload** (`-ngl`), so it
+  can serve models that don't fit in VRAM, using compact **GGUF** files. `parseEngineMetrics` now
+  also maps `llamacpp:*` (running/waiting/kv/tokens/throughput). **Caveats (unverified recipe):**
+  image tag / GGUF repo+quant / flags are best-effort, to validate on hardware; and it serves its
+  bundled GGUF — the Model Manager's model pick (HF safetensors) drives vLLM/SGLang, not llama.cpp
+  (GGUF model switching is a follow-up).
+- **CPU + RAM on the main screen.** New `hardware.Load()` (live CPU% over a 120ms /proc/stat sample
+  + RAM used/total from /proc/meminfo) at **`GET /api/sysload`**, polled every 4s and rendered in the
+  dashboard card (renamed **Graphics → Hardware**): GPU, then CPU and memory with the same bars.
+- **Engine comparison UI.** The Inference → Engine tab is now **comparison cards** (one per engine):
+  a "best for" line, key traits (plain English), a runs-on badge (GPU / CPU + GPU), and the active
+  one highlighted; non-active cards carry a "Use this engine" action. Replaces the bare pills.
+- **Verified:** `/api/engine` lists all three; `/api/sysload` returns live CPU/RAM (Ryzen 9, 4.5%,
+  6.4/15.5 GB); build/vet/`node --check` clean; comparison cards + Hardware card rendered via
+  `scripts/engines-harness.ps1`.
 
 ---
 

@@ -296,26 +296,47 @@
   .md-fit .mdl-fit { margin-right: 5px; }
   .md-acts { display: flex; flex-wrap: wrap; gap: 9px; padding-top: 20px; border-top: 1px solid var(--hair); }
 
-  /* ---------- inference activity dashboard ---------- */
-  .inf-eng { margin-left: 10px; font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
-  .inf-empty { color: var(--muted); font-size: 13.5px; text-align: center; padding: 60px 20px; line-height: 1.6; }
-  .inf-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 18px; }
-  .inf-tile { background: var(--card); border: 1px solid var(--hair); border-radius: 13px; padding: 14px 16px; }
-  .inf-tile .it-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); }
-  .inf-tile .it-val { font-size: 27px; font-weight: 800; letter-spacing: -0.8px; color: var(--ink); font-variant-numeric: tabular-nums; line-height: 1.15; margin-top: 5px; }
-  .inf-tile .it-val .it-unit { font-size: 12.5px; font-weight: 600; color: var(--muted); letter-spacing: 0; margin-left: 4px; }
-  .inf-tile.accent .it-val { color: var(--blue); }
-  .inf-tile.warm .it-val { color: var(--accent); }
-  .inf-charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
-  .inf-card { background: var(--card); border: 1px solid var(--hair); border-radius: 14px; padding: 15px 17px 10px; }
-  .inf-card .ic-head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px; }
-  .inf-card .ic-title { font-size: 11px; font-weight: 500; letter-spacing: .5px; text-transform: lowercase; color: var(--muted); }
-  .inf-card .ic-now { font-size: 17px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
-  .inf-card .ic-now small { font-size: 11px; font-weight: 600; color: var(--muted); margin-left: 3px; }
-  .inf-legend { display: flex; gap: 14px; margin-top: 7px; font-size: 10.5px; color: var(--muted); }
-  .inf-legend span { display: inline-flex; align-items: center; gap: 5px; }
-  .inf-legend i { width: 9px; height: 3px; border-radius: 2px; display: inline-block; }
-  .inf-canvas { width: 100%; height: 88px; display: block; }
+  /* ---------- inference dashboard ---------- */
+  /* persistent status pill in the overlay header */
+  .inf-head { display: inline-flex; align-items: center; gap: 8px; margin-left: 14px; font-size: 12px; color: var(--muted);
+    background: var(--panel-2); border: 1px solid var(--hair); border-radius: 999px; padding: 5px 13px 5px 11px; }
+  .inf-head:empty { display: none; }
+  .inf-head .inf-live { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); flex: none; }
+  .inf-head.on .inf-live { background: #2faa5b; animation: beacon 2.4s ease-in-out infinite; }
+  .inf-head b { color: var(--ink); font-weight: 700; } .inf-head .sep { color: var(--faint); }
+  .inf-head .ih-state { text-transform: uppercase; letter-spacing: .5px; font-size: 9.5px; font-weight: 700; color: var(--muted); }
+  .inf-head.on .ih-state { color: #2faa5b; }
+  .inf-empty { color: var(--muted); font-size: 13.5px; text-align: center; padding: 72px 24px; line-height: 1.75; }
+  /* hero throughput panel — the headline, with a soft blue wash + glowing line */
+  .inf-hero { position: relative; overflow: hidden; border-radius: 18px; margin-bottom: 14px; padding: 20px 22px 14px;
+    background: linear-gradient(180deg, color-mix(in srgb, var(--blue) 7%, var(--card)) 0%, var(--card) 60%);
+    border: 1px solid color-mix(in srgb, var(--blue) 16%, var(--hair)); }
+  .inf-hero-head { display: flex; align-items: flex-start; justify-content: space-between; }
+  .inf-hero-val { font-size: 48px; font-weight: 800; letter-spacing: -2px; color: var(--blue); font-variant-numeric: tabular-nums; line-height: 1; }
+  .inf-hero-val small { font-size: 14px; font-weight: 600; color: var(--muted); letter-spacing: 0; margin-left: 8px; }
+  .inf-hero-cap { font-size: 10.5px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); margin-top: 8px; }
+  .inf-hero-aux { text-align: right; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; line-height: 1.85; }
+  .inf-hero-aux b { color: var(--ink); font-weight: 700; }
+  .inf-hero-canvas { width: 100%; height: 156px; display: block; margin: 10px 0 8px; }
+  .inf-hero-foot { display: flex; align-items: center; justify-content: space-between; }
+  .inf-legend { display: flex; gap: 16px; font-size: 10.5px; color: var(--muted); }
+  .inf-legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .inf-legend i { width: 10px; height: 3px; border-radius: 2px; display: inline-block; }
+  .inf-time { font-size: 9.5px; color: var(--faint); text-transform: uppercase; letter-spacing: .6px; }
+  /* metric cards */
+  .inf-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(188px, 1fr)); gap: 13px; }
+  .inf-metric { background: var(--card); border: 1px solid var(--hair); border-radius: 15px; padding: 15px 17px 12px; display: flex; flex-direction: column;
+    transition: transform .2s cubic-bezier(.34,1.56,.64,1), border-color .18s, box-shadow .2s; }
+  .inf-metric:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--blue) 32%, transparent);
+    box-shadow: 0 12px 28px -18px color-mix(in srgb, var(--blue) 60%, transparent); }
+  .im-label { font-size: 10px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); }
+  .im-val { font-size: 27px; font-weight: 800; letter-spacing: -0.9px; color: var(--ink); font-variant-numeric: tabular-nums; line-height: 1.12; margin-top: 5px; }
+  .im-val small { font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing: 0; margin-left: 4px; }
+  .im-sub { font-size: 11px; color: var(--muted); margin-top: 3px; }
+  .im-spark { width: 100%; height: 34px; display: block; margin-top: auto; padding-top: 10px; }
+  .im-ringwrap { position: relative; width: 110px; height: 110px; margin: 8px auto 2px; }
+  .im-ring { width: 110px; height: 110px; display: block; }
+  .im-ringval { position: absolute; inset: 0 0 11px; display: flex; align-items: center; justify-content: center; font-size: 23px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
 
   /* ---------- layout ---------- */
   main { max-width: 1140px; margin: 0 auto; padding: 38px 26px 90px; }
@@ -355,6 +376,19 @@
 
   .cards { display: grid; grid-template-columns: 1.4fr 1fr; gap: 14px; margin-bottom: 0; }
   .apps-sec { margin-bottom: 40px; }
+  /* engine "starting up" banner + gated launch state */
+  .eng-banner { display: flex; align-items: center; gap: 13px; margin: 0 0 26px; padding: 13px 17px; border-radius: 13px;
+    background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); }
+  .eng-banner.hidden { display: none; }
+  .eb-spin { width: 16px; height: 16px; flex: none; border-radius: 50%; border: 2px solid color-mix(in srgb, var(--accent) 30%, transparent);
+    border-top-color: var(--accent); animation: spin 0.9s linear infinite; }
+  .eb-txt { display: flex; flex-direction: column; line-height: 1.4; }
+  .eb-txt b { font-size: 13.5px; color: var(--ink); } .eb-txt span { font-size: 12px; color: var(--muted); }
+  .tile.gated .ic { opacity: 0.5; cursor: default; }
+  .tile.gated .meta { color: var(--accent); }
+  .meta .dot.wait { background: var(--accent); animation: pulse 1.4s ease-in-out infinite; }
+  .ask.starting { opacity: 0.6; }
+  .ask.starting input, .ask.starting .ask-go { cursor: not-allowed; }
   @media (max-width: 820px) { .cards { grid-template-columns: 1fr; } }
 
   /* one-time entrance — content settles in, staggered, on first paint */
@@ -380,6 +414,7 @@
 
   /* gpu */
   .gpu + .gpu { margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--hair); }
+  #sys-body .sys-sec { margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--hair); }
   .gpu-name { font-weight: 700; font-size: 14px; }
   .gpu-name .idx { color: var(--faint); font-weight: 400; margin-left: 6px; font-size: 11px; }
   .stat { margin-top: 12px; }
@@ -411,6 +446,29 @@
   .er-pill[disabled]:not(.on) { opacity: 0.5; cursor: default; }
   .er-state { margin-left: auto; color: var(--muted); font-size: 11px; }
   .er-state.ready { color: var(--accent); }
+  /* engine comparison cards (Inference → Engine) */
+  .ec-bar { display: flex; align-items: baseline; gap: 12px; margin: -2px 0 16px; }
+  .ec-bar .fld-help { flex: 1; }
+  .ec-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(216px, 1fr)); gap: 13px; }
+  .ec { background: var(--card); border: 1px solid var(--line-2); border-radius: 15px; padding: 15px 16px; display: flex; flex-direction: column;
+    transition: transform .2s cubic-bezier(.34,1.56,.64,1), border-color .18s, box-shadow .2s; }
+  .ec:hover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--blue) 38%, transparent);
+    box-shadow: 0 12px 28px -18px color-mix(in srgb, var(--blue) 60%, transparent); }
+  .ec.on { border-color: var(--blue); background: linear-gradient(180deg, var(--blue-soft), color-mix(in srgb, var(--blue) 4%, var(--card))); }
+  .ec-head { display: flex; align-items: center; gap: 9px; }
+  .ec-ic { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; font-size: 16px; flex: none;
+    background: var(--panel-2); border: 1px solid var(--hair); }
+  .ec.on .ec-ic { background: color-mix(in srgb, var(--blue) 14%, transparent); border-color: color-mix(in srgb, var(--blue) 30%, transparent); }
+  .ec-name { font-size: 15px; font-weight: 800; letter-spacing: -0.3px; color: var(--ink); }
+  .ec-runs { margin-left: auto; font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--muted);
+    border: 1px solid var(--hair); border-radius: 5px; padding: 2px 6px; }
+  .ec-best { font-size: 12.5px; font-weight: 600; color: var(--blue); margin: 7px 0 9px; }
+  .ec.on .ec-best { color: var(--blue); }
+  .ec-traits { list-style: none; margin: 0 0 13px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+  .ec-traits li { font-size: 12px; color: var(--ink-2); line-height: 1.4; padding-left: 16px; position: relative; }
+  .ec-traits li::before { content: "—"; position: absolute; left: 0; color: var(--faint); }
+  .ec-foot { margin-top: auto; }
+  .ec-active { font-size: 12px; font-weight: 700; color: var(--blue); }
 
   /* places */
   .place { display: flex; align-items: center; gap: 12px; padding: 9px 10px; margin: 0 -10px;
@@ -672,7 +730,7 @@
   <div class="mi"><span class="led" id="led-sys"></span> <span id="mi-sys">System</span></div>
   <div class="mi mi-net" id="mi-net" title="Network status"><span class="led" id="led-net"></span> <span id="net-label">Network</span></div>
   <div id="clock">--:--</div>
-  <button class="gear" id="open-inference" title="Inference activity">▥</button>
+  <button class="gear" id="open-inference" title="Inference">▥</button>
   <button class="gear" id="open-models" title="Model Manager">◈</button>
   <button class="gear" id="gear" title="Settings">⚙</button>
 </div>
@@ -699,6 +757,11 @@
     <button class="ghost-chat" id="open-full-chat">Open the full chat ↗</button>
   </div>
 
+  <div id="engine-banner" class="eng-banner hidden">
+    <span class="eb-spin"></span>
+    <div class="eb-txt"><b id="eb-title">Cloudless AI is starting up…</b><span id="eb-sub">Your model is loading — chat and AI apps will be ready in a moment.</span></div>
+  </div>
+
   <section class="apps-sec">
     <div class="sec-row">
       <h3 class="sec">Your apps</h3>
@@ -709,10 +772,11 @@
 
   <div class="cards">
     <section class="card">
-      <h2>Graphics</h2>
+      <h2>Hardware</h2>
       <div id="gpu-body"><div class="empty">Reading GPUs…</div></div>
+      <div id="sys-body"></div>
       <button class="card-link" id="open-models-2">◈ <span id="gpu-model">Model Manager</span> →</button>
-      <button class="card-link" id="open-inference-2">▥ Inference activity →</button>
+      <button class="card-link" id="open-inference-2">▥ Inference →</button>
     </section>
     <section class="card">
       <h2>Places</h2>
@@ -755,7 +819,8 @@
 <div class="overlay hidden" id="inference">
   <div class="mm">
     <div class="lp-head">
-      <div class="lp-ttl">Inference activity<span class="inf-eng" id="inf-eng"></span></div>
+      <div class="lp-ttl">Inference</div>
+      <div class="inf-head" id="inf-head"></div>
       <button class="lp-x" id="inf-x" title="Close">×</button>
     </div>
     <div class="mm-body" id="inf-body"></div>
@@ -950,6 +1015,18 @@ function updateGPUValues(gpus, calc) {
     set('mem', c.mem); set('util', g.utilPct + '%'); set('temp', g.tempC + '°C'); set('pw', c.power);
   });
 }
+/* ---- CPU + RAM (live) ---- */
+async function renderSystem() {
+  const body = document.getElementById('sys-body'); if (!body) return;
+  let d; try { d = await api('/api/sysload'); } catch { return; }
+  const ramPct = d.memTotalMB ? Math.round(d.memUsedMB / d.memTotalMB * 100) : 0;
+  const cpu = (d.cpuModel || 'CPU').replace(/\((R|TM)\)/g, '').replace(/\bCPU\b|\bProcessor\b|\d+-Core/gi, '').replace(/\s+/g, ' ').trim() || 'CPU';
+  body.innerHTML = `<div class="sys-sec">
+      <div class="gpu-name">${escapeHtml(cpu)}<span class="idx">${d.cores} threads</span></div>
+      <div class="stat"><div class="stat-row"><span>cpu</span><b>${Math.round(d.cpuPct)}%</b></div><div class="track"><i style="width:${Math.min(100, d.cpuPct)}%"></i></div></div>
+      <div class="stat"><div class="stat-row"><span>memory</span><b>${(d.memUsedMB / 1024).toFixed(1)} / ${(d.memTotalMB / 1024).toFixed(1)} GB</b></div><div class="track"><i style="width:${ramPct}%"></i></div></div>
+    </div>`;
+}
 
 /* ---- places ---- */
 async function renderPlaces() {
@@ -970,14 +1047,24 @@ async function renderPlaces() {
 // hardcoded "localhost": when you reach Cloudless from another device via its LAN
 // IP, the app lives at that same IP — "localhost" would point at your own device.
 function appURL(port, path) { return `http://${location.hostname}:${port}${path || '/'}`; }
+// An app that depends on the LLM engine can't be used until the model is served.
+function engineBlocked(app) {
+  if (app && app.needsEngine && !engineReady) {
+    toast('Cloudless AI is still starting — your model is loading. Almost ready.');
+    return true;
+  }
+  return false;
+}
 function openApp(app) {
+  if (engineBlocked(app)) return;
   const port = app.ports ? Object.keys(app.ports)[0] : '';
   window.open(appURL(port, app.openPath), '_blank');
 }
 async function renderApps() {
-  const [catalog, apps, pins] = await Promise.all([
-    api('/api/catalog'), api('/api/apps'), api('/api/pins').catch(() => ({ pinned: [] }))]);
+  const [catalog, apps, pins, eng] = await Promise.all([
+    api('/api/catalog'), api('/api/apps'), api('/api/pins').catch(() => ({ pinned: [] })), api('/api/engine').catch(() => null)]);
   catalogCache = catalog;
+  if (eng) { engineReady = !!eng.ready; engineActive = eng.active || ''; setActiveEngine(eng); }
   const running = {}; apps.forEach(c => running[c.name.replace(/^cloudless-/, '')] = c.state);
   lastRunning = running;
   pinnedIds = (pins && pins.pinned) || [];
@@ -991,8 +1078,9 @@ async function renderApps() {
   } else {
     pad.innerHTML = pinned.map(app => {
       const isRun = running[app.id] === 'running';
-      const cls = 'tile' + (isRun ? ' running' : '') + (app.image ? '' : ' disabled');
-      const meta = isRun ? '<span class="dot"></span>Running' : (app.image ? '' : 'Coming soon');
+      const gated = app.needsEngine && !engineReady; // waiting for the model
+      const cls = 'tile' + (isRun && !gated ? ' running' : '') + (gated ? ' gated' : (app.image ? '' : ' disabled'));
+      const meta = gated ? '<span class="dot wait"></span>Waiting for AI' : (isRun ? '<span class="dot"></span>Running' : (app.image ? '' : 'Coming soon'));
       return `<div class="${cls}" data-id="${app.id}">
         <div class="ic">${glyph(app.id)}<button class="stopx" title="Stop">×</button></div>
         <div class="nm">${app.name}</div><div class="meta">${meta}</div>
@@ -1002,11 +1090,12 @@ async function renderApps() {
     pad.querySelectorAll('.tile').forEach(tile => {
       const app = catalog.find(a => a.id === tile.dataset.id);
       const isRun = running[app.id] === 'running';
-      tile.querySelector('.ic').onclick = () => { if (isRun) openApp(app); else if (app.image) startInstall(app, tile); };
+      tile.querySelector('.ic').onclick = () => { if (engineBlocked(app)) return; if (isRun) openApp(app); else if (app.image) startInstall(app, tile); };
       const stop = tile.querySelector('.stopx');
       if (stop) stop.onclick = async e => { e.stopPropagation(); try { await api(`/api/apps/${app.id}/stop`, { method: 'POST' }); } catch {} renderApps(); };
     });
   }
+  applyEngineUI();
   // NOTE: renderApps() (the 8s /api/apps poll) deliberately does NOT touch the
   // launcher. The launcher is redrawn ONLY by explicit user interaction
   // (open / select / search / an action) via refreshLauncher(). This makes
@@ -1128,6 +1217,7 @@ function openSettingsApp(id) { setPage = 'app:' + id; openSettings(); }
 // install from anywhere (launcher button or assistant action); btn optional for inline progress
 function installApp(id, btn) {
   const app = catalogCache.find(a => a.id === id); if (!app) return;
+  if (engineBlocked(app)) return;
   if (lastRunning[id] === 'running') { openApp(app); return; }
   if (!app.image) { toast(app.name + ' is not installable yet'); return; }
   if (btn) { btn.classList.add('busy'); btn.textContent = 'Installing…'; } else toast('Installing ' + app.name + '…');
@@ -1146,6 +1236,7 @@ function installApp(id, btn) {
   }).catch(() => { installing--; if (btn) { btn.classList.remove('busy'); btn.textContent = 'Install'; } toast('Install failed', true); });
 }
 function startInstall(app, tile) {
+  if (engineBlocked(app)) return;
   tile.classList.add('busy'); tile.querySelector('.meta').textContent = 'Preparing…';
   const bar = tile.querySelector('.tbar'); if (bar) { bar.classList.add('indet'); bar.querySelector('i').style.width = ''; }
   api(`/api/apps/${app.id}/start`, { method: 'POST' })
@@ -1184,29 +1275,53 @@ function installById(id) {
 // renderEngine() runs on the 4s poll, so it ONLY updates state — it must never
 // rebuild Settings (that would flicker the panel and wipe form input every poll).
 // Settings is redrawn solely by user actions (open / nav click / switch / job done).
+let lastEngineReady = null;
 async function renderEngine() {
   let d; try { d = await api('/api/engine'); } catch { return; }
   engineReady = !!d.ready; engineActive = d.active || '';
   setActiveEngine(d);
+  // When readiness flips (model finished loading / engine went down), re-gate the
+  // launch surfaces and update the banner.
+  if (engineReady !== lastEngineReady) { lastEngineReady = engineReady; applyEngineUI(); renderApps(); }
+}
+// Reflect engine readiness across the dashboard: a "starting up" banner, and the
+// chat/ask entry disabled until the Cloudless model is served.
+function applyEngineUI() {
+  const starting = !engineReady;
+  const banner = document.getElementById('engine-banner');
+  if (banner) {
+    banner.classList.toggle('hidden', !starting);
+    const sub = document.getElementById('eb-sub');
+    if (sub && starting) sub.textContent = (activeEngineName !== 'the engine' ? activeEngineName + ' is loading your model' : 'Your model is loading') + ' — chat and AI apps will be ready in a moment.';
+  }
+  const ask = document.getElementById('hero-ask'), inp = document.getElementById('hero-ask-input'), go = ask && ask.querySelector('.ask-go');
+  if (ask) ask.classList.toggle('starting', starting);
+  if (inp) { inp.disabled = starting; inp.placeholder = starting ? 'Cloudless AI is starting…' : 'What do you want to do with CloudlessOS?'; }
+  if (go) go.disabled = starting;
+  const ghost = document.getElementById('open-full-chat'); if (ghost) ghost.classList.toggle('off', starting);
+}
+// The engine switch UI lives in the Inference hub (Engine tab); re-render it there.
+function engineUIRefresh() {
+  const p = document.getElementById('inf-panel');
+  if (infOpen && infTab === 'engine' && p) renderEnginePage(p);
 }
 function switchEngine(id) {
   if (engineSwitching) return;
   engineSwitching = true; engineReady = false;
-  if (settingsOpen()) renderSettings(); // reflect "switching…" immediately (user action)
+  engineUIRefresh(); // reflect "switching…" immediately (user action)
   api(`/api/engine/${id}`, { method: 'POST' })
     .then(res => { if (res.jobId) trackEngineJob(res.jobId); else endSwitch(); })
     .catch(() => endSwitch());
 }
 function endSwitch() {
-  engineSwitching = false; renderEngine();
-  if (settingsOpen()) renderSettings();
+  engineSwitching = false; renderEngine(); engineUIRefresh();
 }
 function trackEngineJob(jobId) {
   const es = new EventSource(`/api/jobs/${jobId}/events`); let ended = false;
   const fin = () => { if (ended) return; ended = true; es.close(); endSwitch(); };
   es.onmessage = e => {
     const u = JSON.parse(e.data);
-    const st = document.querySelector('#settings .er-state'); // engine switch lives in Settings
+    const st = document.querySelector('#inf-panel .er-state');
     if (st && u.message) st.textContent = u.message;
     if (u.done) fin();
   };
@@ -1301,7 +1416,7 @@ async function renderSettings() {
 
   const groups = [
     { label: 'you', items: [{ id: 'profile', ic: '◐', label: 'Profile' }] },
-    { label: 'cloudless', items: [{ id: 'hardware', ic: '▤', label: 'Machine' }, { id: 'engine', ic: '✦', label: 'Inference engine' }, { id: 'api', ic: '⚿', label: 'API access' }] },
+    { label: 'cloudless', items: [{ id: 'hardware', ic: '▤', label: 'Machine' }] },
     { label: 'apps', items: apps.map(a => ({ id: 'app:' + a.id, ic: glyph(a.id), label: a.name })) },
     { label: 'system', items: [{ id: 'general', ic: '⦿', label: 'General' }] },
   ];
@@ -1310,15 +1425,13 @@ async function renderSettings() {
       `<div class="nav-item ${it.id === setPage ? 'active' : ''}" data-page="${it.id}"><span class="nav-ic">${it.ic}</span>${it.label}</div>`).join('')).join('');
   document.querySelectorAll('#set-nav .nav-item').forEach(n => n.onclick = () => { setPage = n.dataset.page; renderSettings(); });
 
-  let title = { profile: 'Profile', hardware: 'Machine', engine: 'Inference engine', api: 'API access', general: 'General' }[setPage] || '';
+  let title = { profile: 'Profile', hardware: 'Machine', general: 'General' }[setPage] || '';
   if (setPage.startsWith('app:')) { const a = apps.find(x => 'app:' + x.id === setPage); title = a ? a.name : ''; }
   document.getElementById('set-page-title').textContent = title;
 
   const c = document.getElementById('set-content');
   if (setPage === 'profile') renderProfilePage(c);
   else if (setPage === 'hardware') renderHardwarePage(c);
-  else if (setPage === 'api') renderApiPage(c);
-  else if (setPage === 'engine') renderEnginePage(c);
   else if (setPage === 'general') renderGeneralPage(c);
   else if (setPage.startsWith('app:')) renderAppPage(c, setPage.slice(4));
   else renderHardwarePage(c);
@@ -1458,15 +1571,33 @@ async function renderApiPage(c) {
     tun.disabled = false;
   };
 }
+// Plain-English comparison of the inference engines — what each is best at.
+const ENGINE_INFO = {
+  vllm: { ic: '🚀', best: 'Maximum speed on a capable GPU', runs: 'GPU', traits: ['Highest throughput when the model fits in VRAM', 'Full-precision Hugging Face models', 'Needs enough GPU memory'] },
+  sglang: { ic: '🧩', best: 'Fast GPU serving, strong for agents', runs: 'GPU', traits: ['High throughput & low latency (RadixAttention)', 'Great at structured output and tool calling', 'Full-precision Hugging Face models'] },
+  llamacpp: { ic: '🦙', best: 'Runs anywhere — even low on VRAM', runs: 'CPU + GPU', traits: ['Offloads to system RAM — run models bigger than your VRAM', 'Works on CPU alone, or CPU + GPU together', 'Uses compact GGUF model files'] },
+};
 async function renderEnginePage(c) {
   c.innerHTML = '<div class="set-hint">Loading…</div>';
   let engine; try { engine = await api('/api/engine'); } catch { return; }
-  const pills = (engine.engines || []).map(e =>
-    `<button class="er-pill ${e.active ? 'on' : ''}" data-eng="${e.id}" ${e.active || engineSwitching ? 'disabled' : ''}>${e.name.replace(' Engine', '')}</button>`).join('');
+  const state = engineSwitching ? 'switching…' : (engine.ready ? 'ready' : 'starting…');
+  const cards = (engine.engines || []).map(e => {
+    const info = ENGINE_INFO[e.id] || { ic: '', best: '', runs: '', traits: [] };
+    const traits = info.traits.map(t => `<li>${escapeHtml(t)}</li>`).join('');
+    const foot = e.active
+      ? '<span class="ec-active">● Active</span>'
+      : `<button class="btn" data-eng="${e.id}" ${engineSwitching ? 'disabled' : ''}>Use this engine</button>`;
+    return `<div class="ec ${e.active ? 'on' : ''}">
+        <div class="ec-head">${info.ic ? `<span class="ec-ic">${info.ic}</span>` : ''}<span class="ec-name">${escapeHtml(e.name.replace(' Engine', ''))}</span>${info.runs ? `<span class="ec-runs">${escapeHtml(info.runs)}</span>` : ''}</div>
+        <div class="ec-best">${escapeHtml(info.best)}</div>
+        <ul class="ec-traits">${traits}</ul>
+        <div class="ec-foot">${foot}</div>
+      </div>`;
+  }).join('');
   c.innerHTML = `<div class="set-block"><h3>inference engine</h3>
-    <div class="set-row"><div class="er-pills">${pills}</div><span class="er-state ${engine.ready ? 'ready' : ''}">${engineSwitching ? 'switching…' : (engine.ready ? 'ready' : '…')}</span></div>
-    <div class="fld-help">The engine that powers Cloudless AI (vLLM or SGLang). One runs at a time; switching briefly reloads the model. Most people never need to change this — pick models in the Model Manager.</div></div>`;
-  c.querySelectorAll('.er-pill:not(.on)').forEach(b => b.onclick = () => { switchEngine(b.dataset.eng); toast('Switching engine…'); });
+    <div class="ec-bar"><span class="fld-help" style="margin:0">One engine runs at a time and powers everything — chat, apps and the API. Switching briefly reloads the model; pick the model itself in the Model Manager.</span><span class="er-state ${engine.ready ? 'ready' : ''}">${state}</span></div>
+    <div class="ec-grid">${cards}</div></div>`;
+  c.querySelectorAll('.ec [data-eng]').forEach(b => b.onclick = () => { switchEngine(b.dataset.eng); toast('Switching engine…'); });
 }
 
 const FIT_LABEL = { fits: 'fits your GPU', tight: 'tight fit', over: 'needs more VRAM', unknown: '' };
@@ -1982,30 +2113,58 @@ document.getElementById('mm-x').onclick = closeModelManager;
 document.getElementById('models').addEventListener('click', e => { if (e.target.id === 'models') closeModelManager(); });
 
 /* ---- Inference activity dashboard ---- */
-let infOpen = false, infTimer = null, infPrev = null, infBuf = null;
+let infOpen = false, infTimer = null, infPrev = null, infBuf = null, infPeak = 0, infTab = 'activity';
 const INF_CAP = 60; // samples kept for the charts (~1 min at 1s/sample)
+const setText = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
+const setHTML = (id, v) => { const e = document.getElementById(id); if (e) e.innerHTML = v; };
+const engDisplay = e => ({ vllm: 'vLLM', sglang: 'SGLang', llamacpp: 'llama.cpp' }[e] || (e || '').toUpperCase());
 const cssRgb = v => { const h = getComputedStyle(document.documentElement).getPropertyValue(v).trim().replace('#', '');
   if (h.length === 3) return [0, 1, 2].map(i => parseInt(h[i] + h[i], 16));
   if (h.length >= 6) return [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16)); return [130, 130, 130]; };
-function infReset() { infPrev = null; infBuf = { pTok: [], gTok: [], run: [], wait: [], kv: [] }; }
+let infModel = '';
+// The persistent status pill in the Inference header — engine · model · live — kept
+// in sync across all tabs.
+function infHeadSet(engineId, model, ready) {
+  const h = document.getElementById('inf-head'); if (!h) return;
+  if (model) infModel = model;
+  if (!engineId) { h.className = 'inf-head'; h.innerHTML = ''; return; }
+  h.className = 'inf-head' + (ready ? ' on' : '');
+  h.innerHTML = `<span class="inf-live"></span><b>${escapeHtml(engDisplay(engineId))}</b>${infModel ? `<span class="sep">·</span>${escapeHtml(infModel)}` : ''}<span class="ih-state">${ready ? 'live' : 'loading…'}</span>`;
+}
+function infReset() { infPrev = null; infPeak = 0; infBuf = { pTok: [], gTok: [], run: [], wait: [], kv: [], ttft: [], tpot: [] }; }
+function infStopPoll() { if (infTimer) { clearInterval(infTimer); infTimer = null; } }
 function openInference() {
-  document.getElementById('inference').classList.remove('hidden'); infOpen = true; infReset();
-  document.getElementById('inf-body').innerHTML = '<div class="inf-empty">Connecting to the inference engine…</div>';
-  infPoll(); infTimer = setInterval(infPoll, 1000);
+  document.getElementById('inference').classList.remove('hidden'); infOpen = true; infTab = 'activity'; renderInference();
 }
 function closeInference() {
-  document.getElementById('inference').classList.add('hidden'); infOpen = false;
-  if (infTimer) { clearInterval(infTimer); infTimer = null; }
+  document.getElementById('inference').classList.add('hidden'); infOpen = false; infStopPoll();
+}
+// The Inference hub: live Activity, plus Engine choice and API access in one place.
+function renderInference() {
+  const body = document.getElementById('inf-body'); if (!body) return;
+  const tab = (id, label) => `<button class="mm-tab ${infTab === id ? 'on' : ''}" data-itab="${id}">${label}</button>`;
+  body.innerHTML = `<div class="mm-tabs">${tab('activity', 'Activity')}${tab('engine', 'Engine')}${tab('api', 'API access')}</div><div id="inf-panel"></div>`;
+  body.querySelectorAll('.mm-tab').forEach(b => b.onclick = () => { if (infTab === b.dataset.itab) return; infTab = b.dataset.itab; renderInference(); });
+  const panel = document.getElementById('inf-panel');
+  infStopPoll();
+  if (infTab === 'activity') {
+    infReset(); panel.innerHTML = '<div class="inf-empty">Connecting to the inference engine…</div>';
+    infPoll(); infTimer = setInterval(infPoll, 1000);
+  } else { // engine / api — narrower centred column reads better in the wide overlay
+    panel.style.maxWidth = '780px'; panel.style.margin = '0 auto';
+    api('/api/engine').then(e => infHeadSet(e.active, '', e.ready)).catch(() => {});
+    if (infTab === 'engine') renderEnginePage(panel); else renderApiPage(panel);
+  }
 }
 function infPush(a, v) { a.push(v); if (a.length > INF_CAP) a.shift(); }
 async function infPoll() {
-  if (!infOpen) return;
+  if (!infOpen || infTab !== 'activity') return;
   let m; try { m = await api('/api/engine/metrics'); } catch { return; }
-  const engEl = document.getElementById('inf-eng');
+  if (!infOpen || infTab !== 'activity') return; // tab changed while awaiting
   if (!m.available) {
-    if (engEl) engEl.textContent = m.engine ? (m.engine + (m.ready ? ' · ready' : '')) : '';
+    infHeadSet(m.engine, m.model, m.ready);
     const btn = m.canEnable ? '<button class="btn primary" id="inf-enable" style="margin-top:18px">Turn on live metrics (restarts the engine)</button>' : '';
-    document.getElementById('inf-body').innerHTML = `<div class="inf-empty">${escapeHtml(m.hint || 'Live metrics aren’t available yet.')}<br>Send a request — chat with your AI, or hit the API — and activity will appear here in real time.${btn}</div>`;
+    document.getElementById('inf-panel').innerHTML = `<div class="inf-empty">${escapeHtml(m.hint || 'Live metrics aren’t available yet.')}<br>Send a request — chat with your AI, or hit the API — and activity will appear here in real time.${btn}</div>`;
     const eb = document.getElementById('inf-enable');
     if (eb) eb.onclick = () => {
       eb.disabled = true; eb.textContent = 'Restarting engine…';
@@ -2013,7 +2172,6 @@ async function infPoll() {
     };
     infPrev = null; return;
   }
-  if (engEl) engEl.textContent = m.engine || '';
   const now = performance.now();
   let pRate = 0, gRate = 0, ttft = null, tpot = null;
   if (infPrev) {
@@ -2024,44 +2182,67 @@ async function infPoll() {
   }
   if (m.genThroughput && gRate === 0) gRate = m.genThroughput; // SGLang reports tok/s directly
   infPrev = { t: now, promptTokens: m.promptTokens, genTokens: m.genTokens, ttftSum: m.ttftSum, ttftCount: m.ttftCount, tpotSum: m.tpotSum, tpotCount: m.tpotCount };
+  const carry = (a, v) => infPush(a, v != null ? v : (a.length ? a[a.length - 1] : 0)); // latency updates sparsely — hold the last value
   infPush(infBuf.pTok, pRate); infPush(infBuf.gTok, gRate); infPush(infBuf.run, m.running); infPush(infBuf.wait, m.waiting); infPush(infBuf.kv, m.kvCache * 100);
+  carry(infBuf.ttft, ttft); carry(infBuf.tpot, tpot);
   infRender(m, { pRate, gRate, ttft, tpot });
 }
 const infRate = v => v >= 1000 ? (v / 1000).toFixed(1) + 'k' : String(Math.round(v));
-function infSetVal(id, v) { const el = document.getElementById('v-' + id); if (el) el.textContent = v; }
 function infSkeleton() {
-  const tile = (id, label, unit, cls) => `<div class="inf-tile ${cls || ''}"><div class="it-label">${label}</div><div class="it-val"><span id="v-${id}">0</span><span class="it-unit">${unit}</span></div></div>`;
-  const card = (id, title, legend) => `<div class="inf-card"><div class="ic-head"><span class="ic-title">${title}</span><span class="ic-now" id="now-${id}">—</span></div><canvas class="inf-canvas" id="c-${id}"></canvas>${legend || ''}</div>`;
-  return `<div class="inf-stats">
-      ${tile('run', 'Decoding now', 'reqs', 'accent')}
-      ${tile('wait', 'Queued', 'reqs')}
-      ${tile('kv', 'KV cache', '%')}
-      ${tile('gtps', 'Output', 'tok/s', 'accent')}
-      ${tile('ptps', 'Prefill', 'tok/s', 'warm')}
-      ${tile('ttft', 'First token', 'ms')}
-      ${tile('tpot', 'Per token', 'ms')}
+  return `
+    <div class="inf-hero">
+      <div class="inf-hero-head">
+        <div><div class="inf-hero-val"><span id="h-gen">0</span><small>tokens / sec</small></div><div class="inf-hero-cap">output generation speed</div></div>
+        <div class="inf-hero-aux"><div id="h-peak">peak —</div><div id="h-pre">prompt — tok/s</div></div>
+      </div>
+      <canvas class="inf-hero-canvas" id="c-tput"></canvas>
+      <div class="inf-hero-foot"><div class="inf-legend"><span><i style="background:var(--blue)"></i>output tokens / second</span></div><span class="inf-time">last 60 seconds</span></div>
     </div>
-    <div class="inf-charts">
-      ${card('tput', 'throughput', '<div class="inf-legend"><span><i style="background:var(--accent)"></i>prefill</span><span><i style="background:var(--blue)"></i>decode</span></div>')}
-      ${card('active', 'active requests', '<div class="inf-legend"><span><i style="background:var(--blue)"></i>running</span><span><i style="background:var(--muted)"></i>queued</span></div>')}
-      ${card('kv', 'kv cache', '')}
+    <div class="inf-grid">
+      <div class="inf-metric"><div class="im-label">Active requests</div><div class="im-val"><span id="m-run">0</span></div><div class="im-sub" id="m-wait">none queued</div><canvas class="im-spark" id="c-active"></canvas></div>
+      <div class="inf-metric"><div class="im-label">Memory · KV cache</div><div class="im-ringwrap"><canvas class="im-ring" id="c-kv"></canvas><span class="im-ringval" id="m-kv">0%</span></div></div>
+      <div class="inf-metric"><div class="im-label">Time to first token</div><div class="im-val"><span id="m-ttft">—</span><small>ms</small></div><div class="im-sub">how fast a reply starts</div><canvas class="im-spark" id="c-ttft"></canvas></div>
+      <div class="inf-metric"><div class="im-label">Per output token</div><div class="im-val"><span id="m-tpot">—</span><small>ms</small></div><div class="im-sub">speed of each token</div><canvas class="im-spark" id="c-tpot"></canvas></div>
     </div>`;
 }
 function infRender(m, r) {
-  if (!document.getElementById('inf-stats')) document.getElementById('inf-body').innerHTML = infSkeleton();
-  infSetVal('run', infRate(m.running)); infSetVal('wait', infRate(m.waiting)); infSetVal('kv', (m.kvCache * 100).toFixed(0));
-  infSetVal('gtps', infRate(r.gRate)); infSetVal('ptps', infRate(r.pRate));
-  infSetVal('ttft', r.ttft == null ? '—' : Math.round(r.ttft)); infSetVal('tpot', r.tpot == null ? '—' : Math.round(r.tpot));
+  if (!document.getElementById('inf-hero')) document.getElementById('inf-panel').innerHTML = infSkeleton();
+  infHeadSet(m.engine, m.model, true);
+  if (r.gRate > infPeak) infPeak = r.gRate;
+  setText('h-gen', infRate(r.gRate));
+  setHTML('h-peak', `peak <b>${infRate(infPeak)}</b> tok/s`);
+  setHTML('h-pre', `prompt <b>${infRate(r.pRate)}</b> tok/s`);
+  setText('m-run', infRate(m.running));
+  setText('m-wait', m.waiting >= 1 ? infRate(m.waiting) + ' queued' : 'none queued');
+  const kv = m.kvCache * 100; setText('m-kv', kv.toFixed(0) + '%');
+  setText('m-ttft', r.ttft == null ? '—' : Math.round(r.ttft));
+  setText('m-tpot', r.tpot == null ? '—' : Math.round(r.tpot));
   const blue = cssRgb('--blue'), accent = cssRgb('--accent'), muted = cssRgb('--muted');
-  infChart('c-tput', [{ rgb: accent, data: infBuf.pTok }, { rgb: blue, data: infBuf.gTok }]);
-  document.getElementById('now-tput').innerHTML = `${infRate(r.gRate)}<small>tok/s out</small>`;
-  infChart('c-active', [{ rgb: blue, data: infBuf.run }, { rgb: muted, data: infBuf.wait }]);
-  document.getElementById('now-active').innerHTML = `${infRate(m.running)}<small>running</small>`;
-  infChart('c-kv', [{ rgb: accent, data: infBuf.kv }], 100);
-  document.getElementById('now-kv').innerHTML = `${(m.kvCache * 100).toFixed(0)}<small>%</small>`;
+  infChart('c-tput', [{ rgb: blue, data: infBuf.gTok }], 0, true); // headline = output (glowing line); prompt shown as a number
+  infChart('c-active', [{ rgb: blue, data: infBuf.run }]);
+  infChart('c-ttft', [{ rgb: muted, data: infBuf.ttft }]);
+  infChart('c-tpot', [{ rgb: muted, data: infBuf.tpot }]);
+  infGauge('c-kv', kv, kv >= 90 ? cssRgb('--err') : kv >= 70 ? accent : blue);
 }
-// Dependency-free area+line chart on a <canvas>. series newest-at-right, right-aligned.
-function infChart(id, series, fixedMax) {
+// A radial gauge (270° sweep) for a 0–100% level — elegant + instantly readable.
+function infGauge(id, pct, rgb) {
+  const cv = document.getElementById(id); if (!cv) return;
+  const dpr = window.devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight; if (!w || !h) return;
+  if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+  const ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h);
+  const cx = w / 2, cy = h / 2, r = Math.min(w, h) / 2 - 9, a0 = Math.PI * 0.75, a1 = Math.PI * 2.25;
+  ctx.lineCap = 'round'; ctx.lineWidth = 9;
+  ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--hair').trim();
+  ctx.beginPath(); ctx.arc(cx, cy, r, a0, a1); ctx.stroke();
+  const p = Math.max(0, Math.min(1, pct / 100));
+  const lite = rgb.map(c => Math.min(255, c + 55));
+  const g = ctx.createLinearGradient(0, 0, w, h);
+  g.addColorStop(0, `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`); g.addColorStop(1, `rgb(${lite[0]},${lite[1]},${lite[2]})`);
+  ctx.strokeStyle = g; ctx.shadowColor = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},0.45)`; ctx.shadowBlur = 7;
+  ctx.beginPath(); ctx.arc(cx, cy, r, a0, a0 + (a1 - a0) * p); ctx.stroke();
+}
+// Dependency-free smoothed area+line chart on a <canvas>. Series newest-at-right.
+function infChart(id, series, fixedMax, glow) {
   const cv = document.getElementById(id); if (!cv) return;
   const dpr = window.devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight;
   if (!w || !h) return;
@@ -2073,19 +2254,20 @@ function infChart(id, series, fixedMax) {
   const n = Math.max(2, ...series.map(s => s.data.length)), pad = 3;
   const xOf = i => pad + (w - 2 * pad) * (n <= 1 ? 0 : i / (n - 1));
   const yOf = v => h - pad - (h - 2 * pad) * Math.min(1, v / max);
-  const hair = getComputedStyle(document.documentElement).getPropertyValue('--hair').trim();
-  ctx.strokeStyle = hair; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(pad, h - pad - 0.5); ctx.lineTo(w - pad, h - pad - 0.5); ctx.stroke();
+  const smooth = pts => { ctx.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) { const mx = (pts[i - 1][0] + pts[i][0]) / 2, my = (pts[i - 1][1] + pts[i][1]) / 2; ctx.quadraticCurveTo(pts[i - 1][0], pts[i - 1][1], mx, my); } ctx.lineTo(pts[pts.length - 1][0], pts[pts.length - 1][1]); };
   series.forEach(s => {
     const d = s.data; if (!d.length) return; const off = n - d.length;
+    const pts = d.map((v, i) => [xOf(i + off), yOf(v)]);
     const line = `rgb(${s.rgb[0]},${s.rgb[1]},${s.rgb[2]})`;
-    ctx.beginPath(); d.forEach((v, i) => { const x = xOf(i + off), y = yOf(v); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
-    ctx.lineTo(xOf(d.length - 1 + off), h - pad); ctx.lineTo(xOf(off), h - pad); ctx.closePath();
+    ctx.beginPath(); smooth(pts); ctx.lineTo(pts[pts.length - 1][0], h - pad); ctx.lineTo(pts[0][0], h - pad); ctx.closePath();
     const g = ctx.createLinearGradient(0, 0, 0, h);
-    g.addColorStop(0, `rgba(${s.rgb[0]},${s.rgb[1]},${s.rgb[2]},0.26)`); g.addColorStop(1, `rgba(${s.rgb[0]},${s.rgb[1]},${s.rgb[2]},0)`);
+    g.addColorStop(0, `rgba(${s.rgb[0]},${s.rgb[1]},${s.rgb[2]},0.24)`); g.addColorStop(1, `rgba(${s.rgb[0]},${s.rgb[1]},${s.rgb[2]},0)`);
     ctx.fillStyle = g; ctx.fill();
-    ctx.beginPath(); d.forEach((v, i) => { const x = xOf(i + off), y = yOf(v); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); });
-    ctx.strokeStyle = line; ctx.lineWidth = 1.8; ctx.lineJoin = 'round'; ctx.stroke();
-    ctx.beginPath(); ctx.arc(xOf(d.length - 1 + off), yOf(d[d.length - 1]), 2.4, 0, 7); ctx.fillStyle = line; ctx.fill();
+    ctx.beginPath(); smooth(pts);
+    if (glow) { ctx.shadowColor = `rgba(${s.rgb[0]},${s.rgb[1]},${s.rgb[2]},0.5)`; ctx.shadowBlur = 9; }
+    ctx.strokeStyle = line; ctx.lineWidth = glow ? 2.3 : 1.9; ctx.lineJoin = 'round'; ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.beginPath(); ctx.arc(pts[pts.length - 1][0], pts[pts.length - 1][1], glow ? 3 : 2.5, 0, 7); ctx.fillStyle = line; ctx.fill();
   });
 }
 document.getElementById('open-inference').onclick = openInference;
@@ -2156,6 +2338,11 @@ function asstRender() {
 }
 async function asstSend(text) {
   text = (text || '').trim(); if (!text || asstBusy) return;
+  if (!engineReady) {
+    asstMsgs.push({ role: 'user', content: text });
+    asstMsgs.push({ role: 'assistant', content: 'Cloudless AI is still starting up — your model is loading. Give it a moment and try again.' });
+    asstRender(); return;
+  }
   asstBusy = true;
   const input = document.getElementById('asst-text'); input.value = '';
   document.getElementById('asst-send').disabled = true;
@@ -2201,6 +2388,7 @@ document.getElementById('asst-form').addEventListener('submit', e => { e.prevent
 // hero prompt bar → open the assistant (and send if the user typed something)
 document.getElementById('hero-ask').addEventListener('submit', e => {
   e.preventDefault();
+  if (!engineReady) { toast('Cloudless AI is still starting — your model is loading. Almost ready.'); return; }
   const inp = document.getElementById('hero-ask-input');
   const q = inp.value.trim(); inp.value = '';
   openAsst();
@@ -2298,8 +2486,8 @@ function initBackground() {
 /* ---- boot ---- */
 initBackground();
 tickClock(); setInterval(tickClock, 1000);
-refreshStatus(); renderGPUs(); renderPlaces(); renderApps(); renderEngine(); refreshNetStatus(); refreshActiveModel(); refreshProfileBadge();
-setInterval(() => { refreshStatus(); renderGPUs(); if (!engineSwitching) renderEngine(); }, 4000);
+refreshStatus(); renderGPUs(); renderSystem(); renderPlaces(); renderApps(); renderEngine(); refreshNetStatus(); refreshActiveModel(); refreshProfileBadge();
+setInterval(() => { refreshStatus(); renderGPUs(); renderSystem(); if (!engineSwitching) renderEngine(); }, 4000);
 setInterval(() => { if (installing === 0) renderApps(); }, 8000);
 setInterval(refreshNetStatus, 20000);
 api('/api/onboarding').then(o => { if (!o || !o.completed) renderApps().then(showOnboarding); }).catch(() => {});

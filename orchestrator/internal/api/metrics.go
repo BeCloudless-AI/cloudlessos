@@ -17,15 +17,16 @@ import (
 // GenTokens, TTFT/TPOT sum+count) are cumulative — the UI derives rates from deltas.
 type engineMetrics struct {
 	Available     bool    `json:"available"`
-	Engine        string  `json:"engine"`       // "vllm" | "sglang" | "" — the ACTIVE engine (even when metrics are off)
-	Ready         bool    `json:"ready"`        // the engine is up and serving
-	CanEnable     bool    `json:"canEnable"`    // metrics are off but a restart would turn them on
-	Running       float64 `json:"running"`      // requests decoding right now
-	Waiting       float64 `json:"waiting"`      // requests queued
-	KVCache       float64 `json:"kvCache"`      // KV-cache utilization, 0..1
-	PromptTokens  float64 `json:"promptTokens"` // cumulative prefill tokens
-	GenTokens     float64 `json:"genTokens"`    // cumulative decode/output tokens
-	TTFTSum       float64 `json:"ttftSum"`      // time-to-first-token histogram (prefill latency)
+	Engine        string  `json:"engine"`          // "vllm" | "sglang" | "" — the ACTIVE engine (even when metrics are off)
+	Model         string  `json:"model,omitempty"` // served model (basename) for display
+	Ready         bool    `json:"ready"`           // the engine is up and serving
+	CanEnable     bool    `json:"canEnable"`       // metrics are off but a restart would turn them on
+	Running       float64 `json:"running"`         // requests decoding right now
+	Waiting       float64 `json:"waiting"`         // requests queued
+	KVCache       float64 `json:"kvCache"`         // KV-cache utilization, 0..1
+	PromptTokens  float64 `json:"promptTokens"`    // cumulative prefill tokens
+	GenTokens     float64 `json:"genTokens"`       // cumulative decode/output tokens
+	TTFTSum       float64 `json:"ttftSum"`         // time-to-first-token histogram (prefill latency)
 	TTFTCount     float64 `json:"ttftCount"`
 	TPOTSum       float64 `json:"tpotSum"` // time-per-output-token histogram (decode latency)
 	TPOTCount     float64 `json:"tpotCount"`
@@ -38,10 +39,19 @@ func (s *Server) engineMetricsHandler(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 4*time.Second)
 	defer cancel()
 
+	model := s.state.Get().Model
+	if model == "" {
+		model = catalog.DefaultModel()
+	}
+	if i := strings.LastIndexByte(model, '/'); i >= 0 {
+		model = model[i+1:] // basename for display
+	}
+
 	// Live metrics available → return them (Engine is filled from the metric prefix).
 	if body, ok := scrapeMetrics(ctx); ok {
 		if m := parseEngineMetrics(body); m.Available {
 			m.Ready = true
+			m.Model = model
 			writeJSON(w, http.StatusOK, m)
 			return
 		}
@@ -53,7 +63,7 @@ func (s *Server) engineMetricsHandler(w http.ResponseWriter, r *http.Request) {
 	active := s.activeEngine(ctx)
 	ready := active != "" && engineReady(ctx)
 	name := engineDisplayName(active)
-	res := engineMetrics{Available: false, Engine: active, Ready: ready}
+	res := engineMetrics{Available: false, Engine: active, Ready: ready, Model: model}
 	switch {
 	case active == "":
 		res.Hint = "No inference engine is running right now."
@@ -112,6 +122,10 @@ func parseEngineMetrics(text string) engineMetrics {
 			engine = "sglang"
 			break
 		}
+		if strings.HasPrefix(k, "llamacpp:") {
+			engine = "llamacpp"
+			break
+		}
 	}
 	get := func(names ...string) float64 {
 		for _, n := range names {
@@ -124,16 +138,16 @@ func parseEngineMetrics(text string) engineMetrics {
 	return engineMetrics{
 		Available:     engine != "",
 		Engine:        engine,
-		Running:       get("vllm:num_requests_running", "sglang:num_running_reqs"),
-		Waiting:       get("vllm:num_requests_waiting", "sglang:num_queue_reqs"),
-		KVCache:       get("vllm:gpu_cache_usage_perc", "sglang:token_usage"),
-		PromptTokens:  get("vllm:prompt_tokens_total", "sglang:prompt_tokens_total"),
-		GenTokens:     get("vllm:generation_tokens_total", "sglang:generation_tokens_total"),
+		Running:       get("vllm:num_requests_running", "sglang:num_running_reqs", "llamacpp:requests_processing"),
+		Waiting:       get("vllm:num_requests_waiting", "sglang:num_queue_reqs", "llamacpp:requests_deferred"),
+		KVCache:       get("vllm:gpu_cache_usage_perc", "sglang:token_usage", "llamacpp:kv_cache_usage_ratio"),
+		PromptTokens:  get("vllm:prompt_tokens_total", "sglang:prompt_tokens_total", "llamacpp:prompt_tokens_total"),
+		GenTokens:     get("vllm:generation_tokens_total", "sglang:generation_tokens_total", "llamacpp:tokens_predicted_total"),
 		TTFTSum:       get("vllm:time_to_first_token_seconds_sum", "sglang:time_to_first_token_seconds_sum"),
 		TTFTCount:     get("vllm:time_to_first_token_seconds_count", "sglang:time_to_first_token_seconds_count"),
 		TPOTSum:       get("vllm:time_per_output_token_seconds_sum", "sglang:inter_token_latency_seconds_sum", "sglang:time_per_output_token_seconds_sum"),
 		TPOTCount:     get("vllm:time_per_output_token_seconds_count", "sglang:inter_token_latency_seconds_count", "sglang:time_per_output_token_seconds_count"),
-		GenThroughput: get("sglang:gen_throughput"),
+		GenThroughput: get("sglang:gen_throughput", "llamacpp:predicted_tokens_seconds"),
 		Preemptions:   get("vllm:num_preemptions_total"),
 	}
 }

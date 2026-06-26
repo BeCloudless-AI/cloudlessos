@@ -67,6 +67,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/health", s.health)
 	mux.HandleFunc("GET /api/gpu", s.gpu)
 	mux.HandleFunc("GET /api/system", s.system)
+	mux.HandleFunc("GET /api/sysload", s.sysload)
 	mux.HandleFunc("GET /api/profile", s.profileGet)
 	mux.HandleFunc("POST /api/profile", s.profileSet)
 	mux.HandleFunc("GET /api/catalog", s.catalog)

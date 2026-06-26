@@ -60,22 +60,23 @@ type App struct {
 	Tagline     string            `json:"tagline,omitempty"`  // short "what it's for" line for the launcher
 	Long        string            `json:"long,omitempty"`     // full paragraph for the app's launcher page
 	Examples    []string          `json:"examples,omitempty"` // example "what you can do" bullets
-	Image       string            `json:"image"` // empty = recipe not yet available
-	Ports       map[int]int       `json:"ports"` // hostPort -> containerPort
+	Image       string            `json:"image"`              // empty = recipe not yet available
+	Ports       map[int]int       `json:"ports"`              // hostPort -> containerPort
 	Env         map[string]string `json:"env,omitempty"`
-	GPUs        string            `json:"gpus"`       // "all", "0", ... or "" for none
-	OpenPath    string            `json:"openPath"`   // URL path to open once running
-	MinVRAMGB   int               `json:"minVramGB"`  // rough VRAM floor for usefulness
-	Verified    bool              `json:"verified"`   // recipe validated on Cloudless dev hardware
-	Preinstall  bool              `json:"preinstall"` // pulled AND run automatically on first boot
-	Prefetch    bool              `json:"-"`          // image pulled on boot but not run (ready alternative)
-	Service     bool              `json:"service"`    // infrastructure (engine), hidden from the launcher
+	GPUs        string            `json:"gpus"`             // "all", "0", ... or "" for none
+	OpenPath    string            `json:"openPath"`         // URL path to open once running
+	MinVRAMGB   int               `json:"minVramGB"`        // rough VRAM floor for usefulness
+	Verified    bool              `json:"verified"`         // recipe validated on Cloudless dev hardware
+	Preinstall  bool              `json:"preinstall"`       // pulled AND run automatically on first boot
+	Prefetch    bool              `json:"-"`                // image pulled on boot but not run (ready alternative)
+	Service     bool              `json:"service"`          // infrastructure (engine), hidden from the launcher
 	Hidden      bool              `json:"hidden,omitempty"` // installed/usable but not shown as a launcher tile
-	Engine      bool              `json:"engine"`     // switchable inference engine (carries the stable alias)
-	Network     string            `json:"-"`          // docker network to join (for inter-app DNS)
-	Command     []string          `json:"-"`          // container command/args
-	Volumes     map[string]string `json:"-"`          // host-or-named-volume -> containerPath
-	Build       string            `json:"-"`          // embedded build-context name (build instead of pull)
+	Engine      bool              `json:"engine"`           // switchable inference engine (carries the stable alias)
+	NeedsEngine bool              `json:"needsEngine"`      // depends on the LLM engine (gated until the model is served)
+	Network     string            `json:"-"`                // docker network to join (for inter-app DNS)
+	Command     []string          `json:"-"`                // container command/args
+	Volumes     map[string]string `json:"-"`                // host-or-named-volume -> containerPath
+	Build       string            `json:"-"`                // embedded build-context name (build instead of pull)
 	Config      []ConfigFile      `json:"config,omitempty"` // editable config files (mounted)
 	Settings    []Field           `json:"-"`                // form fields (via /api/apps/{id}/settings)
 	Admin       *AdminInfo        `json:"-"`                // how the app is administered beyond Cloudless settings
@@ -269,12 +270,41 @@ var apps = []App{
 			"--mem-fraction-static", "0.5",
 			"--context-length", "32768", // match vLLM; agents send big prompts
 			"--tool-call-parser", "qwen25", // agents need tool calling
-			"--enable-metrics",             // expose Prometheus /metrics for the inference dashboard (vLLM has it on by default)
+			"--enable-metrics", // expose Prometheus /metrics for the inference dashboard (vLLM has it on by default)
 		},
 		Volumes:   map[string]string{"cloudless-hf": "/root/.cache/huggingface"},
 		GPUs:      "all",
 		OpenPath:  "/",
 		MinVRAMGB: 6,
+		Verified:  false,
+		Prefetch:  true,
+		Service:   true,
+		Engine:    true,
+		Network:   cloudlessNet,
+	},
+	{
+		// Lightweight engine: runs on CPU+GPU and can offload layers to system RAM, so
+		// it can serve models that don't fit in VRAM. Uses compact GGUF model files.
+		// The server image's entrypoint IS llama-server, so Command holds its flags.
+		// Note: it serves its bundled GGUF; the Model Manager's model pick (HF safetensors)
+		// applies to vLLM/SGLang, not here — GGUF model switching is a follow-up.
+		ID:          "llamacpp",
+		Name:        "llama.cpp Engine",
+		Description: "Lightweight engine — runs on CPU+GPU and offloads to system RAM (GGUF models).",
+		Image:       "ghcr.io/ggml-org/llama.cpp:server-cuda",
+		Ports:       map[int]int{8000: 8000},
+		Command: []string{
+			"-hf", "bartowski/Qwen2.5-1.5B-Instruct-GGUF:Q4_K_M", // compact GGUF default
+			"--alias", "cloudless",
+			"--host", "0.0.0.0", "--port", "8000",
+			"-ngl", "999", // offload all layers to GPU when they fit; lower this to spill into RAM
+			"--jinja",   // chat template incl. tool calling (for agents)
+			"--metrics", // expose Prometheus /metrics for the inference dashboard
+		},
+		Volumes:   map[string]string{"cloudless-llamacpp": "/root/.cache/llama.cpp"},
+		GPUs:      "all",
+		OpenPath:  "/",
+		MinVRAMGB: 0, // can run with little/no VRAM (CPU + RAM offload)
 		Verified:  false,
 		Prefetch:  true,
 		Service:   true,
@@ -294,8 +324,8 @@ var apps = []App{
 			"Tune system prompts and switch between models",
 			"Revisit and continue your past chats",
 		},
-		Image:       "ghcr.io/open-webui/open-webui:main",
-		Ports:       map[int]int{3000: 8080},
+		Image: "ghcr.io/open-webui/open-webui:main",
+		Ports: map[int]int{3000: 8080},
 		Env: map[string]string{
 			"WEBUI_NAME": "Cloudless AI",
 			// Auth defaults (overridable in Settings, which writes webui.env and is
@@ -307,6 +337,7 @@ var apps = []App{
 			"OPENAI_API_BASE_URL": EngineEndpoint, // stable alias -> active engine (D15)
 			"OPENAI_API_KEY":      "cloudless",    // engines ignore it unless --api-key is set
 		},
+		NeedsEngine: true, // chat UI for the local model — useless until the engine serves it
 		// webui.env is injected into the container ENV (Open WebUI reads process env),
 		// not mounted. The Settings toggles write WEBUI_AUTH / ENABLE_SIGNUP here.
 		Config: []ConfigFile{{File: "webui.env", Lang: "env", Env: true}},
@@ -450,6 +481,7 @@ var apps = []App{
 		// which stays the source of truth for rebuilding + re-pushing). Manifest-pinnable.
 		Image:       "samuelcardillo/cloudless-openclaw:v1",
 		Ports:       map[int]int{18789: 18789}, // for the UI link; host networking binds it directly
+		NeedsEngine: true,                      // agent that drives the local model
 		Env:         map[string]string{"CUSTOM_API_KEY": "cloudless"},
 		Config:      []ConfigFile{{File: "openclaw.json", Path: "/root/.openclaw/openclaw.json", Lang: "json"}},
 		Settings: []Field{
@@ -481,6 +513,7 @@ var apps = []App{
 			"Use it as a personal assistant on the go",
 		},
 		Image:       "samuelcardillo/cloudless-hermes:v1",
+		NeedsEngine: true, // agent that drives the local model
 		Env:         map[string]string{"OPENAI_API_KEY": "cloudless"},
 		Config: []ConfigFile{
 			{File: "config.yaml", Path: "/root/.hermes/config.yaml", Lang: "yaml"},
@@ -499,7 +532,7 @@ var apps = []App{
 		OpenPath:  "/",
 		MinVRAMGB: 0,
 		Verified:  false,
-		Network:     cloudlessNet,
+		Network:   cloudlessNet,
 	},
 }
 

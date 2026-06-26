@@ -42,6 +42,11 @@ func (s *Server) system(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// sysload reports live CPU + RAM utilization for the dashboard.
+func (s *Server) sysload(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, hardware.Load())
+}
+
 // profileGet returns the user profile plus the resolved locale/region picture so
 // the UI can show the detected timezone/country and the effective (overridable) one.
 func (s *Server) profileGet(w http.ResponseWriter, r *http.Request) {

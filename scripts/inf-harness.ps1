@@ -1,54 +1,55 @@
-# Renders the Inference activity dashboard (real CSS + the real infChart canvas code)
+# Renders the redesigned Inference Activity tab (real CSS + real infChart/infGauge)
 # against sample data, to PNG via headless Edge.
 $src = 'D:\Cloudless\orchestrator\internal\api\web\index.html'
 $h = Get-Content $src -Raw -Encoding UTF8
 $style = [regex]::Match($h, '(?s)<style>.*?</style>').Value
-# pull the real infChart function out of index.html so we render exactly what ships
-$infChart = [regex]::Match($h, '(?s)// Dependency-free area\+line chart.*?\n\}\n').Value
-if (-not $infChart) { Write-Host 'could not extract infChart'; exit 1 }
+$cssRgb = [regex]::Match($h, '(?s)const cssRgb = v => \{.*?return \[130, 130, 130\]; \};').Value
+$infChart = [regex]::Match($h, '(?s)// Dependency-free smoothed area\+line chart.*?\n\}\n').Value
+$infGauge = [regex]::Match($h, '(?s)// A radial gauge.*?\n\}\n').Value
+if (-not ($cssRgb -and $infChart -and $infGauge)) { Write-Host "extract failed"; exit 1 }
 
 $body = @'
 <div class="mm" style="height:auto!important;max-height:none!important">
-  <div class="lp-head"><div class="lp-ttl">Inference activity<span class="inf-eng">SGLANG</span></div><button class="lp-x">&times;</button></div>
-  <div class="mm-body"><div id="inf-body">
-    <div class="inf-stats">
-      <div class="inf-tile accent"><div class="it-label">Decoding now</div><div class="it-val"><span id="v-run">2</span><span class="it-unit">reqs</span></div></div>
-      <div class="inf-tile"><div class="it-label">Queued</div><div class="it-val"><span id="v-wait">0</span><span class="it-unit">reqs</span></div></div>
-      <div class="inf-tile"><div class="it-label">KV cache</div><div class="it-val"><span id="v-kv">34</span><span class="it-unit">%</span></div></div>
-      <div class="inf-tile accent"><div class="it-label">Output</div><div class="it-val"><span id="v-gtps">142</span><span class="it-unit">tok/s</span></div></div>
-      <div class="inf-tile warm"><div class="it-label">Prefill</div><div class="it-val"><span id="v-ptps">0</span><span class="it-unit">tok/s</span></div></div>
-      <div class="inf-tile"><div class="it-label">First token</div><div class="it-val"><span id="v-ttft">38</span><span class="it-unit">ms</span></div></div>
-      <div class="inf-tile"><div class="it-label">Per token</div><div class="it-val"><span id="v-tpot">11</span><span class="it-unit">ms</span></div></div>
+  <div class="lp-head"><div class="lp-ttl">Inference</div>
+    <div class="inf-head on"><span class="inf-live"></span><b>SGLang</b><span class="sep">&middot;</span>Qwen2.5-1.5B-Instruct<span class="ih-state">live</span></div>
+    <button class="lp-x">&times;</button></div>
+  <div class="mm-body"><div id="inf-body"><div id="inf-panel">
+    <div class="inf-hero">
+      <div class="inf-hero-head">
+        <div><div class="inf-hero-val"><span>142</span><small>tokens / sec</small></div><div class="inf-hero-cap">output generation speed</div></div>
+        <div class="inf-hero-aux"><div>peak <b>213</b> tok/s</div><div>prompt <b>0</b> tok/s</div></div>
+      </div>
+      <canvas class="inf-hero-canvas" id="c-tput"></canvas>
+      <div class="inf-hero-foot"><div class="inf-legend"><span><i style="background:var(--blue)"></i>output tokens / second</span></div><span class="inf-time">last 60 seconds</span></div>
     </div>
-    <div class="inf-charts">
-      <div class="inf-card"><div class="ic-head"><span class="ic-title">throughput</span><span class="ic-now">142<small>tok/s out</small></span></div><canvas class="inf-canvas" id="c-tput"></canvas><div class="inf-legend"><span><i style="background:var(--accent)"></i>prefill</span><span><i style="background:var(--blue)"></i>decode</span></div></div>
-      <div class="inf-card"><div class="ic-head"><span class="ic-title">active requests</span><span class="ic-now">2<small>running</small></span></div><canvas class="inf-canvas" id="c-active"></canvas><div class="inf-legend"><span><i style="background:var(--blue)"></i>running</span><span><i style="background:var(--muted)"></i>queued</span></div></div>
-      <div class="inf-card"><div class="ic-head"><span class="ic-title">kv cache</span><span class="ic-now">34<small>%</small></span></div><canvas class="inf-canvas" id="c-kv"></canvas></div>
+    <div class="inf-grid">
+      <div class="inf-metric"><div class="im-label">Active requests</div><div class="im-val"><span>2</span></div><div class="im-sub">1 queued</div><canvas class="im-spark" id="c-active"></canvas></div>
+      <div class="inf-metric"><div class="im-label">Memory &middot; KV cache</div><div class="im-ringwrap"><canvas class="im-ring" id="c-kv"></canvas><span class="im-ringval">34%</span></div></div>
+      <div class="inf-metric"><div class="im-label">Time to first token</div><div class="im-val"><span>38</span><small>ms</small></div><div class="im-sub">how fast a reply starts</div><canvas class="im-spark" id="c-ttft"></canvas></div>
+      <div class="inf-metric"><div class="im-label">Per output token</div><div class="im-val"><span>11</span><small>ms</small></div><div class="im-sub">speed of each token</div><canvas class="im-spark" id="c-tpot"></canvas></div>
     </div>
-  </div></div>
+  </div></div></div>
 </div>
 '@
 
 $script = @"
 <script>
-const cssRgb = v => { const h = getComputedStyle(document.documentElement).getPropertyValue(v).trim().replace('#', '');
-  if (h.length === 3) return [0,1,2].map(i => parseInt(h[i]+h[i],16));
-  if (h.length >= 6) return [0,2,4].map(i => parseInt(h.slice(i,i+2),16)); return [130,130,130]; };
+$cssRgb
+$infGauge
 $infChart
 window.addEventListener('load', () => {
   const blue = cssRgb('--blue'), accent = cssRgb('--accent'), muted = cssRgb('--muted');
-  const N = 60, gen = [], pre = [], run = [], wait = [], kv = [];
-  for (let i = 0; i < N; i++) {
-    const t = i / 6;
-    gen.push(Math.max(0, 120 + 45*Math.sin(t) + 25*Math.sin(t*2.3)));
-    pre.push(i % 11 === 0 ? 600 + 300*Math.abs(Math.sin(t)) : 0);
-    run.push(Math.max(0, Math.round(2 + 1.5*Math.sin(t*0.7))));
-    wait.push(i % 9 === 0 ? 1 : 0);
-    kv.push(28 + 9*Math.sin(t*0.5) + 3*Math.sin(t*1.7));
-  }
-  infChart('c-tput', [{ rgb: accent, data: pre }, { rgb: blue, data: gen }]);
-  infChart('c-active', [{ rgb: blue, data: run }, { rgb: muted, data: wait }]);
-  infChart('c-kv', [{ rgb: accent, data: kv }], 100);
+  const N = 60, gen = [], run = [], ttft = [], tpot = [];
+  for (let i = 0; i < N; i++) { const t = i / 6;
+    gen.push(Math.max(0, 135 + 55*Math.sin(t) + 22*Math.sin(t*2.3)));
+    run.push(Math.max(0, Math.round(2 + 1.4*Math.sin(t*0.7))));
+    ttft.push(34 + 7*Math.sin(t*0.4) + (i % 17 === 0 ? 12 : 0));
+    tpot.push(10.5 + 2*Math.sin(t*0.6)); }
+  infChart('c-tput', [{ rgb: blue, data: gen }], 0, true);
+  infChart('c-active', [{ rgb: blue, data: run }]);
+  infChart('c-ttft', [{ rgb: muted, data: ttft }]);
+  infChart('c-tpot', [{ rgb: muted, data: tpot }]);
+  infGauge('c-kv', 34, blue);
 });
 </script>
 "@
@@ -59,6 +60,6 @@ $tmp = "$env:TEMP\inf-render.html"
 [System.IO.File]::WriteAllText($tmp, $page, (New-Object System.Text.UTF8Encoding($false)))
 $edge = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
 $out = "$env:TEMP\inference.png"; if (Test-Path $out) { Remove-Item $out }
-& $edge --headless=new --disable-gpu --hide-scrollbars --force-device-scale-factor=1 --window-size=1240,780 --screenshot="$out" ("file:///" + ($tmp -replace '\\','/')) 2>$null
-Start-Sleep -Milliseconds 1400
+& $edge --headless=new --disable-gpu --hide-scrollbars --force-device-scale-factor=1 --window-size=1240,760 --screenshot="$out" ("file:///" + ($tmp -replace '\\','/')) 2>$null
+Start-Sleep -Milliseconds 1500
 if (Test-Path $out) { "OK $out" } else { "NO SCREENSHOT" }

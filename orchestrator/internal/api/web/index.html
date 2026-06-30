@@ -28,8 +28,12 @@
     --card-edge: rgba(255, 255, 255, 0.65);
     --hair: rgba(40, 28, 70, 0.10); --line: rgba(40, 28, 70, 0.10); --line-2: rgba(40, 28, 70, 0.16);
     --glass-blur: 20px;
-    --shadow: 0 20px 50px -24px rgba(40, 28, 80, 0.45);
-    --shadow-sm: 0 10px 28px -16px rgba(40, 28, 80, 0.40);
+    /* drop shadow + glossy glass edge: bright top bevel, faint inner base shade */
+    --shadow: 0 20px 50px -24px rgba(40, 28, 80, 0.45),
+              inset 0 1px 0 rgba(255, 255, 255, 0.55),
+              inset 0 -16px 36px -28px rgba(40, 28, 80, 0.22);
+    --shadow-sm: 0 10px 28px -16px rgba(40, 28, 80, 0.40),
+                 inset 0 1px 0 rgba(255, 255, 255, 0.5);
     --ok: #1fb877; --warn: #c98a00; --err: #e5484d;
     --radius: 20px;
     --sky: 47, 107, 255; --sky-alpha: 0;    /* legacy (three.js field disabled) */
@@ -58,7 +62,11 @@
     --hair: rgba(190, 180, 230, 0.12); --line: rgba(190, 180, 230, 0.12); --line-2: rgba(190, 180, 230, 0.20);
     --card-edge: rgba(190, 180, 230, 0.16);
     --blue: #6f9bff; --blue-soft: rgba(111, 155, 255, 0.18);
-    --shadow: 0 24px 60px -24px rgba(0, 0, 0, 0.65); --shadow-sm: 0 12px 30px -16px rgba(0, 0, 0, 0.6);
+    --shadow: 0 24px 60px -24px rgba(0, 0, 0, 0.65),
+              inset 0 1px 0 rgba(255, 255, 255, 0.12),
+              inset 0 -16px 36px -28px rgba(0, 0, 0, 0.4);
+    --shadow-sm: 0 12px 30px -16px rgba(0, 0, 0, 0.6),
+                 inset 0 1px 0 rgba(255, 255, 255, 0.1);
     --w-base: #0e0c16;
     --w1: #6b5a2e; --w2: #7a4a40; --w3: #7a2f50; --w4: #4a2f7a; --w5: #1f5a55; --w6: #5a2f4a;
     --wall-veil: rgba(8, 6, 16, 0.45);
@@ -80,7 +88,7 @@
   /* ---------- wallpaper: soft iridescent gradient mesh (the Cloudless brand) ---------- */
   .wall { position: fixed; inset: 0; z-index: -2; background: var(--w-base); overflow: hidden; }
   .wall::before {
-    content: ""; position: absolute; inset: -25%;
+    content: ""; position: absolute; inset: -30%;
     background:
       radial-gradient(38% 42% at 24% 20%, var(--w1), transparent 62%),
       radial-gradient(40% 44% at 80% 18%, var(--w2), transparent 62%),
@@ -88,15 +96,26 @@
       radial-gradient(50% 54% at 26% 82%, var(--w3), transparent 62%),
       radial-gradient(48% 52% at 82% 84%, var(--w4), transparent 62%),
       radial-gradient(44% 48% at 92% 56%, var(--w6), transparent 62%);
+    /* each blob lives on an oversized tile so it can drift independently */
+    background-size: 165% 165%, 150% 150%, 175% 175%, 155% 155%, 168% 168%, 150% 150%;
+    background-position: 18% 22%, 82% 16%, 50% 50%, 22% 84%, 84% 86%, 92% 52%;
     filter: saturate(1.2);
-    animation: drift 46s ease-in-out infinite alternate;
-    will-change: transform;
+    /* drift = gentle breathing of the whole field; colorflow = each colour
+       wandering its own path so the palette slowly moves, not just pans */
+    animation: drift 52s ease-in-out infinite alternate,
+               colorflow 88s ease-in-out infinite alternate;
+    will-change: transform, background-position;
   }
   .wall::after { content: ""; position: absolute; inset: 0; background: var(--wall-veil); }
   @keyframes drift {
     0%   { transform: translate3d(0, 0, 0) scale(1.02); }
     50%  { transform: translate3d(1.5%, -1.5%, 0) scale(1.07); }
     100% { transform: translate3d(-1.5%, 1%, 0) scale(1.04); }
+  }
+  @keyframes colorflow {
+    0%   { background-position: 18% 22%, 82% 16%, 50% 50%, 22% 84%, 84% 86%, 92% 52%; }
+    50%  { background-position: 30% 12%, 66% 30%, 42% 60%, 34% 70%, 70% 74%, 78% 40%; }
+    100% { background-position:  8% 34%, 90% 26%, 58% 42%, 14% 92%, 92% 78%, 84% 64%; }
   }
   #bg { display: none; }
   @media (prefers-reduced-motion: reduce) { .wall::before { animation: none; } }
@@ -606,10 +625,16 @@
     display: grid; place-items: center; font-size: 33px; cursor: pointer;
     background: linear-gradient(160deg, color-mix(in srgb, var(--icon) 88%, #fff), var(--icon)); border: 1px solid var(--card-edge); box-shadow: var(--shadow-sm);
     transition: transform 0.28s cubic-bezier(.34, 1.56, .64, 1), border-color 0.18s, box-shadow 0.28s;
-    user-select: none;
+    user-select: none; box-shadow: var(--shadow-sm), inset 0 1px 0 rgba(255,255,255,0.7);
+  }
+  /* glossy specular highlight curving across the top of each app icon */
+  .ic::after {
+    content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+    background: linear-gradient(165deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0.12) 30%, transparent 52%);
+    mix-blend-mode: screen;
   }
   .tile .ic:hover { transform: translateY(-5px) scale(1.03);
-    box-shadow: 0 18px 34px -14px color-mix(in srgb, var(--blue) 60%, transparent); }
+    box-shadow: 0 18px 34px -14px color-mix(in srgb, var(--blue) 60%, transparent), inset 0 1px 0 rgba(255,255,255,0.7); }
   .tile .ic:active { transform: translateY(-1px) scale(.97); }
   .tile.running .ic { border-color: color-mix(in srgb, var(--accent) 55%, var(--line-2)); }
   .tile.busy .ic { animation: pulse 1.4s ease-in-out infinite; }

@@ -67,9 +67,9 @@ $body = @"
     <section class="card">
       <div class="card-head"><span class="card-ic">&#128193;</span><h2>Places</h2></div>
       <div id="places-body">
-        <div class="place"><span class="pic">&#128193;</span><span class="pl-txt"><span class="pl">Models</span><span class="pp">&hellip;/cloudless/models</span></span><span class="pl-go">&#8250;</span></div>
-        <div class="place"><span class="pic">&#127912;</span><span class="pl-txt"><span class="pl">Outputs</span><span class="pp">&hellip;/cloudless/outputs</span></span><span class="pl-go">&#8250;</span></div>
-        <div class="place"><span class="pic">&#128196;</span><span class="pl-txt"><span class="pl">Workspace</span><span class="pp">&hellip;/cloudless/work</span></span><span class="pl-go">&#8250;</span></div>
+        <div class="place"><span class="pic">&#128230;</span><span class="pl-txt"><span class="pl">Models</span><span class="pl-d">AI models you download are stored here</span></span><span class="pl-go"><span class="pl-go-tx">Open</span><span class="pl-go-ar">&#8599;</span></span></div>
+        <div class="place"><span class="pic">&#128444;</span><span class="pl-txt"><span class="pl">Outputs</span><span class="pl-d">Images and files your apps generate</span></span><span class="pl-go"><span class="pl-go-tx">Open</span><span class="pl-go-ar">&#8599;</span></span></div>
+        <div class="place"><span class="pic">&#128451;</span><span class="pl-txt"><span class="pl">Workspace</span><span class="pl-d">Your own projects, notebooks and data</span></span><span class="pl-go"><span class="pl-go-tx">Open</span><span class="pl-go-ar">&#8599;</span></span></div>
       </div>
     </section>
   </div>

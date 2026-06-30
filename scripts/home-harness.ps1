@@ -55,8 +55,14 @@ $body = @"
         <div class="stat"><div class="stat-row"><span>cpu</span><b>68%</b></div><div class="track"><i class="mid" style="width:68%"></i></div></div>
         <div class="stat"><div class="stat-row"><span>memory</span><b>18.4 / 64.0 GB</b></div><div class="track"><i style="width:29%"></i></div></div>
       </div></div>
-      <button class="card-link">&#9672; Qwen2.5-1.5B-Instruct &#8594;</button>
-      <button class="card-link">&#9645; Inference &#8594;</button>
+      <div class="hw-foot">
+        <button class="hw-link">
+          <span class="hw-link-dot on"></span>
+          <span class="hw-link-tx"><span class="hw-link-k">Loaded in vLLM</span><span class="hw-link-v">Qwen2.5-1.5B-Instruct</span></span>
+          <span class="hw-link-go">&#8250;</span>
+        </button>
+        <button class="hw-metrics"><span class="hw-metrics-ic"><i></i><i></i><i></i></span>Metrics</button>
+      </div>
     </section>
     <section class="card">
       <div class="card-head"><span class="card-ic">&#128193;</span><h2>Places</h2></div>
@@ -71,7 +77,7 @@ $body = @"
 <nav class="dock" id="dock">
   <button class="dock-item"><span class="dock-tip">Apps</span>&#9638;</button>
   <button class="dock-item"><span class="dock-tip">Models</span>&#9672;</button>
-  <button class="dock-item running"><span class="dock-tip">Inference</span>&#9637;<span class="run-dot"></span></button>
+  <button class="dock-item running"><span class="dock-tip">Metrics</span>&#9637;<span class="run-dot"></span></button>
   <span class="dock-sep"></span>
   <button class="dock-item accent"><span class="dock-tip">Assistant</span>&#10022;</button>
   <button class="dock-item"><span class="dock-tip">Settings</span>&#9881;</button>

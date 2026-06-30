@@ -606,18 +606,22 @@
   .stat { margin-top: 14px; }
   .stat-row { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; color: var(--muted); margin-bottom: 7px; text-transform: none; }
   .stat-row b { color: var(--ink); font-weight: 700; font-size: 13px; font-variant-numeric: tabular-nums; }
-  .track { height: 7px; border-radius: 99px; background: var(--panel-2); border: 1px solid var(--hair); overflow: hidden; position: relative; }
-  .track > i { display: block; height: 100%; border-radius: 99px; position: relative;
-    background: linear-gradient(90deg, var(--blue), color-mix(in srgb, var(--blue) 55%, #ffffff));
-    background-size: 220% 100%; animation: flow 3s linear infinite;
-    box-shadow: 0 0 9px -1px color-mix(in srgb, var(--blue) 65%, transparent);
-    transition: width 0.9s cubic-bezier(.22, 1, .36, 1); }
-  /* a soft sheen sweeps across the fill — reads as "live" without being loud */
-  .track > i::after { content: ""; position: absolute; inset: 0; border-radius: inherit;
-    background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,.5) 50%, transparent 100%);
-    background-size: 55% 100%; background-repeat: no-repeat; animation: sheen 2.8s ease-in-out infinite; }
-  @keyframes flow { to { background-position: -220% 0; } }
-  @keyframes sheen { 0% { background-position: -60% 0; } 55%, 100% { background-position: 170% 0; } }
+  /* usage meters: a soft inset rail with a smooth, value-tinted fill */
+  @property --m1 { syntax: "<color>"; inherits: false; initial-value: #46c7dd; }
+  @property --m2 { syntax: "<color>"; inherits: false; initial-value: #5a8cff; }
+  .track { height: 9px; border-radius: 999px; overflow: hidden; position: relative;
+    background: color-mix(in srgb, var(--ink) 8%, transparent);
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.12), inset 0 -1px 0 rgba(255, 255, 255, 0.25); }
+  .track > i { display: block; height: 100%; min-width: 9px; border-radius: 999px; position: relative;
+    --m1: #46c7dd; --m2: #5a8cff;   /* calm: cyan → blue */
+    background: linear-gradient(90deg, var(--m1), var(--m2));
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), 0 1px 4px -1px color-mix(in srgb, var(--m2) 55%, transparent);
+    transition: width 0.9s cubic-bezier(.22, 1, .36, 1), --m1 .5s ease, --m2 .5s ease; }
+  .track > i.mid { --m1: #5f8bff; --m2: #9a6bff; }   /* busy: blue → violet */
+  .track > i.hi  { --m1: #ffb24d; --m2: #ff5e6c; }   /* hot:  amber → red */
+  /* a small soft cap so the leading edge of the fill reads as rounded + lit */
+  .track > i::after { content: ""; position: absolute; top: 0; right: 0; bottom: 0; width: 9px; border-radius: 999px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.05)); }
   .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
   .chips span { font-size: 11.5px; color: var(--muted); background: var(--panel-2); border: 1px solid var(--hair);
     border-radius: 9px; padding: 5px 11px; font-variant-numeric: tabular-nums; box-shadow: inset 0 1px 0 rgba(255,255,255,0.35); }
@@ -1110,6 +1114,8 @@ let asstMsgs = [], asstBusy = false;
 const DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 const MON = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const pad = n => String(n).padStart(2, '0');
+// usage-meter tier: calm (cyan→blue) under 60%, busy (violet) 60–85%, hot (red) above
+function meterClass(p) { return p >= 85 ? 'hi' : p >= 60 ? 'mid' : ''; }
 const greet = h => h < 5 ? 'Good night' : h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
 let userName = '';
 // Pulls the user profile + detected locale to personalize the greeting and show
@@ -1230,7 +1236,7 @@ function updateGPUValues(gpus, calc) {
     const el = blocks[i]; if (!el) return;
     const c = calc(g);
     const set = (k, v) => { const n = el.querySelector(`[data-k="${k}"]`); if (n) n.textContent = v; };
-    const wid = (k, v) => { const n = el.querySelector(`[data-k="${k}"]`); if (n) n.style.width = v + '%'; };
+    const wid = (k, v) => { const n = el.querySelector(`[data-k="${k}"]`); if (n) { n.style.width = v + '%'; n.className = meterClass(v); } };
     wid('vram', c.vram); wid('utilbar', c.util);
     set('mem', c.mem); set('util', g.utilPct + '%'); set('temp', g.tempC + '°C'); set('pw', c.power);
   });
@@ -1243,8 +1249,8 @@ async function renderSystem() {
   const cpu = (d.cpuModel || 'CPU').replace(/\((R|TM)\)/g, '').replace(/\bCPU\b|\bProcessor\b|\d+-Core/gi, '').replace(/\s+/g, ' ').trim() || 'CPU';
   body.innerHTML = `<div class="sys-sec">
       <div class="gpu-name">${escapeHtml(cpu)}<span class="idx">${d.cores} threads</span></div>
-      <div class="stat"><div class="stat-row"><span>cpu</span><b>${Math.round(d.cpuPct)}%</b></div><div class="track"><i style="width:${Math.min(100, d.cpuPct)}%"></i></div></div>
-      <div class="stat"><div class="stat-row"><span>memory</span><b>${(d.memUsedMB / 1024).toFixed(1)} / ${(d.memTotalMB / 1024).toFixed(1)} GB</b></div><div class="track"><i style="width:${ramPct}%"></i></div></div>
+      <div class="stat"><div class="stat-row"><span>cpu</span><b>${Math.round(d.cpuPct)}%</b></div><div class="track"><i class="${meterClass(Math.min(100, d.cpuPct))}" style="width:${Math.min(100, d.cpuPct)}%"></i></div></div>
+      <div class="stat"><div class="stat-row"><span>memory</span><b>${(d.memUsedMB / 1024).toFixed(1)} / ${(d.memTotalMB / 1024).toFixed(1)} GB</b></div><div class="track"><i class="${meterClass(ramPct)}" style="width:${ramPct}%"></i></div></div>
     </div>`;
 }
 

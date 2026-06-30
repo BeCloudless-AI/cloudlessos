@@ -47,12 +47,12 @@ $body = @"
       <div id="gpu-body"><div class="gpu">
         <div class="gpu-name">RTX 5090<span class="idx">#0</span></div>
         <div class="stat"><div class="stat-row"><span>Memory</span><b>14.2 / 32.0 GB</b></div><div class="track"><i style="width:44%"></i></div></div>
-        <div class="stat"><div class="stat-row"><span>Utilization</span><b>61%</b></div><div class="track"><i style="width:61%"></i></div></div>
+        <div class="stat"><div class="stat-row"><span>Utilization</span><b>91%</b></div><div class="track"><i class="hi" style="width:91%"></i></div></div>
         <div class="chips"><span>58&deg;C</span><span><b>412 / 600 W</b></span><span>Driver 595.79</span></div>
       </div></div>
       <div id="sys-body"><div class="sys-sec">
         <div class="gpu-name">Ryzen 9 7950X<span class="idx">32 threads</span></div>
-        <div class="stat"><div class="stat-row"><span>cpu</span><b>23%</b></div><div class="track"><i style="width:23%"></i></div></div>
+        <div class="stat"><div class="stat-row"><span>cpu</span><b>68%</b></div><div class="track"><i class="mid" style="width:68%"></i></div></div>
         <div class="stat"><div class="stat-row"><span>memory</span><b>18.4 / 64.0 GB</b></div><div class="track"><i style="width:29%"></i></div></div>
       </div></div>
       <button class="card-link">&#9672; Qwen2.5-1.5B-Instruct &#8594;</button>

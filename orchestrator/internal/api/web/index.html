@@ -249,7 +249,7 @@
   .adv.hidden { display: none; }
 
   /* ---------- model manager ---------- */
-  #models { background: rgba(16, 18, 24, 0.5); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
+  #models { background: rgba(20, 16, 36, 0.30); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
   .mm { width: min(1280px, 96vw); height: min(92vh, 1040px); display: flex; flex-direction: column;
     background: var(--card-strong); border: 1px solid var(--card-edge); border-radius: 26px; overflow: hidden;
     box-shadow: var(--shadow); animation: rise 0.32s ease; }
@@ -703,9 +703,10 @@
   .pad-empty .link-btn { font: inherit; font-size: 13px; color: var(--blue); background: none; border: none; cursor: pointer; padding: 0; text-decoration: underline; }
 
   /* ---------- App Launcher (full-screen, two-pane master/detail) ---------- */
-  #launcher { background: rgba(16, 18, 24, 0.5); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
+  #launcher { background: rgba(20, 16, 36, 0.30); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
   .lp { width: min(1040px, 96vw); height: min(86vh, 820px); display: flex; flex-direction: column;
-    background: var(--card); border: 1px solid var(--line-2); border-radius: 18px; overflow: hidden; animation: rise 0.32s ease; }
+    background: var(--card-glass, var(--card)); border: 1px solid var(--line-2); border-radius: 26px; overflow: hidden; animation: rise 0.32s ease;
+    box-shadow: var(--shadow); -webkit-backdrop-filter: blur(var(--glass-blur)); backdrop-filter: blur(var(--glass-blur)); }
   .lp-head { display: flex; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--hair); flex: none; }
   .lp-ttl { font-size: 15px; font-weight: 700; letter-spacing: -0.2px; }
   .lp-x { margin-left: auto; font-size: 22px; line-height: 1; color: var(--muted); background: none; border: none; cursor: pointer; padding: 0 4px; transition: color .15s, transform .2s; }
@@ -782,13 +783,13 @@
     clip-path: polygon(50% 0, 61% 39%, 100% 50%, 61% 61%, 50% 100%, 39% 61%, 0 50%, 39% 39%); animation: spin 9s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
   .asst { position: fixed; right: 26px; bottom: 26px; z-index: 71; width: min(390px, 94vw); height: min(560px, 80vh);
-    display: flex; flex-direction: column; background: var(--card); border: 1px solid var(--line-2); border-radius: 18px;
-    box-shadow: 0 30px 70px -20px rgba(0,0,0,.45); overflow: hidden; transform-origin: bottom right; animation: pop .28s cubic-bezier(.22,1,.36,1); }
+    display: flex; flex-direction: column; background: var(--card); border: 1px solid var(--line-2); border-radius: 22px;
+    box-shadow: var(--shadow); overflow: hidden; transform-origin: bottom right; animation: pop .28s cubic-bezier(.22,1,.36,1); }
   @keyframes pop { from { opacity: 0; transform: translateY(14px) scale(.96); } }
   .asst.hidden { display: none; }
   /* full-chat mode: a large centered window over a dimmed backdrop */
-  #asst-backdrop { position: fixed; inset: 0; z-index: 71; background: rgba(16, 18, 24, 0.5);
-    -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); animation: fade .25s ease; }
+  #asst-backdrop { position: fixed; inset: 0; z-index: 71; background: rgba(20, 16, 36, 0.30);
+    -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); animation: fade .25s ease; }
   #asst-backdrop.hidden { display: none; }
   .asst.full { right: auto; bottom: auto; inset: 0; margin: auto; z-index: 72;
     width: min(820px, 94vw); height: min(86vh, 880px); transform-origin: center; }

@@ -530,8 +530,9 @@
   .hero-zone { font-size: 11px; color: var(--faint); letter-spacing: .2px; }
   @keyframes beacon { 0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent); }
     50% { transform: scale(1.12); box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent) 0%, transparent); } }
-  .hero h1 { margin: 0 0 7px; font-size: 25px; font-weight: 700; letter-spacing: -0.4px; }
-  .hero p { margin: 0; color: var(--muted); font-size: 13.5px; line-height: 1.5; max-width: 520px; }
+  .hero h1 { margin: 0 0 10px; font-size: 38px; font-weight: 800; letter-spacing: -1.4px; line-height: 1.02; color: var(--ink);
+    text-wrap: balance; }
+  .hero p { margin: 0; color: var(--ink-2); font-size: 15px; line-height: 1.55; max-width: 540px; }
   /* hero assistant prompt bar — the primary, most-visible way into Cloudless AI */
   @keyframes cta { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--blue) 42%, transparent); }
     50% { box-shadow: 0 0 24px 2px color-mix(in srgb, var(--blue) 34%, transparent); } }
@@ -586,17 +587,24 @@
     background: var(--card); border: 1px solid var(--card-edge); border-radius: 24px;
     padding: 22px 24px; box-shadow: var(--shadow);
   }
-  .card h2 { margin: 0 0 16px; font-size: 11px; font-weight: 600; letter-spacing: 0.5px;
-    text-transform: uppercase; color: var(--muted); }
+  .card-head { display: flex; align-items: center; gap: 11px; margin: 0 0 20px; }
+  .card-ic { width: 32px; height: 32px; flex: none; border-radius: 10px; display: grid; place-items: center; font-size: 15px;
+    background: linear-gradient(160deg, color-mix(in srgb, var(--icon) 88%, #fff), var(--icon)); border: 1px solid var(--card-edge);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6); }
+  .card h2 { margin: 0; font-size: 15.5px; font-weight: 700; letter-spacing: -0.3px; text-transform: none; color: var(--ink); }
+  .card-live { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 10px; font-weight: 700;
+    letter-spacing: 0.6px; text-transform: uppercase; color: var(--muted); }
+  .card-live i { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: breathe 2.4s ease-in-out infinite; }
 
   /* gpu */
   .gpu + .gpu { margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--hair); }
   #sys-body .sys-sec { margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--hair); }
-  .gpu-name { font-weight: 700; font-size: 14px; }
-  .gpu-name .idx { color: var(--faint); font-weight: 400; margin-left: 6px; font-size: 11px; }
-  .stat { margin-top: 12px; }
-  .stat-row { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-bottom: 6px; text-transform: lowercase; }
-  .stat-row b { color: var(--ink); font-weight: 700; }
+  .gpu-name { font-weight: 700; font-size: 15px; letter-spacing: -0.2px; display: flex; align-items: center; }
+  .gpu-name .idx { color: var(--muted); font-weight: 600; margin-left: 8px; font-size: 10px; letter-spacing: .2px;
+    background: var(--panel-2); border: 1px solid var(--hair); border-radius: 6px; padding: 2px 7px; }
+  .stat { margin-top: 14px; }
+  .stat-row { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; color: var(--muted); margin-bottom: 7px; text-transform: none; }
+  .stat-row b { color: var(--ink); font-weight: 700; font-size: 13px; font-variant-numeric: tabular-nums; }
   .track { height: 7px; border-radius: 99px; background: var(--panel-2); border: 1px solid var(--hair); overflow: hidden; position: relative; }
   .track > i { display: block; height: 100%; border-radius: 99px; position: relative;
     background: linear-gradient(90deg, var(--blue), color-mix(in srgb, var(--blue) 55%, #ffffff));
@@ -609,8 +617,9 @@
     background-size: 55% 100%; background-repeat: no-repeat; animation: sheen 2.8s ease-in-out infinite; }
   @keyframes flow { to { background-position: -220% 0; } }
   @keyframes sheen { 0% { background-position: -60% 0; } 55%, 100% { background-position: 170% 0; } }
-  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
-  .chips span { font-size: 11px; color: var(--muted); border: 1px solid var(--hair); border-radius: 6px; padding: 3px 9px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+  .chips span { font-size: 11.5px; color: var(--muted); background: var(--panel-2); border: 1px solid var(--hair);
+    border-radius: 9px; padding: 5px 11px; font-variant-numeric: tabular-nums; box-shadow: inset 0 1px 0 rgba(255,255,255,0.35); }
   .chips b { color: var(--ink); font-weight: 700; }
   .empty { color: var(--muted); font-size: 13px; }
 
@@ -648,18 +657,25 @@
   .ec-active { font-size: 12px; font-weight: 700; color: var(--blue); }
 
   /* places */
-  .place { display: flex; align-items: center; gap: 12px; padding: 9px 10px; margin: 0 -10px;
-    border-radius: 8px; cursor: pointer; transition: background 0.15s, transform 0.22s cubic-bezier(.34, 1.56, .64, 1); }
-  .place:hover { background: var(--panel-2); transform: translateX(4px); }
-  .place:hover .pic { transform: scale(1.12); } .place .pic { transition: transform 0.22s cubic-bezier(.34, 1.56, .64, 1); }
-  .place .pic { font-size: 18px; width: 22px; text-align: center; }
-  .place .pl { font-weight: 500; }
-  .place .pp { margin-left: auto; color: var(--faint); font-size: 11px; max-width: 46%;
+  .place { display: flex; align-items: center; gap: 13px; padding: 10px 11px; margin: 0 -11px;
+    border-radius: 13px; cursor: pointer; transition: background 0.15s, box-shadow .15s; }
+  .place + .place { margin-top: 2px; }
+  .place:hover { background: var(--panel-2); box-shadow: inset 0 1px 0 rgba(255,255,255,0.4); }
+  .place .pic { width: 36px; height: 36px; flex: none; border-radius: 11px; display: grid; place-items: center; font-size: 18px;
+    background: var(--card-solid); border: 1px solid var(--hair); box-shadow: var(--shadow-sm);
+    transition: transform 0.22s cubic-bezier(.34, 1.56, .64, 1); }
+  .place:hover .pic { transform: scale(1.06); }
+  .pl-txt { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+  .place .pl { font-weight: 600; font-size: 13.5px; color: var(--ink); letter-spacing: -0.1px; }
+  .place .pp { color: var(--faint); font-size: 11px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pl-go { flex: none; color: var(--faint); font-size: 19px; line-height: 1; opacity: 0;
+    transform: translateX(-4px); transition: opacity .15s, transform .2s cubic-bezier(.34,1.56,.64,1); }
+  .place:hover .pl-go { opacity: 0.7; transform: translateX(0); }
 
   /* launchpad */
-  .sec { text-align: left; font-size: 11px; font-weight: 500; letter-spacing: 0.5px;
-    text-transform: lowercase; color: var(--muted); margin: 0 0 20px; }
+  .sec { text-align: left; font-size: 17px; font-weight: 700; letter-spacing: -0.3px;
+    text-transform: none; color: var(--ink); margin: 0 0 20px; }
   .pad { display: grid; grid-template-columns: repeat(auto-fill, minmax(108px, 1fr)); gap: 26px 14px; }
   .tile { width: 100px; text-align: center; }
   .ic {
@@ -683,8 +699,8 @@
   .tile.disabled .ic { opacity: 0.45; cursor: default; }
   @keyframes pulse { 50% { opacity: 0.55; } }
   @keyframes breathe { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.78); } }
-  .nm { font-size: 12.5px; font-weight: 500; }
-  .meta { font-size: 11px; color: var(--muted); margin-top: 3px; min-height: 14px; }
+  .nm { font-size: 13px; font-weight: 600; color: var(--ink); letter-spacing: -0.1px; }
+  .meta { font-size: 11px; color: var(--muted); margin-top: 4px; min-height: 14px; }
   .meta .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%;
     background: var(--accent); margin-right: 5px; vertical-align: middle;
     animation: breathe 2s ease-in-out infinite; }
@@ -930,8 +946,8 @@
   <div class="hero">
     <div class="greet-row">
       <div class="greet-txt">
-        <h1>Welcome to Cloudless</h1>
-        <p id="hero-sub">Your private, local-AI workstation.</p>
+        <h1 id="hero-greet">Welcome</h1>
+        <p id="hero-sub">Your private, local-AI workstation — no cloud, no accounts.</p>
       </div>
       <div class="hero-time">
         <div class="ht-clock"><span id="big-clock">--:--</span><span class="accent-dot"></span></div>
@@ -962,14 +978,14 @@
 
   <div class="cards">
     <section class="card">
-      <h2>Hardware</h2>
+      <div class="card-head"><span class="card-ic">&#128421;</span><h2>Hardware</h2><span class="card-live"><i></i>live</span></div>
       <div id="gpu-body"><div class="empty">Reading GPUs…</div></div>
       <div id="sys-body"></div>
       <button class="card-link" id="open-models-2">◈ <span id="gpu-model">Model Manager</span> →</button>
       <button class="card-link" id="open-inference-2">▥ Inference →</button>
     </section>
     <section class="card">
-      <h2>Places</h2>
+      <div class="card-head"><span class="card-ic">&#128193;</span><h2>Places</h2></div>
       <div id="places-body"></div>
     </section>
   </div>
@@ -1100,6 +1116,7 @@ let userName = '';
 async function refreshProfileBadge() {
   let p; try { p = await api('/api/profile'); } catch { return; }
   userName = (p.name || '').trim();
+  const hg = document.getElementById('hero-greet'); if (hg) hg.textContent = `${greet(new Date().getHours())}${userName ? ', ' + userName : ''}`;
   const z = document.getElementById('hero-zone'); if (!z) return;
   const d = p.detected || {};
   const parts = [];
@@ -1112,7 +1129,7 @@ function tickClock() {
   document.getElementById('big-clock').textContent = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
   document.getElementById('clock').textContent =
     `${DAYS[d.getDay()].slice(0,3)} ${pad(d.getDate())} ${MON[d.getMonth()].slice(0,3)}  ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  document.getElementById('hero-sub').textContent = `${greet(d.getHours())}${userName ? ', ' + userName : ''}. Your private, local-AI workstation.`;
+  const hg = document.getElementById('hero-greet'); if (hg) hg.textContent = `${greet(d.getHours())}${userName ? ', ' + userName : ''}`;
   document.getElementById('hero-date').textContent = `${DAYS[d.getDay()]}, ${pad(d.getDate())} ${MON[d.getMonth()]}`;
   applyTheme(d.getHours());
 }
@@ -1235,8 +1252,10 @@ async function renderPlaces() {
   let list; try { list = await api('/api/folders'); } catch { return; }
   const body = document.getElementById('places-body');
   body.innerHTML = list.map(p => `<div class="place" data-id="${p.id}">
-    <span class="pic">${PLACE_ICON[p.id] || '📁'}</span><span class="pl">${p.label}</span>
-    <span class="pp" title="${p.path}">${p.path.replace(/^.*\/(?=[^/]+\/[^/]+$)/, '…/')}</span></div>`).join('');
+    <span class="pic">${PLACE_ICON[p.id] || '📁'}</span>
+    <span class="pl-txt"><span class="pl">${p.label}</span>
+    <span class="pp" title="${p.path}">${p.path.replace(/^.*\/(?=[^/]+\/[^/]+$)/, '…/')}</span></span>
+    <span class="pl-go">›</span></div>`).join('');
   body.querySelectorAll('.place').forEach(el => el.onclick = async () => {
     try { const r = await api(`/api/folders/${el.dataset.id}/open`, { method: 'POST' });
       toast(r.opened ? `Opened ${el.querySelector('.pl').textContent}` : (r.error || 'Could not open folder'), !r.opened);

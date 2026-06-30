@@ -43,7 +43,7 @@ $body = @"
   </section>
   <div class="cards">
     <section class="card">
-      <h2>Hardware</h2>
+      <div class="card-head"><span class="card-ic">&#128421;</span><h2>Hardware</h2><span class="card-live"><i></i>live</span></div>
       <div id="gpu-body"><div class="gpu">
         <div class="gpu-name">RTX 5090<span class="idx">#0</span></div>
         <div class="stat"><div class="stat-row"><span>Memory</span><b>14.2 / 32.0 GB</b></div><div class="track"><i style="width:44%"></i></div></div>
@@ -59,11 +59,11 @@ $body = @"
       <button class="card-link">&#9645; Inference &#8594;</button>
     </section>
     <section class="card">
-      <h2>Places</h2>
+      <div class="card-head"><span class="card-ic">&#128193;</span><h2>Places</h2></div>
       <div id="places-body">
-        <div class="place"><span class="pic">&#128193;</span><span class="pl">Models</span><span class="pp">&hellip;/cloudless/models</span></div>
-        <div class="place"><span class="pic">&#127912;</span><span class="pl">Outputs</span><span class="pp">&hellip;/cloudless/outputs</span></div>
-        <div class="place"><span class="pic">&#128196;</span><span class="pl">Workspace</span><span class="pp">&hellip;/cloudless/work</span></div>
+        <div class="place"><span class="pic">&#128193;</span><span class="pl-txt"><span class="pl">Models</span><span class="pp">&hellip;/cloudless/models</span></span><span class="pl-go">&#8250;</span></div>
+        <div class="place"><span class="pic">&#127912;</span><span class="pl-txt"><span class="pl">Outputs</span><span class="pp">&hellip;/cloudless/outputs</span></span><span class="pl-go">&#8250;</span></div>
+        <div class="place"><span class="pic">&#128196;</span><span class="pl-txt"><span class="pl">Workspace</span><span class="pp">&hellip;/cloudless/work</span></span><span class="pl-go">&#8250;</span></div>
       </div>
     </section>
   </div>

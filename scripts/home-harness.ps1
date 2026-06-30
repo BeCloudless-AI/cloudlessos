@@ -68,6 +68,14 @@ $body = @"
     </section>
   </div>
 </main>
+<nav class="dock" id="dock">
+  <button class="dock-item"><span class="dock-tip">Apps</span>&#9638;</button>
+  <button class="dock-item"><span class="dock-tip">Models</span>&#9672;</button>
+  <button class="dock-item running"><span class="dock-tip">Inference</span>&#9637;<span class="run-dot"></span></button>
+  <span class="dock-sep"></span>
+  <button class="dock-item accent"><span class="dock-tip">Assistant</span>&#10022;</button>
+  <button class="dock-item"><span class="dock-tip">Settings</span>&#9881;</button>
+</nav>
 "@
 $freeze = "<style>*,*::before,*::after{animation:none!important;transition:none!important;opacity:1!important}</style>"
 $page = "<!doctype html><html><head><meta charset=`"utf-8`">$style$freeze</head><body>$body</body></html>"

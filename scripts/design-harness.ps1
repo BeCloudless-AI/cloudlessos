@@ -51,7 +51,7 @@ $set = @"
   <div class="set">
     <aside class="set-sidebar"><div class="set-brand">Settings</div><nav class="set-nav">$nav</nav></aside>
     <main class="set-main">
-      <header class="set-topbar"><span class="set-page-title">Profile</span><button class="set-x">&#10005;</button></header>
+      <header class="set-topbar"><span class="win-traffic"><i class="t-c"></i><i class="t-m"></i><i class="t-f"></i></span><span class="set-page-title">Profile</span><button class="set-x">&#10005;</button></header>
       <div class="set-content">$setContent</div>
     </main>
   </div>
@@ -78,7 +78,7 @@ $cards = (Mdl 'Qwen2.5-1.5B-Instruct' '1.5B &middot; Q4 &middot; 32K ctx &middot
 $mm = @"
 <div class="overlay" style="position:static">
   <div class="mm">
-    <div class="lp-head"><div class="lp-ttl">Model Manager</div><button class="lp-x">&#215;</button></div>
+    <div class="lp-head"><span class="win-traffic"><i class="t-c"></i><i class="t-m"></i><i class="t-f"></i></span><div class="lp-ttl">Model Manager</div><button class="lp-x">&#215;</button></div>
     <div class="mm-body">
       <div class="mm-tabs"><button class="mm-tab on">Language models</button><button class="mm-tab">Diffusion</button><button class="mm-tab">Downloaded</button></div>
       <div class="mm-bar"><span class="mm-sum">Showing <b>5</b> models that fit your <b>RTX 5090 (32 GB)</b></span></div>
@@ -103,7 +103,7 @@ $li = ($liApps | ForEach-Object {
 $lp = @"
 <div class="overlay" style="position:static">
   <div class="lp">
-    <div class="lp-head"><div class="lp-ttl">App Launcher</div><button class="lp-x">&#215;</button></div>
+    <div class="lp-head"><span class="win-traffic"><i class="t-c"></i><i class="t-m"></i><i class="t-f"></i></span><div class="lp-ttl">App Launcher</div><button class="lp-x">&#215;</button></div>
     <div class="lp-cols">
       <div class="lp-side">
         <input class="lp-search" placeholder="Search apps&hellip;">

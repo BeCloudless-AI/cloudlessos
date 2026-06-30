@@ -162,6 +162,48 @@
     padding: 0 2px; line-height: 1; transition: color 0.15s, transform 0.3s; }
   .gear:hover { color: var(--blue); transform: rotate(40deg); }
 
+  /* ---------- window chrome: macOS-style traffic lights on app windows ---------- */
+  .win-traffic { display: flex; align-items: center; gap: 8px; margin-right: 15px; flex: none; }
+  .win-traffic i { width: 12px; height: 12px; border-radius: 50%; display: block;
+    box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.14); transition: filter .12s; }
+  .win-traffic .t-c { background: #ff5f57; cursor: pointer; }
+  .win-traffic .t-m { background: #febc2e; }
+  .win-traffic .t-f { background: #28c840; }
+  .win-traffic:hover i { filter: saturate(1.15) brightness(1.02); }
+  .win-traffic .t-c:hover { filter: brightness(0.9); }
+  /* the old corner × is superseded by the red light (kept in DOM for wiring/ESC) */
+  .lp-head .lp-x, .set-topbar .set-x { display: none; }
+  /* title bars read as real window chrome: taller, draggable-looking */
+  .lp-head, .set-topbar { cursor: default; user-select: none; }
+
+  /* ---------- dock (bottom-centered, like a real desktop OS) ---------- */
+  .dock { position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%); z-index: 40;
+    display: flex; align-items: flex-end; gap: 9px; padding: 9px 11px; border-radius: 24px;
+    background: var(--card-strong); border: 1px solid var(--card-edge); box-shadow: var(--shadow);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.5); backdrop-filter: blur(var(--glass-blur)) saturate(1.5); }
+  .dock-item { position: relative; width: 50px; height: 50px; border-radius: 15px; border: 1px solid var(--card-edge);
+    background: linear-gradient(160deg, color-mix(in srgb, var(--icon) 88%, #fff), var(--icon));
+    display: grid; place-items: center; font-size: 23px; color: var(--ink); cursor: pointer;
+    box-shadow: var(--shadow-sm), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+    transition: transform .22s cubic-bezier(.34, 1.56, .64, 1), box-shadow .22s; }
+  .dock-item::after { content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+    background: linear-gradient(165deg, rgba(255,255,255,0.5) 0%, rgba(255,255,255,0.1) 30%, transparent 52%); mix-blend-mode: screen; }
+  .dock-item:hover { transform: translateY(-11px) scale(1.12);
+    box-shadow: 0 18px 34px -14px color-mix(in srgb, var(--blue) 60%, transparent), inset 0 1px 0 rgba(255,255,255,0.7); }
+  .dock-item:active { transform: translateY(-4px) scale(1.04); }
+  .dock-item.accent { background: linear-gradient(160deg, color-mix(in srgb, var(--blue) 82%, #fff), var(--blue)); color: #fff; border-color: transparent; }
+  .dock-tip { position: absolute; bottom: calc(100% + 12px); left: 50%; transform: translateX(-50%) translateY(5px);
+    background: var(--card-strong); color: var(--ink); font-size: 11.5px; font-weight: 600; padding: 5px 11px; border-radius: 9px;
+    white-space: nowrap; opacity: 0; pointer-events: none; transition: opacity .15s, transform .15s;
+    box-shadow: var(--shadow-sm); border: 1px solid var(--card-edge);
+    -webkit-backdrop-filter: blur(var(--glass-blur)); backdrop-filter: blur(var(--glass-blur)); }
+  .dock-item:hover .dock-tip { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .dock-sep { width: 1px; align-self: stretch; margin: 5px 3px; background: var(--line-2); }
+  .dock-item .run-dot { position: absolute; bottom: -7px; left: 50%; transform: translateX(-50%);
+    width: 5px; height: 5px; border-radius: 50%; background: var(--accent); opacity: 0; transition: opacity .25s; }
+  .dock-item.running .run-dot { opacity: 1; }
+  @media (max-width: 560px) { .dock-item { width: 44px; height: 44px; font-size: 20px; } }
+
   /* settings sheet */
   .set { width: min(800px, 95vw); height: min(580px, 90vh); display: flex;
     background: var(--card-strong); border: 1px solid var(--card-edge); border-radius: 26px;
@@ -474,7 +516,7 @@
   .btn.pw-clear { font-size: 12px; padding: 7px 14px; }
 
   /* ---------- layout ---------- */
-  main { max-width: 1140px; margin: 0 auto; padding: 38px 26px 90px; }
+  main { max-width: 1140px; margin: 0 auto; padding: 38px 26px 124px; }
   .hero { margin-bottom: 30px; }
   /* compact hero: greeting on the left, time + date as a quiet anchor on the right */
   .greet-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; }
@@ -798,7 +840,9 @@
   .ac-btn.busy { pointer-events: none; opacity: .7; }
 
   /* ---------- Cloudless Assistant ---------- */
-  #asst-fab { position: fixed; right: 26px; bottom: 26px; z-index: 70; width: 56px; height: 56px; border-radius: 50%;
+  /* the Assistant now lives in the dock; the floating FAB is retired */
+  #asst-fab { display: none; }
+  #asst-fab.legacy { position: fixed; right: 26px; bottom: 26px; z-index: 70; width: 56px; height: 56px; border-radius: 50%;
     border: none; cursor: pointer; background: var(--blue); display: grid; place-items: center;
     box-shadow: 0 10px 26px -6px color-mix(in srgb, var(--blue) 70%, transparent); animation: cta 3.4s ease-in-out infinite;
     transition: transform .25s cubic-bezier(.34,1.56,.64,1); }
@@ -931,12 +975,22 @@
   </div>
 </main>
 
+<nav class="dock" id="dock" aria-label="Dock">
+  <button class="dock-item" id="dock-launcher"><span class="dock-tip">Apps</span>&#9638;</button>
+  <button class="dock-item" id="dock-models"><span class="dock-tip">Models</span>&#9672;</button>
+  <button class="dock-item" id="dock-inference"><span class="dock-tip">Inference</span>&#9637;<span class="run-dot"></span></button>
+  <span class="dock-sep"></span>
+  <button class="dock-item accent" id="dock-asst"><span class="dock-tip">Assistant</span>&#10022;</button>
+  <button class="dock-item" id="dock-settings"><span class="dock-tip">Settings</span>&#9881;</button>
+</nav>
+
 <div id="toast"></div>
 
 <!-- full-screen App Launcher -->
 <div class="overlay hidden" id="launcher">
   <div class="lp">
     <div class="lp-head">
+      <span class="win-traffic"><i class="t-c" title="Close"></i><i class="t-m"></i><i class="t-f"></i></span>
       <div class="lp-ttl">App Launcher</div>
       <button class="lp-x" id="lp-x" title="Close">×</button>
     </div>
@@ -954,6 +1008,7 @@
 <div class="overlay hidden" id="models">
   <div class="mm">
     <div class="lp-head">
+      <span class="win-traffic"><i class="t-c" title="Close"></i><i class="t-m"></i><i class="t-f"></i></span>
       <div class="lp-ttl">Model Manager</div>
       <button class="lp-x" id="mm-x" title="Close">×</button>
     </div>
@@ -965,6 +1020,7 @@
 <div class="overlay hidden" id="inference">
   <div class="mm">
     <div class="lp-head">
+      <span class="win-traffic"><i class="t-c" title="Close"></i><i class="t-m"></i><i class="t-f"></i></span>
       <div class="lp-ttl">Inference</div>
       <div class="inf-head" id="inf-head"></div>
       <button class="lp-x" id="inf-x" title="Close">×</button>
@@ -998,7 +1054,7 @@
       <nav class="set-nav" id="set-nav"></nav>
     </aside>
     <main class="set-main">
-      <header class="set-topbar"><span class="set-page-title" id="set-page-title"></span><button class="set-x" id="set-x">✕</button></header>
+      <header class="set-topbar"><span class="win-traffic"><i class="t-c" title="Close"></i><i class="t-m"></i><i class="t-f"></i></span><span class="set-page-title" id="set-page-title"></span><button class="set-x" id="set-x">✕</button></header>
       <div class="set-content" id="set-content"></div>
     </main>
   </div>
@@ -1445,6 +1501,7 @@ function applyEngineUI() {
   if (inp) { inp.disabled = starting; inp.placeholder = starting ? 'Cloudless AI is starting…' : 'What do you want to do with CloudlessOS?'; }
   if (go) go.disabled = starting;
   const ghost = document.getElementById('open-full-chat'); if (ghost) ghost.classList.toggle('off', starting);
+  const di = document.getElementById('dock-inference'); if (di) di.classList.toggle('running', engineReady);
 }
 // The engine switch UI lives in the Inference hub (Engine tab); re-render it there.
 function engineUIRefresh() {
@@ -2323,6 +2380,19 @@ document.getElementById('open-models').onclick = openModelManager;
 document.getElementById('open-models-2').onclick = openModelManager;
 document.getElementById('mm-x').onclick = closeModelManager;
 document.getElementById('models').addEventListener('click', e => { if (e.target.id === 'models') closeModelManager(); });
+
+/* ---- Dock + window chrome (real-OS desktop) ---- */
+document.getElementById('dock-launcher').onclick = openLauncher;
+document.getElementById('dock-models').onclick = openModelManager;
+document.getElementById('dock-inference').onclick = openInference;
+document.getElementById('dock-asst').onclick = () => openAsst();
+document.getElementById('dock-settings').onclick = openSettings;
+// the red traffic light closes its window (mirrors the legacy × button and Esc)
+document.querySelectorAll('.win-traffic .t-c').forEach(dot => {
+  const head = dot.closest('.lp-head, .set-topbar');
+  const x = head && head.querySelector('.lp-x, .set-x');
+  if (x) dot.onclick = () => x.click();
+});
 
 /* ---- Inference activity dashboard ---- */
 let infOpen = false, infTimer = null, infPrev = null, infBuf = null, infPeak = 0, infTab = 'activity';

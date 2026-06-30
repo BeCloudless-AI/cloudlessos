@@ -96,26 +96,27 @@
       radial-gradient(50% 54% at 26% 82%, var(--w3), transparent 62%),
       radial-gradient(48% 52% at 82% 84%, var(--w4), transparent 62%),
       radial-gradient(44% 48% at 92% 56%, var(--w6), transparent 62%);
-    /* each blob lives on an oversized tile so it can drift independently */
-    background-size: 165% 165%, 150% 150%, 175% 175%, 155% 155%, 168% 168%, 150% 150%;
-    background-position: 18% 22%, 82% 16%, 50% 50%, 22% 84%, 84% 86%, 92% 52%;
+    /* each blob lives on an oversized tile so it can drift a long way independently */
+    background-size: 200% 200%, 185% 185%, 210% 210%, 190% 190%, 205% 205%, 185% 185%;
+    background-position: 15% 25%, 85% 12%, 50% 50%, 20% 85%, 86% 88%, 95% 50%;
     filter: saturate(1.2);
     /* drift = gentle breathing of the whole field; colorflow = each colour
-       wandering its own path so the palette slowly moves, not just pans */
-    animation: drift 52s ease-in-out infinite alternate,
-               colorflow 88s ease-in-out infinite alternate;
+       visibly wandering its own path so the palette keeps moving */
+    animation: drift 38s ease-in-out infinite alternate,
+               colorflow 54s ease-in-out infinite alternate;
     will-change: transform, background-position;
   }
   .wall::after { content: ""; position: absolute; inset: 0; background: var(--wall-veil); }
   @keyframes drift {
-    0%   { transform: translate3d(0, 0, 0) scale(1.02); }
-    50%  { transform: translate3d(1.5%, -1.5%, 0) scale(1.07); }
-    100% { transform: translate3d(-1.5%, 1%, 0) scale(1.04); }
+    0%   { transform: translate3d(0, 0, 0) scale(1.03); }
+    50%  { transform: translate3d(3%, -2.5%, 0) scale(1.09); }
+    100% { transform: translate3d(-3%, 2%, 0) scale(1.06); }
   }
+  /* each layer sweeps a wide arc so the colours clearly move around the screen */
   @keyframes colorflow {
-    0%   { background-position: 18% 22%, 82% 16%, 50% 50%, 22% 84%, 84% 86%, 92% 52%; }
-    50%  { background-position: 30% 12%, 66% 30%, 42% 60%, 34% 70%, 70% 74%, 78% 40%; }
-    100% { background-position:  8% 34%, 90% 26%, 58% 42%, 14% 92%, 92% 78%, 84% 64%; }
+    0%   { background-position: 15% 25%, 85% 12%, 50% 50%, 20% 85%, 86% 88%, 95% 50%; }
+    50%  { background-position: 45%  6%, 55% 40%, 34% 66%, 46% 58%, 60% 66%, 68% 26%; }
+    100% { background-position:  4% 44%, 96% 30%, 66% 36%,  8% 98%, 98% 72%, 78% 70%; }
   }
   #bg { display: none; }
   @media (prefers-reduced-motion: reduce) { .wall::before { animation: none; } }

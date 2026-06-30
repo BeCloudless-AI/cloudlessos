@@ -295,6 +295,26 @@
   .md-fit { font-size: 12.5px; color: var(--ink-2); margin: 0 0 18px; }
   .md-fit .mdl-fit { margin-right: 5px; }
   .md-acts { display: flex; flex-wrap: wrap; gap: 9px; padding-top: 20px; border-top: 1px solid var(--hair); }
+  /* advanced: editable engine launch command */
+  .md-adv { margin-top: 18px; border-top: 1px solid var(--hair); padding-top: 14px; }
+  .md-adv-tog { font: inherit; font-size: 12.5px; font-weight: 600; color: var(--muted); background: none; border: 0;
+    cursor: pointer; padding: 4px 0; display: inline-flex; align-items: center; gap: 8px; }
+  .md-adv-tog:hover { color: var(--ink); }
+  .md-adv-chev { font-size: 10px; transition: transform .15s; }
+  .md-adv-tog.open .md-adv-chev { transform: rotate(90deg); }
+  .md-adv-body { margin-top: 12px; }
+  .md-adv-body.hidden { display: none; }
+  .md-adv-note { font-size: 12px; color: var(--muted); line-height: 1.6; margin-bottom: 4px; }
+  .md-adv-warn { font-size: 11.5px; color: var(--warn); line-height: 1.55; margin: 8px 0 0; }
+  .md-adv-badge { display: inline-block; font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px;
+    color: var(--blue); background: var(--blue-soft); padding: 2px 7px; border-radius: 6px; margin-left: 4px; vertical-align: middle; }
+  .md-adv-lbl { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: var(--faint); margin: 13px 0 5px; }
+  .md-adv-cmd { width: 100%; box-sizing: border-box; font: inherit; font-size: 12px; line-height: 1.5; padding: 10px 12px;
+    border-radius: 10px; border: 1px solid var(--line-2); background: var(--control); color: var(--ink); resize: vertical; }
+  .md-adv-cmd:focus { outline: none; border-color: var(--blue); }
+  .md-adv-prev { white-space: pre-wrap; word-break: break-word; font: inherit; font-size: 11px; line-height: 1.55;
+    color: var(--muted); background: var(--panel-2); border: 1px solid var(--hair); border-radius: 10px; padding: 10px 12px; margin: 0; }
+  .md-adv-acts { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
 
   /* ---------- inference dashboard ---------- */
   /* persistent status pill in the overlay header */
@@ -307,6 +327,16 @@
   .inf-head .ih-state { text-transform: uppercase; letter-spacing: .5px; font-size: 9.5px; font-weight: 700; color: var(--muted); }
   .inf-head.on .ih-state { color: #2faa5b; }
   .inf-empty { color: var(--muted); font-size: 13.5px; text-align: center; padding: 72px 24px; line-height: 1.75; }
+  /* hardware band (always-live GPU/CPU/RAM) + the slim engine-not-serving notice */
+  .inf-hwwrap { margin-top: 18px; }
+  .inf-hwhead { font-size: 11px; font-weight: 600; letter-spacing: .5px; text-transform: uppercase; color: var(--muted);
+    margin: 2px 2px 12px; display: flex; align-items: baseline; gap: 9px; }
+  .inf-hwhead span { font-size: 9.5px; font-weight: 500; color: var(--faint); letter-spacing: .6px; }
+  .inf-metric .im-sub.im-c { text-align: center; }
+  .inf-engnote { background: var(--card); border: 1px solid var(--hair); border-radius: 18px; padding: 30px 24px;
+    text-align: center; color: var(--muted); font-size: 12.5px; line-height: 1.7; }
+  .inf-engnote-msg { color: var(--ink); font-weight: 600; font-size: 14px; }
+  .inf-engnote-sub { margin-top: 6px; font-size: 12px; max-width: 460px; margin-left: auto; margin-right: auto; }
   /* hero throughput panel — the headline, with a soft blue wash + glowing line */
   .inf-hero { position: relative; overflow: hidden; border-radius: 18px; margin-bottom: 14px; padding: 20px 22px 14px;
     background: linear-gradient(180deg, color-mix(in srgb, var(--blue) 7%, var(--card)) 0%, var(--card) 60%);
@@ -337,6 +367,49 @@
   .im-ringwrap { position: relative; width: 110px; height: 110px; margin: 8px auto 2px; }
   .im-ring { width: 110px; height: 110px; display: block; }
   .im-ringval { position: absolute; inset: 0 0 11px; display: flex; align-items: center; justify-content: center; font-size: 23px; font-weight: 800; color: var(--ink); font-variant-numeric: tabular-nums; }
+  /* usage tab */
+  .us-chartwrap { background: var(--card); border: 1px solid var(--hair); border-radius: 16px; padding: 16px 18px 14px; margin-bottom: 14px; }
+  .us-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; gap: 12px; }
+  .us-htitle { font-size: 11px; font-weight: 500; letter-spacing: .5px; text-transform: lowercase; color: var(--muted); }
+  .us-time { font-size: 9.5px; color: var(--faint); text-transform: uppercase; letter-spacing: .6px; margin-left: 4px; }
+  /* hour/day/month/year zoom toggle */
+  .us-range { display: inline-flex; background: var(--panel-2); border: 1px solid var(--hair); border-radius: 999px; padding: 3px; flex: none; }
+  .us-rbtn { border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 11px; font-weight: 600;
+    padding: 4px 12px; border-radius: 999px; cursor: pointer; transition: background .15s, color .15s; }
+  .us-rbtn:hover { color: var(--ink); }
+  .us-rbtn.on { background: var(--blue); color: #fff; }
+  .inf-actbar { display: flex; justify-content: flex-end; margin-bottom: 14px; }
+  .us-chart { display: flex; align-items: flex-end; gap: 3px; height: 120px; }
+  .us-axis { display: flex; gap: 3px; margin-top: 7px; }
+  .us-axis span { flex: 1; min-width: 0; text-align: center; font-size: 9px; color: var(--faint); font-variant-numeric: tabular-nums;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .us-axis-ends { justify-content: space-between; }
+  .us-axis-ends span { flex: none; }
+  .us-bar { flex: 1; min-width: 0; min-height: 2px; border-radius: 3px 3px 0 0; transition: background .15s;
+    background: color-mix(in srgb, var(--blue) 65%, transparent); }
+  .us-bar:hover { background: var(--blue); }
+  .us-bar.peak { background: var(--accent); }
+  .us-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+  .us-tile { background: var(--card); border: 1px solid var(--hair); border-radius: 13px; padding: 13px 15px; }
+  .us-tile .us-label { font-size: 10px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); }
+  .us-tile .us-val { font-size: 23px; font-weight: 800; letter-spacing: -0.7px; color: var(--ink); font-variant-numeric: tabular-nums; line-height: 1.15; margin-top: 5px; }
+  .us-tile .us-sub { font-size: 10.5px; color: var(--muted); margin-top: 3px; }
+  /* floating tooltip shared by the live charts + the usage bars */
+  .chart-tip { position: fixed; z-index: 9999; pointer-events: none; display: none;
+    background: var(--ink); color: var(--bg); padding: 6px 9px; border-radius: 8px; font-size: 11px;
+    line-height: 1.35; box-shadow: 0 8px 22px -8px rgba(0,0,0,.5); white-space: nowrap; }
+  .chart-tip b { font-weight: 800; font-variant-numeric: tabular-nums; }
+  .chart-tip span { display: block; opacity: .7; font-size: 9.5px; text-transform: uppercase; letter-spacing: .5px; margin-top: 1px; }
+  /* power tab: electricity bars in warm accent (distinct from the blue usage bars), clickable to erase */
+  .pw-bar { background: color-mix(in srgb, var(--accent) 58%, transparent); cursor: pointer; }
+  .pw-bar:hover { background: var(--accent); }
+  .pw-bar.peak { background: var(--blue); }
+  .pw-bar.peak:hover { background: var(--blue); filter: brightness(1.08); }
+  .pw-bar.pw-empty { cursor: default; background: var(--hair); }
+  .pw-bar.pw-empty:hover { background: var(--hair); }
+  .pw-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 16px; flex-wrap: wrap; }
+  .pw-erasehint { font-size: 11px; color: var(--faint); }
+  .btn.pw-clear { font-size: 12px; padding: 7px 14px; }
 
   /* ---------- layout ---------- */
   main { max-width: 1140px; margin: 0 auto; padding: 38px 26px 90px; }
@@ -1661,6 +1734,13 @@ let mmTab = 'language', mmDetail = null, mmLM = null, mmDiff = null;
 let mmFilter = { q: '', fits: false, vision: false, tools: false };
 const mmCache = {};
 function modelsOpen() { return !document.getElementById('models').classList.contains('hidden'); }
+// True when a full-screen overlay covers the dashboard. Used to pause the WebGL
+// background and the home pollers — there's no point rendering or polling what's
+// hidden, and that work competes with the GPU/CPU the foreground (and the model) needs.
+function anyOverlayOpen() {
+  return infOpen || modelsOpen() || settingsOpen() || launcherOpen()
+    || document.getElementById('asst').classList.contains('full');
+}
 function openModelManager() { mmDetail = null; document.getElementById('models').classList.remove('hidden'); renderModelManager(); }
 function closeModelManager() { document.getElementById('models').classList.add('hidden'); }
 function openModelDetail(type, id) { mmDetail = { type, id }; renderModelManager(); }
@@ -1805,11 +1885,70 @@ function renderModelDetail(c) {
       <div class="md-specgrid">${specs}</div>
       ${fit}
       <div class="md-acts">${actions}</div>
+      ${lm ? `<div class="md-adv">
+        <button class="md-adv-tog" id="md-adv-tog">⚙ Advanced — engine launch command <span class="md-adv-chev">▸</span></button>
+        <div class="md-adv-body hidden" id="md-adv-body"></div>
+      </div>` : ''}
     </div>`;
   document.getElementById('mm-back').onclick = () => { mmDetail = null; renderModelManager(); };
   const lb = c.querySelector('[data-launch]'); if (lb) lb.onclick = () => launchModel(m);
   const db = c.querySelector('[data-dl]'); if (db) db.onclick = () => { (lm ? downloadModel : downloadDiffusion)(m); mmDetail = null; renderModelManager(); };
   const rb = c.querySelector('[data-redl]'); if (rb) rb.onclick = () => downloadModel(m);
+  const at = document.getElementById('md-adv-tog');
+  if (at) at.onclick = () => {
+    const b = document.getElementById('md-adv-body'); const open = b.classList.toggle('hidden') === false;
+    at.classList.toggle('open', open);
+    if (open && !b.dataset.loaded) { b.dataset.loaded = '1'; loadLaunch(m); }
+  };
+}
+// Advanced: show + edit the exact command the engine launches this model with.
+let mmLaunch = null;
+async function loadLaunch(m) {
+  const body = document.getElementById('md-adv-body'); if (!body) return;
+  body.innerHTML = '<div class="set-hint">Loading launch command…</div>';
+  let info; try { info = await api('/api/engine/launch?model=' + encodeURIComponent(m.id)); }
+  catch { body.innerHTML = '<div class="set-hint">No inference engine available to build a launch command.</div>'; return; }
+  mmLaunch = info; paintLaunch(m, info);
+}
+function paintLaunch(m, info) {
+  const body = document.getElementById('md-adv-body'); if (!body) return;
+  const badge = info.overridden ? '<span class="md-adv-badge">customized</span>' : '';
+  body.innerHTML = `
+    <div class="md-adv-note">The command Cloudless runs to launch this model with <b>${escapeHtml(info.engineName)}</b>. Edit it and save — your version is used every time this model launches on this engine. The container name, GPU and network flags are managed by Cloudless. ${badge}</div>
+    ${info.note ? `<div class="md-adv-warn">${escapeHtml(info.note)}</div>` : ''}
+    <label class="md-adv-lbl">Container command — arguments passed to ${escapeHtml(info.engineName)}</label>
+    <textarea class="md-adv-cmd" id="md-cmd" spellcheck="false" rows="5">${escapeHtml(info.command)}</textarea>
+    <label class="md-adv-lbl">Full command preview</label>
+    <pre class="md-adv-prev" id="md-prev"></pre>
+    <div class="md-adv-acts">
+      <button class="btn primary" id="md-cmd-save">Save</button>
+      <button class="btn" id="md-cmd-launch">Save &amp; launch</button>
+      <button class="btn" id="md-cmd-reset" ${info.overridden ? '' : 'disabled'}>Reset to default</button>
+    </div>`;
+  const ta = document.getElementById('md-cmd'), prev = document.getElementById('md-prev');
+  const sync = () => { prev.textContent = info.prefix + ' ' + ta.value.trim().replace(/\s+/g, ' '); };
+  ta.oninput = sync; sync();
+  document.getElementById('md-cmd-save').onclick = () => saveLaunch(m, ta.value, false);
+  document.getElementById('md-cmd-launch').onclick = () => saveLaunch(m, ta.value, true);
+  document.getElementById('md-cmd-reset').onclick = () => resetLaunch(m);
+}
+function saveLaunch(m, command, launch) {
+  if (!command.trim()) { toast('The launch command can’t be empty', true); return; }
+  api('/api/engine/launch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: m.id, command }) })
+    .then(info => {
+      mmLaunch = info; paintLaunch(m, info);
+      if (launch) {
+        toast('Saved — launching ' + m.name + '…');
+        api('/api/settings/model', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: m.id }) })
+          .then(r => { if (r.jobId) trackJobToast(r.jobId, 'Model'); }).catch(() => toast('Launch failed', true));
+      } else toast(info.overridden ? 'Launch command saved' : 'Saved — matches the default');
+    })
+    .catch(() => toast('Could not save the command', true));
+}
+function resetLaunch(m) {
+  api('/api/engine/launch?model=' + encodeURIComponent(m.id), { method: 'DELETE' })
+    .then(info => { mmLaunch = info; paintLaunch(m, info); toast('Reset to the default command'); })
+    .catch(() => toast('Could not reset', true));
 }
 
 function fmtUptime(sec) {
@@ -2114,7 +2253,15 @@ document.getElementById('models').addEventListener('click', e => { if (e.target.
 
 /* ---- Inference activity dashboard ---- */
 let infOpen = false, infTimer = null, infPrev = null, infBuf = null, infPeak = 0, infTab = 'activity';
-const INF_CAP = 60; // samples kept for the charts (~1 min at 1s/sample)
+let infUsageTimer = null, infUsageCache = {}, infUsageRange = 'day', infTipEl = null; // usage auto-refresh + per-range cached snapshots + selected zoom + shared chart tooltip
+let infPowerTimer = null, infPowerCache = {}, infPowerRange = 'day'; // electricity-log auto-refresh + per-range cache + selected zoom
+let infActRange = 'live'; // Activity zoom: 'live' (real-time stream) or a usage range (throughput over time)
+const PW_RANGES = { hour: { unit: 'hour', sub: 'last 24 hours', peak: 'Peak hour' }, day: { unit: 'day', sub: 'last 30 days', peak: 'Peak day' }, month: { unit: 'month', sub: 'last 12 months', peak: 'Peak month' }, year: { unit: 'year', sub: 'last 5 years', peak: 'Peak year' } };
+const US_RANGES = { hour: { title: 'hourly requests', sub: 'last 24 hours', peak: 'Peak hour' }, day: { title: 'daily requests', sub: 'last 30 days', peak: 'Peak day' }, month: { title: 'monthly requests', sub: 'last 12 months', peak: 'Peak month' }, year: { title: 'yearly requests', sub: 'last 5 years', peak: 'Peak year' } };
+const INF_SAMPLE_MS = 1000;          // live metrics cadence; matches the server-side scrape cache, so we never re-draw stale data or over-poll the engine
+const INF_HW_MS = 3000;              // hardware (GPU/CPU/RAM) changes slowly — 3s is plenty and keeps nvidia-smi/sysload load low
+const INF_CAP = Math.round(60000 / INF_SAMPLE_MS); // samples kept for the charts (~1 min window)
+let infHwTimer = null;               // hardware-metrics poll (runs in Activity → Live regardless of engine state)
 const setText = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
 const setHTML = (id, v) => { const e = document.getElementById(id); if (e) e.innerHTML = v; };
 const engDisplay = e => ({ vllm: 'vLLM', sglang: 'SGLang', llamacpp: 'llama.cpp' }[e] || (e || '').toUpperCase());
@@ -2131,10 +2278,16 @@ function infHeadSet(engineId, model, ready) {
   h.className = 'inf-head' + (ready ? ' on' : '');
   h.innerHTML = `<span class="inf-live"></span><b>${escapeHtml(engDisplay(engineId))}</b>${infModel ? `<span class="sep">·</span>${escapeHtml(infModel)}` : ''}<span class="ih-state">${ready ? 'live' : 'loading…'}</span>`;
 }
-function infReset() { infPrev = null; infPeak = 0; infBuf = { pTok: [], gTok: [], run: [], wait: [], kv: [], ttft: [], tpot: [] }; }
-function infStopPoll() { if (infTimer) { clearInterval(infTimer); infTimer = null; } }
+function infReset() { infPrev = null; infPeak = 0; infBuf = { pTok: [], gTok: [], run: [], wait: [], kv: [], ttft: [], tpot: [], gutil: [], gpow: [], cpu: [] }; }
+function infStopPoll() {
+  if (infTimer) { clearInterval(infTimer); infTimer = null; }
+  if (infHwTimer) { clearInterval(infHwTimer); infHwTimer = null; }
+  if (infUsageTimer) { clearInterval(infUsageTimer); infUsageTimer = null; }
+  if (infPowerTimer) { clearInterval(infPowerTimer); infPowerTimer = null; }
+  infHideTip();
+}
 function openInference() {
-  document.getElementById('inference').classList.remove('hidden'); infOpen = true; infTab = 'activity'; renderInference();
+  document.getElementById('inference').classList.remove('hidden'); infOpen = true; renderInference(); // reopen to the last-viewed tab
 }
 function closeInference() {
   document.getElementById('inference').classList.add('hidden'); infOpen = false; infStopPoll();
@@ -2143,33 +2296,286 @@ function closeInference() {
 function renderInference() {
   const body = document.getElementById('inf-body'); if (!body) return;
   const tab = (id, label) => `<button class="mm-tab ${infTab === id ? 'on' : ''}" data-itab="${id}">${label}</button>`;
-  body.innerHTML = `<div class="mm-tabs">${tab('activity', 'Activity')}${tab('engine', 'Engine')}${tab('api', 'API access')}</div><div id="inf-panel"></div>`;
+  body.innerHTML = `<div class="mm-tabs">${tab('activity', 'Activity')}${tab('usage', 'Usage')}${tab('power', 'Power')}${tab('engine', 'Engine')}${tab('api', 'API access')}</div><div id="inf-panel"></div>`;
   body.querySelectorAll('.mm-tab').forEach(b => b.onclick = () => { if (infTab === b.dataset.itab) return; infTab = b.dataset.itab; renderInference(); });
   const panel = document.getElementById('inf-panel');
   infStopPoll();
+  if (infTab !== 'activity') api('/api/engine').then(e => infHeadSet(e.active, '', e.ready)).catch(() => {});
   if (infTab === 'activity') {
-    infReset(); panel.innerHTML = '<div class="inf-empty">Connecting to the inference engine…</div>';
-    infPoll(); infTimer = setInterval(infPoll, 1000);
+    const rbtn = (r, lbl) => `<button class="us-rbtn ${infActRange === r ? 'on' : ''}" data-arange="${r}">${lbl}</button>`;
+    panel.innerHTML = `<div class="inf-actbar"><div class="us-range">${rbtn('live', 'Live')}${rbtn('hour', 'Hour')}${rbtn('day', 'Day')}${rbtn('month', 'Month')}${rbtn('year', 'Year')}</div></div><div id="inf-act"></div>`;
+    panel.querySelectorAll('.us-rbtn').forEach(b => b.onclick = () => infSetActRange(b.dataset.arange));
+    infActivity();
+  } else if (infTab === 'usage') {
+    renderUsage(panel); // full width — the daily chart wants room
+  } else if (infTab === 'power') {
+    renderPower(panel); // electricity log — full width, same chart footprint as Usage
   } else { // engine / api — narrower centred column reads better in the wide overlay
     panel.style.maxWidth = '780px'; panel.style.margin = '0 auto';
-    api('/api/engine').then(e => infHeadSet(e.active, '', e.ready)).catch(() => {});
     if (infTab === 'engine') renderEnginePage(panel); else renderApiPage(panel);
   }
 }
+// Activity has a Live real-time view plus historical throughput at hour/day/month/year zoom.
+function infSetActRange(r) { if (infActRange === r) return; infActRange = r; renderInference(); }
+function infActivity() {
+  api('/api/engine').then(e => infHeadSet(e.active, '', e.ready)).catch(() => {}); // keep the header pill fresh
+  if (infActRange === 'live') {
+    infReset();
+    // Two regions: engine metrics (only when a model is serving) + hardware metrics
+    // (GPU/CPU/RAM — always live, independent of the engine). The hardware band keeps
+    // the dashboard useful even with no engine running.
+    const host = document.getElementById('inf-act'); if (host) host.innerHTML = '<div id="inf-eng"></div><div class="inf-hwwrap" id="inf-hw"></div>';
+    infPoll(); infTimer = setInterval(infPoll, INF_SAMPLE_MS);
+    infHwPoll(); infHwTimer = setInterval(infHwPoll, INF_HW_MS);
+  } else {
+    infHistory(infActRange);
+  }
+}
+// Historical throughput: output tokens generated per bucket over the selected range,
+// from the same usage rollups (no extra engine load). Refreshes every 5s while open.
+async function infHistory(range) {
+  const host = document.getElementById('inf-act'); if (!host) return;
+  const draw = async () => {
+    if (!infOpen || infTab !== 'activity' || infActRange !== range) return;
+    let u; try { u = await api('/api/engine/usage?range=' + range); } catch { if (!host.children.length) host.innerHTML = '<div class="inf-empty">Could not load activity.</div>'; return; }
+    if (!infOpen || infTab !== 'activity' || infActRange !== range) return;
+    const meta = US_RANGES[range], s = u.series || [];
+    const outMax = Math.max(1, ...s.map(d => d.completionTokens));
+    const totOut = s.reduce((a, d) => a + d.completionTokens, 0), totIn = s.reduce((a, d) => a + d.promptTokens, 0), totReq = s.reduce((a, d) => a + d.requests, 0);
+    let peak = { label: '', v: 0 }; s.forEach(d => { if (d.completionTokens > peak.v) peak = { label: d.label, v: d.completionTokens }; });
+    const fewBars = s.length <= 12;
+    const bars = s.map(d => { const hi = Math.max(2, Math.round(d.completionTokens / outMax * 100)); const isPeak = d.label === peak.label && d.completionTokens > 0; return `<div class="us-bar ${isPeak ? 'peak' : ''}" style="height:${hi}%" data-label="${escapeHtml(d.label)}" data-tok="${d.completionTokens}"></div>`; }).join('');
+    const axis = fewBars
+      ? `<div class="us-axis">${s.map(d => `<span>${escapeHtml(d.label)}</span>`).join('')}</div>`
+      : `<div class="us-axis us-axis-ends"><span>${escapeHtml(s[0] ? s[0].label : '')}</span><span>${escapeHtml(s.length ? s[s.length - 1].label : '')}</span></div>`;
+    const tile = (label, val, sub) => `<div class="us-tile"><div class="us-label">${label}</div><div class="us-val">${val}</div>${sub ? `<div class="us-sub">${sub}</div>` : ''}</div>`;
+    const peakVal = peak.v > 0 ? `${infNum(peak.v)} <span style="font-size:12px;font-weight:600;color:var(--muted)">${escapeHtml(peak.label)}</span>` : '—';
+    host.innerHTML = `
+      <div class="us-chartwrap">
+        <div class="us-head"><div><span class="us-htitle">output tokens / ${range}</span> <span class="us-time">${meta.sub}</span></div></div>
+        <div class="us-chart" id="inf-act-chart">${bars}</div>
+        ${axis}
+      </div>
+      <div class="inf-grid">
+        ${tile('Output tokens', infNum(totOut), 'generated · ' + meta.sub)}
+        ${tile('Input tokens', infNum(totIn), 'prompt')}
+        ${tile('Requests', infNum(totReq), meta.sub)}
+        ${tile('Busiest ' + range, peakVal, 'output tokens')}
+      </div>
+      <div class="fld-help" style="margin-top:16px"><b>Live</b> streams real-time throughput; the ranges show output tokens the engine generated per ${range}. Same data as the Usage tab, viewed as the engine's work over time.</div>`;
+    const chart = document.getElementById('inf-act-chart');
+    if (chart) chart.querySelectorAll('.us-bar').forEach(b => {
+      b.onmousemove = e => infShowTip(e, `<b>${infNum(+b.dataset.tok)} tokens</b><span>${b.dataset.label}</span>`);
+      b.onmouseleave = infHideTip;
+    });
+  };
+  if (!host.children.length) host.innerHTML = '<div class="inf-empty">Loading activity…</div>';
+  await draw();
+  infTimer = setInterval(draw, 5000); // reuse the activity timer slot; cleared on tab/range switch
+}
+// Historical usage analytics (sampled into daily buckets by the daemon).
+function infNum(n) { return n >= 1e6 ? (n / 1e6).toFixed(2) + 'M' : n >= 1e3 ? (n / 1e3).toFixed(1) + 'k' : String(Math.round(n)); }
+function infAgo(iso) {
+  if (!iso) return 'never';
+  const s = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (s < 60) return 'just now'; if (s < 3600) return Math.floor(s / 60) + ' min ago';
+  if (s < 86400) return Math.floor(s / 3600) + ' h ago'; return Math.floor(s / 86400) + ' d ago';
+}
+async function renderUsage(c) {
+  const cached = infUsageCache[infUsageRange];
+  if (cached) paintUsage(c, cached); // instant repaint from the last snapshot for this range — no flash
+  else c.innerHTML = '<div class="inf-empty">Loading usage…</div>';
+  const load = async () => {
+    if (!infOpen || infTab !== 'usage') return;
+    const r = infUsageRange;
+    let u; try { u = await api('/api/engine/usage?range=' + r); } catch { if (!infUsageCache[r]) c.innerHTML = '<div class="inf-empty">Could not load usage.</div>'; return; }
+    if (!infOpen || infTab !== 'usage' || infUsageRange !== r) return; // range/tab changed while awaiting
+    infUsageCache[r] = u; paintUsage(c, u);
+  };
+  await load();
+  infUsageTimer = setInterval(load, 5000); // keep the figures live while the tab is open
+}
+// Switch the chart's zoom (hour/day/month/year) and reload that range.
+function infSetRange(r) {
+  if (infUsageRange === r) return;
+  infUsageRange = r;
+  if (infUsageTimer) { clearInterval(infUsageTimer); infUsageTimer = null; }
+  renderUsage(document.getElementById('inf-panel'));
+}
+function paintUsage(c, u) {
+  const meta = US_RANGES[u.range] || US_RANGES.day;
+  const series = u.series || [];
+  const max = Math.max(1, ...series.map(d => d.requests));
+  const fewBars = series.length <= 12; // sparse enough to label every bar
+  const bars = series.map(d => {
+    const hi = Math.max(2, Math.round(d.requests / max * 100));
+    const peak = d.key === u.peakKey && d.requests > 0;
+    return `<div class="us-bar ${peak ? 'peak' : ''}" style="height:${hi}%" data-label="${escapeHtml(d.label)}" data-req="${d.requests}"></div>`;
+  }).join('');
+  const axis = fewBars
+    ? `<div class="us-axis">${series.map(d => `<span>${escapeHtml(d.label)}</span>`).join('')}</div>`
+    : `<div class="us-axis us-axis-ends"><span>${escapeHtml(series[0] ? series[0].label : '')}</span><span>${escapeHtml(series.length ? series[series.length - 1].label : '')}</span></div>`;
+  const rbtns = Object.keys(US_RANGES).map(r => `<button class="us-rbtn ${u.range === r ? 'on' : ''}" data-range="${r}">${r[0].toUpperCase() + r.slice(1)}</button>`).join('');
+  const tile = (label, val, sub) => `<div class="us-tile"><div class="us-label">${label}</div><div class="us-val">${val}</div>${sub ? `<div class="us-sub">${sub}</div>` : ''}</div>`;
+  const succ = u.successRate < 0 ? '—' : Math.round(u.successRate) + '%';
+  const peakVal = u.peakRequests > 0 ? `${infNum(u.peakRequests)} <span style="font-size:12px;font-weight:600;color:var(--muted)">${escapeHtml(u.peakLabel)}</span>` : '—';
+  const cacheTotal = u.cacheHits + u.cacheMisses;
+  const hitRate = cacheTotal > 0 ? Math.round(u.cacheHits / cacheTotal * 100) + '% hit rate' : '';
+  c.innerHTML = `
+    <div class="us-chartwrap">
+      <div class="us-head">
+        <div><span class="us-htitle">${meta.title}</span> <span class="us-time">${meta.sub}</span></div>
+        <div class="us-range">${rbtns}</div>
+      </div>
+      <div class="us-chart" id="us-chart">${bars}</div>
+      ${axis}
+    </div>
+    <div class="us-grid">
+      ${tile('Total requests', infNum(u.totalRequests))}
+      ${tile('Total tokens', infNum(u.totalTokens))}
+      ${tile('Input tokens', infNum(u.promptTokens), 'prompt')}
+      ${tile('Output tokens', infNum(u.completionTokens), 'completion')}
+      ${tile('Avg in / request', infNum(u.avgPromptTokens))}
+      ${tile('Avg out / request', infNum(u.avgCompletionTokens))}
+      ${tile(meta.peak, peakVal)}
+      ${tile('Success rate', succ, u.apiRequests > 0 ? infNum(u.apiRequests) + ' API requests' : 'API requests')}
+      ${tile('Cache hits', infNum(u.cacheHits), hitRate)}
+      ${tile('Cache misses', infNum(u.cacheMisses))}
+      ${tile('Last request', infAgo(u.lastRequestAt))}
+    </div>
+    <div class="fld-help" style="margin-top:16px">The chart shows the selected range; totals, averages and cache are lifetime. Requests, tokens and cache are sampled from the engine across <b>all</b> traffic (chat, agents, API). Success rate covers requests through your API keys. Cache stats need a prefix-caching engine (vLLM).</div>`;
+  // Range toggle.
+  c.querySelectorAll('.us-rbtn').forEach(b => b.onclick = () => infSetRange(b.dataset.range));
+  // Interactive bars: a floating tooltip with the exact period + request count.
+  const chart = document.getElementById('us-chart');
+  if (chart) chart.querySelectorAll('.us-bar').forEach(b => {
+    b.onmousemove = e => { const n = +b.dataset.req; infShowTip(e, `<b>${n} request${n === 1 ? '' : 's'}</b><span>${b.dataset.label}</span>`); };
+    b.onmouseleave = infHideTip;
+  });
+}
+// ---- Electricity (Power tab) ----------------------------------------------
+// A permanent record of the machine's AI energy use: GPU board power (nvidia-smi)
+// sampled continuously and integrated into watt-hours, kept per hour/day/month/year.
+// The user can review any range and erase any bucket (or clear everything).
+function infEnergy(wh) {
+  if (wh >= 1e6) return (wh / 1e6).toFixed(2) + ' MWh';
+  if (wh >= 1e4) return (wh / 1e3).toFixed(0) + ' kWh';
+  if (wh >= 1e3) return (wh / 1e3).toFixed(2) + ' kWh';
+  if (wh >= 1) return Math.round(wh) + ' Wh';
+  return wh > 0 ? wh.toFixed(2) + ' Wh' : '0 Wh';
+}
+function infWatt(w) { return w >= 1000 ? (w / 1000).toFixed(2) + ' kW' : Math.round(w) + ' W'; }
+async function renderPower(c) {
+  const cached = infPowerCache[infPowerRange];
+  if (cached) paintPower(c, cached); // instant repaint — no flash on range/tab switch
+  else c.innerHTML = '<div class="inf-empty">Loading electricity…</div>';
+  const load = async () => {
+    if (!infOpen || infTab !== 'power') return;
+    const r = infPowerRange;
+    let p; try { p = await api('/api/engine/power?range=' + r); } catch { if (!infPowerCache[r]) c.innerHTML = '<div class="inf-empty">Could not load electricity data.</div>'; return; }
+    if (!infOpen || infTab !== 'power' || infPowerRange !== r) return; // range/tab changed while awaiting
+    infPowerCache[r] = p; paintPower(c, p);
+  };
+  await load();
+  infPowerTimer = setInterval(load, 5000); // keep the live figures fresh
+}
+function infSetPowerRange(r) {
+  if (infPowerRange === r) return;
+  infPowerRange = r;
+  if (infPowerTimer) { clearInterval(infPowerTimer); infPowerTimer = null; }
+  renderPower(document.getElementById('inf-panel'));
+}
+function paintPower(c, p) {
+  const meta = PW_RANGES[p.range] || PW_RANGES.day;
+  const series = p.series || [];
+  const max = Math.max(1, ...series.map(d => d.energyWh));
+  const fewBars = series.length <= 12;
+  const bars = series.map(d => {
+    const hi = Math.max(2, Math.round(d.energyWh / max * 100));
+    const peak = d.key === p.peakKey && d.energyWh > 0;
+    const empty = !(d.energyWh > 0);
+    return `<div class="us-bar pw-bar ${peak ? 'peak' : ''} ${empty ? 'pw-empty' : ''}" style="height:${hi}%" data-key="${escapeHtml(d.key)}" data-label="${escapeHtml(d.label)}" data-wh="${d.energyWh}" data-avg="${d.avgW}" data-peak="${d.peakW}"></div>`;
+  }).join('');
+  const axis = fewBars
+    ? `<div class="us-axis">${series.map(d => `<span>${escapeHtml(d.label)}</span>`).join('')}</div>`
+    : `<div class="us-axis us-axis-ends"><span>${escapeHtml(series[0] ? series[0].label : '')}</span><span>${escapeHtml(series.length ? series[series.length - 1].label : '')}</span></div>`;
+  const rbtns = Object.keys(PW_RANGES).map(r => `<button class="us-rbtn ${p.range === r ? 'on' : ''}" data-range="${r}">${r[0].toUpperCase() + r.slice(1)}</button>`).join('');
+  const tile = (label, val, sub) => `<div class="us-tile"><div class="us-label">${label}</div><div class="us-val">${val}</div>${sub ? `<div class="us-sub">${sub}</div>` : ''}</div>`;
+  const peakVal = p.peakEnergyWh > 0 ? `${infEnergy(p.peakEnergyWh)} <span style="font-size:12px;font-weight:600;color:var(--muted)">${escapeHtml(p.peakLabel)}</span>` : '—';
+  c.innerHTML = `
+    <div class="us-chartwrap">
+      <div class="us-head">
+        <div><span class="us-htitle">electricity / ${meta.unit}</span> <span class="us-time">${meta.sub}</span></div>
+        <div class="us-range">${rbtns}</div>
+      </div>
+      <div class="us-chart" id="pw-chart">${bars}</div>
+      ${axis}
+    </div>
+    <div class="us-grid">
+      ${tile('This view', infEnergy(p.rangeWh), meta.sub)}
+      ${tile('Lifetime total', infEnergy(p.totalWh), 'all recorded')}
+      ${tile('Now', p.nowW > 0 ? infWatt(p.nowW) : '—', 'current draw')}
+      ${tile('Avg power', p.avgW > 0 ? infWatt(p.avgW) : '—', 'while sampled')}
+      ${tile('Peak power', p.peakW > 0 ? infWatt(p.peakW) : '—', 'highest reading')}
+      ${tile(meta.peak, peakVal, 'energy')}
+    </div>
+    <div class="pw-actions">
+      <span class="pw-erasehint">Click a bar to erase that ${meta.unit}.</span>
+      <button class="btn danger pw-clear" id="pw-clear">Clear all electricity logs</button>
+    </div>
+    <div class="fld-help" style="margin-top:14px">Electricity is the GPUs' board power (via nvidia-smi), sampled continuously and integrated into watt-hours — it records the machine's AI energy use even while idle. Erasing a day also corrects its month and year totals. <b>Cost isn't shown</b> — it depends on your electricity tariff.</div>`;
+  c.querySelectorAll('.us-rbtn').forEach(b => b.onclick = () => infSetPowerRange(b.dataset.range));
+  const chart = document.getElementById('pw-chart');
+  if (chart) chart.querySelectorAll('.pw-bar').forEach(b => {
+    const wh = +b.dataset.wh;
+    b.onmousemove = e => {
+      if (!(wh > 0)) { infShowTip(e, `<b>no data</b><span>${b.dataset.label}</span>`); return; }
+      infShowTip(e, `<b>${infEnergy(wh)}</b><span>${b.dataset.label} · avg ${infWatt(+b.dataset.avg)} · peak ${infWatt(+b.dataset.peak)} · click to erase</span>`);
+    };
+    b.onmouseleave = infHideTip;
+    b.onclick = () => {
+      if (!(wh > 0)) return;
+      if (!confirm(`Erase the electricity log for ${b.dataset.label}? This also updates the month and year totals, and can't be undone.`)) return;
+      infPowerClear(p.range, b.dataset.key);
+    };
+  });
+  const clr = document.getElementById('pw-clear');
+  if (clr) clr.onclick = () => {
+    if (!confirm('Erase ALL recorded electricity data?\n\nThis permanently clears every hour, day, month and year, and can\'t be undone.')) return;
+    infPowerClear(p.range, '');
+  };
+}
+// Erase a bucket (key set) or the whole log (key empty), then repaint from the
+// server's fresh report. Ranges share underlying data, so invalidate every cache.
+function infPowerClear(range, key) {
+  infHideTip();
+  const qs = '/api/engine/power?range=' + encodeURIComponent(range) + (key ? '&key=' + encodeURIComponent(key) : '');
+  api(qs, { method: 'DELETE' }).then(p => {
+    infPowerCache = {}; infPowerCache[p.range] = p;
+    if (infOpen && infTab === 'power') paintPower(document.getElementById('inf-panel'), p);
+    toast(key ? 'Log erased' : 'All electricity logs cleared');
+  }).catch(() => toast('Could not erase the log', true));
+}
 function infPush(a, v) { a.push(v); if (a.length > INF_CAP) a.shift(); }
 async function infPoll() {
-  if (!infOpen || infTab !== 'activity') return;
+  if (!infOpen || infTab !== 'activity' || infActRange !== 'live') return;
   let m; try { m = await api('/api/engine/metrics'); } catch { return; }
-  if (!infOpen || infTab !== 'activity') return; // tab changed while awaiting
+  if (!infOpen || infTab !== 'activity' || infActRange !== 'live') return; // tab/range changed while awaiting
   if (!m.available) {
     infHeadSet(m.engine, m.model, m.ready);
-    const btn = m.canEnable ? '<button class="btn primary" id="inf-enable" style="margin-top:18px">Turn on live metrics (restarts the engine)</button>' : '';
-    document.getElementById('inf-panel').innerHTML = `<div class="inf-empty">${escapeHtml(m.hint || 'Live metrics aren’t available yet.')}<br>Send a request — chat with your AI, or hit the API — and activity will appear here in real time.${btn}</div>`;
-    const eb = document.getElementById('inf-enable');
-    if (eb) eb.onclick = () => {
-      eb.disabled = true; eb.textContent = 'Restarting engine…';
-      api('/api/engine/restart', { method: 'POST' }).then(r => { if (r.jobId) trackJobToast(r.jobId, 'Engine'); toast('Restarting engine to enable metrics…'); }).catch(() => { toast('Failed', true); eb.disabled = false; });
-    };
+    // Engine-specific metrics need a serving model. Show a slim notice in the engine
+    // region only — the hardware band below keeps streaming. Rebuild once (guarded),
+    // so we don't reattach the button or flicker every poll.
+    const eng = document.getElementById('inf-eng');
+    if (eng && !document.getElementById('inf-eng-banner')) {
+      const btn = m.canEnable ? '<button class="btn primary" id="inf-enable" style="margin-top:14px">Turn on live metrics (restarts the engine)</button>' : '';
+      eng.innerHTML = `<div class="inf-engnote" id="inf-eng-banner"><div class="inf-engnote-msg">${escapeHtml(m.hint || 'No model is serving right now.')}</div><div class="inf-engnote-sub">Throughput, latency and KV-cache metrics appear here once a model is loaded and serving. Hardware metrics below are live.</div>${btn}</div>`;
+      const eb = document.getElementById('inf-enable');
+      if (eb) eb.onclick = () => {
+        eb.disabled = true; eb.textContent = 'Restarting engine…';
+        api('/api/engine/restart', { method: 'POST' }).then(r => { if (r.jobId) trackJobToast(r.jobId, 'Engine'); toast('Restarting engine to enable metrics…'); }).catch(() => { toast('Failed', true); eb.disabled = false; });
+      };
+    }
     infPrev = null; return;
   }
   const now = performance.now();
@@ -2206,7 +2612,10 @@ function infSkeleton() {
     </div>`;
 }
 function infRender(m, r) {
-  if (!document.getElementById('inf-hero')) document.getElementById('inf-panel').innerHTML = infSkeleton();
+  // Build the engine skeleton only when it isn't already present (e.g. returning from
+  // the no-metrics banner). Rebuilding every poll would recreate the canvases and wipe
+  // the hover crosshair — guard on the hero canvas, which only the skeleton creates.
+  if (!document.getElementById('c-tput')) { const eng = document.getElementById('inf-eng'); if (eng) eng.innerHTML = infSkeleton(); }
   infHeadSet(m.engine, m.model, true);
   if (r.gRate > infPeak) infPeak = r.gRate;
   setText('h-gen', infRate(r.gRate));
@@ -2218,11 +2627,70 @@ function infRender(m, r) {
   setText('m-ttft', r.ttft == null ? '—' : Math.round(r.ttft));
   setText('m-tpot', r.tpot == null ? '—' : Math.round(r.tpot));
   const blue = cssRgb('--blue'), accent = cssRgb('--accent'), muted = cssRgb('--muted');
-  infChart('c-tput', [{ rgb: blue, data: infBuf.gTok }], 0, true); // headline = output (glowing line); prompt shown as a number
-  infChart('c-active', [{ rgb: blue, data: infBuf.run }]);
-  infChart('c-ttft', [{ rgb: muted, data: infBuf.ttft }]);
-  infChart('c-tpot', [{ rgb: muted, data: infBuf.tpot }]);
+  infChart('c-tput', [{ rgb: blue, data: infBuf.gTok }], 0, { glow: true, label: 'output', fmt: v => infRate(v) + ' tok/s' }); // headline = output (glowing line); prompt shown as a number
+  infChart('c-active', [{ rgb: blue, data: infBuf.run }], 0, { label: 'active requests', fmt: v => infRate(v) });
+  infChart('c-ttft', [{ rgb: muted, data: infBuf.ttft }], 0, { label: 'time to first token', fmt: v => Math.round(v) + ' ms' });
+  infChart('c-tpot', [{ rgb: muted, data: infBuf.tpot }], 0, { label: 'per output token', fmt: v => Math.round(v) + ' ms' });
   infGauge('c-kv', kv, kv >= 90 ? cssRgb('--err') : kv >= 70 ? accent : blue);
+}
+// Hardware metrics — GPU (util / memory / power / temp) + CPU + RAM. These come from
+// nvidia-smi and the OS, so they're live whether or not an inference engine is running.
+// Polled on its own slower timer; renders into #inf-hw, untouched by the engine region.
+function infHwSkeleton() {
+  return `
+    <div class="inf-hwhead">Hardware <span>live · this machine</span></div>
+    <div class="inf-grid">
+      <div class="inf-metric"><div class="im-label">GPU · utilization</div><div class="im-ringwrap"><canvas class="im-ring" id="c-gutil"></canvas><span class="im-ringval" id="m-gutil">—</span></div><div class="im-sub im-c" id="m-gutilsub">&nbsp;</div></div>
+      <div class="inf-metric"><div class="im-label">GPU · memory</div><div class="im-ringwrap"><canvas class="im-ring" id="c-gmem"></canvas><span class="im-ringval" id="m-gmem">—</span></div><div class="im-sub im-c" id="m-gmemsub">— / — GB</div></div>
+      <div class="inf-metric"><div class="im-label">GPU · power</div><div class="im-val"><span id="m-gpow">—</span><small>W</small></div><div class="im-sub" id="m-gpowsub">—</div><canvas class="im-spark" id="c-gpow"></canvas></div>
+      <div class="inf-metric"><div class="im-label">CPU</div><div class="im-val"><span id="m-cpu">—</span><small>%</small></div><div class="im-sub" id="m-cpuname">processor</div><canvas class="im-spark" id="c-cpu"></canvas></div>
+      <div class="inf-metric"><div class="im-label">System memory</div><div class="im-ringwrap"><canvas class="im-ring" id="c-ram"></canvas><span class="im-ringval" id="m-ram">—</span></div><div class="im-sub im-c" id="m-ramsub">— / — GB</div></div>
+    </div>`;
+}
+async function infHwPoll() {
+  if (!infOpen || infTab !== 'activity' || infActRange !== 'live') return;
+  let gpu, sys;
+  try { [gpu, sys] = await Promise.all([api('/api/gpu'), api('/api/sysload').catch(() => null)]); } catch { return; }
+  if (!infOpen || infTab !== 'activity' || infActRange !== 'live') return; // tab/range changed while awaiting
+  const host = document.getElementById('inf-hw'); if (!host) return;
+  if (!document.getElementById('c-gutil')) host.innerHTML = infHwSkeleton();
+  const blue = cssRgb('--blue'), accent = cssRgb('--accent'), err = cssRgb('--err');
+  const ringColor = pct => pct >= 90 ? err : pct >= 70 ? accent : blue;
+  // GPU — aggregate across all cards (avg utilization, summed memory + power, hottest temp).
+  const gpus = (gpu && gpu.gpus) || [];
+  const n = gpus.length;
+  if (n) {
+    const util = Math.round(gpus.reduce((a, g) => a + Math.max(0, g.utilPct), 0) / n);
+    const memUsed = gpus.reduce((a, g) => a + Math.max(0, g.memUsedMB), 0);
+    const memTot = gpus.reduce((a, g) => a + Math.max(0, g.memTotalMB), 0);
+    const memPct = memTot ? Math.round(memUsed / memTot * 100) : 0;
+    const pow = gpus.reduce((a, g) => a + (g.powerW > 0 ? g.powerW : 0), 0);
+    const powLim = gpus.reduce((a, g) => a + (g.powerLimitW > 0 ? g.powerLimitW : 0), 0);
+    const temp = gpus.reduce((a, g) => Math.max(a, g.tempC), 0);
+    infPush(infBuf.gutil, util); infPush(infBuf.gpow, pow);
+    setText('m-gutil', util + '%'); infGauge('c-gutil', util, ringColor(util));
+    setText('m-gutilsub', n > 1 ? `avg of ${n} GPUs` : ' ');
+    setText('m-gmem', memPct + '%'); infGauge('c-gmem', memPct, ringColor(memPct));
+    setText('m-gmemsub', `${gb(memUsed)} / ${gb(memTot)} GB`);
+    setText('m-gpow', Math.round(pow));
+    setHTML('m-gpowsub', `${temp}°C${powLim > 0 ? ` · ${Math.round(powLim)} W cap` : ''}`);
+    infChart('c-gpow', [{ rgb: accent, data: infBuf.gpow }], 0, { glow: true, label: 'GPU power', fmt: v => Math.round(v) + ' W' });
+  } else {
+    setText('m-gutil', '—'); setText('m-gutilsub', 'no GPU detected');
+    setText('m-gmem', '—'); setText('m-gmemsub', '—'); setText('m-gpow', '—'); setText('m-gpowsub', 'no GPU detected');
+  }
+  // CPU + RAM.
+  if (sys) {
+    const cpuPct = Math.max(0, Math.min(100, sys.cpuPct || 0));
+    infPush(infBuf.cpu, cpuPct);
+    setText('m-cpu', Math.round(cpuPct));
+    const cpuName = (sys.cpuModel || 'CPU').replace(/\((R|TM)\)/g, '').replace(/\bCPU\b|\bProcessor\b|\d+-Core/gi, '').replace(/\s+/g, ' ').trim() || 'CPU';
+    setText('m-cpuname', `${cpuName}${sys.cores ? ' · ' + sys.cores + ' threads' : ''}`);
+    infChart('c-cpu', [{ rgb: blue, data: infBuf.cpu }], 100, { label: 'CPU load', fmt: v => Math.round(v) + '%' });
+    const ramPct = sys.memTotalMB ? Math.round(sys.memUsedMB / sys.memTotalMB * 100) : 0;
+    setText('m-ram', ramPct + '%'); infGauge('c-ram', ramPct, ringColor(ramPct));
+    setText('m-ramsub', `${gb(sys.memUsedMB)} / ${gb(sys.memTotalMB)} GB`);
+  }
 }
 // A radial gauge (270° sweep) for a 0–100% level — elegant + instantly readable.
 function infGauge(id, pct, rgb) {
@@ -2242,8 +2710,11 @@ function infGauge(id, pct, rgb) {
   ctx.beginPath(); ctx.arc(cx, cy, r, a0, a0 + (a1 - a0) * p); ctx.stroke();
 }
 // Dependency-free smoothed area+line chart on a <canvas>. Series newest-at-right.
-function infChart(id, series, fixedMax, glow) {
+// opts: { glow, label, fmt } — label/fmt drive the hover tooltip.
+function infChart(id, series, fixedMax, opts) {
+  opts = opts || {};
   const cv = document.getElementById(id); if (!cv) return;
+  cv._args = { series, fixedMax, opts }; // remembered so a hover can repaint the exact same frame
   const dpr = window.devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight;
   if (!w || !h) return;
   if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
@@ -2264,12 +2735,56 @@ function infChart(id, series, fixedMax, glow) {
     g.addColorStop(0, `rgba(${s.rgb[0]},${s.rgb[1]},${s.rgb[2]},0.24)`); g.addColorStop(1, `rgba(${s.rgb[0]},${s.rgb[1]},${s.rgb[2]},0)`);
     ctx.fillStyle = g; ctx.fill();
     ctx.beginPath(); smooth(pts);
-    if (glow) { ctx.shadowColor = `rgba(${s.rgb[0]},${s.rgb[1]},${s.rgb[2]},0.5)`; ctx.shadowBlur = 9; }
-    ctx.strokeStyle = line; ctx.lineWidth = glow ? 2.3 : 1.9; ctx.lineJoin = 'round'; ctx.stroke();
+    if (opts.glow) { ctx.shadowColor = `rgba(${s.rgb[0]},${s.rgb[1]},${s.rgb[2]},0.5)`; ctx.shadowBlur = 9; }
+    ctx.strokeStyle = line; ctx.lineWidth = opts.glow ? 2.3 : 1.9; ctx.lineJoin = 'round'; ctx.stroke();
     ctx.shadowBlur = 0;
-    ctx.beginPath(); ctx.arc(pts[pts.length - 1][0], pts[pts.length - 1][1], glow ? 3 : 2.5, 0, 7); ctx.fillStyle = line; ctx.fill();
+    ctx.beginPath(); ctx.arc(pts[pts.length - 1][0], pts[pts.length - 1][1], opts.glow ? 3 : 2.5, 0, 7); ctx.fillStyle = line; ctx.fill();
   });
+  cv._geo = { xOf, yOf, n, pad, w, h, series }; // geometry for the hover layer
+  if (cv._hi != null && cv._hi >= 0 && cv._hi < n) infDrawCrosshair(cv, ctx);
+  if (!cv._bound) { cv._bound = 1; infBindHover(cv); }
 }
+// Draw the hover crosshair + a dot on each series at the hovered sample.
+function infDrawCrosshair(cv, ctx) {
+  const g = cv._geo, hi = cv._hi, x = g.xOf(hi);
+  ctx.save();
+  ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--faint').trim();
+  ctx.lineWidth = 1; ctx.setLineDash([3, 3]);
+  ctx.beginPath(); ctx.moveTo(x, g.pad); ctx.lineTo(x, g.h - g.pad); ctx.stroke();
+  ctx.setLineDash([]);
+  g.series.forEach(s => {
+    const off = g.n - s.data.length, di = hi - off; if (di < 0 || di >= s.data.length) return;
+    const y = g.yOf(s.data[di]);
+    ctx.beginPath(); ctx.arc(x, y, 4.5, 0, 7); ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--card').trim(); ctx.fill();
+    ctx.beginPath(); ctx.arc(x, y, 3, 0, 7); ctx.fillStyle = `rgb(${s.rgb[0]},${s.rgb[1]},${s.rgb[2]})`; ctx.fill();
+  });
+  ctx.restore();
+}
+function infBindHover(cv) {
+  cv.style.cursor = 'crosshair';
+  cv.addEventListener('mousemove', e => {
+    const g = cv._geo; if (!g) return;
+    const rect = cv.getBoundingClientRect(), mx = e.clientX - rect.left;
+    let hi = Math.round((mx - g.pad) / Math.max(1, g.w - 2 * g.pad) * (g.n - 1));
+    hi = Math.max(0, Math.min(g.n - 1, hi));
+    cv._hi = hi;
+    const a = cv._args; if (a) infChart(cv.id, a.series, a.fixedMax, a.opts); // repaint with the crosshair
+    const opts = (a && a.opts) || {};
+    const vals = g.series.map(s => { const off = g.n - s.data.length, di = hi - off; return di < 0 ? null : (opts.fmt ? opts.fmt(s.data[di]) : Math.round(s.data[di])); }).filter(v => v != null);
+    const secs = Math.round((g.n - 1 - hi) * INF_SAMPLE_MS / 1000);
+    infShowTip(e, `<b>${vals.join(' · ') || '—'}</b><span>${escapeHtml(opts.label || '')}${opts.label ? ' · ' : ''}${secs <= 0 ? 'now' : secs + 's ago'}</span>`);
+  });
+  cv.addEventListener('mouseleave', () => { cv._hi = null; const a = cv._args; if (a) infChart(cv.id, a.series, a.fixedMax, a.opts); infHideTip(); });
+}
+// Shared floating tooltip used by the charts and the usage bars.
+function infShowTip(e, html) {
+  if (!infTipEl) { infTipEl = document.createElement('div'); infTipEl.className = 'chart-tip'; document.body.appendChild(infTipEl); }
+  infTipEl.innerHTML = html; infTipEl.style.display = 'block';
+  const tw = infTipEl.offsetWidth, x = Math.min(window.innerWidth - tw - 8, e.clientX + 14);
+  infTipEl.style.left = Math.max(8, x) + 'px';
+  infTipEl.style.top = Math.max(8, e.clientY - infTipEl.offsetHeight - 10) + 'px';
+}
+function infHideTip() { if (infTipEl) infTipEl.style.display = 'none'; }
 document.getElementById('open-inference').onclick = openInference;
 document.getElementById('open-inference-2').onclick = openInference;
 document.getElementById('inf-x').onclick = closeInference;
@@ -2463,9 +2978,18 @@ function initBackground() {
   resize();
 
   const pos = geo.attributes.position.array;
-  let t = 0, raf = 0;
-  function frame() {
-    t += 0.012;
+  let t = 0, raf = 0, lastT = 0;
+  // The modals are translucent (blurred) — the field shows THROUGH them — so we keep it
+  // moving rather than freezing (a frozen backdrop reads as jank). It just runs slower
+  // under a modal. Capping fps is the real win vs the old uncapped 120/144Hz render.
+  const BG_DT_FG = 1000 / 30, BG_DT_OVERLAY = 1000 / 15;
+  function frame(now) {
+    now = now || performance.now();
+    raf = requestAnimationFrame(frame);
+    if (now - lastT < (anyOverlayOpen() ? BG_DT_OVERLAY : BG_DT_FG)) return; // frame-rate cap
+    const dt = Math.min(0.1, (now - lastT) / 1000); // seconds, clamped across throttles/pauses
+    lastT = now;
+    t += dt * 0.72; // preserve the original ~0.012-per-frame-at-60fps motion speed
     for (let k = 0; k < count; k++) {
       const x = base[k * 2], z = base[k * 2 + 1];
       pos[k * 3 + 1] = Math.sin(x * 0.35 + t) * 0.6 + Math.cos(z * 0.4 - t * 0.7) * 0.6;
@@ -2473,12 +2997,11 @@ function initBackground() {
     geo.attributes.position.needsUpdate = true;
     field.rotation.z = Math.sin(t * 0.05) * 0.04;
     renderer.render(scene, camera);
-    raf = requestAnimationFrame(frame);
   }
-  // Pause when the tab is hidden — no point spinning the GPU in the background.
+  // Stop the loop entirely when the tab is hidden — no point spinning the GPU at all.
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) { cancelAnimationFrame(raf); raf = 0; }
-    else if (!raf) frame();
+    else if (!raf) { lastT = 0; frame(); }
   });
   frame();
 }

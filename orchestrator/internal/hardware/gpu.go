@@ -8,6 +8,8 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 )
 
 // GPU is a single GPU's live stats.
@@ -23,9 +25,36 @@ type GPU struct {
 	Driver      string  `json:"driver"`
 }
 
-// GPUs queries nvidia-smi for all NVIDIA GPUs. Returns an empty slice (and the
-// error) when nvidia-smi is absent or reports nothing.
+// gpuTTL is how long a nvidia-smi snapshot is reused. GPU stats are read-only
+// telemetry, so sub-second staleness is harmless — and several pollers (the home
+// panel, the inference hardware band, /api/system) hit this, so caching bounds
+// nvidia-smi to ~one fork per TTL no matter how many callers overlap.
+const gpuTTL = 700 * time.Millisecond
+
+var (
+	gpuMu    sync.Mutex
+	gpuCache []GPU
+	gpuErr   error
+	gpuAt    time.Time
+)
+
+// GPUs returns the latest GPU snapshot, querying nvidia-smi at most once per gpuTTL.
+// The lock is held across the query, so a burst of concurrent callers (e.g. on page
+// load) collapses to a single fork rather than each spawning its own nvidia-smi.
 func GPUs(ctx context.Context) ([]GPU, error) {
+	gpuMu.Lock()
+	defer gpuMu.Unlock()
+	if gpuCache != nil && time.Since(gpuAt) < gpuTTL {
+		return gpuCache, gpuErr
+	}
+	gpuCache, gpuErr = queryGPUs(ctx)
+	gpuAt = time.Now()
+	return gpuCache, gpuErr
+}
+
+// queryGPUs runs nvidia-smi for all NVIDIA GPUs. Returns an empty slice (and the
+// error) when nvidia-smi is absent or reports nothing.
+func queryGPUs(ctx context.Context) ([]GPU, error) {
 	cmd := exec.CommandContext(ctx, "nvidia-smi",
 		"--query-gpu=index,name,memory.used,memory.total,utilization.gpu,temperature.gpu,power.draw,power.limit,driver_version",
 		"--format=csv,noheader,nounits")

@@ -9,14 +9,17 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
 	"github.com/cloudless/orchestrator/internal/api"
 	"github.com/cloudless/orchestrator/internal/engine"
 	"github.com/cloudless/orchestrator/internal/manifest"
+	"github.com/cloudless/orchestrator/internal/power"
 	"github.com/cloudless/orchestrator/internal/provision"
 	"github.com/cloudless/orchestrator/internal/state"
+	"github.com/cloudless/orchestrator/internal/usage"
 )
 
 func main() {
@@ -36,7 +39,9 @@ func main() {
 	log.Printf("manifest: %s", envOr("CLOUDLESS_MANIFEST_URL", manifest.DefaultURL))
 	log.Printf("models manifest: %s", envOr("CLOUDLESS_MODELS_URL", manifest.DefaultModelsURL))
 
-	srv := api.NewServer(eng, st, mf, mfModels, mfDiff)
+	us := usage.Open(filepath.Join(st.Dir(), "usage.json"))
+	pw := power.Open(filepath.Join(st.Dir(), "power.json"))
+	srv := api.NewServer(eng, st, mf, mfModels, mfDiff, us, pw)
 
 	httpServer := &http.Server{
 		Addr:              addr,
@@ -62,13 +67,28 @@ func main() {
 		}
 	}()
 
-	// Flush gateway usage counters to disk periodically (per-request updates are
-	// debounced in memory via RecordUsage/PersistIfDirty).
+	// Flush gateway key-usage + the usage analytics store to disk periodically
+	// (per-request updates are debounced in memory).
 	flush := time.NewTicker(20 * time.Second)
 	defer flush.Stop()
 	go func() {
 		for range flush.C {
 			st.PersistIfDirty()
+			us.Flush()
+			pw.Flush()
+		}
+	}()
+
+	// Sample the engine's cumulative counters into usage buckets, and the GPUs'
+	// board power into the electricity log, on one ticker.
+	sampler := time.NewTicker(30 * time.Second)
+	defer sampler.Stop()
+	go func() {
+		srv.SampleUsage() // an initial sample to set the usage baseline
+		srv.SamplePower() // sets the power-integration clock
+		for range sampler.C {
+			srv.SampleUsage()
+			srv.SamplePower()
 		}
 	}()
 
@@ -90,6 +110,8 @@ func main() {
 
 	log.Println("shutting down...")
 	st.PersistIfDirty() // save any unflushed gateway usage
+	us.Flush()
+	pw.Flush()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_ = gatewayServer.Shutdown(ctx)

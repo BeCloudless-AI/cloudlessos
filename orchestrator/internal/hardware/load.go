@@ -6,39 +6,52 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"time"
+	"sync"
 )
 
 // LoadInfo is the host's live CPU + RAM utilization (Linux /proc).
 type LoadInfo struct {
 	CPUModel   string  `json:"cpuModel"`
 	Cores      int     `json:"cores"`
-	CPUPct     float64 `json:"cpuPct"` // 0..100 over a short sample window
+	CPUPct     float64 `json:"cpuPct"` // 0..100 since the previous Load() call
 	MemUsedMB  int     `json:"memUsedMB"`
 	MemTotalMB int     `json:"memTotalMB"`
 }
 
-// Load samples CPU utilization over a brief window and reads RAM use. Best-effort.
+var (
+	loadMu              sync.Mutex
+	lastTotal, lastBusy uint64
+	lastPct             float64
+	haveLast            bool
+)
+
+// Load reports CPU utilization (over the interval since the previous call) and RAM
+// use. It does NOT sleep — the dashboard polls it on a ticker, so the gap between
+// calls IS the sample window. This keeps /api/sysload instant instead of blocking
+// ~120ms per request (which made the system panel appear in a delayed stage).
 func Load() LoadInfo {
-	t0, b0 := cpuJiffies()
-	time.Sleep(120 * time.Millisecond)
-	t1, b1 := cpuJiffies()
-	pct := 0.0
-	if t1 > t0 {
-		pct = float64(b1-b0) / float64(t1-t0) * 100
+	total, busy := cpuJiffies()
+	loadMu.Lock()
+	pct := lastPct
+	if haveLast && total > lastTotal {
+		pct = float64(busy-lastBusy) / float64(total-lastTotal) * 100
 	}
+	lastTotal, lastBusy, haveLast = total, busy, true
 	if pct < 0 {
 		pct = 0
 	} else if pct > 100 {
 		pct = 100
 	}
+	lastPct = pct
+	loadMu.Unlock()
+
 	model, cores := cpuInfo(runtime.NumCPU())
-	total, avail := memKB()
-	used := total - avail
+	total2, avail := memKB()
+	used := total2 - avail
 	if used < 0 {
 		used = 0
 	}
-	return LoadInfo{CPUModel: model, Cores: cores, CPUPct: pct, MemUsedMB: used / 1024, MemTotalMB: total / 1024}
+	return LoadInfo{CPUModel: model, Cores: cores, CPUPct: pct, MemUsedMB: used / 1024, MemTotalMB: total2 / 1024}
 }
 
 // cpuJiffies returns total and busy (non-idle) jiffies from /proc/stat's "cpu" line.

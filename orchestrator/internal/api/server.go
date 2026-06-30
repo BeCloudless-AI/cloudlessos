@@ -22,8 +22,10 @@ import (
 	"github.com/cloudless/orchestrator/internal/jobs"
 	"github.com/cloudless/orchestrator/internal/manifest"
 	"github.com/cloudless/orchestrator/internal/places"
+	"github.com/cloudless/orchestrator/internal/power"
 	"github.com/cloudless/orchestrator/internal/provision"
 	"github.com/cloudless/orchestrator/internal/state"
+	"github.com/cloudless/orchestrator/internal/usage"
 )
 
 //go:embed all:web
@@ -37,11 +39,13 @@ type Server struct {
 	manifest *manifest.Store
 	mfModels *manifest.ModelsStore
 	mfDiff   *manifest.DiffusionStore
+	usage    *usage.Store
+	power    *power.Store
 }
 
 // NewServer constructs a Server backed by the given engine, state store and manifests.
-func NewServer(eng engine.Engine, st *state.Store, mf *manifest.Store, mfModels *manifest.ModelsStore, mfDiff *manifest.DiffusionStore) *Server {
-	return &Server{eng: eng, jobs: jobs.NewManager(), state: st, manifest: mf, mfModels: mfModels, mfDiff: mfDiff}
+func NewServer(eng engine.Engine, st *state.Store, mf *manifest.Store, mfModels *manifest.ModelsStore, mfDiff *manifest.DiffusionStore, us *usage.Store, pw *power.Store) *Server {
+	return &Server{eng: eng, jobs: jobs.NewManager(), state: st, manifest: mf, mfModels: mfModels, mfDiff: mfDiff, usage: us, power: pw}
 }
 
 // imageFor returns the image reference to pull/run for an app: the manifest's
@@ -97,6 +101,12 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/folders/{id}/open", s.openFolder)
 	mux.HandleFunc("GET /api/engine", s.engineState)
 	mux.HandleFunc("GET /api/engine/metrics", s.engineMetricsHandler)
+	mux.HandleFunc("GET /api/engine/usage", s.engineUsage)
+	mux.HandleFunc("GET /api/engine/power", s.enginePower)
+	mux.HandleFunc("DELETE /api/engine/power", s.enginePowerClear)
+	mux.HandleFunc("GET /api/engine/launch", s.engineLaunchGet)
+	mux.HandleFunc("POST /api/engine/launch", s.engineLaunchSet)
+	mux.HandleFunc("DELETE /api/engine/launch", s.engineLaunchClear)
 	mux.HandleFunc("POST /api/engine/restart", s.engineRestart)
 	mux.HandleFunc("POST /api/engine/{id}", s.engineSwitch)
 	mux.HandleFunc("GET /api/pins", s.pinsGet)
@@ -155,9 +165,21 @@ func (s *Server) folders(w http.ResponseWriter, r *http.Request) {
 }
 
 // activeEngine returns the id of the currently-running inference engine, or "".
+// It lists containers ONCE (one `docker ps`) and scans, rather than calling Find
+// per engine — this runs on every /api/engine poll, so the extra forks add up.
 func (s *Server) activeEngine(ctx context.Context) string {
+	all, err := s.eng.List(ctx)
+	if err != nil {
+		return ""
+	}
+	running := make(map[string]bool, len(all))
+	for _, c := range all {
+		if c.State == "running" {
+			running[c.Name] = true
+		}
+	}
 	for _, e := range catalog.Engines() {
-		if c, _ := s.eng.Find(ctx, e.ContainerName()); c != nil && c.State == "running" {
+		if running[e.ContainerName()] {
 			return e.ID
 		}
 	}
@@ -262,7 +284,8 @@ func (s *Server) applyEngine(job *jobs.Job, target catalog.App) {
 	}
 	job.Progress("switching", "Starting "+target.Name+" …", -1, -1)
 	_ = s.eng.Remove(ctx, target.ContainerName())
-	_, runErr := s.eng.Run(ctx, catalog.EngineSpec(target, model))
+	override, _ := s.state.EngineCmd(target.ID, resolveModel(model))
+	_, runErr := s.eng.Run(ctx, catalog.EngineSpecOverride(target, model, override))
 	provision.EngineMu.Unlock()
 	if runErr != nil {
 		job.Fail(runErr)

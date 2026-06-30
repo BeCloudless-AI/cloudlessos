@@ -7,11 +7,11 @@ import "context"
 
 // RunSpec describes how to launch a container for a catalog app.
 type RunSpec struct {
-	Name    string            // container name (orchestrator-managed, "cloudless-" prefix)
-	Image   string            // image ref to run
-	Ports   map[int]int       // hostPort -> containerPort (bound to 127.0.0.1)
-	Env     map[string]string // environment variables
-	Volumes map[string]string // hostPath-or-named-volume -> containerPath
+	Name         string            // container name (orchestrator-managed, "cloudless-" prefix)
+	Image        string            // image ref to run
+	Ports        map[int]int       // hostPort -> containerPort (bound to 127.0.0.1)
+	Env          map[string]string // environment variables
+	Volumes      map[string]string // hostPath-or-named-volume -> containerPath
 	GPUs         string            // "all", "0", ... or "" for no GPU
 	Network      string            // docker network to join (container-name DNS), or ""
 	NetworkAlias string            // extra DNS alias on the network (e.g. "cloudless-ai")

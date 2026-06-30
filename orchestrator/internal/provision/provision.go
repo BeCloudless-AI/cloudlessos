@@ -98,7 +98,10 @@ func Run(ctx context.Context, eng engine.Engine, st *state.Store, mf *manifest.S
 			if served == "" {
 				served = catalog.DefaultModel()
 			}
-			if mp, ok := mf.ModelPin(ctx, "default"); ok && served == mp.Repo {
+			if override, ok := st.EngineCmd(e.ID, served); ok {
+				spec.Args = override // a user-saved launch command wins verbatim
+				logf(e.ID + ": using saved launch command")
+			} else if mp, ok := mf.ModelPin(ctx, "default"); ok && served == mp.Repo {
 				args := append([]string{}, spec.Args...) // copy: don't mutate the shared catalog slice
 				spec.Args = append(args, "--revision", mp.Revision)
 				logf(e.ID + ": pinning model revision " + mp.Revision[:12])

@@ -52,7 +52,9 @@ func (s *Server) GatewayHandler() http.Handler {
 		}
 		s.state.RecordUsage(id)
 		rewriteModel(r) // let callers use any model name; the engine serves exactly one
-		rp.ServeHTTP(w, r)
+		rec := &statusRec{ResponseWriter: w, status: 200}
+		rp.ServeHTTP(rec, r)
+		s.usage.RecordAPI(rec.status < 400) // success rate (API traffic)
 	})
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "service": "cloudless-proxy"})
@@ -64,6 +66,30 @@ func (s *Server) GatewayHandler() http.Handler {
 		})
 	})
 	return mux
+}
+
+// statusRec wraps a ResponseWriter to capture the response status for usage tracking,
+// while preserving Flusher so the reverse proxy can still stream SSE.
+type statusRec struct {
+	http.ResponseWriter
+	status int
+	wrote  bool
+}
+
+func (r *statusRec) WriteHeader(code int) {
+	if !r.wrote {
+		r.status, r.wrote = code, true
+	}
+	r.ResponseWriter.WriteHeader(code)
+}
+func (r *statusRec) Write(b []byte) (int, error) {
+	r.wrote = true
+	return r.ResponseWriter.Write(b)
+}
+func (r *statusRec) Flush() {
+	if f, ok := r.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
 }
 
 // bearerToken pulls the key from "Authorization: Bearer <key>" (case-insensitive scheme).

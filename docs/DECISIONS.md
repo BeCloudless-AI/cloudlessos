@@ -1058,6 +1058,179 @@ running vs queued requests, KV-cache use, TTFT/TPOT — with readable numbers an
   6.4/15.5 GB); build/vet/`node --check` clean; comparison cards + Hardware card rendered via
   `scripts/engines-harness.ps1`.
 
+### Usage analytics (Inference → Usage tab)
+
+- **Why a persisted accumulator, not just the engine's /metrics.** The engine exposes Prometheus
+  *counters* that are point-in-time and **reset to zero on every engine restart** (and an engine
+  switch recreates the container). To show daily history, totals, peak day and a 30-day chart we keep
+  our own store. New `internal/usage` package: JSON-backed daily buckets (`usage.json` in the state
+  dir), pruned to ~95 days.
+- **Reset-safe sampling.** A 30s ticker (`Server.SampleUsage`) scrapes the engine, and folds the
+  **delta** since the last sample into today's bucket. If a counter goes *down* (restart), the delta
+  clamps to 0 — no false spike. First sample only sets the baseline.
+- **Two sources, by design.** Token/request/cache numbers come from the **engine** (covers *all*
+  traffic — chat, agents, API). **Success rate** comes from the **gateway** (`statusRec` wraps the
+  reverse-proxy response so we record real HTTP status per API-key request) — the engine has no notion
+  of "our API keys". Cache hits/misses need a prefix-caching engine (vLLM); shown as 0 otherwise.
+- **Surface:** `GET /api/engine/usage?range=…` → totals, prompt/completion split, averages, peak,
+  success rate, last-request timestamp, and the selected range's `series[]` (zero-filled). UI
+  `renderUsage()` draws the bar chart (peak highlighted) + stat tiles.
+- **Multi-granularity (hour / day / month / year).** Rather than only daily buckets, each sample folds
+  the same delta into the current **hour, day, month and year** rollups at once (standard rollup
+  tables), each independently retained (72 h / 95 d / 36 mo / 12 y). `Snapshot(range)` serves the
+  matching series (24 / 30 / 12 / 5 points) with per-point labels; an unknown range falls back to day.
+  Lifetime totals are summed from the yearly rollup (so they're truly all-time, not last-95-days).
+  Peak is computed per selected range; the UI has a Hour/Day/Month/Year pill toggle, per-range chart
+  title and axis labels, and a "Peak {range}" tile.
+- **Activity zoom too (Live + Hour/Day/Month/Year).** The Activity tab keeps its real-time stream under
+  a **Live** mode and adds the same range selector; the historical modes chart **output tokens
+  generated per bucket** (the engine's work over time) from the same `series[]` — no extra engine load,
+  no backend change. Live's poll is gated on `infActRange === 'live'` so it pauses in historical mode.
+- **Interactive dashboard (Activity + Usage).** Live charts (`infChart`) gained a hover crosshair +
+  shared floating tooltip (value + time-ago); usage bars show a date/count tooltip. Faster perceived
+  data: sample interval 1000→750 ms, Activity paints its skeleton instantly, Usage repaints from a
+  per-range cache and auto-refreshes every 5 s. Fixed a latent bug where `infRender` guarded on a
+  non-existent `#inf-hero` id and rebuilt the whole panel (recreating canvases) every poll — now guards
+  on the hero canvas, so it builds once and hover state survives.
+- **Verified:** `internal/usage` unit tests (deltas, reset-no-spike, success rate, all-ranges-accrue,
+  unknown-range-fallback) pass; `scripts/usage-check.sh` confirms every range's series length + gateway
+  recording on the throwaway daemon (hour=24/day=30/month=12/year=5, bogus→day); Usage Day+Month views
+  rendered via `scripts/usage-harness.ps1` and the interactive Activity hover via
+  `scripts/inf-interactive-harness.ps1`.
+
+---
+
+## D39 — Electricity consumption log (Inference → Power tab)
+
+**Decision:** Add a permanent, reviewable, erasable record of the machine's AI electricity
+use, surfaced as a new **Power** tab in the Inference hub.
+
+- **Source = GPU board power.** `nvidia-smi` already gives `power.draw` per GPU (see
+  `hardware.GPUs`). The new `internal/power` store sums it across GPUs and **integrates watts
+  over the real interval between samples into watt-hours** (energy = Σ W·Δt). Sampling rides the
+  existing 30 s usage ticker (`SamplePower`), so consumption accrues continuously — including
+  idle draw, and regardless of which engine (or none) is running. We label it honestly as GPU
+  power; whole-system RAPL/IPMI isn't portable and isn't measured.
+- **Day buckets are the source of truth.** Per-sample energy folds into the current **hour** and
+  **day** bucket. The **month** and **year** views are *derived* by rolling up days — so erasing a
+  day's log also corrects its month and year totals (no four-independent-rollup inconsistency like
+  Usage has). Hours are kept ~4 days (for the 24 h view); days ~5.5 years (the long record).
+- **Reset/downtime-safe.** The first sample only sets the integration clock; an interval is capped
+  at `maxGap` (5 min) so daemon downtime/sleep can't credit a huge phantom draw.
+- **Review + erase, the literal ask.** `GET /api/engine/power?range=` returns the report;
+  `DELETE /api/engine/power?range=&key=` erases — a single bucket (click any bar) or, with no key,
+  the **whole log** ("Clear all electricity logs", confirm-guarded). Persisted to `power.json`.
+- **UI mirrors Usage** (same chart/tile footprint) but electricity bars are **orange** (peak = blue)
+  to distinguish from Usage's blue request bars; tiles show This view / Lifetime / Now / Avg / Peak
+  power / Peak period. **Cost is intentionally not shown** — it depends on the user's tariff (a future
+  setting could add a €/kWh estimate).
+- **Verified:** `internal/power` unit tests (watt→Wh integration, first-sample-clock-only, gap cap,
+  month/year derived-from-days, day-erase corrects all views, clear-all, unknown-range fallback,
+  persist round-trip, series lengths) pass; `scripts/power-api-check.sh` confirms all ranges + both
+  DELETE paths on the throwaway daemon; Power Day+Month views rendered via `scripts/power-harness.ps1`.
+
+---
+
+## D40 — Activity dashboard works without an inference engine (always-live hardware band)
+
+**Decision:** The Inference → Activity → **Live** view always shows a **Hardware** band (GPU
+utilization, GPU memory, GPU power + temp, CPU, system RAM), independent of whether an inference
+engine is running or reporting metrics.
+
+- **Why:** Engine metrics (throughput, TTFT/TPOT, KV cache, request counts) fundamentally require a
+  serving model. But the *hardware* metrics come from `nvidia-smi` (`/api/gpu`) and the OS
+  (`/api/sysload`) and are always available — yet the old Live view went blank ("send a request…")
+  whenever no engine reported, making the dashboard useless at exactly the moment you'd want to see
+  what the machine is doing. Now the dashboard is always populated.
+- **Structure:** Live view splits into two regions — `#inf-eng` (engine hero + tiles, *or* a slim
+  "no model serving" notice with the enable button) and `#inf-hw` (the hardware band). The hardware
+  band renders/updates independently, so the engine region toggling never wipes it.
+- **Polling:** Engine metrics stay at 750 ms (cheap Prometheus scrape); hardware polls on its own
+  **1500 ms** timer (`infHwPoll`) since `nvidia-smi` is heavier. No backend change — reuses the
+  existing `/api/gpu` + `/api/sysload`. Multi-GPU is aggregated (avg util, summed memory + power,
+  hottest temp). Rings use the shared `infGauge`; GPU-power uses an orange sparkline (ties to the
+  Power tab); CPU a blue one.
+- **Verified:** `node --check` + `go build` clean; the no-engine Live state (engine notice + live
+  Hardware band with real `infHwSkeleton`/`infGauge`) rendered via `scripts/inf-hardware-harness.ps1`.
+
+---
+
+## D41 — Editable engine launch command (Model Manager → Advanced)
+
+**Decision:** Each language model's detail page gets an **Advanced — engine launch command**
+section that shows the exact command the engine launches the model with, and lets the user edit,
+save, and reuse it.
+
+- **What's editable vs managed:** the editable part is the **container command** (the args after the
+  image — e.g. vLLM's `--gpu-memory-utilization`, `--max-model-len`, parsers). The `docker run`
+  scaffolding (`--name`, `--gpus`, `--network`, `--network-alias`, `-p`, `-v`, image) is shown as a
+  read-only **full command preview** but stays managed by Cloudless — the orchestrator relies on the
+  container name + `cloudless-ai` alias to find and route the active engine, so letting users break
+  those would break engine switching, the gateway and the dashboard.
+- **Keyed by (engine, model).** The same model launched on vLLM vs llama.cpp is a completely
+  different command, so overrides are stored per `engineID\x00modelID` in `state.json` (`EngineCmds`).
+  The "active or selected or default" engine is what the editor targets.
+- **Honored everywhere the engine starts.** `catalog.EngineSpecOverride` applies the saved command;
+  both launch sites use it — the API (`applyEngine`: switch / model-change / restart) and the boot
+  `provision` path — so a saved command survives reboots. A user command wins verbatim over the
+  default-model revision pin.
+- **Save / Save & launch / Reset.** Save persists for later; Save & launch also restarts the engine
+  on this model now; Reset clears the override. A command equal to the default clears the override
+  rather than storing a redundant copy. `GET/POST/DELETE /api/engine/launch`.
+- **Round-trip-safe parsing.** New `engine.ShellSplit`/`ShellJoin` tokenize the edited line (honoring
+  quotes) into argv and back; `engine.PreviewParts` (a refactor of `docker.Run` into a shared,
+  now-deterministic `runArgs`) renders the managed prefix + command so display can't drift from what
+  actually runs.
+- **Verified:** `internal/engine` tests (ShellSplit cases, join↔split round-trip, PreviewParts splits
+  command from scaffold, runArgs deterministic) pass; `scripts/launch-cmd-check.sh` exercises
+  GET/POST/DELETE + persistence + the equals-default-clears rule on the throwaway daemon; the Advanced
+  editor rendered via `scripts/models-launch-harness.ps1`.
+
+---
+
+## D42 — Dashboard performance: cap the background, cut per-request latency
+
+**Symptom:** the dashboard felt heavy / slow, and modals + page refresh "appeared in stages."
+Root causes, across the stack:
+
+- **The WebGL background ran uncapped.** `initBackground` animates a 2,560-point field and re-uploads
+  the vertex buffer every `requestAnimationFrame` — on a 120/144 Hz display that's 120–144 full-screen
+  renders/s, continuously, even while the GPU is serving the model. Fix: **cap to 30 fps** (motion is
+  now time-based, so speed is unchanged), dropping to **15 fps while a modal is open**. The modals are
+  translucent + blurred (`rgba(…,0.5)` + `blur(3px)`), so the field shows *through* them — it must keep
+  moving (an earlier attempt to *freeze*/skip it under modals read as jank, "appearing in stages", and
+  was reverted). Still fully stops on tab-hidden.
+- **`/api/sysload` blocked ~120 ms per call.** `hardware.Load()` slept 120 ms to sample CPU between two
+  `/proc/stat` reads — so the System panel always arrived as a late stage. Rewrote it to compute CPU%
+  from the delta **since the previous call** (the poll interval is the window) — no sleep. Measured
+  ~120 ms → **2–5 ms**.
+- **`nvidia-smi` forked per caller.** The home GPU panel, the Inference hardware band and `/api/system`
+  each spawned their own `nvidia-smi`. Added a **700 ms cache with the lock held across the query** in
+  `hardware.GPUs` — repeat reads are ~1 ms and a concurrent burst (page load) collapses to a single
+  fork (single-flight). GPU stats are read-only telemetry, so sub-second staleness is harmless.
+- **`activeEngine` forked `docker` up to 3×.** It called `eng.Find` (a full `docker ps -a`) once per
+  engine, on every `/api/engine` poll and every idle `/api/engine/metrics` poll. Rewrote it to list
+  containers **once** and scan → 1 fork instead of 3.
+
+Kept the home pollers always-on (an earlier gate-under-modal version left the home view stale and
+re-staging on return); the GPU cache + single-`List` already bound their cost.
+
+**Verified:** `go build`/`go vet`/`go test`/`node --check` clean; `activeEngine` still reports the
+running engine via one list (`scripts/engine-detect-check.sh`); latency measured with
+`scripts/latency-check.sh` (sysload 2–5 ms, gpu 1–2 ms cached, 5 concurrent gpu calls ~1 ms each).
+
+**Follow-up — bound the metrics gathering itself (don't load the inference server):**
+
+- **Cached the engine `/metrics` scrape.** The live dashboard poll (`/api/engine/metrics`) and the
+  30 s usage sampler each hit the inference server's `/metrics` endpoint independently — extra
+  event-loop work for the very process serving the model. Added a **900 ms cache with the lock held
+  across the fetch** (single-flight) in `scrapeMetrics`, so all callers share one scrape and the
+  engine is hit at most ~1×/s no matter how fast the UI polls or how many tabs are open. Verified:
+  100 concurrent callers → **1** fetch; cached within the window; one refetch after TTL.
+- **Eased the live cadences.** Inference live metrics 0.75 s → **1 s** (aligned to the scrape cache,
+  so we never redraw stale data or out-poll the cache); the hardware band 1.5 s → **3 s** (GPU/CPU/RAM
+  move slowly). Together these roughly halve the dashboard's steady-state metrics work.
+
 ---
 
 ## Open questions (not yet decided)

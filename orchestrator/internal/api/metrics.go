@@ -6,10 +6,35 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/cloudless/orchestrator/internal/catalog"
+	"github.com/cloudless/orchestrator/internal/usage"
 )
+
+// SampleUsage scrapes the engine's cumulative counters into the usage store. Called
+// on a ticker so daily usage accrues across the whole machine's inference traffic.
+func (s *Server) SampleUsage() {
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
+	body, ok := scrapeMetrics(ctx)
+	if !ok {
+		return
+	}
+	if m := parseEngineMetrics(body); m.Available {
+		s.usage.Sample(usage.Counters{
+			Requests: m.RequestsCtr, PromptTokens: m.PromptTokens, CompletionTokens: m.GenTokens,
+			CacheHits: m.CacheHits, CacheQueries: m.CacheQueries,
+		})
+	}
+}
+
+// engineUsage returns the accumulated usage report for the requested range
+// (?range=hour|day|month|year; default day) — totals, peak, and the series.
+func (s *Server) engineUsage(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, s.usage.Snapshot(r.URL.Query().Get("range")))
+}
 
 // engineMetrics is a normalized snapshot of the active inference engine's live work,
 // scraped from its Prometheus /metrics endpoint. Names differ between vLLM (vllm:*)
@@ -33,6 +58,10 @@ type engineMetrics struct {
 	GenThroughput float64 `json:"genThroughput,omitempty"` // SGLang reports tok/s directly
 	Preemptions   float64 `json:"preemptions,omitempty"`
 	Hint          string  `json:"hint,omitempty"`
+	// usage-sampling counters (not surfaced in the live response)
+	RequestsCtr  float64 `json:"-"` // cumulative request counter
+	CacheHits    float64 `json:"-"` // prefix-cache hits
+	CacheQueries float64 `json:"-"` // prefix-cache lookups
 }
 
 func (s *Server) engineMetricsHandler(w http.ResponseWriter, r *http.Request) {
@@ -87,8 +116,38 @@ func engineDisplayName(id string) string {
 	return id
 }
 
-// scrapeMetrics fetches the engine's Prometheus text exposition (host port 8000).
+// Engine /metrics scrape cache. The live dashboard polls /api/engine/metrics ~1×/s
+// and the usage sampler runs every 30s; without this they'd each hit the inference
+// server's /metrics endpoint independently, adding event-loop work to the engine
+// that's busy serving the model. Caching with the lock held across the fetch also
+// makes it single-flight, so concurrent callers share one scrape instead of piling on.
+const metricsTTL = 900 * time.Millisecond
+
+var (
+	metricsMu   sync.Mutex
+	metricsBody string
+	metricsOK   bool
+	metricsAt   time.Time
+)
+
+// scrapeMetrics returns the engine's Prometheus text, scraping at most once per
+// metricsTTL (shared across all callers). Sub-second staleness is fine for a live view.
 func scrapeMetrics(ctx context.Context) (string, bool) {
+	metricsMu.Lock()
+	defer metricsMu.Unlock()
+	if !metricsAt.IsZero() && time.Since(metricsAt) < metricsTTL {
+		return metricsBody, metricsOK
+	}
+	metricsBody, metricsOK = scrapeFetch(ctx)
+	metricsAt = time.Now()
+	return metricsBody, metricsOK
+}
+
+// scrapeFetch is the actual fetch behind the cache (swappable in tests).
+var scrapeFetch = scrapeMetricsRaw
+
+// scrapeMetricsRaw fetches the engine's Prometheus text exposition (host port 8000).
+func scrapeMetricsRaw(ctx context.Context) (string, bool) {
 	url := "http://127.0.0.1:" + strconv.Itoa(catalog.EnginePort) + "/metrics"
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -135,7 +194,7 @@ func parseEngineMetrics(text string) engineMetrics {
 		}
 		return 0
 	}
-	return engineMetrics{
+	em := engineMetrics{
 		Available:     engine != "",
 		Engine:        engine,
 		Running:       get("vllm:num_requests_running", "sglang:num_running_reqs", "llamacpp:requests_processing"),
@@ -149,7 +208,16 @@ func parseEngineMetrics(text string) engineMetrics {
 		TPOTCount:     get("vllm:time_per_output_token_seconds_count", "sglang:inter_token_latency_seconds_count", "sglang:time_per_output_token_seconds_count"),
 		GenThroughput: get("sglang:gen_throughput", "llamacpp:predicted_tokens_seconds"),
 		Preemptions:   get("vllm:num_preemptions_total"),
+		CacheHits:     get("vllm:gpu_prefix_cache_hits_total", "vllm:prefix_cache_hits_total"),
+		CacheQueries:  get("vllm:gpu_prefix_cache_queries_total", "vllm:prefix_cache_queries_total"),
 	}
+	// A cumulative request counter; fall back to the TTFT histogram count (one per
+	// request that produced a first token) — universal across vLLM/SGLang.
+	em.RequestsCtr = get("vllm:request_success_total", "sglang:e2e_request_latency_seconds_count")
+	if em.RequestsCtr == 0 {
+		em.RequestsCtr = em.TTFTCount
+	}
+	return em
 }
 
 // promSum parses a Prometheus text exposition, summing each metric's value across

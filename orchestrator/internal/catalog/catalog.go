@@ -180,6 +180,17 @@ func EngineSpec(a App, model string) engine.RunSpec {
 	return rs
 }
 
+// EngineSpecOverride is EngineSpec with the container command replaced by a
+// user-saved override (the args after the image) when non-empty — so a launch
+// command edited in the Model Manager is honored everywhere the engine starts.
+func EngineSpecOverride(a App, model string, override []string) engine.RunSpec {
+	rs := EngineSpec(a, model)
+	if len(override) > 0 {
+		rs.Args = append([]string(nil), override...)
+	}
+	return rs
+}
+
 // DefaultEngine returns the id of the default engine (the preinstalled one).
 func DefaultEngine() string {
 	for _, a := range apps {

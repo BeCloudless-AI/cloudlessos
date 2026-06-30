@@ -67,6 +67,7 @@ GPU containers and serves a web UI. End-to-end verified with Ollama (pull → GP
 - `docs/ROADMAP.md` — phased plan with concrete milestones.
 - `docs/DECISIONS.md` — decision log (ADR-style) with rationale and open questions.
 - `docs/DEV_ENVIRONMENT.md` — hardware, WSL2 setup steps, and current setup status.
+- `docs/HARDWARE.md` — Cloudless PC reference builds (SKU specs, component lists, pricing).
 - `docs/STATUS.md` — **living** state: what's done, what's in progress, what's next.
 - `orchestrator/README.md` — the Go daemon: layout, how to run, API, known limitations.
 

@@ -1,6 +1,12 @@
 package api
 
-import "testing"
+import (
+	"context"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+)
 
 func TestParseEngineMetricsVLLM(t *testing.T) {
 	text := `# HELP vllm:num_requests_running Number of requests currently running on GPU.
@@ -77,4 +83,53 @@ func TestParseEngineMetricsEmpty(t *testing.T) {
 	if m := parseEngineMetrics(`{"detail":"Not Found"}`); m.Available || m.Engine != "" {
 		t.Errorf("non-prometheus body should be unavailable, got %+v", m)
 	}
+}
+
+// The engine /metrics scrape is cached + single-flight so the live dashboard poll
+// and the usage sampler don't pile requests onto the inference server.
+func TestScrapeMetricsCachedSingleFlight(t *testing.T) {
+	var n int32
+	old := scrapeFetch
+	scrapeFetch = func(ctx context.Context) (string, bool) {
+		atomic.AddInt32(&n, 1)
+		time.Sleep(10 * time.Millisecond) // slow scrape, so concurrent callers overlap
+		return "body", true
+	}
+	defer func() { scrapeFetch = old; resetMetricsCache() }()
+	resetMetricsCache()
+
+	// A burst of concurrent callers within one TTL must collapse to a single fetch.
+	var wg sync.WaitGroup
+	for i := 0; i < 100; i++ {
+		wg.Add(1)
+		go func() { defer wg.Done(); scrapeMetrics(context.Background()) }()
+	}
+	wg.Wait()
+	if got := atomic.LoadInt32(&n); got != 1 {
+		t.Fatalf("concurrent burst fetched %d times, want 1 (single-flight)", got)
+	}
+
+	// Repeat calls within the TTL stay cached.
+	for i := 0; i < 50; i++ {
+		scrapeMetrics(context.Background())
+	}
+	if got := atomic.LoadInt32(&n); got != 1 {
+		t.Fatalf("cached window fetched %d times, want 1", got)
+	}
+
+	// After the TTL expires, the next call refetches exactly once.
+	metricsMu.Lock()
+	metricsAt = time.Now().Add(-2 * metricsTTL)
+	metricsMu.Unlock()
+	scrapeMetrics(context.Background())
+	if got := atomic.LoadInt32(&n); got != 2 {
+		t.Fatalf("post-TTL fetched total %d times, want 2", got)
+	}
+}
+
+func resetMetricsCache() {
+	metricsMu.Lock()
+	metricsAt = time.Time{}
+	metricsBody, metricsOK = "", false
+	metricsMu.Unlock()
 }

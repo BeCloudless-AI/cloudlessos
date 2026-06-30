@@ -44,6 +44,11 @@ type State struct {
 	LocalNetSet bool     `json:"localNetSet,omitempty"` // user has chosen (else default ON)
 	Profile     Profile  `json:"profile"`               // user-controlled profile
 	APIKeys     []APIKey `json:"apiKeys,omitempty"`     // Cloudless Proxy credentials
+
+	// EngineCmds holds user-edited launch commands, keyed "engineID\x00modelID".
+	// The value is the container command (args after the image) to use when that
+	// model is launched on that engine, overriding the catalog default.
+	EngineCmds map[string][]string `json:"engineCmds,omitempty"`
 }
 
 // Store is a file-backed state store, safe for concurrent use.
@@ -150,6 +155,38 @@ func (s *Store) SetModel(model string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.st.Model = model
+	return s.save()
+}
+
+func cmdKey(engine, model string) string { return engine + "\x00" + model }
+
+// EngineCmd returns the saved launch-command override for (engine, model), if any.
+func (s *Store) EngineCmd(engine, model string) ([]string, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	a, ok := s.st.EngineCmds[cmdKey(engine, model)]
+	if !ok || len(a) == 0 {
+		return nil, false
+	}
+	return append([]string(nil), a...), true
+}
+
+// SetEngineCmd saves a launch-command override for (engine, model) and persists.
+func (s *Store) SetEngineCmd(engine, model string, args []string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.st.EngineCmds == nil {
+		s.st.EngineCmds = map[string][]string{}
+	}
+	s.st.EngineCmds[cmdKey(engine, model)] = append([]string(nil), args...)
+	return s.save()
+}
+
+// ClearEngineCmd removes the override for (engine, model) (revert to default) and persists.
+func (s *Store) ClearEngineCmd(engine, model string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.st.EngineCmds, cmdKey(engine, model))
 	return s.save()
 }
 

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"sort"
 	"strings"
 )
 
@@ -156,7 +157,10 @@ func (d *Docker) RemoveImage(ctx context.Context, image string) error {
 	return nil
 }
 
-func (d *Docker) Run(ctx context.Context, spec RunSpec) (string, error) {
+// runArgs builds the full `docker run …` argument list for a spec. Map-derived
+// flags (ports/env/volumes) are emitted in sorted order so the command is
+// deterministic — important for the editable command preview in the UI.
+func runArgs(spec RunSpec) []string {
 	args := []string{"run", "-d", "--name", spec.Name, "--restart", "unless-stopped"}
 	if spec.GPUs != "" {
 		args = append(args, "--gpus", spec.GPUs)
@@ -169,24 +173,113 @@ func (d *Docker) Run(ctx context.Context, spec RunSpec) (string, error) {
 	}
 	// Host networking binds host ports directly; -p is invalid there.
 	if spec.Network != "host" {
-		for host, cont := range spec.Ports {
-			args = append(args, "-p", fmt.Sprintf("127.0.0.1:%d:%d", host, cont))
+		hosts := make([]int, 0, len(spec.Ports))
+		for host := range spec.Ports {
+			hosts = append(hosts, host)
+		}
+		sort.Ints(hosts)
+		for _, host := range hosts {
+			args = append(args, "-p", fmt.Sprintf("127.0.0.1:%d:%d", host, spec.Ports[host]))
 		}
 	}
-	for k, v := range spec.Env {
-		args = append(args, "-e", fmt.Sprintf("%s=%s", k, v))
+	for _, k := range sortedKeys(spec.Env) {
+		args = append(args, "-e", fmt.Sprintf("%s=%s", k, spec.Env[k]))
 	}
-	for host, cont := range spec.Volumes {
-		args = append(args, "-v", fmt.Sprintf("%s:%s", host, cont))
+	for _, h := range sortedKeys(spec.Volumes) {
+		args = append(args, "-v", fmt.Sprintf("%s:%s", h, spec.Volumes[h]))
 	}
 	args = append(args, spec.Image)
 	args = append(args, spec.Args...)
+	return args
+}
 
-	out, errs, err := d.exec(ctx, args...)
+func sortedKeys(m map[string]string) []string {
+	ks := make([]string, 0, len(m))
+	for k := range m {
+		ks = append(ks, k)
+	}
+	sort.Strings(ks)
+	return ks
+}
+
+// PreviewParts renders the `docker run …` command for display, split into the
+// orchestrator-managed prefix (flags + image) and the container command (spec.Args).
+// The UI shows the prefix read-only and lets the user edit just the command.
+func PreviewParts(spec RunSpec) (prefix, command string) {
+	full := runArgs(spec)
+	pre := full[:len(full)-len(spec.Args)]
+	return "docker " + ShellJoin(pre), ShellJoin(spec.Args)
+}
+
+func (d *Docker) Run(ctx context.Context, spec RunSpec) (string, error) {
+	out, errs, err := d.exec(ctx, runArgs(spec)...)
 	if err != nil {
 		return "", fmt.Errorf("run %s: %v: %s", spec.Image, err, strings.TrimSpace(errs))
 	}
 	return strings.TrimSpace(out), nil
+}
+
+// ShellJoin renders argv as a single space-separated line, quoting any token that
+// contains whitespace or quotes so it round-trips through ShellSplit.
+func ShellJoin(argv []string) string {
+	parts := make([]string, len(argv))
+	for i, a := range argv {
+		if a == "" || strings.ContainsAny(a, " \t\n\"'") {
+			parts[i] = `"` + strings.ReplaceAll(a, `"`, `\"`) + `"`
+		} else {
+			parts[i] = a
+		}
+	}
+	return strings.Join(parts, " ")
+}
+
+// ShellSplit tokenizes a command line into argv, honoring single/double quotes and
+// backslash-escaped double quotes. Whitespace (incl. newlines) separates tokens.
+func ShellSplit(s string) []string {
+	var out []string
+	var cur []rune
+	inTok := false
+	var quote rune
+	esc := false
+	flush := func() {
+		if inTok {
+			out = append(out, string(cur))
+			cur = cur[:0]
+			inTok = false
+		}
+	}
+	for _, r := range s {
+		if esc {
+			cur = append(cur, r)
+			esc = false
+			inTok = true
+			continue
+		}
+		if quote != 0 {
+			switch {
+			case r == '\\' && quote == '"':
+				esc = true
+			case r == quote:
+				quote = 0
+			default:
+				cur = append(cur, r)
+			}
+			inTok = true
+			continue
+		}
+		switch r {
+		case '\'', '"':
+			quote = r
+			inTok = true
+		case ' ', '\t', '\n', '\r':
+			flush()
+		default:
+			cur = append(cur, r)
+			inTok = true
+		}
+	}
+	flush()
+	return out
 }
 
 func (d *Docker) Stop(ctx context.Context, name string) error {

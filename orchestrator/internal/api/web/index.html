@@ -13,42 +13,55 @@
     src: url('vendor/fonts/red-hat-mono-latin-700-normal.woff2') format('woff2'); }
 
   :root {
-    /* default = daytime (overridden by html[data-theme] below) */
-    --bg: #e8e8e7;
-    --accent: #ff5a00; --accent-2: #ff5a00; --accent-soft: rgba(255, 90, 0, 0.12);
-    --blue: #1f6bff; --blue-soft: rgba(31, 107, 255, 0.12); /* cloudless sky */
-    --ink: #0c0c0c; --ink-2: #3a3a3a; --muted: #8a8a88; --faint: #bdbdbb;
-    --card: #ffffff; --panel-2: #f1f1f0; --card-edge: rgba(0, 0, 0, 0.12);
-    --hair: rgba(0, 0, 0, 0.10); --line: rgba(0, 0, 0, 0.10); --line-2: rgba(0, 0, 0, 0.22);
-    --shadow: none;
-    --ok: #ff5a00; --warn: #b8860b; --err: #d23b1e;
-    --radius: 14px;
-    --sky: 31, 107, 255;     /* three.js dot field colour (rgb triplet) */
-    --sky-alpha: 0.16;       /* how present the background field is */
-    --control: #ffffff;      /* input/pill backgrounds (tracks --card across themes) */
+    /* ---- Cloudless: soft iridescent wallpaper + frosted glass (UmbrelOS-style) ----
+       default = daytime; html[data-theme] tints the wallpaper / flips to dark glass. */
+    --bg: #f6efe6;                          /* warm base beneath the gradient */
+    --accent: #ff5a2c; --accent-2: #ff7a4d; --accent-soft: rgba(255, 90, 44, 0.14);
+    --blue: #2f6bff; --blue-soft: rgba(47, 107, 255, 0.14); /* cloudless sky */
+    --ink: #1c1830; --ink-2: #4c4860; --muted: #807c90; --faint: #aaa5b6;
+    --card: rgba(255, 255, 255, 0.62);      /* frosted glass surface */
+    --card-strong: rgba(255, 255, 255, 0.82); /* less see-through: modals + header */
+    --icon: rgba(255, 255, 255, 0.90);      /* app-icon tiles read as solid */
+    --card-solid: #ffffff;
+    --panel-2: rgba(255, 255, 255, 0.34);
+    --control: rgba(255, 255, 255, 0.66);   /* input/pill backgrounds */
+    --card-edge: rgba(255, 255, 255, 0.65);
+    --hair: rgba(40, 28, 70, 0.10); --line: rgba(40, 28, 70, 0.10); --line-2: rgba(40, 28, 70, 0.16);
+    --glass-blur: 20px;
+    --shadow: 0 20px 50px -24px rgba(40, 28, 80, 0.45);
+    --shadow-sm: 0 10px 28px -16px rgba(40, 28, 80, 0.40);
+    --ok: #1fb877; --warn: #c98a00; --err: #e5484d;
+    --radius: 20px;
+    --sky: 47, 107, 255; --sky-alpha: 0;    /* legacy (three.js field disabled) */
+    /* iridescent wallpaper mesh stops */
+    --w-base: #f6efe6;
+    --w1: #ffe89c; --w2: #ffbf6b; --w3: #ff6f91; --w4: #b76cff; --w5: #43c7b8; --w6: #ffc6e6;
+    --wall-veil: transparent;
   }
-  /* ---- time-of-day themes (set by applyTheme(hour)) ---- */
+  /* ---- time-of-day tints (set by applyTheme(hour)) — same dreamy wallpaper, warmer
+         at the edges of the day, dark glass at night ---- */
   html[data-theme="dawn"] {           /* 05–08: warm, low sun */
-    --bg: #efe7df; --card: #fffaf4; --panel-2: #f3ebe1; --control: #fffaf4;
-    --ink: #1a130c; --ink-2: #46382b; --muted: #978c7e; --faint: #c7bbac;
-    --hair: rgba(60, 40, 20, 0.10); --line: rgba(60, 40, 20, 0.10); --line-2: rgba(60, 40, 20, 0.22);
-    --card-edge: rgba(60, 40, 20, 0.12);
-    --sky: 255, 138, 60; --sky-alpha: 0.18;
+    --bg: #f7ecdf; --w-base: #f7ecdf;
+    --w1: #ffe6a6; --w2: #ffb07a; --w3: #ff8aa0; --w4: #c98cff; --w5: #6fd0c2; --w6: #ffd3c0;
   }
   html[data-theme="dusk"] {           /* 18–21: warm, fading light */
-    --bg: #2a241f; --card: #34302a; --panel-2: #2f2a25; --control: #3a352e;
-    --ink: #f4ece2; --ink-2: #cdc2b4; --muted: #9a8f80; --faint: #6b6256;
-    --hair: rgba(255, 240, 220, 0.10); --line: rgba(255, 240, 220, 0.10); --line-2: rgba(255, 240, 220, 0.20);
-    --card-edge: rgba(255, 240, 220, 0.14);
-    --sky: 255, 122, 48; --sky-alpha: 0.22;
+    --bg: #efe1e6; --w-base: #efe1e6;
+    --w1: #ffd9a0; --w2: #ff9e7a; --w3: #ff6f91; --w4: #9a6cff; --w5: #4bb6c9; --w6: #ffb6d6;
+    --wall-veil: rgba(30, 20, 50, 0.08);
   }
-  html[data-theme="night"] {          /* 21–05: deep, blue dark */
-    --bg: #0d1117; --card: #161b24; --panel-2: #11161e; --control: #1b2230;
-    --ink: #eef2f8; --ink-2: #c2ccda; --muted: #7c8696; --faint: #4a5364;
-    --hair: rgba(190, 210, 240, 0.10); --line: rgba(190, 210, 240, 0.10); --line-2: rgba(190, 210, 240, 0.20);
-    --card-edge: rgba(190, 210, 240, 0.14);
-    --blue: #4d8bff; --blue-soft: rgba(77, 139, 255, 0.16);
-    --sky: 77, 139, 255; --sky-alpha: 0.30;
+  html[data-theme="night"] {          /* 21–05: deep, dark glass */
+    --bg: #0e0c16;
+    --ink: #f1eef8; --ink-2: #c7c2d6; --muted: #8b859c; --faint: #5b5670;
+    --card: rgba(34, 30, 50, 0.55); --card-strong: rgba(26, 22, 40, 0.82); --card-solid: #1a1726;
+    --icon: rgba(48, 42, 68, 0.78);
+    --panel-2: rgba(255, 255, 255, 0.06); --control: rgba(255, 255, 255, 0.09);
+    --hair: rgba(190, 180, 230, 0.12); --line: rgba(190, 180, 230, 0.12); --line-2: rgba(190, 180, 230, 0.20);
+    --card-edge: rgba(190, 180, 230, 0.16);
+    --blue: #6f9bff; --blue-soft: rgba(111, 155, 255, 0.18);
+    --shadow: 0 24px 60px -24px rgba(0, 0, 0, 0.65); --shadow-sm: 0 12px 30px -16px rgba(0, 0, 0, 0.6);
+    --w-base: #0e0c16;
+    --w1: #6b5a2e; --w2: #7a4a40; --w3: #7a2f50; --w4: #4a2f7a; --w5: #1f5a55; --w6: #5a2f4a;
+    --wall-veil: rgba(8, 6, 16, 0.45);
   }
   html { transition: none; }
   body, .menubar, .set, .card, .tile, .fld-input, .er-pill { transition: background-color 0.6s ease, color 0.6s ease, border-color 0.6s ease; }
@@ -56,25 +69,54 @@
   html, body { height: 100%; margin: 0; }
   body {
     color: var(--ink); background: var(--bg);
-    font-family: 'Red Hat Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased;
+    font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+    font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
   }
   ::selection { background: var(--blue-soft); }
   button { font: inherit; cursor: pointer; }
+  /* numbers stay tabular so live metrics don't jitter */
+  #clock, #big-clock, .us-val, .im-val, .key-meta, .im-ringval, .inf-hero-val { font-variant-numeric: tabular-nums; }
 
-  /* ---------- background: flat base + subtle three.js field ---------- */
-  .wall { position: fixed; inset: 0; z-index: -1; background: var(--bg); }
-  .wall .blob { display: none; }
-  #bg { position: fixed; inset: 0; z-index: -1; display: block; pointer-events: none; }
+  /* ---------- wallpaper: soft iridescent gradient mesh (the Cloudless brand) ---------- */
+  .wall { position: fixed; inset: 0; z-index: -2; background: var(--w-base); overflow: hidden; }
+  .wall::before {
+    content: ""; position: absolute; inset: -25%;
+    background:
+      radial-gradient(38% 42% at 24% 20%, var(--w1), transparent 62%),
+      radial-gradient(40% 44% at 80% 18%, var(--w2), transparent 62%),
+      radial-gradient(46% 50% at 52% 46%, var(--w5), transparent 58%),
+      radial-gradient(50% 54% at 26% 82%, var(--w3), transparent 62%),
+      radial-gradient(48% 52% at 82% 84%, var(--w4), transparent 62%),
+      radial-gradient(44% 48% at 92% 56%, var(--w6), transparent 62%);
+    filter: saturate(1.2);
+    animation: drift 46s ease-in-out infinite alternate;
+    will-change: transform;
+  }
+  .wall::after { content: ""; position: absolute; inset: 0; background: var(--wall-veil); }
+  @keyframes drift {
+    0%   { transform: translate3d(0, 0, 0) scale(1.02); }
+    50%  { transform: translate3d(1.5%, -1.5%, 0) scale(1.07); }
+    100% { transform: translate3d(-1.5%, 1%, 0) scale(1.04); }
+  }
+  #bg { display: none; }
+  @media (prefers-reduced-motion: reduce) { .wall::before { animation: none; } }
+
+  /* ---------- frosted-glass surfaces (UmbrelOS feel) ---------- */
+  .menubar, .card, .set, .mm, .asst, .net-pop, .tile .ic, .us-chartwrap, .us-tile,
+  .inf-metric, .inf-hero, .ec, .ask, .adm-creds, .code-box, .eng-banner, .inf-engnote, .lp-card {
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.5);
+    backdrop-filter: blur(var(--glass-blur)) saturate(1.5);
+  }
 
   /* ---------- menu bar ---------- */
   .menubar {
-    position: sticky; top: 0; z-index: 30; height: 36px; display: flex; align-items: center; gap: 16px;
-    padding: 0 18px; font-size: 11.5px; color: var(--ink);
-    background: var(--bg); border-bottom: 1px solid var(--hair);
+    position: sticky; top: 0; z-index: 30; height: 44px; display: flex; align-items: center; gap: 16px;
+    padding: 0 20px; font-size: 12px; color: var(--ink);
+    background: var(--card); border-bottom: 1px solid var(--hair);
   }
-  .menubar .brand { display: flex; align-items: center; gap: 9px; font-weight: 700; letter-spacing: 0.3px; }
-  .menubar .brand .mark { width: 12px; height: 12px; border-radius: 2px; background: var(--blue); }
+  .menubar .brand { display: flex; align-items: center; gap: 9px; font-weight: 700; letter-spacing: 0.2px; font-size: 13px; }
+  .menubar .brand .mark { width: 16px; height: 16px; border-radius: 6px; flex: none;
+    background: conic-gradient(from 200deg, #ffd166, #ff6f91, #b76cff, #43c7b8, #ffd166); }
   .menubar .spacer { flex: 1; }
   .menubar .mi { display: flex; align-items: center; gap: 6px; color: var(--muted); }
   .menubar .led { width: 6px; height: 6px; border-radius: 50%; background: var(--faint); }
@@ -103,8 +145,8 @@
 
   /* settings sheet */
   .set { width: min(800px, 95vw); height: min(580px, 90vh); display: flex;
-    background: var(--card); border: 1px solid var(--line-2); border-radius: var(--radius);
-    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.18); animation: rise 0.3s ease; overflow: hidden; }
+    background: var(--card-strong); border: 1px solid var(--card-edge); border-radius: 26px;
+    box-shadow: var(--shadow); animation: rise 0.3s ease; overflow: hidden; }
   .set-sidebar { width: 200px; flex: none; background: var(--panel-2); border-right: 1px solid var(--line); padding: 14px 12px; overflow-y: auto; }
   .set-brand { font-weight: 700; font-size: 14px; padding: 6px 10px 8px; }
   .set-nav { display: flex; flex-direction: column; gap: 1px; }
@@ -209,7 +251,8 @@
   /* ---------- model manager ---------- */
   #models { background: rgba(16, 18, 24, 0.5); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
   .mm { width: min(1280px, 96vw); height: min(92vh, 1040px); display: flex; flex-direction: column;
-    background: var(--card); border: 1px solid var(--line-2); border-radius: 18px; overflow: hidden; animation: rise 0.32s ease; }
+    background: var(--card-strong); border: 1px solid var(--card-edge); border-radius: 26px; overflow: hidden;
+    box-shadow: var(--shadow); animation: rise 0.32s ease; }
   .mm-body { flex: 1; overflow-y: auto; padding: 20px 32px 34px; }
   .mm-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--hair); margin-bottom: 18px; }
   .mm-tab { font: inherit; font-size: 13px; font-weight: 500; padding: 9px 15px; background: none; border: none;
@@ -479,11 +522,11 @@
   .pad.enter .tile:nth-child(6) { animation-delay: 0.50s; }
   .pad.enter .tile:nth-child(n+7) { animation-delay: 0.56s; }
   .card {
-    background: var(--card); border: 1px solid var(--hair); border-radius: var(--radius);
-    padding: 20px 22px;
+    background: var(--card); border: 1px solid var(--card-edge); border-radius: 24px;
+    padding: 22px 24px; box-shadow: var(--shadow);
   }
-  .card h2 { margin: 0 0 16px; font-size: 11px; font-weight: 500; letter-spacing: 0.5px;
-    text-transform: lowercase; color: var(--muted); }
+  .card h2 { margin: 0 0 16px; font-size: 11px; font-weight: 600; letter-spacing: 0.5px;
+    text-transform: uppercase; color: var(--muted); }
 
   /* gpu */
   .gpu + .gpu { margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--hair); }
@@ -559,14 +602,14 @@
   .pad { display: grid; grid-template-columns: repeat(auto-fill, minmax(108px, 1fr)); gap: 26px 14px; }
   .tile { width: 100px; text-align: center; }
   .ic {
-    position: relative; width: 72px; height: 72px; margin: 0 auto 9px; border-radius: 16px;
-    display: grid; place-items: center; font-size: 32px; cursor: pointer;
-    background: var(--card); border: 1px solid var(--line-2);
+    position: relative; width: 76px; height: 76px; margin: 0 auto 11px; border-radius: 22px;
+    display: grid; place-items: center; font-size: 33px; cursor: pointer;
+    background: linear-gradient(160deg, color-mix(in srgb, var(--icon) 88%, #fff), var(--icon)); border: 1px solid var(--card-edge); box-shadow: var(--shadow-sm);
     transition: transform 0.28s cubic-bezier(.34, 1.56, .64, 1), border-color 0.18s, box-shadow 0.28s;
     user-select: none;
   }
-  .tile .ic:hover { transform: translateY(-4px) scale(1.02); border-color: var(--ink);
-    box-shadow: 0 12px 24px -10px color-mix(in srgb, var(--blue) 55%, transparent); }
+  .tile .ic:hover { transform: translateY(-5px) scale(1.03);
+    box-shadow: 0 18px 34px -14px color-mix(in srgb, var(--blue) 60%, transparent); }
   .tile .ic:active { transform: translateY(-1px) scale(.97); }
   .tile.running .ic { border-color: color-mix(in srgb, var(--accent) 55%, var(--line-2)); }
   .tile.busy .ic { animation: pulse 1.4s ease-in-out infinite; }
@@ -602,13 +645,15 @@
   #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
   #toast.err { background: var(--err); }
 
-  /* overlays (onboarding / settings) — flat */
+  /* overlays — a frosted sheet floating over the blurred wallpaper (UmbrelOS feel) */
   .overlay { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center;
-    background: rgba(20, 20, 20, 0.32); animation: fade 0.3s ease; }
+    background: rgba(20, 16, 36, 0.30); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+    animation: fade 0.3s ease; }
   .overlay.hidden { display: none; } .overlay.out { animation: fadeo 0.3s ease forwards; }
   @keyframes fade { from { opacity: 0 } } @keyframes fadeo { to { opacity: 0 } }
-  .ob { width: min(520px, 92vw); background: var(--card); border: 1px solid var(--line-2);
-    border-radius: var(--radius); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.2);
+  .ob { width: min(520px, 92vw); background: var(--card-strong); border: 1px solid var(--card-edge);
+    border-radius: 26px; box-shadow: var(--shadow);
+    -webkit-backdrop-filter: blur(var(--glass-blur)); backdrop-filter: blur(var(--glass-blur));
     padding: 38px 38px 28px; animation: rise 0.35s ease; }
   @keyframes rise { from { transform: translateY(12px); opacity: 0 } }
   .ob-body { min-height: 218px; }
@@ -639,17 +684,19 @@
   .dots { display: flex; gap: 7px; } .dots span { width: 7px; height: 7px; border-radius: 50%; background: var(--line-2); transition: width 0.3s, background 0.3s; }
   .dots span.on { background: var(--blue); width: 18px; border-radius: 3px; }
   .ob-act { margin-left: auto; display: flex; gap: 9px; }
-  .btn { padding: 9px 18px; border-radius: 9px; border: 1px solid var(--line-2); background: var(--control); color: var(--ink); font-weight: 500; transition: filter 0.15s, background 0.15s; }
-  .btn:hover { background: var(--panel-2); }
-  .btn.primary { background: var(--blue); border-color: var(--blue); color: #fff; }
+  .btn { padding: 9px 18px; border-radius: 12px; border: 1px solid var(--card-edge); background: var(--control); color: var(--ink); font-weight: 500; transition: filter 0.15s, background 0.15s, box-shadow .15s; }
+  .btn:hover { background: var(--card-strong); }
+  .btn.primary { background: var(--blue); border-color: transparent; color: #fff; box-shadow: 0 8px 20px -8px color-mix(in srgb, var(--blue) 70%, transparent); }
   .btn.primary:hover { filter: brightness(1.08); background: var(--blue); }
   .btn.link { background: none; border: none; color: var(--muted); } .btn.link:hover { color: var(--ink); background: none; }
 
   /* ---------- fast-launch section header ---------- */
   .sec-row { display: flex; align-items: center; justify-content: space-between; margin: 0 0 20px; }
   .sec-row .sec { margin: 0; }
-  .sec-act { font: inherit; font-size: 11.5px; color: var(--ink-2); background: var(--card); border: 1px solid var(--line-2);
-    border-radius: 8px; padding: 6px 12px; cursor: pointer; transition: border-color .15s, color .15s, transform .2s cubic-bezier(.34,1.56,.64,1); }
+  .sec-act { font: inherit; font-size: 11.5px; color: var(--ink-2); background: var(--card); border: 1px solid var(--card-edge);
+    border-radius: 12px; padding: 7px 13px; cursor: pointer; box-shadow: var(--shadow-sm);
+    -webkit-backdrop-filter: blur(var(--glass-blur)); backdrop-filter: blur(var(--glass-blur));
+    transition: border-color .15s, color .15s, transform .2s cubic-bezier(.34,1.56,.64,1); }
   .sec-act:hover { border-color: var(--blue); color: var(--blue); transform: translateY(-1px); }
   .pad-empty { grid-column: 1 / -1; color: var(--muted); font-size: 13px; padding: 14px 16px;
     border: 1px dashed var(--line-2); border-radius: var(--radius); text-align: center; }
@@ -2924,6 +2971,10 @@ document.addEventListener('keydown', e => {
    Colour + presence come from the active theme's --sky / --sky-alpha vars,
    so the field warms at dawn/dusk and glows blue at night. */
 function initBackground() {
+  // The wallpaper is now a pure-CSS iridescent gradient mesh (.wall) — lighter than the
+  // old WebGL point-field and matching the Cloudless brand. Nothing to init here.
+  return;
+  /* eslint-disable no-unreachable */
   const canvas = document.getElementById('bg');
   if (!canvas || typeof THREE === 'undefined') return;
   let renderer;

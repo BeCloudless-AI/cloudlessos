@@ -31,7 +31,7 @@ $body = @"
 <main>
   <div class="hero">
     <div class="greet-row">
-      <div class="greet-txt"><h1>Good evening, Samuel</h1><p>Your private, local-AI workstation.</p></div>
+      <div class="greet-txt"><div class="hero-kicker">Private AI control plane</div><h1>Good evening, Samuel</h1><p>Your models, apps, and data. Running here, on your hardware.</p></div>
       <div class="hero-time"><div class="ht-clock"><span id="big-clock">19:53</span><span class="accent-dot"></span></div><div class="hero-date">Tuesday, 30 June</div><div class="hero-zone">Europe/Paris</div></div>
     </div>
     <form class="ask"><span class="ask-spark"></span><input placeholder="What do you want to do with CloudlessOS?"><button class="ask-go" type="button">&#8594;</button></form>
@@ -75,16 +75,16 @@ $body = @"
   </div>
 </main>
 <nav class="dock" id="dock">
-  <button class="dock-item"><span class="dock-tip">Apps</span>&#9638;</button>
-  <button class="dock-item"><span class="dock-tip">Models</span>&#9672;</button>
-  <button class="dock-item running"><span class="dock-tip">Metrics</span>&#9637;<span class="run-dot"></span></button>
+  <button class="dock-item"><span class="dock-tip">Apps</span><span class="dock-glyph">&#9638;</span></button>
+  <button class="dock-item"><span class="dock-tip">Models</span><span class="dock-glyph">&#9672;</span></button>
+  <button class="dock-item running"><span class="dock-tip">Metrics</span><span class="dock-glyph">&#9637;</span><span class="run-dot"></span></button>
   <span class="dock-sep"></span>
-  <button class="dock-item accent"><span class="dock-tip">Assistant</span>&#10022;</button>
-  <button class="dock-item"><span class="dock-tip">Settings</span>&#9881;</button>
+  <button class="dock-item accent"><span class="dock-tip">Assistant</span><span class="dock-glyph">&#10022;</span></button>
+  <button class="dock-item"><span class="dock-tip">Settings</span><span class="dock-glyph">&#9881;</span></button>
 </nav>
 "@
-$freeze = "<style>*,*::before,*::after{animation:none!important;transition:none!important;opacity:1!important}</style>"
-$page = "<!doctype html><html><head><meta charset=`"utf-8`">$style$freeze</head><body>$body</body></html>"
+$freeze = "<style>*,*::before,*::after{animation:none!important;transition:none!important}</style>"
+$page = "<!doctype html><html><head><meta charset=`"utf-8`"><meta name=`"viewport`" content=`"width=device-width, initial-scale=1`">$style$freeze</head><body>$body</body></html>"
 $tmp = "$env:TEMP\home-render.html"
 [System.IO.File]::WriteAllText($tmp, $page, (New-Object System.Text.UTF8Encoding($false)))
 $edge = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"

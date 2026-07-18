@@ -3,6 +3,7 @@
 $src = 'D:\Cloudless\orchestrator\internal\api\web\index.html'
 $h = Get-Content $src -Raw -Encoding UTF8
 $style = [regex]::Match($h, '(?s)<style>.*?</style>').Value
+$sprite = [regex]::Match($h, '(?s)<!-- Cloudless brand mark.*?</svg>').Value
 
 $apps = @(
   @('Cloudless AI','&#128172;','&#9679; running'),
@@ -19,14 +20,15 @@ $tiles = ($apps | ForEach-Object {
 
 $body = @"
 <div class="wall"></div>
+$sprite
 <div class="menubar">
-  <div class="brand"><span class="mark"></span> Cloudless</div>
+  <div class="brand"><svg class="mark cl-mark"><use href="#cl-star"/></svg> cloudless</div>
   <div class="spacer"></div>
   <div class="mi"><span class="led ok"></span> RTX 5090</div>
   <div class="mi"><span class="led ok"></span> Ready</div>
   <div class="mi mi-net"><span class="led net-online"></span> Network</div>
   <div id="clock">19:53</div>
-  <button class="gear">&#9645;</button><button class="gear">&#9672;</button><button class="gear">&#9881;</button>
+  <button class="gear"><svg class="ui-icon"><use href="#ui-metrics"/></svg></button><button class="gear"><svg class="ui-icon"><use href="#ui-models"/></svg></button><button class="gear"><svg class="ui-icon"><use href="#ui-settings"/></svg></button>
 </div>
 <main>
   <div class="hero">
@@ -34,11 +36,11 @@ $body = @"
       <div class="greet-txt"><div class="hero-kicker">Private AI control plane</div><h1>Good evening, Samuel</h1><p>Your models, apps, and data. Running here, on your hardware.</p></div>
       <div class="hero-time"><div class="ht-clock"><span id="big-clock">19:53</span><span class="accent-dot"></span></div><div class="hero-date">Tuesday, 30 June</div><div class="hero-zone">Europe/Paris</div></div>
     </div>
-    <form class="ask"><span class="ask-spark"></span><input placeholder="What do you want to do with CloudlessOS?"><button class="ask-go" type="button">&#8594;</button></form>
+    <form class="ask"><span class="ask-spark"></span><input placeholder="What do you want to do with CloudlessOS?"><button class="ask-go" type="button"><svg class="ui-icon"><use href="#ui-arrow-right"/></svg></button></form>
     <button class="ghost-chat">Open the full chat &#8599;</button>
   </div>
   <section class="apps-sec">
-    <div class="sec-row"><h3 class="sec">your apps</h3><button class="sec-act">&#9638; All apps</button></div>
+    <div class="sec-row"><h3 class="sec">your apps</h3><button class="sec-act"><svg class="ui-icon sm"><use href="#ui-apps"/></svg>All apps</button></div>
     <div class="pad">$tiles</div>
   </section>
   <div class="cards">
@@ -75,12 +77,12 @@ $body = @"
   </div>
 </main>
 <nav class="dock" id="dock">
-  <button class="dock-item"><span class="dock-tip">Apps</span><span class="dock-glyph">&#9638;</span></button>
-  <button class="dock-item"><span class="dock-tip">Models</span><span class="dock-glyph">&#9672;</span></button>
-  <button class="dock-item running"><span class="dock-tip">Metrics</span><span class="dock-glyph">&#9637;</span><span class="run-dot"></span></button>
+  <button class="dock-item"><span class="dock-tip">Apps</span><span class="dock-glyph"><svg class="ui-icon"><use href="#ui-apps"/></svg></span></button>
+  <button class="dock-item"><span class="dock-tip">Models</span><span class="dock-glyph"><svg class="ui-icon"><use href="#ui-models"/></svg></span></button>
+  <button class="dock-item running"><span class="dock-tip">Metrics</span><span class="dock-glyph"><svg class="ui-icon"><use href="#ui-metrics"/></svg></span><span class="run-dot"></span></button>
   <span class="dock-sep"></span>
-  <button class="dock-item accent"><span class="dock-tip">Assistant</span><span class="dock-glyph">&#10022;</span></button>
-  <button class="dock-item"><span class="dock-tip">Settings</span><span class="dock-glyph">&#9881;</span></button>
+  <button class="dock-item accent"><span class="dock-tip">Assistant</span><span class="dock-glyph"><svg class="ui-icon"><use href="#ui-assistant"/></svg></span></button>
+  <button class="dock-item"><span class="dock-tip">Settings</span><span class="dock-glyph"><svg class="ui-icon"><use href="#ui-settings"/></svg></span></button>
 </nav>
 "@
 $freeze = "<style>*,*::before,*::after{animation:none!important;transition:none!important}</style>"

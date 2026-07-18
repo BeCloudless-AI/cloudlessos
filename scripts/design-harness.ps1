@@ -4,11 +4,12 @@
 $src = 'D:\Cloudless\orchestrator\internal\api\web\index.html'
 $h = Get-Content $src -Raw -Encoding UTF8
 $style = [regex]::Match($h, '(?s)<style>.*?</style>').Value
+$sprite = [regex]::Match($h, '(?s)<!-- Cloudless brand mark.*?</svg>').Value
 $edge = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
 $freeze = "<style>*,*::before,*::after{animation:none!important;transition:none!important;opacity:1!important}</style>"
 
 function Shot($name, $body, $w, $ht) {
-  $page = "<!doctype html><html><head><meta charset=`"utf-8`">$style$freeze</head><body><div class=`"wall`"></div>$body</body></html>"
+  $page = "<!doctype html><html><head><meta charset=`"utf-8`">$style$freeze</head><body><div class=`"wall`"></div>$sprite$body</body></html>"
   $tmp = "$env:TEMP\dh-$name.html"
   [System.IO.File]::WriteAllText($tmp, $page, (New-Object System.Text.UTF8Encoding($false)))
   $out = "$env:TEMP\dh-$name.png"
@@ -172,12 +173,12 @@ $appearance = @"
 <div class="overlay" style="position:static">
   <div class="set">
     <aside class="set-sidebar"><div class="set-brand">Settings</div><nav class="set-nav">
-      <div class="nav-group">you</div><div class="nav-item"><span class="nav-ic">&#9680;</span>Profile</div>
-      <div class="nav-group">cloudless</div><div class="nav-item"><span class="nav-ic">&#9636;</span>Machine</div>
-      <div class="nav-group">system</div><div class="nav-item active"><span class="nav-ic">&#9682;</span>Appearance</div><div class="nav-item"><span class="nav-ic">&#10687;</span>General</div>
+      <div class="nav-group">you</div><div class="nav-item"><span class="nav-ic"><svg class="ui-icon"><use href="#ui-user"/></svg></span>Profile</div>
+      <div class="nav-group">cloudless</div><div class="nav-item"><span class="nav-ic"><svg class="ui-icon"><use href="#ui-machine"/></svg></span>Machine</div>
+      <div class="nav-group">system</div><div class="nav-item active"><span class="nav-ic"><svg class="ui-icon"><use href="#ui-appearance"/></svg></span>Appearance</div><div class="nav-item"><span class="nav-ic"><svg class="ui-icon"><use href="#ui-general"/></svg></span>General</div>
     </nav></aside>
     <main class="set-main">
-      <header class="set-topbar"><span class="set-page-title">Appearance</span><button class="set-x">&#10005;</button></header>
+      <header class="set-topbar"><span class="set-page-title">Appearance</span><button class="set-x"><svg class="ui-icon"><use href="#ui-close"/></svg></button></header>
       <div class="set-content"><div class="set-block"><h3>theme</h3><div class="theme-grid">$($themeCards -join '')</div>
         <div class="fld-help appearance-note">This preference is saved only in this browser. Automatic follows dawn, daytime, dusk, and night on the machine's clock.</div>
       </div></div>

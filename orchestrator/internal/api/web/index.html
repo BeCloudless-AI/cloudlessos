@@ -1051,6 +1051,12 @@
     outline: 3px solid color-mix(in srgb, var(--blue) 35%, transparent);
     outline-offset: 3px;
   }
+  .ui-icon {
+    width: 18px; height: 18px; display: block; flex: none; fill: none; stroke: currentColor;
+    stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; pointer-events: none;
+  }
+  .ui-icon.sm { width: 15px; height: 15px; }
+  .ui-icon.lg { width: 20px; height: 20px; }
 
   /* Status bar */
   .menubar {
@@ -1090,7 +1096,8 @@
   .dock-item:active { transform: scale(.94); }
   .dock-item.accent { color: #fff; background: var(--blue); box-shadow: 0 10px 24px -14px var(--blue); }
   .dock-item.accent:hover { color: #fff; background: color-mix(in srgb, var(--blue) 88%, white); }
-  .dock-glyph { font-size: 19px; line-height: 1; font-weight: 500; }
+  .dock-glyph { width: 20px; height: 20px; display: grid; place-items: center; }
+  .dock-glyph .ui-icon { width: 20px; height: 20px; }
   .dock-tip {
     left: calc(100% + 11px); bottom: auto; top: 50%;
     transform: translateY(-50%) translateX(-4px); padding: 6px 10px; border-radius: 8px;
@@ -1133,6 +1140,7 @@
   .sec-row { margin-bottom: 15px; }
   .sec { font-size: 15px; font-weight: 750; letter-spacing: -.25px; }
   .sec-act { padding: 7px 11px; background: var(--panel-2); }
+  .sec-act { display: inline-flex; align-items: center; gap: 7px; }
   .pad { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 9px; }
   .tile {
     width: auto; min-width: 0; display: grid; grid-template-columns: 50px minmax(0, 1fr);
@@ -1182,6 +1190,11 @@
     display: grid; place-items: center; width: 32px; height: 32px; margin-left: auto; border: 0;
     border-radius: 9px; background: var(--panel-2); color: var(--muted); font-size: 18px;
   }
+  .lp-x .ui-icon, .set-x .ui-icon, .asst-x .ui-icon, .asst-exp .ui-icon { width: 16px; height: 16px; }
+  .ask-go, .asst-send { display: grid; place-items: center; }
+  .ask-go .ui-icon, .asst-send .ui-icon { width: 18px; height: 18px; }
+  .nav-ic { display: grid; place-items: center; }
+  .nav-ic .ui-icon { width: 15px; height: 15px; }
   .lp-head .lp-x:hover, .set-topbar .set-x:hover { color: var(--ink); background: var(--hair); }
   .lp-side, .set-sidebar { background: var(--panel-2); }
   .lp-search, .fld-input, .asst-in input { background: var(--control); border-color: var(--line-2); }
@@ -1290,6 +1303,21 @@
     <symbol id="cl-star" viewBox="-1 -1 206 332">
       <path d="M99.3284 1.76841C99.6021 -0.585205 103.022 -0.591345 103.304 1.76126L116.971 115.66C117.491 119.999 122.334 122.342 126.067 120.063L170.872 92.6877C172.662 91.5944 174.717 93.6384 173.628 95.4303L145.79 141.247C143.68 144.72 145.564 149.239 149.518 150.19L201.686 162.741C203.727 163.232 203.732 166.128 201.693 166.626L149.57 179.364C145.62 180.33 143.753 184.855 145.875 188.32L173.877 234.037C174.972 235.824 172.925 237.876 171.131 236.789L126.228 209.576C122.487 207.309 117.652 209.671 117.148 214.011L103.891 327.958C103.617 330.311 100.197 330.317 99.9146 327.965L86.2485 214.067C85.7279 209.728 80.8848 207.384 77.1522 209.664L32.3471 237.038C30.5571 238.132 28.5027 236.088 29.5913 234.296L57.4291 188.479C59.5387 185.006 57.6552 180.488 53.7016 179.537L1.5329 166.986C-0.507192 166.495 -0.512403 163.599 1.52591 163.1L53.6492 150.362C57.5993 149.397 59.4666 144.871 57.3444 141.406L29.3421 95.6897C28.247 93.9017 30.2941 91.8502 32.088 92.9371L76.9913 120.151C80.732 122.417 85.5667 120.056 86.0716 115.715L99.3284 1.76841Z"/>
     </symbol>
+    <!-- Menu icons adapted from Lucide (ISC); see vendor/lucide-LICENSE.txt. -->
+    <symbol id="ui-apps" viewBox="0 0 24 24"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></symbol>
+    <symbol id="ui-models" viewBox="0 0 24 24"><path d="M2.97 12.92A2 2 0 0 0 2 14.63v3.24a2 2 0 0 0 .97 1.71l3 1.8a2 2 0 0 0 2.06 0L12 19v-5.5l-5-3-4.03 2.42Z"/><path d="m7 16.5-4.74-2.85M7 16.5l5-3M7 16.5v5.17"/><path d="M12 13.5V19l3.97 2.38a2 2 0 0 0 2.06 0l3-1.8a2 2 0 0 0 .97-1.71v-3.24a2 2 0 0 0-.97-1.71L17 10.5l-5 3Z"/><path d="m17 16.5-5-3m5 3 4.74-2.85M17 16.5v5.17"/><path d="M7.97 4.42A2 2 0 0 0 7 6.13v4.37l5 3 5-3V6.13a2 2 0 0 0-.97-1.71l-3-1.8a2 2 0 0 0-2.06 0l-3 1.8Z"/><path d="M12 8 7.26 5.15M12 8l4.74-2.85M12 13.5V8"/></symbol>
+    <symbol id="ui-metrics" viewBox="0 0 24 24"><path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"/></symbol>
+    <symbol id="ui-assistant" viewBox="0 0 24 24"><path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"/><path d="M20 2v4m2-2h-4"/><circle cx="4" cy="20" r="2"/></symbol>
+    <symbol id="ui-settings" viewBox="0 0 24 24"><path d="M14 17H5M19 7h-9"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></symbol>
+    <symbol id="ui-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></symbol>
+    <symbol id="ui-machine" viewBox="0 0 24 24"><path d="M12 20v2m0-20v2m5 16v2m0-20v2M2 12h2m-2 5h2M2 7h2m16 5h2m-2 5h2m-2-10h2M7 20v2M7 2v2"/><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="8" y="8" width="8" height="8" rx="1"/></symbol>
+    <symbol id="ui-appearance" viewBox="0 0 24 24"><path d="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z"/><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/></symbol>
+    <symbol id="ui-general" viewBox="0 0 24 24"><path d="M10 5H3m9 14H3M14 3v4m2 10v4m5-9h-9m9 7h-5m5-14h-7M8 10v4m0-2H3"/></symbol>
+    <symbol id="ui-close" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+    <symbol id="ui-expand" viewBox="0 0 24 24"><path d="M15 3h6v6m0-6-7 7M3 21l7-7m-1 7H3v-6"/></symbol>
+    <symbol id="ui-collapse" viewBox="0 0 24 24"><path d="m14 10 7-7m-1 7h-6V4M3 21l7-7m-6 0h6v6"/></symbol>
+    <symbol id="ui-arrow-up" viewBox="0 0 24 24"><path d="m5 12 7-7 7 7M12 19V5"/></symbol>
+    <symbol id="ui-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14m-7-7 7 7-7 7"/></symbol>
   </defs>
 </svg>
 
@@ -1300,9 +1328,9 @@
   <div class="mi"><span class="led" id="led-sys"></span> <span id="mi-sys">System</span></div>
   <div class="mi mi-net" id="mi-net" title="Network status"><span class="led" id="led-net"></span> <span id="net-label">Network</span></div>
   <div id="clock">--:--</div>
-  <button class="gear" id="open-inference" title="Metrics">▥</button>
-  <button class="gear" id="open-models" title="Model Manager">◈</button>
-  <button class="gear" id="gear" title="Settings">⚙</button>
+  <button class="gear" id="open-inference" title="Metrics" aria-label="Metrics"><svg class="ui-icon" aria-hidden="true"><use href="#ui-metrics"/></svg></button>
+  <button class="gear" id="open-models" title="Model Manager" aria-label="Model Manager"><svg class="ui-icon" aria-hidden="true"><use href="#ui-models"/></svg></button>
+  <button class="gear" id="gear" title="Settings" aria-label="Settings"><svg class="ui-icon" aria-hidden="true"><use href="#ui-settings"/></svg></button>
 </div>
 <div id="net-pop" class="net-pop hidden"></div>
 
@@ -1323,7 +1351,7 @@
     <form class="ask" id="hero-ask" autocomplete="off">
       <span class="ask-spark"></span>
       <input id="hero-ask-input" placeholder="What do you want to do with CloudlessOS?" autocomplete="off">
-      <button class="ask-go" type="submit" title="Ask Cloudless">→</button>
+      <button class="ask-go" type="submit" title="Ask Cloudless" aria-label="Ask Cloudless"><svg class="ui-icon" aria-hidden="true"><use href="#ui-arrow-right"/></svg></button>
     </form>
     <button class="ghost-chat" id="open-full-chat">Open the full chat ↗</button>
   </div>
@@ -1336,7 +1364,7 @@
   <section class="apps-sec">
     <div class="sec-row">
       <h3 class="sec">Your apps</h3>
-      <button class="sec-act" id="open-launcher" title="Browse all apps">▦ All apps</button>
+      <button class="sec-act" id="open-launcher" title="Browse all apps"><svg class="ui-icon sm" aria-hidden="true"><use href="#ui-apps"/></svg>All apps</button>
     </div>
     <div class="pad" id="pad"></div>
   </section>
@@ -1363,12 +1391,12 @@
 </main>
 
 <nav class="dock" id="dock" aria-label="Cloudless tools">
-  <button class="dock-item" id="dock-launcher" aria-label="Apps" title="Apps"><span class="dock-tip">Apps</span><span class="dock-glyph" aria-hidden="true">&#9638;</span></button>
-  <button class="dock-item" id="dock-models" aria-label="Models" title="Models"><span class="dock-tip">Models</span><span class="dock-glyph" aria-hidden="true">&#9672;</span></button>
-  <button class="dock-item" id="dock-inference" aria-label="Metrics" title="Metrics"><span class="dock-tip">Metrics</span><span class="dock-glyph" aria-hidden="true">&#9637;</span><span class="run-dot"></span></button>
+  <button class="dock-item" id="dock-launcher" aria-label="Apps" title="Apps"><span class="dock-tip">Apps</span><span class="dock-glyph" aria-hidden="true"><svg class="ui-icon"><use href="#ui-apps"/></svg></span></button>
+  <button class="dock-item" id="dock-models" aria-label="Models" title="Models"><span class="dock-tip">Models</span><span class="dock-glyph" aria-hidden="true"><svg class="ui-icon"><use href="#ui-models"/></svg></span></button>
+  <button class="dock-item" id="dock-inference" aria-label="Metrics" title="Metrics"><span class="dock-tip">Metrics</span><span class="dock-glyph" aria-hidden="true"><svg class="ui-icon"><use href="#ui-metrics"/></svg></span><span class="run-dot"></span></button>
   <span class="dock-sep"></span>
-  <button class="dock-item accent" id="dock-asst" aria-label="Assistant" title="Assistant"><span class="dock-tip">Assistant</span><span class="dock-glyph" aria-hidden="true">&#10022;</span></button>
-  <button class="dock-item" id="dock-settings" aria-label="Settings" title="Settings"><span class="dock-tip">Settings</span><span class="dock-glyph" aria-hidden="true">&#9881;</span></button>
+  <button class="dock-item accent" id="dock-asst" aria-label="Assistant" title="Assistant"><span class="dock-tip">Assistant</span><span class="dock-glyph" aria-hidden="true"><svg class="ui-icon"><use href="#ui-assistant"/></svg></span></button>
+  <button class="dock-item" id="dock-settings" aria-label="Settings" title="Settings"><span class="dock-tip">Settings</span><span class="dock-glyph" aria-hidden="true"><svg class="ui-icon"><use href="#ui-settings"/></svg></span></button>
 </nav>
 
 <div id="toast"></div>
@@ -1379,7 +1407,7 @@
     <div class="lp-head">
       <span class="win-traffic"><i class="t-c" title="Close"></i><i class="t-m"></i><i class="t-f"></i></span>
       <div class="lp-ttl">App Launcher</div>
-      <button class="lp-x" id="lp-x" title="Close">×</button>
+      <button class="lp-x" id="lp-x" title="Close" aria-label="Close App Launcher"><svg class="ui-icon" aria-hidden="true"><use href="#ui-close"/></svg></button>
     </div>
     <div class="lp-cols">
       <aside class="lp-side">
@@ -1397,7 +1425,7 @@
     <div class="lp-head">
       <span class="win-traffic"><i class="t-c" title="Close"></i><i class="t-m"></i><i class="t-f"></i></span>
       <div class="lp-ttl">Model Manager</div>
-      <button class="lp-x" id="mm-x" title="Close">×</button>
+      <button class="lp-x" id="mm-x" title="Close" aria-label="Close Model Manager"><svg class="ui-icon" aria-hidden="true"><use href="#ui-close"/></svg></button>
     </div>
     <div class="mm-body" id="mm-body"></div>
   </div>
@@ -1410,7 +1438,7 @@
       <span class="win-traffic"><i class="t-c" title="Close"></i><i class="t-m"></i><i class="t-f"></i></span>
       <div class="lp-ttl">Metrics</div>
       <div class="inf-head" id="inf-head"></div>
-      <button class="lp-x" id="inf-x" title="Close">×</button>
+      <button class="lp-x" id="inf-x" title="Close" aria-label="Close Metrics"><svg class="ui-icon" aria-hidden="true"><use href="#ui-close"/></svg></button>
     </div>
     <div class="mm-body" id="inf-body"></div>
   </div>
@@ -1423,14 +1451,14 @@
   <div class="asst-head">
     <svg class="cl-mark asst-mark" aria-hidden="true"><use href="#cl-star"/></svg>
     <div class="asst-ttl">Cloudless Assistant<span class="asst-sub">here to help you decide</span></div>
-    <button class="asst-exp" id="asst-exp" title="Expand">⤢</button>
-    <button class="asst-x" id="asst-x" title="Close">×</button>
+    <button class="asst-exp" id="asst-exp" title="Expand" aria-label="Expand Assistant"><svg class="ui-icon" aria-hidden="true"><use href="#ui-expand"/></svg></button>
+    <button class="asst-x" id="asst-x" title="Close" aria-label="Close Assistant"><svg class="ui-icon" aria-hidden="true"><use href="#ui-close"/></svg></button>
   </div>
   <div class="asst-body" id="asst-body"></div>
   <div class="asst-chips" id="asst-chips"></div>
   <form class="asst-in" id="asst-form" autocomplete="off">
     <input id="asst-text" placeholder="Ask anything about CloudlessOS…" autocomplete="off">
-    <button class="asst-send" id="asst-send" title="Send" type="submit">↑</button>
+    <button class="asst-send" id="asst-send" title="Send" aria-label="Send" type="submit"><svg class="ui-icon" aria-hidden="true"><use href="#ui-arrow-up"/></svg></button>
   </form>
 </div>
 
@@ -1441,7 +1469,7 @@
       <nav class="set-nav" id="set-nav"></nav>
     </aside>
     <main class="set-main">
-      <header class="set-topbar"><span class="win-traffic"><i class="t-c" title="Close"></i><i class="t-m"></i><i class="t-f"></i></span><span class="set-page-title" id="set-page-title"></span><button class="set-x" id="set-x">✕</button></header>
+      <header class="set-topbar"><span class="win-traffic"><i class="t-c" title="Close"></i><i class="t-m"></i><i class="t-f"></i></span><span class="set-page-title" id="set-page-title"></span><button class="set-x" id="set-x" title="Close" aria-label="Close Settings"><svg class="ui-icon" aria-hidden="true"><use href="#ui-close"/></svg></button></header>
       <div class="set-content" id="set-content"></div>
     </main>
   </div>
@@ -1476,6 +1504,7 @@ const PLACE_DESC = {
   downloads: 'Files Cloudless downloads for you',
 };
 const glyph = id => GLYPH[id] || '⚙️';
+const uiIcon = (name, cls = 'ui-icon') => `<svg class="${cls}" aria-hidden="true"><use href="#ui-${name}"/></svg>`;
 const tileBg = id => TILE_BG[id] || 'linear-gradient(135deg,#cfd9e8,#aab8cc)';
 const gb = mb => (mb / 1024).toFixed(1);
 let installing = 0, catalogCache = [], gpuBuilt = 0, appsEntered = false;
@@ -2039,14 +2068,14 @@ async function renderSettings() {
   if (setPage.startsWith('app:') && !apps.some(a => 'app:' + a.id === setPage)) setPage = 'hardware';
 
   const groups = [
-    { label: 'you', items: [{ id: 'profile', ic: '◐', label: 'Profile' }] },
-    { label: 'cloudless', items: [{ id: 'hardware', ic: '▤', label: 'Machine' }] },
-    { label: 'apps', items: apps.map(a => ({ id: 'app:' + a.id, ic: glyph(a.id), label: a.name })) },
-    { label: 'system', items: [{ id: 'appearance', ic: '◒', label: 'Appearance' }, { id: 'general', ic: '⦿', label: 'General' }] },
+    { label: 'you', items: [{ id: 'profile', icon: 'user', label: 'Profile' }] },
+    { label: 'cloudless', items: [{ id: 'hardware', icon: 'machine', label: 'Machine' }] },
+    { label: 'apps', items: apps.map(a => ({ id: 'app:' + a.id, glyph: glyph(a.id), label: a.name })) },
+    { label: 'system', items: [{ id: 'appearance', icon: 'appearance', label: 'Appearance' }, { id: 'general', icon: 'general', label: 'General' }] },
   ];
   document.getElementById('set-nav').innerHTML = groups.map(g =>
     `<div class="nav-group">${g.label}</div>` + g.items.map(it =>
-      `<div class="nav-item ${it.id === setPage ? 'active' : ''}" data-page="${it.id}"><span class="nav-ic">${it.ic}</span>${it.label}</div>`).join('')).join('');
+      `<div class="nav-item ${it.id === setPage ? 'active' : ''}" data-page="${it.id}"><span class="nav-ic">${it.icon ? uiIcon(it.icon) : it.glyph}</span>${it.label}</div>`).join('')).join('');
   document.querySelectorAll('#set-nav .nav-item').forEach(n => n.onclick = () => { setPage = n.dataset.page; renderSettings(); });
 
   let title = { profile: 'Profile', hardware: 'Machine', appearance: 'Appearance', general: 'General' }[setPage] || '';
@@ -3405,7 +3434,9 @@ function setAsstFull(on) {
   document.getElementById('asst').classList.toggle('full', on);
   document.getElementById('asst-backdrop').classList.toggle('hidden', !on);
   const ex = document.getElementById('asst-exp');
-  ex.textContent = on ? '⤡' : '⤢'; ex.title = on ? 'Collapse' : 'Expand';
+  ex.innerHTML = uiIcon(on ? 'collapse' : 'expand');
+  ex.title = on ? 'Collapse' : 'Expand';
+  ex.setAttribute('aria-label', (on ? 'Collapse' : 'Expand') + ' Assistant');
 }
 function openAsst(full) {
   document.getElementById('asst').classList.remove('hidden');

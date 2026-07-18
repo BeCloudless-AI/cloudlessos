@@ -157,7 +157,37 @@ $asst = @"
 </div>
 "@
 
+# ---- Appearance ----
+$themeCards = @(
+  @('auto','Automatic','Changes with the time of day.'),
+  @('cloudless','Cloudless','Bright, cool, and quietly atmospheric.'),
+  @('midnight','Midnight','Deep navy with crisp blue light.'),
+  @('aurora','Aurora','Dark teal with a cool luminous accent.'),
+  @('ember','Ember','Warm paper, clay, and soft coral.')
+) | ForEach-Object {
+  $on = if ($_[0] -eq 'cloudless') { ' on' } else { '' }
+  "<button class=`"theme-option theme-$($_[0])$on`"><span class=`"theme-preview`"></span><span class=`"theme-copy`"><span><span class=`"theme-name`">$($_[1])</span><span class=`"theme-desc`">$($_[2])</span></span><span class=`"theme-check`">&#10003;</span></span></button>"
+}
+$appearance = @"
+<div class="overlay" style="position:static">
+  <div class="set">
+    <aside class="set-sidebar"><div class="set-brand">Settings</div><nav class="set-nav">
+      <div class="nav-group">you</div><div class="nav-item"><span class="nav-ic">&#9680;</span>Profile</div>
+      <div class="nav-group">cloudless</div><div class="nav-item"><span class="nav-ic">&#9636;</span>Machine</div>
+      <div class="nav-group">system</div><div class="nav-item active"><span class="nav-ic">&#9682;</span>Appearance</div><div class="nav-item"><span class="nav-ic">&#10687;</span>General</div>
+    </nav></aside>
+    <main class="set-main">
+      <header class="set-topbar"><span class="set-page-title">Appearance</span><button class="set-x">&#10005;</button></header>
+      <div class="set-content"><div class="set-block"><h3>theme</h3><div class="theme-grid">$($themeCards -join '')</div>
+        <div class="fld-help appearance-note">This preference is saved only in this browser. Automatic follows dawn, daytime, dusk, and night on the machine's clock.</div>
+      </div></div>
+    </main>
+  </div>
+</div>
+"@
+
 Shot 'settings'   $set  900 720
+Shot 'appearance' $appearance 900 720
 Shot 'models'     $mm   1320 940
 Shot 'launcher'   $lp   1180 820
 Shot 'onboarding' $ob   720 640

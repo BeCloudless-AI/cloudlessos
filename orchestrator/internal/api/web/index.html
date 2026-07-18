@@ -4,6 +4,18 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Cloudless</title>
+<script>
+  // Apply the saved appearance before first paint to avoid a bright/dark flash.
+  (() => {
+    try {
+      const pref = localStorage.getItem('cloudless.theme') || 'auto';
+      const h = new Date().getHours();
+      const timed = h >= 5 && h < 8 ? 'dawn' : h >= 8 && h < 18 ? 'cloudless' : h >= 18 && h < 21 ? 'dusk' : 'night';
+      document.documentElement.dataset.themePreference = pref;
+      document.documentElement.dataset.theme = pref === 'auto' ? timed : pref;
+    } catch {}
+  })();
+</script>
 <style>
   @font-face { font-family: 'Red Hat Mono'; font-weight: 400; font-display: swap;
     src: url('vendor/fonts/red-hat-mono-latin-400-normal.woff2') format('woff2'); }
@@ -991,6 +1003,39 @@
     --w-base: #0b0e18; --w1: #182443; --w2: #33201f; --w3: #192c40;
     --w4: #24213e; --w5: #142d2d; --w6: #30202f; --wall-veil: rgba(5, 7, 14, .18);
   }
+  html[data-theme="midnight"] {
+    --bg: #080b14; --ink: #f7f8ff; --ink-2: #cbd2e8; --muted: #8e99b4; --faint: #65708c;
+    --accent: #ff7255; --accent-2: #ff9b80; --accent-soft: rgba(255, 114, 85, .13);
+    --blue: #7898ff; --blue-soft: rgba(120, 152, 255, .15);
+    --card: rgba(16, 21, 37, .9); --card-strong: rgba(13, 17, 30, .97); --card-solid: #151b2d;
+    --icon: rgba(28, 35, 57, .97); --panel-2: rgba(255, 255, 255, .055); --control: rgba(255, 255, 255, .07);
+    --hair: rgba(211, 220, 255, .09); --line: rgba(211, 220, 255, .09); --line-2: rgba(211, 220, 255, .16);
+    --card-edge: rgba(211, 220, 255, .11);
+    --w-base: #080b14; --w1: #111c3a; --w2: #271827; --w3: #12273c;
+    --w4: #211b3d; --w5: #10292b; --w6: #29192a; --wall-veil: rgba(3, 5, 12, .2);
+  }
+  html[data-theme="aurora"] {
+    --bg: #061514; --ink: #effffb; --ink-2: #bedbd4; --muted: #82a59d; --faint: #5f817a;
+    --accent: #ff8a59; --accent-2: #ffc16b; --accent-soft: rgba(255, 138, 89, .13);
+    --blue: #55d9c2; --blue-soft: rgba(85, 217, 194, .13);
+    --card: rgba(9, 30, 29, .88); --card-strong: rgba(7, 25, 24, .97); --card-solid: #0c2523;
+    --icon: rgba(15, 42, 39, .97); --panel-2: rgba(222, 255, 248, .055); --control: rgba(222, 255, 248, .07);
+    --hair: rgba(198, 255, 242, .09); --line: rgba(198, 255, 242, .09); --line-2: rgba(198, 255, 242, .16);
+    --card-edge: rgba(198, 255, 242, .11);
+    --w-base: #061514; --w1: #0e3433; --w2: #33231d; --w3: #0d2839;
+    --w4: #1f2240; --w5: #0a3930; --w6: #2f1d2c; --wall-veil: rgba(1, 10, 9, .18);
+  }
+  html[data-theme="ember"] {
+    --bg: #f2e8df; --ink: #25130e; --ink-2: #5c3c32; --muted: #80665e; --faint: #a08a82;
+    --accent: #e84d2a; --accent-2: #ff7951; --accent-soft: rgba(232, 77, 42, .12);
+    --blue: #b7472d; --blue-soft: rgba(183, 71, 45, .1);
+    --card: rgba(255, 250, 245, .88); --card-strong: rgba(255, 252, 248, .96); --card-solid: #fffaf5;
+    --icon: rgba(255, 252, 248, .96); --panel-2: rgba(81, 38, 24, .055); --control: rgba(255, 252, 248, .72);
+    --hair: rgba(81, 38, 24, .09); --line: rgba(81, 38, 24, .09); --line-2: rgba(81, 38, 24, .15);
+    --card-edge: rgba(255, 255, 255, .88);
+    --w-base: #f2e8df; --w1: #f6d8bf; --w2: #f5c2ad; --w3: #ead3c6;
+    --w4: #e5c9d1; --w5: #d9e3d7; --w6: #f1d6c9; --wall-veil: transparent;
+  }
   body { font-size: 14px; overflow-x: hidden; }
   .wall::before {
     inset: -18%; filter: saturate(.72);
@@ -1149,6 +1194,44 @@
   .msg.user { background: var(--blue); }
   .msg.bot { background: var(--panel-2); border: 1px solid var(--hair); }
 
+  /* Appearance picker */
+  .theme-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .theme-option {
+    min-width: 0; padding: 12px; text-align: left; border: 1px solid var(--line-2);
+    border-radius: 14px; background: var(--control); color: var(--ink); transition: border-color .16s, transform .16s, background .16s;
+  }
+  .theme-option:hover { transform: translateY(-1px); border-color: color-mix(in srgb, var(--blue) 46%, var(--line-2)); }
+  .theme-option.on { border-color: var(--blue); background: var(--blue-soft); box-shadow: 0 0 0 1px var(--blue); }
+  .theme-preview {
+    position: relative; display: block; height: 86px; margin-bottom: 10px; overflow: hidden; border-radius: 10px;
+    border: 1px solid rgba(255,255,255,.18); background: var(--tp-bg);
+  }
+  .theme-preview::before {
+    content: ""; position: absolute; inset: -20%;
+    background: radial-gradient(55% 70% at 20% 20%, var(--tp-a), transparent 72%),
+      radial-gradient(55% 70% at 80% 80%, var(--tp-b), transparent 72%);
+  }
+  .theme-preview::after {
+    content: ""; position: absolute; left: 13px; right: 13px; bottom: 12px; height: 30px;
+    border-radius: 8px; background: var(--tp-card); border: 1px solid rgba(255,255,255,.28);
+    box-shadow: 0 8px 22px -14px rgba(0,0,0,.55);
+  }
+  .theme-auto { --tp-bg: linear-gradient(120deg,#e7edf8 0 49%,#0b0e18 51%); --tp-a: #91b2ff; --tp-b: #7a5bd2; --tp-card: rgba(255,255,255,.72); }
+  .theme-cloudless { --tp-bg: #e9edf5; --tp-a: #a9c4ff; --tp-b: #ead7e8; --tp-card: rgba(255,255,255,.82); }
+  .theme-midnight { --tp-bg: #080b14; --tp-a: #263c7a; --tp-b: #4c2865; --tp-card: rgba(27,35,58,.94); }
+  .theme-aurora { --tp-bg: #061514; --tp-a: #168b77; --tp-b: #263c78; --tp-card: rgba(14,48,44,.94); }
+  .theme-ember { --tp-bg: #f2e8df; --tp-a: #f0a17d; --tp-b: #d7b3c4; --tp-card: rgba(255,250,245,.9); }
+  .theme-copy { display: flex; align-items: flex-start; gap: 8px; }
+  .theme-copy > span:first-child { min-width: 0; }
+  .theme-name { display: block; font-size: 13px; font-weight: 750; }
+  .theme-desc { display: block; margin-top: 2px; color: var(--muted); font-size: 10.5px; line-height: 1.4; }
+  .theme-check {
+    width: 18px; height: 18px; margin-left: auto; flex: none; display: grid; place-items: center;
+    border: 1px solid var(--line-2); border-radius: 50%; color: transparent; font-size: 11px;
+  }
+  .theme-option.on .theme-check { border-color: var(--blue); background: var(--blue); color: #fff; }
+  .appearance-note { margin-top: 14px; }
+
   @media (max-width: 980px) {
     main { padding-right: 26px; padding-left: 98px; }
     .cards { grid-template-columns: 1fr; }
@@ -1187,6 +1270,7 @@
     .card-head { margin-bottom: 15px; }
     .set { flex-direction: column; }
     .set-sidebar { width: 100%; max-height: 120px; border-right: 0; border-bottom: 1px solid var(--hair); }
+    .theme-grid { grid-template-columns: 1fr; }
   }
 </style>
 </head>
@@ -1430,22 +1514,42 @@ function tickClock() {
   applyTheme(d.getHours());
 }
 
-// Theme follows the sky: warm at dawn, bright by day, warm again at dusk, dark at night.
+// Appearance can follow the sky or stay on a palette selected by the user.
+const THEME_KEY = 'cloudless.theme';
+const THEME_OPTIONS = [
+  { id: 'auto', name: 'Automatic', desc: 'Changes with the time of day.' },
+  { id: 'cloudless', name: 'Cloudless', desc: 'Bright, cool, and quietly atmospheric.' },
+  { id: 'midnight', name: 'Midnight', desc: 'Deep navy with crisp blue light.' },
+  { id: 'aurora', name: 'Aurora', desc: 'Dark teal with a cool luminous accent.' },
+  { id: 'ember', name: 'Ember', desc: 'Warm paper, clay, and soft coral.' },
+];
 function themeForHour(h) {
   if (h >= 5 && h < 8) return 'dawn';
-  if (h >= 8 && h < 18) return 'day';
+  if (h >= 8 && h < 18) return 'cloudless';
   if (h >= 18 && h < 21) return 'dusk';
   return 'night';
 }
+let themePreference = (() => {
+  try {
+    const saved = localStorage.getItem(THEME_KEY) || 'auto';
+    return THEME_OPTIONS.some(t => t.id === saved) ? saved : 'auto';
+  } catch { return 'auto'; }
+})();
 let currentTheme = '';
-function applyTheme(h) {
-  const t = themeForHour(h);
-  if (t === currentTheme) return;
+function applyTheme(h, force) {
+  const t = themePreference === 'auto' ? themeForHour(h) : themePreference;
+  document.documentElement.dataset.themePreference = themePreference;
+  if (!force && t === currentTheme) return;
   currentTheme = t;
-  // "day" is the bare :root default — no attribute keeps the CSS lean.
-  if (t === 'day') document.documentElement.removeAttribute('data-theme');
-  else document.documentElement.setAttribute('data-theme', t);
+  document.documentElement.setAttribute('data-theme', t);
   if (window.bgSetTheme) window.bgSetTheme();
+}
+function setThemePreference(id) {
+  if (!THEME_OPTIONS.some(t => t.id === id)) return;
+  themePreference = id;
+  try { localStorage.setItem(THEME_KEY, id); } catch {}
+  currentTheme = '';
+  applyTheme(new Date().getHours(), true);
 }
 
 /* ---- status + gpu ---- */
@@ -1938,20 +2042,21 @@ async function renderSettings() {
     { label: 'you', items: [{ id: 'profile', ic: '◐', label: 'Profile' }] },
     { label: 'cloudless', items: [{ id: 'hardware', ic: '▤', label: 'Machine' }] },
     { label: 'apps', items: apps.map(a => ({ id: 'app:' + a.id, ic: glyph(a.id), label: a.name })) },
-    { label: 'system', items: [{ id: 'general', ic: '⦿', label: 'General' }] },
+    { label: 'system', items: [{ id: 'appearance', ic: '◒', label: 'Appearance' }, { id: 'general', ic: '⦿', label: 'General' }] },
   ];
   document.getElementById('set-nav').innerHTML = groups.map(g =>
     `<div class="nav-group">${g.label}</div>` + g.items.map(it =>
       `<div class="nav-item ${it.id === setPage ? 'active' : ''}" data-page="${it.id}"><span class="nav-ic">${it.ic}</span>${it.label}</div>`).join('')).join('');
   document.querySelectorAll('#set-nav .nav-item').forEach(n => n.onclick = () => { setPage = n.dataset.page; renderSettings(); });
 
-  let title = { profile: 'Profile', hardware: 'Machine', general: 'General' }[setPage] || '';
+  let title = { profile: 'Profile', hardware: 'Machine', appearance: 'Appearance', general: 'General' }[setPage] || '';
   if (setPage.startsWith('app:')) { const a = apps.find(x => 'app:' + x.id === setPage); title = a ? a.name : ''; }
   document.getElementById('set-page-title').textContent = title;
 
   const c = document.getElementById('set-content');
   if (setPage === 'profile') renderProfilePage(c);
   else if (setPage === 'hardware') renderHardwarePage(c);
+  else if (setPage === 'appearance') renderAppearancePage(c);
   else if (setPage === 'general') renderGeneralPage(c);
   else if (setPage.startsWith('app:')) renderAppPage(c, setPage.slice(4));
   else renderHardwarePage(c);
@@ -2432,6 +2537,26 @@ async function renderHardwarePage(c) {
     <div class="set-block"><h3>places</h3>${folders.map(p => `<button class="place" data-folder="${p.id}"><span class="pic">${PLACE_ICON[p.id] || '📁'}</span><span class="pl">${p.label}</span><span class="pp" title="${p.path}">${p.path}</span></button>`).join('')}</div>`;
   c.querySelectorAll('[data-folder]').forEach(b => b.onclick = async () => {
     try { const r = await api(`/api/folders/${b.dataset.folder}/open`, { method: 'POST' }); toast(r.opened ? 'Opened ' + b.querySelector('.pl').textContent : (r.error || 'Could not open folder'), !r.opened); } catch { toast('Could not open folder', true); }
+  });
+}
+
+function renderAppearancePage(c) {
+  const cards = THEME_OPTIONS.map(t => `
+    <button class="theme-option theme-${t.id}${themePreference === t.id ? ' on' : ''}" data-theme-id="${t.id}" aria-pressed="${themePreference === t.id}">
+      <span class="theme-preview" aria-hidden="true"></span>
+      <span class="theme-copy">
+        <span><span class="theme-name">${t.name}</span><span class="theme-desc">${t.desc}</span></span>
+        <span class="theme-check" aria-hidden="true">✓</span>
+      </span>
+    </button>`).join('');
+  c.innerHTML = `
+    <div class="set-block"><h3>theme</h3>
+      <div class="theme-grid">${cards}</div>
+      <div class="fld-help appearance-note">This preference is saved only in this browser. Automatic follows dawn, daytime, dusk, and night on the machine's clock.</div>
+    </div>`;
+  c.querySelectorAll('[data-theme-id]').forEach(b => b.onclick = () => {
+    setThemePreference(b.dataset.themeId);
+    renderAppearancePage(c);
   });
 }
 

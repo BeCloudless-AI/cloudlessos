@@ -164,7 +164,8 @@ $themeCards = @(
   @('cloudless','Cloudless','Bright, cool, and quietly atmospheric.'),
   @('midnight','Midnight','Deep navy with crisp blue light.'),
   @('aurora','Aurora','Dark teal with a cool luminous accent.'),
-  @('ember','Ember','Warm paper, clay, and soft coral.')
+  @('ember','Ember','Warm paper, clay, and soft coral.'),
+  @('sunbeam','Sunbeam','Luminous yellow with a warm orange glow.')
 ) | ForEach-Object {
   $on = if ($_[0] -eq 'cloudless') { ' on' } else { '' }
   "<button class=`"theme-option theme-$($_[0])$on`"><span class=`"theme-preview`"></span><span class=`"theme-copy`"><span><span class=`"theme-name`">$($_[1])</span><span class=`"theme-desc`">$($_[2])</span></span><span class=`"theme-check`">&#10003;</span></span></button>"

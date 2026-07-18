@@ -24,11 +24,10 @@ $sprite
 <div class="menubar">
   <div class="brand"><svg class="mark cl-mark"><use href="#cl-star"/></svg> cloudless</div>
   <div class="spacer"></div>
-  <div class="mi"><span class="led ok"></span> RTX 5090</div>
   <div class="mi"><span class="led ok"></span> Ready</div>
   <div class="mi mi-net"><span class="led net-online"></span> Network</div>
   <div id="clock">19:53</div>
-  <button class="gear"><svg class="ui-icon"><use href="#ui-metrics"/></svg></button><button class="gear"><svg class="ui-icon"><use href="#ui-models"/></svg></button><button class="gear"><svg class="ui-icon"><use href="#ui-settings"/></svg></button>
+  <button class="gear"><svg class="ui-icon"><use href="#ui-metrics"/></svg></button><button class="gear"><svg class="ui-icon"><use href="#ui-models"/></svg></button><button class="gear"><svg class="ui-icon"><use href="#ui-settings"/></svg></button><button class="gear shutdown"><svg class="ui-icon"><use href="#ui-power"/></svg></button>
 </div>
 <main>
   <div class="hero">

@@ -987,14 +987,17 @@
     --shadow: 0 24px 70px -42px rgba(19, 27, 56, .55), 0 2px 10px -7px rgba(19, 27, 56, .3);
     --shadow-sm: 0 12px 32px -22px rgba(19, 27, 56, .52);
     --glass-blur: 28px; --radius: 18px;
+    --brand-mark: #315cf5;
     --w-base: #e9edf5; --w1: #dce5ff; --w2: #f8dfd4; --w3: #d9e7ff;
     --w4: #d9d3f4; --w5: #d8ede9; --w6: #efe3ea;
   }
   html[data-theme="dawn"], html[data-theme="dusk"] {
+    --brand-mark: #c75838;
     --bg: #ececf2; --w-base: #ececf2; --w1: #e1e5f8; --w2: #f4d8ca;
     --w3: #e4d9ed; --w4: #d8d7ee; --w5: #d5e8e4; --w6: #eee1e2;
   }
   html[data-theme="night"] {
+    --brand-mark: #7896ff;
     --bg: #0b0e18; --ink: #f5f7ff; --ink-2: #c7cde0; --muted: #8f98af; --faint: #697188;
     --card: rgba(20, 25, 42, .87); --card-strong: rgba(17, 21, 36, .97); --card-solid: #161b2c;
     --icon: rgba(31, 38, 61, .96); --panel-2: rgba(255, 255, 255, .055); --control: rgba(255, 255, 255, .07);
@@ -1004,6 +1007,7 @@
     --w4: #24213e; --w5: #142d2d; --w6: #30202f; --wall-veil: rgba(5, 7, 14, .18);
   }
   html[data-theme="midnight"] {
+    --brand-mark: #7898ff;
     --bg: #080b14; --ink: #f7f8ff; --ink-2: #cbd2e8; --muted: #8e99b4; --faint: #65708c;
     --accent: #ff7255; --accent-2: #ff9b80; --accent-soft: rgba(255, 114, 85, .13);
     --blue: #7898ff; --blue-soft: rgba(120, 152, 255, .15);
@@ -1015,6 +1019,7 @@
     --w4: #211b3d; --w5: #10292b; --w6: #29192a; --wall-veil: rgba(3, 5, 12, .2);
   }
   html[data-theme="aurora"] {
+    --brand-mark: #55d9c2;
     --bg: #061514; --ink: #effffb; --ink-2: #bedbd4; --muted: #82a59d; --faint: #5f817a;
     --accent: #ff8a59; --accent-2: #ffc16b; --accent-soft: rgba(255, 138, 89, .13);
     --blue: #55d9c2; --blue-soft: rgba(85, 217, 194, .13);
@@ -1026,6 +1031,7 @@
     --w4: #1f2240; --w5: #0a3930; --w6: #2f1d2c; --wall-veil: rgba(1, 10, 9, .18);
   }
   html[data-theme="ember"] {
+    --brand-mark: #c84b2b;
     --bg: #f2e8df; --ink: #25130e; --ink-2: #5c3c32; --muted: #80665e; --faint: #a08a82;
     --accent: #e84d2a; --accent-2: #ff7951; --accent-soft: rgba(232, 77, 42, .12);
     --blue: #b7472d; --blue-soft: rgba(183, 71, 45, .1);
@@ -1035,6 +1041,18 @@
     --card-edge: rgba(255, 255, 255, .88);
     --w-base: #f2e8df; --w1: #f6d8bf; --w2: #f5c2ad; --w3: #ead3c6;
     --w4: #e5c9d1; --w5: #d9e3d7; --w6: #f1d6c9; --wall-veil: transparent;
+  }
+  html[data-theme="sunbeam"] {
+    --brand-mark: #d85a16;
+    --bg: #ffe36d; --ink: #2a1808; --ink-2: #62421f; --muted: #866942; --faint: #a68a62;
+    --accent: #ff8a2f; --accent-2: #ffb436; --accent-soft: rgba(255, 138, 47, .16);
+    --blue: #d85a16; --blue-soft: rgba(216, 90, 22, .12);
+    --card: rgba(255, 250, 226, .84); --card-strong: rgba(255, 252, 236, .95); --card-solid: #fff9df;
+    --icon: rgba(255, 253, 240, .95); --panel-2: rgba(91, 50, 12, .06); --control: rgba(255, 252, 235, .72);
+    --hair: rgba(91, 50, 12, .1); --line: rgba(91, 50, 12, .1); --line-2: rgba(91, 50, 12, .17);
+    --card-edge: rgba(255, 255, 255, .72);
+    --w-base: #ffe36d; --w1: #ffee76; --w2: #ffb436; --w3: #ffe487;
+    --w4: #ffd27e; --w5: #ffa740; --w6: #fff3b8; --wall-veil: transparent;
   }
   body { font-size: 14px; overflow-x: hidden; }
   .wall::before {
@@ -1066,6 +1084,7 @@
   }
   .menubar .brand { gap: 10px; font-size: 15px; font-weight: 750; letter-spacing: -.25px; text-transform: none; }
   .menubar .brand .mark { width: 13px; height: 22px; }
+  .menubar .cl-mark { fill: var(--brand-mark); transition: fill .2s ease; }
   .menubar .mi {
     min-height: 30px; padding: 0 10px; gap: 7px; border: 1px solid var(--hair);
     border-radius: 999px; background: var(--panel-2); color: var(--ink-2);
@@ -1077,6 +1096,8 @@
     border-radius: 9px; color: var(--muted); transition: color .15s, background .15s;
   }
   .gear:hover { color: var(--ink); background: var(--panel-2); transform: none; }
+  .gear.shutdown:hover { color: var(--err); background: color-mix(in srgb, var(--err) 10%, transparent); }
+  .gear.shutdown:disabled { opacity: .45; cursor: wait; }
   .net-pop { top: 58px; }
 
   /* Persistent tool rail: it never covers dashboard content. */
@@ -1234,6 +1255,7 @@
   .theme-midnight { --tp-bg: #080b14; --tp-a: #263c7a; --tp-b: #4c2865; --tp-card: rgba(27,35,58,.94); }
   .theme-aurora { --tp-bg: #061514; --tp-a: #168b77; --tp-b: #263c78; --tp-card: rgba(14,48,44,.94); }
   .theme-ember { --tp-bg: #f2e8df; --tp-a: #f0a17d; --tp-b: #d7b3c4; --tp-card: rgba(255,250,245,.9); }
+  .theme-sunbeam { --tp-bg: #ffee76; --tp-a: #fff3a4; --tp-b: #ff912f; --tp-card: rgba(255,252,235,.88); }
   .theme-copy { display: flex; align-items: flex-start; gap: 8px; }
   .theme-copy > span:first-child { min-width: 0; }
   .theme-name { display: block; font-size: 13px; font-weight: 750; }
@@ -1309,6 +1331,7 @@
     <symbol id="ui-metrics" viewBox="0 0 24 24"><path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"/></symbol>
     <symbol id="ui-assistant" viewBox="0 0 24 24"><path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"/><path d="M20 2v4m2-2h-4"/><circle cx="4" cy="20" r="2"/></symbol>
     <symbol id="ui-settings" viewBox="0 0 24 24"><path d="M14 17H5M19 7h-9"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></symbol>
+    <symbol id="ui-power" viewBox="0 0 24 24"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/></symbol>
     <symbol id="ui-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></symbol>
     <symbol id="ui-machine" viewBox="0 0 24 24"><path d="M12 20v2m0-20v2m5 16v2m0-20v2M2 12h2m-2 5h2M2 7h2m16 5h2m-2 5h2m-2-10h2M7 20v2M7 2v2"/><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="8" y="8" width="8" height="8" rx="1"/></symbol>
     <symbol id="ui-appearance" viewBox="0 0 24 24"><path d="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z"/><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/></symbol>
@@ -1324,13 +1347,13 @@
 <div class="menubar">
   <div class="brand"><svg class="mark cl-mark" aria-hidden="true"><use href="#cl-star"/></svg> cloudless</div>
   <div class="spacer"></div>
-  <div class="mi"><span class="led" id="led-gpu"></span> <span id="mi-gpu">GPU</span></div>
   <div class="mi"><span class="led" id="led-sys"></span> <span id="mi-sys">System</span></div>
   <div class="mi mi-net" id="mi-net" title="Network status"><span class="led" id="led-net"></span> <span id="net-label">Network</span></div>
   <div id="clock">--:--</div>
   <button class="gear" id="open-inference" title="Metrics" aria-label="Metrics"><svg class="ui-icon" aria-hidden="true"><use href="#ui-metrics"/></svg></button>
   <button class="gear" id="open-models" title="Model Manager" aria-label="Model Manager"><svg class="ui-icon" aria-hidden="true"><use href="#ui-models"/></svg></button>
   <button class="gear" id="gear" title="Settings" aria-label="Settings"><svg class="ui-icon" aria-hidden="true"><use href="#ui-settings"/></svg></button>
+  <button class="gear shutdown" id="shutdown" title="Shut down CloudlessOS" aria-label="Shut down CloudlessOS"><svg class="ui-icon" aria-hidden="true"><use href="#ui-power"/></svg></button>
 </div>
 <div id="net-pop" class="net-pop hidden"></div>
 
@@ -1551,6 +1574,7 @@ const THEME_OPTIONS = [
   { id: 'midnight', name: 'Midnight', desc: 'Deep navy with crisp blue light.' },
   { id: 'aurora', name: 'Aurora', desc: 'Dark teal with a cool luminous accent.' },
   { id: 'ember', name: 'Ember', desc: 'Warm paper, clay, and soft coral.' },
+  { id: 'sunbeam', name: 'Sunbeam', desc: 'Luminous yellow with a warm orange glow.' },
 ];
 function themeForHour(h) {
   if (h >= 5 && h < 8) return 'dawn';
@@ -1621,9 +1645,6 @@ function toggleNetPop() {
 async function renderGPUs() {
   let data; try { data = await api('/api/gpu'); } catch { return; }
   const gpus = (data && data.gpus) || [];
-  document.getElementById('led-gpu').className = 'led ' + (gpus.length ? 'ok' : '');
-  document.getElementById('mi-gpu').textContent = gpus.length
-    ? (gpus.length === 1 ? gpus[0].name.replace('NVIDIA GeForce ', '') : gpus.length + ' GPUs') : 'No GPU';
   const body = document.getElementById('gpu-body');
   if (!gpus.length) { body.innerHTML = '<div class="empty">No NVIDIA GPU detected on this machine.</div>'; gpuBuilt = 0; return; }
   const calc = g => ({
@@ -2832,6 +2853,20 @@ function trackJobToast(jobId, label) {
 document.getElementById('gear').onclick = openSettings;
 document.getElementById('set-x').onclick = closeSettings;
 document.getElementById('settings').addEventListener('click', e => { if (e.target.id === 'settings') closeSettings(); });
+document.getElementById('shutdown').onclick = async () => {
+  if (!confirm('Shut down CloudlessOS? This will stop all apps and power off this machine.')) return;
+  const button = document.getElementById('shutdown');
+  button.disabled = true;
+  button.title = 'CloudlessOS is shutting down';
+  try {
+    await api('/api/system/shutdown', { method: 'POST', headers: { 'X-Cloudless-Action': 'shutdown' } });
+    toast('CloudlessOS is shutting down…');
+  } catch {
+    button.disabled = false;
+    button.title = 'Shut down CloudlessOS';
+    toast('Could not shut down CloudlessOS', true);
+  }
+};
 
 /* ---- connectivity popover wiring ---- */
 document.getElementById('mi-net').onclick = e => { e.stopPropagation(); toggleNetPop(); };

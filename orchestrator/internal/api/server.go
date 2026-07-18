@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/cloudless/orchestrator/internal/apps"
@@ -41,11 +42,20 @@ type Server struct {
 	mfDiff   *manifest.DiffusionStore
 	usage    *usage.Store
 	power    *power.Store
+	shutdown func() error
+
+	shutdownMu     sync.Mutex
+	shutdownQueued bool
+	shutdownDelay  time.Duration
 }
 
 // NewServer constructs a Server backed by the given engine, state store and manifests.
 func NewServer(eng engine.Engine, st *state.Store, mf *manifest.Store, mfModels *manifest.ModelsStore, mfDiff *manifest.DiffusionStore, us *usage.Store, pw *power.Store) *Server {
-	return &Server{eng: eng, jobs: jobs.NewManager(), state: st, manifest: mf, mfModels: mfModels, mfDiff: mfDiff, usage: us, power: pw}
+	return &Server{
+		eng: eng, jobs: jobs.NewManager(), state: st, manifest: mf, mfModels: mfModels,
+		mfDiff: mfDiff, usage: us, power: pw, shutdown: systemShutdown,
+		shutdownDelay: time.Second,
+	}
 }
 
 // imageFor returns the image reference to pull/run for an app: the manifest's
@@ -71,6 +81,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/health", s.health)
 	mux.HandleFunc("GET /api/gpu", s.gpu)
 	mux.HandleFunc("GET /api/system", s.system)
+	mux.HandleFunc("POST /api/system/shutdown", s.systemShutdown)
 	mux.HandleFunc("GET /api/sysload", s.sysload)
 	mux.HandleFunc("GET /api/profile", s.profileGet)
 	mux.HandleFunc("POST /api/profile", s.profileSet)

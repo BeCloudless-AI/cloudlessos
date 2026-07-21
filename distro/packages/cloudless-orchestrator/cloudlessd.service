@@ -16,9 +16,9 @@ StateDirectory=cloudless
 StateDirectoryMode=0750
 NoNewPrivileges=true
 PrivateTmp=true
-ProtectHome=true
+ProtectHome=read-only
 ProtectSystem=strict
-ReadWritePaths=/var/lib/cloudless -/run/docker.sock
+ReadWritePaths=/var/lib/cloudless -/run/docker.sock -/home/cloudless/Cloudless -/home/cloudless/Downloads
 
 [Install]
 WantedBy=multi-user.target

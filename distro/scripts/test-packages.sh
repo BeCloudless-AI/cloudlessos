@@ -26,6 +26,11 @@ sh -n "$DISTRO/packages/cloudless-branding/os-release"
 grep -Fq '$HOME/snap/chromium/common/cloudless-browser' \
     "$DISTRO/packages/cloudless-shell/cloudless-kiosk"
 grep -Fq 'startup.png' "$DISTRO/packages/cloudless-shell/openbox-autostart"
+grep -Fq 'pcmanfm' "$DISTRO/scripts/build-packages.sh"
+grep -Fq 'CLOUDLESS_HOME=/home/cloudless/Cloudless' \
+    "$DISTRO/packages/cloudless-orchestrator/cloudless.env"
+grep -Fq 'CLOUDLESS_DESKTOP_HOME=/home/cloudless' \
+    "$DISTRO/packages/cloudless-orchestrator/cloudless.env"
 grep -Fq 'update-alternatives --set default.plymouth' \
     "$DISTRO/packages/cloudless-branding/postinst"
 grep -Fq 'Wants=docker.service' "$DISTRO/packages/cloudless-orchestrator/cloudlessd.service"

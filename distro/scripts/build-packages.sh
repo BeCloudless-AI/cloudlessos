@@ -47,7 +47,7 @@ install -Dm0755 "$DISTRO/packages/cloudless-orchestrator/prerm" "$PKG/DEBIAN/pre
 finish_package "$PKG" cloudless-orchestrator
 
 PKG="$WORK/cloudless-shell"
-make_control "$PKG" cloudless-shell "CloudlessOS fullscreen web shell" "lightdm, lightdm-gtk-greeter, openbox, xorg, curl, feh, unclutter, x11-xserver-utils"
+make_control "$PKG" cloudless-shell "CloudlessOS fullscreen web shell" "lightdm, lightdm-gtk-greeter, openbox, pcmanfm, xorg, curl, feh, unclutter, x11-xserver-utils"
 install -Dm0755 "$DISTRO/packages/cloudless-shell/cloudless-kiosk" "$PKG/usr/bin/cloudless-kiosk"
 install -Dm0644 "$DISTRO/packages/cloudless-shell/openbox-autostart" "$PKG/usr/share/cloudless/openbox-autostart"
 install -Dm0644 "$DISTRO/packages/cloudless-shell/lightdm.conf" "$PKG/etc/lightdm/lightdm.conf.d/60-cloudless.conf"

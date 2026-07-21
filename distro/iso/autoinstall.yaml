@@ -21,6 +21,7 @@ autoinstall:
     - lightdm
     - lightdm-gtk-greeter
     - openbox
+    - pcmanfm
     - plymouth
     - plymouth-themes
     - ubuntu-drivers-common

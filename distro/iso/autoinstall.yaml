@@ -17,6 +17,7 @@ autoinstall:
     - ca-certificates
     - curl
     - docker.io
+    - feh
     - lightdm
     - lightdm-gtk-greeter
     - openbox

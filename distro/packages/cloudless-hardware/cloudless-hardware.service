@@ -2,7 +2,6 @@
 Description=Configure CloudlessOS GPU and container hardware
 Wants=network-online.target
 After=network-online.target
-Before=cloudlessd.service
 
 [Service]
 Type=oneshot

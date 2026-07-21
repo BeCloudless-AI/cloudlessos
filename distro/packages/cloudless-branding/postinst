@@ -5,6 +5,10 @@ if [ ! -e /usr/lib/os-release.ubuntu ]; then
         --divert /usr/lib/os-release.ubuntu /usr/lib/os-release
 fi
 install -m 0644 /usr/share/cloudless/os-release /usr/lib/os-release
-if command -v plymouth-set-default-theme >/dev/null 2>&1; then plymouth-set-default-theme cloudless || true; fi
+update-alternatives --install \
+    /usr/share/plymouth/themes/default.plymouth default.plymouth \
+    /usr/share/plymouth/themes/cloudless/cloudless.plymouth 200
+update-alternatives --set default.plymouth \
+    /usr/share/plymouth/themes/cloudless/cloudless.plymouth
 update-initramfs -u >/dev/null 2>&1 || true
 update-grub >/dev/null 2>&1 || true

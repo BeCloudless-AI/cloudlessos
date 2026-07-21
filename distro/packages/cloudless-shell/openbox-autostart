@@ -1,3 +1,5 @@
+xsetroot -solid "#f3f5fb"
+feh --no-fehbg --bg-fill /usr/share/backgrounds/cloudless/startup.png &
 xset s off
 xset -dpms
 xset s noblank

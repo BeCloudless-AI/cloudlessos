@@ -1,6 +1,8 @@
 #!/bin/sh
 set -e
 if [ "$1" = remove ] || [ "$1" = deconfigure ]; then
+    update-alternatives --remove default.plymouth \
+        /usr/share/plymouth/themes/cloudless/cloudless.plymouth || true
     rm -f /usr/lib/os-release
     dpkg-divert --package cloudless-branding --remove --rename \
         --divert /usr/lib/os-release.ubuntu /usr/lib/os-release || true

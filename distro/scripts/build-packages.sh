@@ -47,10 +47,14 @@ install -Dm0755 "$DISTRO/packages/cloudless-orchestrator/prerm" "$PKG/DEBIAN/pre
 finish_package "$PKG" cloudless-orchestrator
 
 PKG="$WORK/cloudless-shell"
-make_control "$PKG" cloudless-shell "CloudlessOS fullscreen web shell" "lightdm, lightdm-gtk-greeter, openbox, xorg, curl, unclutter, x11-xserver-utils"
+make_control "$PKG" cloudless-shell "CloudlessOS fullscreen web shell" "lightdm, lightdm-gtk-greeter, openbox, xorg, curl, feh, unclutter, x11-xserver-utils"
 install -Dm0755 "$DISTRO/packages/cloudless-shell/cloudless-kiosk" "$PKG/usr/bin/cloudless-kiosk"
 install -Dm0644 "$DISTRO/packages/cloudless-shell/openbox-autostart" "$PKG/usr/share/cloudless/openbox-autostart"
 install -Dm0644 "$DISTRO/packages/cloudless-shell/lightdm.conf" "$PKG/etc/lightdm/lightdm.conf.d/60-cloudless.conf"
+mkdir -p "$PKG/usr/share/backgrounds/cloudless"
+rsvg-convert -w 1920 -h 1080 "$DISTRO/packages/cloudless-shell/startup-background.svg" -o "$WORK/startup-background.png"
+rsvg-convert -w 560 "$DISTRO/assets/cloudless-logo.svg" -o "$WORK/startup-logo.png"
+convert "$WORK/startup-background.png" "$WORK/startup-logo.png" -gravity center -composite "$PKG/usr/share/backgrounds/cloudless/startup.png"
 install -Dm0755 "$DISTRO/packages/cloudless-shell/postinst" "$PKG/DEBIAN/postinst"
 finish_package "$PKG" cloudless-shell
 

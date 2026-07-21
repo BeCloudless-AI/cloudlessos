@@ -25,6 +25,14 @@ sh -n "$DISTRO/packages/cloudless-branding/os-release"
 # background visible.
 grep -Fq '$HOME/snap/chromium/common/cloudless-browser' \
     "$DISTRO/packages/cloudless-shell/cloudless-kiosk"
+grep -Fq 'startup.png' "$DISTRO/packages/cloudless-shell/openbox-autostart"
+grep -Fq 'update-alternatives --set default.plymouth' \
+    "$DISTRO/packages/cloudless-branding/postinst"
+grep -Fq 'Wants=docker.service' "$DISTRO/packages/cloudless-orchestrator/cloudlessd.service"
+if grep -Eq '^After=.*docker\.service' "$DISTRO/packages/cloudless-orchestrator/cloudlessd.service"; then
+    echo "cloudlessd must not delay the local UI behind Docker" >&2
+    exit 1
+fi
 
 while IFS= read -r script; do bash -n "$script"; done < <(find "$DISTRO/scripts" "$DISTRO/packages" -type f \( -name '*.sh' -o -name postinst -o -name prerm -o -name cloudless-kiosk -o -name cloudless-hardware-install -o -name cloudless-validate \))
 echo "Package validation passed"

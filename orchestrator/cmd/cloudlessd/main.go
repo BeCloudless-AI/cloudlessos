@@ -105,9 +105,26 @@ func main() {
 			log.Printf("provisioning skipped: no usable NVIDIA GPU detected (%v)", gpuErr)
 		} else {
 			log.Printf("provisioning enabled: %d NVIDIA GPU(s) detected", len(gpus))
-			go provision.Run(context.Background(), eng, st, mf, func(m string) {
-				log.Printf("[provision] %s", m)
-			})
+			go func() {
+				waitingLogged := false
+				for {
+					engineCtx, engineCancel := context.WithTimeout(context.Background(), 3*time.Second)
+					err := eng.Available(engineCtx)
+					engineCancel()
+					if err == nil {
+						break
+					}
+					if !waitingLogged {
+						log.Printf("provisioning waiting for Docker: %v", err)
+						waitingLogged = true
+					}
+					time.Sleep(2 * time.Second)
+				}
+				log.Printf("provisioning Docker engine ready")
+				provision.Run(context.Background(), eng, st, mf, func(m string) {
+					log.Printf("[provision] %s", m)
+				})
+			}()
 		}
 	} else {
 		log.Printf("provisioning skipped (CLOUDLESS_NO_PROVISION set)")

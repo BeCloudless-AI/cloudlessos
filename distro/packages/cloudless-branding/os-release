@@ -1,0 +1,11 @@
+NAME="CloudlessOS"
+PRETTY_NAME="CloudlessOS 0.1 (Ubuntu 24.04 LTS base)"
+ID=cloudlessos
+ID_LIKE="ubuntu debian"
+VERSION_ID="0.1"
+VERSION="0.1 (Noble)"
+VERSION_CODENAME=noble
+HOME_URL="https://www.becloudless.ai/"
+SUPPORT_URL="https://github.com/samuelcardillo/cloudlessos/issues"
+BUG_REPORT_URL="https://github.com/samuelcardillo/cloudlessos/issues"
+UBUNTU_CODENAME=noble

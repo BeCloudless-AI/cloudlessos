@@ -1,0 +1,10 @@
+#!/bin/sh
+set -u
+REPORT=/var/lib/cloudless/validation-report.txt
+install -d -m 0750 /var/lib/cloudless
+exec > "$REPORT" 2>&1
+echo "CloudlessOS validation: $(date -u +%FT%TZ)"
+printf 'docker: '; if docker info >/dev/null 2>&1; then echo ready; else echo unavailable; fi
+printf 'nvidia: '; if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1; then echo ready; else echo unavailable; fi
+printf 'orchestrator: '; if curl --silent --fail --max-time 5 http://127.0.0.1:8765/api/health >/dev/null; then echo ready; else echo unavailable; fi
+printf 'storage-free-bytes: '; df --output=avail -B1 /var/lib/cloudless | tail -n 1 | tr -d ' '

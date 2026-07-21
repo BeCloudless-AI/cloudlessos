@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=CloudlessOS
+Description=CloudlessOS animated boot screen
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/cloudless
+ScriptFile=/usr/share/plymouth/themes/cloudless/cloudless.script

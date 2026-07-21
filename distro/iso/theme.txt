@@ -1,0 +1,31 @@
+desktop-image: "grub.png"
+desktop-image-scale-method: "stretch"
+desktop-color: "#070910"
+title-text: ""
+message-font: "Unifont Regular 16"
+message-color: "#d8dae2"
+message-bg-color: "#111522"
+
++ boot_menu {
+  left = 31%
+  top = 38%
+  width = 38%
+  height = 34%
+  item_font = "Unifont Regular 18"
+  item_color = "#d8dae2"
+  selected_item_color = "#ffcf4a"
+  item_height = 38
+  item_padding = 12
+  item_spacing = 8
+  scrollbar = false
+}
+
++ label {
+  text = "Ubuntu 24.04 LTS foundation"
+  left = 0
+  top = 91%
+  width = 100%
+  align = "center"
+  font = "Unifont Regular 14"
+  color = "#747b8e"
+}

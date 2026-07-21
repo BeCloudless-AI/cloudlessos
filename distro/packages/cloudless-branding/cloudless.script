@@ -1,0 +1,12 @@
+Window.SetBackgroundTopColor(0.055, 0.065, 0.090);
+Window.SetBackgroundBottomColor(0.020, 0.025, 0.040);
+logo.image = Image("cloudless-logo.png");
+logo.sprite = Sprite(logo.image);
+logo.sprite.SetX(Window.GetWidth() / 2 - logo.image.GetWidth() / 2);
+logo.sprite.SetY(Window.GetHeight() / 2 - logo.image.GetHeight() / 2);
+fun refresh_callback () {
+    elapsed = Plymouth.GetTime();
+    pulse = 0.72 + 0.20 * Math.Sin(elapsed * 2.2);
+    logo.sprite.SetOpacity(pulse);
+}
+Plymouth.SetRefreshFunction(refresh_callback);

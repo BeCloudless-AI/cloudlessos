@@ -1,0 +1,25 @@
+[Unit]
+Description=CloudlessOS orchestrator
+Wants=network-online.target
+After=network-online.target docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+EnvironmentFile=-/etc/cloudless/cloudless.env
+ExecStart=/usr/lib/cloudless/cloudlessd
+Restart=always
+RestartSec=3
+TimeoutStopSec=15
+StateDirectory=cloudless
+StateDirectoryMode=0750
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/cloudless /run/docker.sock
+
+[Install]
+WantedBy=multi-user.target

@@ -15,6 +15,7 @@ import (
 
 	"github.com/cloudless/orchestrator/internal/api"
 	"github.com/cloudless/orchestrator/internal/engine"
+	"github.com/cloudless/orchestrator/internal/hardware"
 	"github.com/cloudless/orchestrator/internal/manifest"
 	"github.com/cloudless/orchestrator/internal/power"
 	"github.com/cloudless/orchestrator/internal/provision"
@@ -97,9 +98,17 @@ func main() {
 	// Set CLOUDLESS_NO_PROVISION=1 to skip this (e.g. a second daemon on another
 	// port for testing — it won't touch the primary daemon's containers).
 	if os.Getenv("CLOUDLESS_NO_PROVISION") == "" {
-		go provision.Run(context.Background(), eng, st, mf, func(m string) {
-			log.Printf("[provision] %s", m)
-		})
+		probeCtx, probeCancel := context.WithTimeout(context.Background(), 8*time.Second)
+		gpus, gpuErr := hardware.GPUs(probeCtx)
+		probeCancel()
+		if gpuErr != nil || len(gpus) == 0 {
+			log.Printf("provisioning skipped: no usable NVIDIA GPU detected (%v)", gpuErr)
+		} else {
+			log.Printf("provisioning enabled: %d NVIDIA GPU(s) detected", len(gpus))
+			go provision.Run(context.Background(), eng, st, mf, func(m string) {
+				log.Printf("[provision] %s", m)
+			})
+		}
 	} else {
 		log.Printf("provisioning skipped (CLOUDLESS_NO_PROVISION set)")
 	}

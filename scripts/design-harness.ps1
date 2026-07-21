@@ -17,6 +17,24 @@ function Shot($name, $body, $w, $ht) {
   if (Test-Path $out) { "OK  $out" } else { "NO SHOT $name" }
 }
 
+function ShotFirstLaunchState($name, $w, $ht, $state) {
+  $launchSrc = 'D:\Cloudless\orchestrator\internal\api\web\first-launch\index.html'
+  $page = Get-Content $launchSrc -Raw -Encoding UTF8
+  $page = $page.Replace('url("cloud-opening.png")', 'url("file:///D:/Cloudless/orchestrator/internal/api/web/first-launch/cloud-opening.png")')
+  $wallpaper = 'html{background:linear-gradient(135deg,#dce8f8,#eef3fb 48%,#e8def4)!important}'
+  if ($state -eq 'word') {
+    $override = $wallpaper + 'body{background:transparent!important}#clouds{display:none!important}.logo path{animation:none!important;opacity:1!important;filter:none!important;transform:none!important}.more{display:none!important}'
+  } else {
+    $override = $wallpaper + 'body{background:rgba(2,5,12,.34)!important}#clouds{opacity:.38!important;transform:scale(1.1)!important}.logo path{animation:none!important}.logo path:first-of-type{opacity:1!important;filter:none!important;transform:translateX(190px)!important}.logo path:not(:first-of-type){opacity:0!important}.more{display:none!important}'
+  }
+  $page = $page -replace '</style>', ($override + '</style>')
+  $tmp = "$env:TEMP\dh-$name.html"
+  [System.IO.File]::WriteAllText($tmp, $page, (New-Object System.Text.UTF8Encoding($false)))
+  $out = "$env:TEMP\dh-$name.png"
+  & $edge --headless=new --disable-gpu --hide-scrollbars --force-device-scale-factor=1 --window-size=$w,$ht --screenshot="$out" ("file:///" + ($tmp -replace '\\','/')) 2>$null | Out-Null
+  if (Test-Path $out) { "OK  $out" } else { "NO SHOT $name" }
+}
+
 # ---- Settings ----
 $navGroups = @(
   @('general', @(@('&#9881;','Profile',$true), @('&#127760;','Location & time',$false), @('&#128268;','Network',$false))),
@@ -62,29 +80,47 @@ $set = @"
 # ---- Model Manager ----
 function Mdl($name,$meta,$notes,$caps,$tags,$on,$rec,$fit,$status) {
   $cls = "mdl"; if ($on) { $cls += " on" }; if ($rec) { $cls += " rec" }; $cls += " fit-$fit"
-  "<button class=`"$cls`"><div class=`"mdl-top`"><span class=`"mdl-name`">$name</span>$status</div>" +
-  "<div class=`"mdl-meta`">$meta</div><div class=`"mdl-notes`">$notes</div>" +
+  "<button class=`"$cls`"><div class=`"mdl-top`"><span class=`"mdl-icon`"><svg class=`"ui-icon`"><use href=`"#ui-models`"/></svg></span><span class=`"mdl-title`"><span class=`"mdl-name`">$name</span><span class=`"mdl-meta`">$meta</span></span>$status</div>" +
+  "<div class=`"mdl-notes`">$notes</div>" +
   "<div class=`"mdl-tags`">$caps$tags</div>" +
-  "<div class=`"mdl-foot`"><span class=`"mdl-fit fit-$fit`">$(if($fit -eq 'fits'){'fits comfortably'}elseif($fit -eq 'tight'){'tight fit'}else{'too large'})</span><span class=`"mdl-use`">details &#8250;</span></div></button>"
+  "<div class=`"mdl-foot`"><span class=`"mdl-fit fit-$fit`">$(if($fit -eq 'fits'){'fits your GPU'}elseif($fit -eq 'tight'){'tight fit'}else{'needs more VRAM'})</span><span class=`"mdl-use`"><svg class=`"ui-icon`"><use href=`"#ui-arrow-right`"/></svg></span></div></button>"
 }
 $rec = '<span class="mdl-cap rec">&#9733; recommended</span>'
 $vis = '<span class="mdl-cap vis">vision</span>'
 $tool = '<span class="mdl-cap">tools</span>'
 $t = '<span class="mdl-t">chat</span><span class="mdl-t">general</span>'
-$cards = (Mdl 'Qwen2.5-1.5B-Instruct' '1.5B &middot; Q4 &middot; 32K ctx &middot; ~2 GB' 'Fast, capable small chat model. Great default for quick local use.' $rec $t $true $true 'fits' '<span class="mdl-active">&#9679; loaded</span>') +
-  (Mdl 'Llama-3.1-8B-Instruct' '8B &middot; Q4 &middot; 128K ctx &middot; ~6 GB' 'Strong general assistant with long context and tool calling.' "$tool" $t $false $false 'fits' '<span class="mdl-disk">on disk</span>') +
+$cards = (Mdl 'Qwen2.5-1.5B-Instruct' '1.5B &middot; Q4 &middot; 32K ctx' 'Fast, capable small chat model. Great default for quick local use.' $rec $t $true $true 'fits' '<span class="mdl-status active"><i></i>Loaded</span>') +
+  (Mdl 'Llama-3.1-8B-Instruct' '8B &middot; Q4 &middot; 128K ctx' 'Strong general assistant with long context and tool calling.' "$tool" $t $false $false 'fits' '<span class="mdl-status">Downloaded</span>') +
   (Mdl 'Qwen2.5-VL-7B' '7B &middot; Q4 &middot; 32K ctx &middot; ~7 GB' 'Multimodal model that can read images and screenshots.' "$vis$tool" $t $false $false 'fits' '') +
   (Mdl 'Mixtral-8x7B' '47B MoE &middot; Q4 &middot; ~28 GB' 'Powerful mixture-of-experts; tight on a single 32 GB card.' '' $t $false $false 'tight' '') +
   (Mdl 'Llama-3.1-70B' '70B &middot; Q4 &middot; ~40 GB' 'Frontier-class quality; needs more VRAM than available.' '' $t $false $false 'over' '')
 $mm = @"
 <div class="overlay" style="position:static">
   <div class="mm">
-    <div class="lp-head"><span class="win-traffic"><i class="t-c"></i><i class="t-m"></i><i class="t-f"></i></span><div class="lp-ttl">Model Manager</div><button class="lp-x">&#215;</button></div>
+    <div class="lp-head mm-head"><span class="mm-head-icon"><svg class="ui-icon"><use href="#ui-models"/></svg></span><div class="mm-head-copy"><div class="lp-ttl">Model Manager</div><div class="mm-head-sub">Choose what powers your local AI</div></div><button class="lp-x"><svg class="ui-icon"><use href="#ui-close"/></svg></button></div>
     <div class="mm-body">
-      <div class="mm-tabs"><button class="mm-tab on">Language models</button><button class="mm-tab">Diffusion</button><button class="mm-tab">Downloaded</button></div>
-      <div class="mm-bar"><span class="mm-sum">Showing <b>5</b> models that fit your <b>RTX 5090 (32 GB)</b></span></div>
-      <div class="mdl-sec">recommended for your machine</div>
+      <div class="mm-tabs"><button class="mm-tab on"><svg class="ui-icon"><use href="#ui-models"/></svg>Language models</button><button class="mm-tab"><svg class="ui-icon"><use href="#ui-appearance"/></svg>Image models</button></div>
+      <div class="mm-bar"><div class="mm-machine"><svg class="ui-icon"><use href="#ui-machine"/></svg><span><small>Your hardware</small><b>32 GB VRAM</b></span></div><label class="mm-search"><svg class="ui-icon"><use href="#ui-search"/></svg><input placeholder="Search language models&hellip;"></label></div>
+      <div class="mm-filter-row"><span class="mm-filter-label">Filter</span><div class="mm-filters"><button class="mm-chip">Fits my GPU</button><button class="mm-chip">Vision</button><button class="mm-chip">Tool calling</button></div><span class="mm-result-count">5 models</span></div>
+      <div class="mdl-sec"><span>recommended for your machine</span><span class="mdl-count">5</span></div>
       <div class="mdl-grid">$cards</div>
+    </div>
+  </div>
+</div>
+"@
+
+$mmDetail = @"
+<div class="overlay" style="position:static">
+  <div class="mm">
+    <div class="lp-head mm-head"><span class="mm-head-icon"><svg class="ui-icon"><use href="#ui-models"/></svg></span><div class="mm-head-copy"><div class="lp-ttl">Model Manager</div><div class="mm-head-sub">Choose what powers your local AI</div></div><button class="lp-x"><svg class="ui-icon"><use href="#ui-close"/></svg></button></div>
+    <div class="mm-body">
+      <button class="lp-back"><svg class="ui-icon"><use href="#ui-arrow-right"/></svg><span>All models</span></button>
+      <div class="md-detail">
+        <div class="md-hero"><div class="md-ic2">&#129504;</div><div class="md-hd"><div class="md-eyebrow">Language model</div><div class="md-nm">Qwen2.5-1.5B-Instruct</div><div class="md-sub">Qwen/Qwen2.5-1.5B-Instruct</div><div class="mdl-tags md-caps"><span class="mdl-cap rec">&#9733; recommended</span><span class="mdl-cap">tools</span></div></div><div class="md-hero-actions"><button class="btn">Re-download weights</button></div></div>
+        <div class="md-banner loaded">This model is loaded in vLLM right now.</div>
+        <p class="md-desc">A compact general-purpose assistant that runs quickly on local hardware.</p>
+        <div class="md-specgrid"><div class="md-spec"><span class="md-k">Parameters</span><span class="md-v">1.5B</span></div><div class="md-spec"><span class="md-k">Context</span><span class="md-v">32K tokens</span></div><div class="md-spec"><span class="md-k">VRAM needed</span><span class="md-v">~2 GB</span></div></div>
+      </div>
     </div>
   </div>
 </div>
@@ -188,9 +224,63 @@ $appearance = @"
 </div>
 "@
 
+# ---- Metrics: Engine + API access ----
+$infTabsEngine = @"
+<div class="mm-tabs inf-tabs"><button class="mm-tab"><svg class="ui-icon"><use href="#ui-metrics"/></svg>Activity</button><button class="mm-tab"><svg class="ui-icon"><use href="#ui-apps"/></svg>Usage</button><button class="mm-tab"><svg class="ui-icon"><use href="#ui-power"/></svg>Power</button><button class="mm-tab on"><svg class="ui-icon"><use href="#ui-machine"/></svg>Engine</button><button class="mm-tab"><svg class="ui-icon"><use href="#ui-key"/></svg>API access</button></div>
+"@
+$engineCards = @(
+  @('rocket','vLLM','GPU','Maximum throughput on a capable GPU',@('Fastest when the model fits in VRAM','Serves Hugging Face model weights','Best for many simultaneous requests'),$true),
+  @('network','SGLang','GPU','Responsive serving for agents and tools',@('Low latency with RadixAttention','Strong structured output and tool calling','Efficient prompt and prefix reuse'),$false),
+  @('machine','llama.cpp','CPU + GPU','Flexible local inference on almost any machine',@('Offloads models between RAM and VRAM','Can run entirely on the CPU','Uses compact GGUF model files'),$false)
+) | ForEach-Object {
+  $on = if ($_[5]) { ' on' } else { '' }
+  $traits = ($_[4] | ForEach-Object { "<li>$_</li>" }) -join ''
+  $foot = if ($_[5]) { '<span class="ec-active">Active engine</span>' } else { '<button class="btn">Use this engine</button>' }
+  "<div class=`"ec$on`"><div class=`"ec-head`"><span class=`"ec-ic`"><svg class=`"ui-icon`"><use href=`"#ui-$($_[0])`"/></svg></span><span class=`"ec-title`"><span class=`"ec-name`">$($_[1])</span><span class=`"ec-runs`">$($_[2])</span></span></div><div class=`"ec-best`">$($_[3])</div><ul class=`"ec-traits`">$traits</ul><div class=`"ec-foot`">$foot</div></div>"
+}
+$infEngine = @"
+<div class="overlay" style="position:static"><div class="mm" style="height:760px">
+  <div class="lp-head"><div class="lp-ttl">Metrics</div><div class="inf-head on"><span class="inf-live"></span><b>vLLM</b><span class="ih-state">live</span></div><button class="lp-x"><svg class="ui-icon"><use href="#ui-close"/></svg></button></div>
+  <div class="mm-body">$infTabsEngine<div id="inf-panel"><div class="inf-page">
+    <div class="inf-page-hero"><span class="inf-page-icon"><svg class="ui-icon"><use href="#ui-machine"/></svg></span><div class="inf-page-copy"><div class="inf-page-eyebrow">Runtime</div><div class="inf-page-title">Inference engine</div><div class="inf-page-desc">Choose the runtime that powers chat, apps, and the API. Switching reloads the current model and usually takes under a minute.</div></div><span class="inf-state-pill ready">Ready</span></div>
+    <div class="ec-grid">$($engineCards -join '')</div><div class="fld-help">The model itself is selected in Model Manager. Engine availability depends on your hardware and installation.</div>
+  </div></div></div>
+</div></div>
+"@
+
+$infTabsApi = $infTabsEngine -replace 'mm-tab on"><svg class="ui-icon"><use href="#ui-machine"/></svg>Engine','mm-tab"><svg class="ui-icon"><use href="#ui-machine"/></svg>Engine' -replace 'mm-tab"><svg class="ui-icon"><use href="#ui-key"/></svg>API access','mm-tab on"><svg class="ui-icon"><use href="#ui-key"/></svg>API access'
+$infApi = @"
+<div class="overlay" style="position:static"><div class="mm" style="height:820px">
+  <div class="lp-head"><div class="lp-ttl">Metrics</div><div class="inf-head on"><span class="inf-live"></span><b>vLLM</b><span class="ih-state">live</span></div><button class="lp-x"><svg class="ui-icon"><use href="#ui-close"/></svg></button></div>
+  <div class="mm-body">$infTabsApi<div id="inf-panel"><div class="inf-page">
+    <div class="inf-page-hero"><span class="inf-page-icon"><svg class="ui-icon"><use href="#ui-key"/></svg></span><div class="inf-page-copy"><div class="inf-page-eyebrow">OpenAI compatible</div><div class="inf-page-title">API access</div><div class="inf-page-desc">Connect local tools and apps to the model running on this machine. Requests stay on your hardware unless you enable network access.</div></div><span class="inf-state-pill ready">Local</span></div>
+    <section class="api-section"><div class="api-section-head"><div><div class="api-section-title">Connect a client</div><div class="api-section-desc">Use these values with any OpenAI-compatible SDK.</div></div></div>
+      <div class="api-endpoints"><div class="api-endpoint"><span class="api-endpoint-label">Base URL</span><code>http://cloudless.local:8765/v1</code><button class="api-copy"><svg class="ui-icon"><use href="#ui-copy"/></svg></button></div><div class="api-endpoint"><span class="api-endpoint-label">Model</span><code>cloudless</code><button class="api-copy"><svg class="ui-icon"><use href="#ui-copy"/></svg></button></div><div class="api-endpoint"><span class="api-endpoint-label">Backed by</span><code>Qwen2.5-1.5B-Instruct</code><span></span></div></div>
+      <div class="api-code"><div class="code-box"><pre>curl http://cloudless.local:8765/v1/chat/completions \
+  -H "Authorization: Bearer YOUR_KEY" \
+  -d '{"model":"cloudless","messages":[...]}'</pre></div><button class="api-copy"><svg class="ui-icon"><use href="#ui-copy"/></svg></button></div>
+    </section>
+    <section class="api-section"><div class="api-section-head"><div><div class="api-section-title">API keys</div><div class="api-section-desc">Keys control who can send requests to your model.</div></div><button class="btn primary">Generate key</button></div><div class="api-keys-empty">No keys yet. Generate one when you are ready to connect a client.</div></section>
+    <section class="api-section"><div class="api-section-head"><div><div class="api-section-title">Network access</div><div class="api-section-desc">Choose where the API can be reached. Authentication is always required.</div></div></div><div class="api-access-grid"><div class="api-access-card"><div class="api-access-top"><span class="api-access-icon"><svg class="ui-icon"><use href="#ui-network"/></svg></span><span class="api-access-name">Local network</span><label class="switch"><input type="checkbox" checked><span class="track2"></span></label></div><div class="fld-help">Reach Cloudless from devices on your Wi-Fi.</div></div><div class="api-access-card"><div class="api-access-top"><span class="api-access-icon"><svg class="ui-icon"><use href="#ui-expand"/></svg></span><span class="api-access-name">Public link</span><label class="switch"><input type="checkbox"><span class="track2"></span></label></div><div class="fld-help">Create a secure internet address for approved remote clients.</div></div></div></section>
+  </div></div></div>
+</div></div>
+"@
+
+ShotFirstLaunchState 'first-launch-seat' 1180 760 'seat'
+ShotFirstLaunchState 'first-launch-word' 1180 760 'word'
+ShotFirstLaunchState 'first-launch-mobile' 600 900 'word'
 Shot 'settings'   $set  900 720
 Shot 'appearance' $appearance 900 720
+Shot 'metrics-engine' $infEngine 1180 840
+Shot 'metrics-engine-compact' $infEngine 700 900
+Shot 'metrics-api' $infApi 1180 900
+Shot 'metrics-api-compact' $infApi 700 940
 Shot 'models'     $mm   1320 940
+Shot 'models-compact' $mm 760 940
+Shot 'models-mobile' $mm 600 940
+Shot 'model-detail' $mmDetail 1040 760
+Shot 'model-detail-compact' $mmDetail 760 900
+Shot 'model-detail-mobile' $mmDetail 600 900
 Shot 'launcher'   $lp   1180 820
 Shot 'onboarding' $ob   720 640
 Shot 'assistant'  $asst 520 720

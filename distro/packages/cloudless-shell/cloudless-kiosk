@@ -1,0 +1,56 @@
+#!/bin/sh
+set -u
+export HOME="${HOME:-/home/cloudless}"
+export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+export XDG_CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
+export PATH="/snap/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+mkdir -p "$XDG_CACHE_HOME"
+LOG="$XDG_CACHE_HOME/cloudless-kiosk.log"
+exec >>"$LOG" 2>&1
+
+echo "$(date -Is) Cloudless kiosk starting"
+
+while ! curl --silent --fail --max-time 2 http://127.0.0.1:8765/api/health >/dev/null; do sleep 1; done
+echo "$(date -Is) Cloudless API is ready"
+
+find_browser() {
+    for candidate in chromium chromium-browser google-chrome-stable firefox; do
+        if command -v "$candidate" >/dev/null 2>&1; then command -v "$candidate"; return 0; fi
+    done
+    return 1
+}
+# Snap mounts can finish after LightDM starts on the first boot. Keep retrying
+# instead of leaving users at Openbox's empty black background when Chromium's
+# first launch races its core/base snap activation.
+while :; do
+    if ! BROWSER="$(find_browser)"; then
+        echo "$(date -Is) browser command not available yet; retrying"
+        sleep 2
+        continue
+    fi
+
+    echo "$(date -Is) launching $BROWSER"
+    case "$(basename "$BROWSER")" in
+        firefox)
+            "$BROWSER" --kiosk http://127.0.0.1:8765
+            ;;
+        *)
+            # Strictly confined Chromium snaps cannot write arbitrary hidden
+            # paths such as ~/.config. Their own ~/snap/<name>/common tree is
+            # writable and persists across snap revisions. Native browsers keep
+            # using the standard XDG configuration directory.
+            case "$BROWSER" in
+                /snap/*|*/snap/*) PROFILE_DIR="$HOME/snap/chromium/common/cloudless-browser" ;;
+                *) PROFILE_DIR="$XDG_CONFIG_HOME/cloudless-browser" ;;
+            esac
+            mkdir -p "$PROFILE_DIR"
+            "$BROWSER" --kiosk --app=http://127.0.0.1:8765 \
+                --user-data-dir="$PROFILE_DIR" --no-first-run \
+                --disable-session-crashed-bubble --disable-infobars --disable-pinch \
+                --overscroll-history-navigation=0
+            ;;
+    esac
+    status=$?
+    echo "$(date -Is) browser exited with status $status; retrying in 3 seconds"
+    sleep 3
+done

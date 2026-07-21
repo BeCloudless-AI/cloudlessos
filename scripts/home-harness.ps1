@@ -1,5 +1,11 @@
 # Renders the redesigned home (real CSS) populated with representative content:
 # frosted menubar, hero + ask bar, app grid, glass Hardware + Places cards.
+param(
+  [int]$Width = 1320,
+  [int]$Height = 940,
+  [string]$Name = 'home-render'
+)
+
 $src = 'D:\Cloudless\orchestrator\internal\api\web\index.html'
 $h = Get-Content $src -Raw -Encoding UTF8
 $style = [regex]::Match($h, '(?s)<style>.*?</style>').Value
@@ -15,7 +21,8 @@ $apps = @(
 )
 $tiles = ($apps | ForEach-Object {
   $running = if ($_[2] -like '*running*') { ' running' } else { '' }
-  "<div class=`"tile$running`"><div class=`"ic`">$($_[1])</div><div class=`"nm`">$($_[0])</div><div class=`"meta`">$($_[2])</div></div>"
+  $stop = if ($running) { '<button class="stopx" style="display:grid"><svg class="ui-icon sm"><use href="#ui-close"/></svg></button>' } else { '' }
+  "<div class=`"tile$running`"><div class=`"ic`">$($_[1])</div>$stop<div class=`"tile-copy`"><div class=`"nm`">$($_[0])</div><div class=`"meta`">$($_[2])</div></div><div class=`"tbar`"><i></i></div></div>"
 }) -join ''
 
 $body = @"
@@ -27,7 +34,7 @@ $sprite
   <div class="mi"><span class="led ok"></span> Ready</div>
   <div class="mi mi-net"><span class="led net-online"></span> Network</div>
   <div id="clock">19:53</div>
-  <button class="gear"><svg class="ui-icon"><use href="#ui-metrics"/></svg></button><button class="gear"><svg class="ui-icon"><use href="#ui-models"/></svg></button><button class="gear"><svg class="ui-icon"><use href="#ui-settings"/></svg></button><button class="gear shutdown"><svg class="ui-icon"><use href="#ui-power"/></svg></button>
+  <button class="gear shutdown"><svg class="ui-icon"><use href="#ui-power"/></svg></button>
 </div>
 <main>
   <div class="hero">
@@ -86,10 +93,10 @@ $sprite
 "@
 $freeze = "<style>*,*::before,*::after{animation:none!important;transition:none!important}</style>"
 $page = "<!doctype html><html><head><meta charset=`"utf-8`"><meta name=`"viewport`" content=`"width=device-width, initial-scale=1`">$style$freeze</head><body>$body</body></html>"
-$tmp = "$env:TEMP\home-render.html"
+$tmp = "$env:TEMP\$Name.html"
 [System.IO.File]::WriteAllText($tmp, $page, (New-Object System.Text.UTF8Encoding($false)))
 $edge = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
-$out = "$env:TEMP\home-render.png"
-& $edge --headless=new --disable-gpu --hide-scrollbars --force-device-scale-factor=1 --window-size=1320,940 --screenshot="$out" ("file:///" + ($tmp -replace '\\','/')) 2>$null
+$out = "$env:TEMP\$Name.png"
+& $edge --headless=new --disable-gpu --hide-scrollbars --force-device-scale-factor=1 "--window-size=$Width,$Height" --screenshot="$out" ("file:///" + ($tmp -replace '\\','/')) 2>$null
 Start-Sleep -Milliseconds 900
 if (Test-Path $out) { "OK $out" } else { "NO SHOT" }

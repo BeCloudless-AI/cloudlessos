@@ -1,0 +1,78 @@
+# Building CloudlessOS
+
+CloudlessOS is built as an Ubuntu Server 24.04 appliance installer. The standard ISO is
+an online installer: it contains Cloudless itself, while GPU drivers, the browser,
+container images, and models are obtained during installation or first boot.
+
+## Build host
+
+Use Ubuntu 24.04 amd64 with at least 20 GB free. WSL2 can build the packages and ISO,
+but it cannot provide a representative firmware, Plymouth, display-manager, or NVIDIA
+installation test.
+
+```bash
+sudo apt update
+sudo apt install -y curl dpkg-dev imagemagick librsvg2-bin xorriso
+bash scripts/install-go.sh
+bash distro/scripts/test-packages.sh
+bash distro/scripts/build-iso.sh
+bash distro/scripts/test-iso.sh
+```
+
+If Docker is the only Linux build environment available, validate packages in the
+official Go build image:
+
+```bash
+docker run --rm -v "$PWD:/src" -w /src golang:1.26-bookworm bash distro/scripts/container-test.sh
+```
+
+Replace the final script with `distro/scripts/container-build-iso.sh` to produce the
+complete ISO from the same container.
+
+For an emulated firmware smoke test, install QEMU, OVMF, Socat, and ImageMagick and run
+`distro/scripts/test-boot.sh`. It captures BIOS and UEFI framebuffers under
+`distro/out/boot-tests/`.
+
+The ISO and SHA-256 file are written to `distro/out/`. Set
+`CLOUDLESS_BASE_ISO=/path/to/ubuntu.iso` to use an existing Ubuntu Server image.
+
+## Installation behavior
+
+The installer asks for networking, target Grstorage, and administrator identity. It has no
+default password and does not silently wipe a disk. Cloudless packages are installed from
+the ISO after Ubuntu lays down the base system.
+
+On the installed system:
+
+- `cloudless-hardware.service` detects NVIDIA hardware and configures the Ubuntu driver,
+  Docker, and NVIDIA Container Toolkit.
+- `cloudlessd.service` serves the OS on loopback ports 8765 and 8766.
+- LightDM signs into an unprivileged `cloudless` account and launches the browser in kiosk
+  mode through Openbox.
+- `cloudless-firstboot.service` writes `/var/lib/cloudless/validation-report.txt`.
+
+The first hardware setup requires internet access and may take several minutes. A driver
+installation may require an additional reboot before `nvidia-smi` becomes available.
+
+## Write the ISO to USB
+
+Verify the SHA-256 file, then use Rufus in DD mode, balenaEtcher, GNOME Disks, or a raw
+Linux write. Double-check the target before using `dd`:
+
+```bash
+sudo dd if=distro/out/cloudlessos-0.1.0-dev-amd64.iso of=/dev/sdX bs=16M status=progress conv=fsync
+```
+
+## Release test matrix
+
+Before publishing an image, test:
+
+1. QEMU with UEFI firmware and an empty virtual disk.
+2. QEMU with legacy BIOS.
+3. Physical NVIDIA hardware with Secure Boot enabled and disabled.
+4. A machine without NVIDIA hardware, which must reach the limited-mode UI.
+5. Installation with interrupted networking, which must fail clearly.
+
+This development image is not an offline installer or recovery image. It is not ready for
+production distribution until the GPU matrix, update path, recovery, and licensing review
+are complete.

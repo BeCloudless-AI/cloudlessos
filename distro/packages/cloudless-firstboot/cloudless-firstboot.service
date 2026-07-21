@@ -1,0 +1,13 @@
+[Unit]
+Description=Validate the first CloudlessOS boot
+After=cloudlessd.service graphical.target
+Wants=cloudlessd.service
+
+[Service]
+Type=oneshot
+ExecStartPre=/bin/sleep 5
+ExecStart=/usr/lib/cloudless/cloudless-validate
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

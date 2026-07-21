@@ -697,6 +697,93 @@
   .ec-foot { margin-top: auto; }
   .ec-active { font-size: 12px; font-weight: 700; color: var(--blue); }
 
+  /* Inference hub: engine selection and API access */
+  .inf-tabs { width: 100%; margin-bottom: 18px; overflow-x: auto; scrollbar-width: none; }
+  .inf-tabs::-webkit-scrollbar { display: none; }
+  .inf-tabs .mm-tab { flex: 1 0 auto; min-width: 104px; }
+  .inf-tabs .ui-icon { width: 14px; height: 14px; }
+  .inf-page { display: flex; flex-direction: column; gap: 14px; }
+  .inf-page-hero {
+    display: flex; align-items: center; gap: 14px; padding: 18px;
+    border: 1px solid color-mix(in srgb, var(--blue) 18%, var(--hair)); border-radius: 16px;
+    background: linear-gradient(145deg, color-mix(in srgb, var(--blue) 8%, var(--card)), var(--card));
+  }
+  .inf-page-icon {
+    width: 48px; height: 48px; flex: none; display: grid; place-items: center;
+    border-radius: 13px; color: var(--blue); background: var(--blue-soft);
+    border: 1px solid color-mix(in srgb, var(--blue) 24%, var(--hair));
+  }
+  .inf-page-icon .ui-icon { width: 22px; height: 22px; }
+  .inf-page-copy { min-width: 0; flex: 1; }
+  .inf-page-eyebrow { color: var(--blue); font-size: 9px; font-weight: 800; letter-spacing: .75px; text-transform: uppercase; }
+  .inf-page-title { margin-top: 3px; color: var(--ink); font-size: 18px; font-weight: 780; letter-spacing: -.35px; }
+  .inf-page-desc { margin-top: 4px; max-width: 560px; color: var(--muted); font-size: 11.5px; line-height: 1.5; }
+  .inf-state-pill {
+    min-height: 28px; padding: 6px 10px; flex: none; display: inline-flex; align-items: center; gap: 6px;
+    border: 1px solid var(--hair); border-radius: 999px; background: var(--panel-2);
+    color: var(--muted); font-size: 9.5px; font-weight: 800; letter-spacing: .45px; text-transform: uppercase;
+  }
+  .inf-state-pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .inf-state-pill.ready { color: #2faa5b; background: color-mix(in srgb, #2faa5b 9%, var(--card)); border-color: color-mix(in srgb, #2faa5b 25%, var(--hair)); }
+  .ec-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 11px; }
+  .ec {
+    min-width: 0; min-height: 250px; padding: 16px; border-color: var(--hair); border-radius: 15px;
+    background: color-mix(in srgb, var(--card) 88%, transparent); box-shadow: none;
+  }
+  .ec.on {
+    border-color: color-mix(in srgb, var(--blue) 55%, var(--line-2));
+    background: linear-gradient(145deg, color-mix(in srgb, var(--blue) 9%, var(--card)), var(--card));
+    box-shadow: inset 3px 0 0 var(--blue);
+  }
+  .ec-head { align-items: flex-start; gap: 10px; }
+  .ec-ic { width: 38px; height: 38px; border-radius: 11px; color: var(--blue); background: var(--blue-soft); }
+  .ec-ic .ui-icon { width: 18px; height: 18px; }
+  .ec-title { min-width: 0; flex: 1; }
+  .ec-name { display: block; font-size: 14px; font-weight: 780; line-height: 1.25; }
+  .ec-runs { display: inline-block; margin: 4px 0 0; padding: 2px 6px; border-radius: 6px; }
+  .ec-best { min-height: 38px; margin: 12px 0 10px; color: var(--ink); font-size: 12.5px; font-weight: 700; line-height: 1.45; }
+  .ec-traits { gap: 7px; margin-bottom: 16px; }
+  .ec-traits li { padding-left: 17px; color: var(--muted); font-size: 11px; line-height: 1.45; }
+  .ec-traits li::before { content: "✓"; color: var(--blue); font-weight: 800; }
+  .ec-foot { min-height: 34px; padding-top: 12px; display: flex; align-items: center; border-top: 1px solid var(--hair); }
+  .ec-foot .btn { width: 100%; min-height: 34px; }
+  .ec-active { display: inline-flex; align-items: center; gap: 6px; font-size: 10px; text-transform: uppercase; letter-spacing: .45px; }
+  .ec-active::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+  .api-section {
+    padding: 16px; border: 1px solid var(--hair); border-radius: 15px;
+    background: color-mix(in srgb, var(--card) 88%, transparent);
+  }
+  .api-section-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 13px; }
+  .api-section-title { color: var(--ink); font-size: 13.5px; font-weight: 760; letter-spacing: -.15px; }
+  .api-section-desc { margin-top: 3px; color: var(--muted); font-size: 11px; line-height: 1.45; }
+  .api-endpoints { overflow: hidden; border: 1px solid var(--hair); border-radius: 11px; background: var(--panel-2); }
+  .api-endpoint { min-height: 44px; padding: 8px 10px 8px 12px; display: grid; grid-template-columns: 88px minmax(0, 1fr) 30px; align-items: center; gap: 10px; }
+  .api-endpoint + .api-endpoint { border-top: 1px solid var(--hair); }
+  .api-endpoint-label { color: var(--muted); font-size: 9px; font-weight: 750; letter-spacing: .45px; text-transform: uppercase; }
+  .api-endpoint code { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); font-size: 11.5px; }
+  .api-copy {
+    width: 30px; height: 30px; display: grid; place-items: center; border: 1px solid var(--hair);
+    border-radius: 8px; background: var(--card); color: var(--muted); cursor: pointer;
+  }
+  .api-copy:hover { color: var(--blue); border-color: color-mix(in srgb, var(--blue) 32%, var(--hair)); background: var(--blue-soft); }
+  .api-copy .ui-icon { width: 13px; height: 13px; }
+  .api-code { position: relative; margin-top: 10px; }
+  .api-code .code-box { margin: 0; padding-right: 48px; border-radius: 11px; }
+  .api-code .api-copy { position: absolute; right: 9px; top: 9px; }
+  .api-keys-empty { padding: 18px; text-align: center; border: 1px dashed var(--line-2); border-radius: 11px; color: var(--muted); font-size: 11.5px; }
+  .api-section .key-row { padding: 10px 0; }
+  .api-section .cfg-actions { margin-top: 12px; }
+  .api-access-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .api-access-card { padding: 13px; border: 1px solid var(--hair); border-radius: 12px; background: var(--panel-2); }
+  .api-access-top { display: flex; align-items: center; gap: 10px; }
+  .api-access-icon { width: 32px; height: 32px; flex: none; display: grid; place-items: center; border-radius: 9px; color: var(--blue); background: var(--blue-soft); }
+  .api-access-icon .ui-icon { width: 15px; height: 15px; }
+  .api-access-name { flex: 1; color: var(--ink); font-size: 12px; font-weight: 720; }
+  .api-access-card .fld-help { margin-top: 9px; line-height: 1.5; }
+  .api-warning { margin-top: 10px; display: flex; align-items: flex-start; gap: 9px; }
+  .api-warning .ui-icon { width: 14px; height: 14px; margin-top: 2px; flex: none; }
+
   /* places */
   .place { display: flex; align-items: center; gap: 13px; padding: 10px 11px; margin: 0 -11px;
     border-radius: 13px; cursor: pointer; transition: background 0.15s, box-shadow .15s; }
@@ -820,6 +907,25 @@
   .btn.primary { background: var(--blue); border-color: transparent; color: #fff; box-shadow: 0 8px 20px -8px color-mix(in srgb, var(--blue) 70%, transparent); }
   .btn.primary:hover { filter: brightness(1.08); background: var(--blue); }
   .btn.link { background: none; border: none; color: var(--muted); } .btn.link:hover { color: var(--ink); background: none; }
+
+  /* The original becloudless.ai scene runs in an isolated frame so app styles cannot distort it. */
+  .boot-intro {
+    position: fixed; inset: 0; z-index: 120; overflow: hidden; background: transparent;
+  }
+  .boot-intro.hidden { display: none; }
+  .boot-intro.out { pointer-events: none; }
+  .boot-dim {
+    position: absolute; inset: 0; z-index: 0; background: rgba(2, 5, 12, .42);
+    -webkit-backdrop-filter: brightness(.66) saturate(.78); backdrop-filter: brightness(.66) saturate(.78);
+    opacity: 1;
+  }
+  .boot-intro.play .boot-dim { animation: boot-dim-fade 5.2s cubic-bezier(.45,0,.2,1) forwards; }
+  .boot-intro iframe {
+    position: relative; z-index: 1; width: 100%; height: 100%; display: block;
+    border: 0; background: transparent; opacity: 1; transition: opacity .7s cubic-bezier(.4,0,.2,1);
+  }
+  .boot-intro.out iframe { opacity: 0; }
+  @keyframes boot-dim-fade { to { opacity: 0; } }
 
   /* ---------- fast-launch section header ---------- */
   .sec-row { display: flex; align-items: center; justify-content: space-between; margin: 0 0 20px; }
@@ -988,16 +1094,28 @@
     --shadow-sm: 0 12px 32px -22px rgba(19, 27, 56, .52);
     --glass-blur: 28px; --radius: 18px;
     --brand-mark: #315cf5;
+    --wall-motion: wall-mesh; --wall-speed: 34s; --wall-glow-speed: 24s; --wall-direction: alternate;
+    --wall-parallax-x: 0px; --wall-parallax-y: 0px;
+    --wall-glow-x: 0px; --wall-glow-y: 0px;
+    --wall-glow-a: rgba(49, 92, 245, .24); --wall-glow-b: rgba(255, 104, 70, .18);
+    --wall-glow-opacity: .58; --wall-blend: soft-light;
     --w-base: #e9edf5; --w1: #dce5ff; --w2: #f8dfd4; --w3: #d9e7ff;
     --w4: #d9d3f4; --w5: #d8ede9; --w6: #efe3ea;
   }
   html[data-theme="dawn"], html[data-theme="dusk"] {
     --brand-mark: #c75838;
+    --wall-motion: wall-solar;
+    --wall-speed: 29s; --wall-glow-speed: 20s; --wall-direction: alternate-reverse;
+    --wall-glow-a: rgba(255, 126, 79, .28); --wall-glow-b: rgba(118, 128, 235, .17);
     --bg: #ececf2; --w-base: #ececf2; --w1: #e1e5f8; --w2: #f4d8ca;
     --w3: #e4d9ed; --w4: #d8d7ee; --w5: #d5e8e4; --w6: #eee1e2;
   }
   html[data-theme="night"] {
     --brand-mark: #7896ff;
+    --wall-motion: wall-deep;
+    --wall-speed: 42s; --wall-glow-speed: 30s;
+    --wall-glow-a: rgba(76, 123, 255, .3); --wall-glow-b: rgba(160, 79, 210, .19);
+    --wall-glow-opacity: .66; --wall-blend: screen;
     --bg: #0b0e18; --ink: #f5f7ff; --ink-2: #c7cde0; --muted: #8f98af; --faint: #697188;
     --card: rgba(20, 25, 42, .87); --card-strong: rgba(17, 21, 36, .97); --card-solid: #161b2c;
     --icon: rgba(31, 38, 61, .96); --panel-2: rgba(255, 255, 255, .055); --control: rgba(255, 255, 255, .07);
@@ -1008,6 +1126,10 @@
   }
   html[data-theme="midnight"] {
     --brand-mark: #7898ff;
+    --wall-motion: wall-deep;
+    --wall-speed: 46s; --wall-glow-speed: 34s; --wall-direction: alternate-reverse;
+    --wall-glow-a: rgba(60, 107, 255, .32); --wall-glow-b: rgba(121, 72, 190, .21);
+    --wall-glow-opacity: .7; --wall-blend: screen;
     --bg: #080b14; --ink: #f7f8ff; --ink-2: #cbd2e8; --muted: #8e99b4; --faint: #65708c;
     --accent: #ff7255; --accent-2: #ff9b80; --accent-soft: rgba(255, 114, 85, .13);
     --blue: #7898ff; --blue-soft: rgba(120, 152, 255, .15);
@@ -1020,6 +1142,10 @@
   }
   html[data-theme="aurora"] {
     --brand-mark: #55d9c2;
+    --wall-motion: wall-aurora;
+    --wall-speed: 22s; --wall-glow-speed: 15s;
+    --wall-glow-a: rgba(50, 242, 201, .3); --wall-glow-b: rgba(112, 90, 255, .24);
+    --wall-glow-opacity: .76; --wall-blend: screen;
     --bg: #061514; --ink: #effffb; --ink-2: #bedbd4; --muted: #82a59d; --faint: #5f817a;
     --accent: #ff8a59; --accent-2: #ffc16b; --accent-soft: rgba(255, 138, 89, .13);
     --blue: #55d9c2; --blue-soft: rgba(85, 217, 194, .13);
@@ -1032,6 +1158,10 @@
   }
   html[data-theme="ember"] {
     --brand-mark: #c84b2b;
+    --wall-motion: wall-solar;
+    --wall-speed: 31s; --wall-glow-speed: 21s; --wall-direction: alternate-reverse;
+    --wall-glow-a: rgba(232, 77, 42, .26); --wall-glow-b: rgba(255, 177, 94, .2);
+    --wall-glow-opacity: .62; --wall-blend: soft-light;
     --bg: #f2e8df; --ink: #25130e; --ink-2: #5c3c32; --muted: #80665e; --faint: #a08a82;
     --accent: #e84d2a; --accent-2: #ff7951; --accent-soft: rgba(232, 77, 42, .12);
     --blue: #b7472d; --blue-soft: rgba(183, 71, 45, .1);
@@ -1044,6 +1174,10 @@
   }
   html[data-theme="sunbeam"] {
     --brand-mark: #d85a16;
+    --wall-motion: wall-sunbeam;
+    --wall-speed: 25s; --wall-glow-speed: 17s;
+    --wall-glow-a: rgba(255, 247, 132, .48); --wall-glow-b: rgba(255, 130, 29, .25);
+    --wall-glow-opacity: .76; --wall-blend: soft-light;
     --bg: #ffe36d; --ink: #2a1808; --ink-2: #62421f; --muted: #866942; --faint: #a68a62;
     --accent: #ff8a2f; --accent-2: #ffb436; --accent-soft: rgba(255, 138, 47, .16);
     --blue: #d85a16; --blue-soft: rgba(216, 90, 22, .12);
@@ -1055,15 +1189,116 @@
     --w4: #ffd27e; --w5: #ffa740; --w6: #fff3b8; --wall-veil: transparent;
   }
   body { font-size: 14px; overflow-x: hidden; }
+  .wall { transition: background-color .9s ease; }
   .wall::before {
-    inset: -18%; filter: saturate(.72);
+    inset: -22%; filter: saturate(.82); will-change: transform, background-position;
     background:
       radial-gradient(38% 45% at 12% 10%, var(--w1), transparent 70%),
       radial-gradient(36% 42% at 92% 4%, var(--w2), transparent 72%),
       radial-gradient(46% 52% at 54% 48%, var(--w5), transparent 72%),
       radial-gradient(38% 42% at 8% 96%, var(--w3), transparent 72%),
       radial-gradient(42% 48% at 94% 92%, var(--w4), transparent 70%);
-    background-size: auto; animation: drift 52s ease-in-out infinite alternate;
+    background-repeat: no-repeat;
+    background-size: 78% 80%, 72% 76%, 86% 88%, 74% 78%, 80% 82%;
+    background-position: 10% 5%, 88% 16%, 36% 58%, 13% 86%, 88% 82%;
+    animation: var(--wall-motion) var(--wall-speed) cubic-bezier(.45, .05, .25, 1) infinite var(--wall-direction);
+  }
+  .wall::after {
+    inset: -18%; pointer-events: none; will-change: transform, opacity;
+    background:
+      radial-gradient(34% 40% at 24% 28%, var(--wall-glow-a), transparent 72%),
+      radial-gradient(30% 38% at 76% 72%, var(--wall-glow-b), transparent 74%),
+      linear-gradient(var(--wall-veil), var(--wall-veil));
+    opacity: var(--wall-glow-opacity); mix-blend-mode: var(--wall-blend);
+    animation: wall-light var(--wall-glow-speed) ease-in-out infinite alternate;
+  }
+  @keyframes wall-mesh {
+    0% {
+      transform: translate3d(calc(-3% + var(--wall-parallax-x)), calc(-2% + var(--wall-parallax-y)), 0) scale(1.03);
+      background-position: -8% -6%, 108% -8%, 52% 44%, -6% 108%, 108% 106%;
+    }
+    34% {
+      transform: translate3d(calc(2% + var(--wall-parallax-x)), calc(-1% + var(--wall-parallax-y)), 0) scale(1.08);
+      background-position: 10% 5%, 88% 16%, 36% 58%, 13% 86%, 88% 82%;
+    }
+    68% {
+      transform: translate3d(calc(-1% + var(--wall-parallax-x)), calc(3% + var(--wall-parallax-y)), 0) scale(1.05);
+      background-position: 2% 18%, 98% -2%, 66% 38%, -2% 90%, 102% 96%;
+    }
+    100% {
+      transform: translate3d(calc(3% + var(--wall-parallax-x)), calc(1% + var(--wall-parallax-y)), 0) scale(1.09);
+      background-position: 16% -4%, 84% 10%, 46% 64%, 16% 82%, 82% 88%;
+    }
+  }
+  @keyframes wall-solar {
+    0% {
+      transform: translate3d(calc(-4% + var(--wall-parallax-x)), calc(2% + var(--wall-parallax-y)), 0) rotate(-1deg) scale(1.04);
+      background-position: -10% 12%, 104% -6%, 46% 48%, -4% 102%, 104% 96%;
+    }
+    50% {
+      transform: translate3d(calc(3% + var(--wall-parallax-x)), calc(-3% + var(--wall-parallax-y)), 0) rotate(1.5deg) scale(1.1);
+      background-position: 14% -4%, 84% 20%, 62% 58%, 15% 80%, 82% 88%;
+    }
+    100% {
+      transform: translate3d(calc(1% + var(--wall-parallax-x)), calc(4% + var(--wall-parallax-y)), 0) rotate(-.5deg) scale(1.06);
+      background-position: 4% 22%, 96% 4%, 34% 38%, -2% 88%, 102% 82%;
+    }
+  }
+  @keyframes wall-deep {
+    0% {
+      transform: translate3d(calc(-2% + var(--wall-parallax-x)), calc(-1% + var(--wall-parallax-y)), 0) scale(1.05);
+      background-position: -4% 2%, 104% 4%, 54% 40%, 2% 100%, 98% 102%;
+    }
+    50% {
+      transform: translate3d(calc(1% + var(--wall-parallax-x)), calc(2% + var(--wall-parallax-y)), 0) scale(1.08);
+      background-position: 7% 14%, 91% -3%, 42% 60%, 10% 86%, 88% 90%;
+    }
+    100% {
+      transform: translate3d(calc(3% + var(--wall-parallax-x)), calc(-2% + var(--wall-parallax-y)), 0) scale(1.06);
+      background-position: 16% -2%, 82% 13%, 66% 48%, -4% 92%, 102% 84%;
+    }
+  }
+  @keyframes wall-aurora {
+    0% {
+      transform: translate3d(calc(-3% + var(--wall-parallax-x)), calc(5% + var(--wall-parallax-y)), 0) skewX(-1.5deg) scale(1.06);
+      background-position: -6% 20%, 104% -8%, 42% 70%, 4% 88%, 96% 104%;
+    }
+    45% {
+      transform: translate3d(calc(2% + var(--wall-parallax-x)), calc(-5% + var(--wall-parallax-y)), 0) skewX(1deg) scale(1.12);
+      background-position: 12% -8%, 86% 24%, 62% 32%, 16% 72%, 80% 88%;
+    }
+    100% {
+      transform: translate3d(calc(4% + var(--wall-parallax-x)), calc(3% + var(--wall-parallax-y)), 0) skewX(-.5deg) scale(1.08);
+      background-position: 2% 12%, 98% 2%, 32% 62%, -4% 94%, 104% 78%;
+    }
+  }
+  @keyframes wall-sunbeam {
+    0% {
+      transform: translate3d(calc(-2% + var(--wall-parallax-x)), calc(-2% + var(--wall-parallax-y)), 0) rotate(-.6deg) scale(1.04);
+      background-position: -4% -4%, 106% 4%, 50% 46%, 2% 104%, 100% 100%;
+    }
+    38% {
+      transform: translate3d(calc(3% + var(--wall-parallax-x)), calc(1% + var(--wall-parallax-y)), 0) rotate(.8deg) scale(1.12);
+      background-position: 12% 10%, 86% -4%, 38% 62%, 14% 82%, 84% 88%;
+    }
+    72% {
+      transform: translate3d(calc(-1% + var(--wall-parallax-x)), calc(4% + var(--wall-parallax-y)), 0) rotate(-.3deg) scale(1.08);
+      background-position: 2% 20%, 98% 18%, 66% 36%, -2% 88%, 104% 78%;
+    }
+    100% {
+      transform: translate3d(calc(4% + var(--wall-parallax-x)), calc(-3% + var(--wall-parallax-y)), 0) rotate(.5deg) scale(1.1);
+      background-position: 16% -2%, 82% 12%, 46% 66%, 18% 80%, 80% 94%;
+    }
+  }
+  @keyframes wall-light {
+    0% { transform: translate3d(calc(-5% + var(--wall-glow-x)), calc(-3% + var(--wall-glow-y)), 0) rotate(-3deg) scale(1); opacity: var(--wall-glow-opacity); }
+    48% { transform: translate3d(calc(4% + var(--wall-glow-x)), calc(2% + var(--wall-glow-y)), 0) rotate(2deg) scale(1.08); opacity: var(--wall-glow-opacity); }
+    100% { transform: translate3d(calc(-1% + var(--wall-glow-x)), calc(5% + var(--wall-glow-y)), 0) rotate(-1deg) scale(1.04); opacity: var(--wall-glow-opacity); }
+  }
+  html.wall-motion-paused .wall::before,
+  html.wall-motion-paused .wall::after { animation-play-state: paused; }
+  @media (prefers-reduced-motion: reduce) {
+    .wall::before, .wall::after { animation: none; transform: none; }
   }
   button:focus-visible, input:focus-visible, [tabindex]:focus-visible {
     outline: 3px solid color-mix(in srgb, var(--blue) 35%, transparent);
@@ -1158,28 +1393,48 @@
     margin: 0 0 16px; padding: 22px; border: 1px solid var(--card-edge); border-radius: 20px;
     background: var(--card); box-shadow: var(--shadow);
   }
-  .sec-row { margin-bottom: 15px; }
-  .sec { font-size: 15px; font-weight: 750; letter-spacing: -.25px; }
-  .sec-act { padding: 7px 11px; background: var(--panel-2); }
-  .sec-act { display: inline-flex; align-items: center; gap: 7px; }
+  .sec-row { min-height: 32px; margin-bottom: 15px; }
+  .sec { font-size: 15px; font-weight: 750; line-height: 1.2; letter-spacing: -.25px; }
+  .sec-act {
+    min-height: 32px; padding: 6px 11px; display: inline-flex; align-items: center; gap: 7px;
+    white-space: nowrap; line-height: 1; background: var(--panel-2);
+  }
   .pad { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 9px; }
   .tile {
-    width: auto; min-width: 0; display: grid; grid-template-columns: 50px minmax(0, 1fr);
-    grid-template-rows: auto auto; column-gap: 12px; align-items: center; text-align: left;
+    position: relative; width: auto; min-width: 0; min-height: 68px; display: flex;
+    align-items: center; gap: 10px; text-align: left; overflow: visible;
     padding: 10px; border: 1px solid var(--hair); border-radius: 14px; background: var(--control);
     transition: border-color .16s, background .16s, transform .16s;
   }
   .tile:hover { border-color: color-mix(in srgb, var(--blue) 34%, var(--line-2)); background: var(--card-solid); transform: translateY(-1px); }
-  .ic {
-    grid-row: 1 / 3; width: 50px; height: 50px; margin: 0; border-radius: 14px; font-size: 23px;
+  .tile .ic {
+    flex: 0 0 46px; width: 46px; height: 46px; margin: 0; border-radius: 13px; font-size: 22px;
+    line-height: 1;
     box-shadow: var(--shadow-sm); transition: transform .18s, box-shadow .18s;
   }
   .ic::after { opacity: .52; }
   .tile .ic:hover { transform: none; box-shadow: var(--shadow-sm); }
-  .nm { align-self: end; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 700; }
-  .meta { align-self: start; margin-top: 1px; min-height: 14px; font-size: 10.5px; }
-  .tbar { grid-column: 1 / -1; width: 100%; margin-top: 7px; }
-  .stopx { right: -5px; top: -5px; }
+  .tile-copy {
+    min-width: 0; flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 3px;
+  }
+  .nm {
+    width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-size: 13px; font-weight: 700; line-height: 1.25;
+  }
+  .meta {
+    width: 100%; min-height: 13px; margin: 0; overflow: hidden; text-overflow: ellipsis;
+    white-space: nowrap; font-size: 10.5px; line-height: 1.25;
+  }
+  .tbar {
+    position: absolute; left: 10px; right: 10px; bottom: 4px; width: auto; margin: 0;
+  }
+  .stopx {
+    left: auto; right: 7px; top: 7px; width: 20px; height: 20px; padding: 0;
+    border: 2px solid var(--card-solid); background: var(--ink); color: var(--card-solid);
+    box-shadow: 0 5px 12px -6px rgba(0, 0, 0, .65); z-index: 2;
+  }
+  .tile.running:hover .stopx, .stopx:hover { display: grid; }
+  .stopx .ui-icon { width: 10px; height: 10px; stroke-width: 2.5; }
   .pad-empty { grid-column: 1 / -1; padding: 20px; border-radius: 12px; background: var(--panel-2); }
 
   .cards { grid-template-columns: minmax(0, 1.25fr) minmax(300px, .75fr); gap: 16px; }
@@ -1195,6 +1450,9 @@
   .place { padding: 10px; margin: 0 -10px; border: 1px solid transparent; }
   .place:hover { border-color: var(--hair); background: var(--control); box-shadow: none; }
   .place .pic { width: 34px; height: 34px; border-radius: 10px; box-shadow: none; }
+  .pl-go { width: 64px; justify-content: flex-end; }
+  .pl-go-tx { max-width: 44px; opacity: 0; }
+  .place:hover .pl-go-tx { max-width: 44px; opacity: 1; }
 
   /* Windows and sheets share a single, non-imitative Cloudless language. */
   .overlay { padding: 76px 24px 24px 94px; background: rgba(11, 14, 25, .34); backdrop-filter: blur(12px); }
@@ -1223,6 +1481,161 @@
   .li.active, .nav-item.active { background: var(--blue-soft); color: var(--blue); }
   .mdl, .ec, .inf-metric, .us-tile { box-shadow: none; }
   .mdl:hover, .ec:hover { transform: translateY(-1px); }
+  .lp-back {
+    min-height: 34px; margin: 0 0 18px; padding: 7px 11px 7px 9px;
+    display: inline-flex; align-items: center; gap: 7px;
+    border: 1px solid var(--hair); border-radius: 9px; background: var(--panel-2);
+    color: var(--ink-2); font: inherit; font-size: 12px; font-weight: 650;
+    line-height: 1; cursor: pointer; transition: color .15s, border-color .15s, background .15s, transform .15s;
+  }
+  .lp-back .ui-icon { width: 14px; height: 14px; transform: rotate(180deg); }
+  .lp-back:hover {
+    color: var(--blue); border-color: color-mix(in srgb, var(--blue) 35%, var(--line-2));
+    background: var(--blue-soft); transform: translateX(-1px);
+  }
+
+  /* Model Manager: catalogue-first hierarchy with a calm, readable density. */
+  .mm .mm-head { min-height: 70px; padding: 0 22px; }
+  .mm-head-icon {
+    width: 36px; height: 36px; flex: none; display: grid; place-items: center;
+    border-radius: 11px; color: var(--blue); background: var(--blue-soft);
+    border: 1px solid color-mix(in srgb, var(--blue) 20%, var(--hair));
+  }
+  .mm-head-icon .ui-icon { width: 18px; height: 18px; }
+  .mm-head-copy { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .mm-head-sub { color: var(--muted); font-size: 10.5px; line-height: 1.2; }
+  .mm-body { padding: 22px 28px 36px; }
+  .mm-tabs {
+    width: fit-content; max-width: 100%; gap: 3px; margin: 0 0 20px; padding: 4px;
+    border: 1px solid var(--hair); border-radius: 12px; background: var(--panel-2);
+  }
+  .mm-tab {
+    min-height: 36px; margin: 0; padding: 7px 13px; display: inline-flex; align-items: center; gap: 8px;
+    border: 0; border-radius: 8px; color: var(--muted); font-size: 12px; font-weight: 650;
+  }
+  .mm-tab .ui-icon { width: 15px; height: 15px; }
+  .mm-tab:hover { color: var(--ink); background: color-mix(in srgb, var(--control) 65%, transparent); }
+  .mm-tab.on { color: var(--blue); border: 0; background: var(--card-strong); box-shadow: 0 4px 12px -9px rgba(9, 18, 48, .65); }
+  .mm-bar {
+    margin: 0 0 12px; padding: 14px; display: grid; grid-template-columns: auto minmax(260px, 420px);
+    align-items: center; gap: 16px; border: 1px solid var(--hair); border-radius: 14px;
+    background: color-mix(in srgb, var(--panel-2) 70%, transparent);
+  }
+  .mm-machine { min-width: 0; display: flex; align-items: center; gap: 10px; color: var(--blue); }
+  .mm-machine > .ui-icon { width: 19px; height: 19px; flex: none; }
+  .mm-machine > span { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .mm-machine small { color: var(--muted); font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: .55px; }
+  .mm-machine b { color: var(--ink); font-size: 13px; font-weight: 750; font-variant-numeric: tabular-nums; }
+  .mm-search { position: relative; width: 100%; display: flex; align-items: center; }
+  .mm-search > .ui-icon { position: absolute; left: 12px; width: 16px; height: 16px; color: var(--faint); pointer-events: none; }
+  .mm-search input {
+    width: 100%; max-width: none; min-height: 40px; padding: 9px 13px 9px 38px;
+    border-radius: 10px; background: var(--card-strong);
+  }
+  .mm-filter-row { min-height: 34px; display: flex; align-items: center; gap: 10px; margin: 0 2px 18px; }
+  .mm-filter-label { color: var(--faint); font-size: 9px; font-weight: 750; letter-spacing: .65px; text-transform: uppercase; }
+  .mm-filters { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; margin: 0; }
+  .mm-chip { min-height: 30px; padding: 6px 11px; border-radius: 8px; font-size: 11px; font-weight: 650; }
+  .mm-result-count { margin-left: auto; color: var(--muted); font-size: 10.5px; font-variant-numeric: tabular-nums; }
+  .mdl-sec {
+    display: flex; align-items: center; gap: 8px; margin: 22px 2px 10px;
+    color: var(--ink-2); font-size: 10px; font-weight: 750; letter-spacing: .55px; text-transform: uppercase;
+  }
+  .mdl-sec:first-of-type { margin-top: 0; }
+  .mdl-count {
+    min-width: 20px; height: 20px; padding: 0 6px; display: inline-grid; place-items: center;
+    border-radius: 999px; color: var(--muted); background: var(--panel-2);
+    border: 1px solid var(--hair); font-size: 9.5px; letter-spacing: 0;
+  }
+  .mdl-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  .mdl {
+    min-width: 0; min-height: 210px; gap: 11px; padding: 15px; border-radius: 15px;
+    background: color-mix(in srgb, var(--card) 88%, transparent); border-color: var(--hair);
+    box-shadow: none; overflow: hidden;
+  }
+  .mdl:hover {
+    border-color: color-mix(in srgb, var(--blue) 40%, var(--line-2));
+    background: var(--card-solid); transform: translateY(-2px);
+    box-shadow: 0 16px 30px -24px color-mix(in srgb, var(--blue) 55%, transparent);
+  }
+  .mdl.on {
+    border-color: color-mix(in srgb, var(--blue) 55%, var(--line-2));
+    background: linear-gradient(145deg, color-mix(in srgb, var(--blue) 9%, var(--card)), var(--card));
+    box-shadow: inset 3px 0 0 var(--blue);
+  }
+  .mdl.rec:not(.on) { border-color: var(--hair); }
+  .mdl.fit-over { opacity: 1; }
+  .mdl-top { min-width: 0; align-items: flex-start; gap: 10px; }
+  .mdl-icon {
+    width: 38px; height: 38px; flex: none; display: grid; place-items: center;
+    border-radius: 11px; color: var(--blue); background: var(--blue-soft);
+    border: 1px solid color-mix(in srgb, var(--blue) 18%, var(--hair));
+  }
+  .mdl-icon.image { color: var(--accent); background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 20%, var(--hair)); }
+  .mdl-icon .ui-icon { width: 18px; height: 18px; }
+  .mdl-title { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 4px; }
+  .mdl-name {
+    display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-size: 14px; font-weight: 760; line-height: 1.25; letter-spacing: -.15px;
+  }
+  .mdl-meta {
+    display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    color: var(--muted); font-size: 10.5px; line-height: 1.3;
+  }
+  .mdl-status {
+    min-height: 23px; padding: 4px 7px; flex: none; display: inline-flex; align-items: center; gap: 5px;
+    border-radius: 7px; color: var(--muted); background: var(--panel-2);
+    border: 1px solid var(--hair); font-size: 9px; font-weight: 750; text-transform: uppercase; letter-spacing: .3px;
+  }
+  .mdl-status.active { color: var(--blue); background: var(--blue-soft); border-color: color-mix(in srgb, var(--blue) 25%, var(--hair)); }
+  .mdl-status i { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+  .mdl-notes {
+    min-height: 45px; margin: 0; display: -webkit-box; overflow: hidden;
+    -webkit-box-orient: vertical; -webkit-line-clamp: 3;
+    color: var(--ink-2); font-size: 11.5px; line-height: 1.48;
+  }
+  .mdl-tags { min-height: 22px; margin: 0; align-content: flex-start; }
+  .mdl-t, .mdl-cap { border-radius: 6px; padding: 2px 6px; font-size: 9.5px; }
+  .mdl-foot { min-height: 31px; margin-top: auto; padding-top: 10px; border-top: 1px solid var(--hair); }
+  .mdl-fit { font-size: 10px; }
+  .mdl-use {
+    width: 27px; height: 27px; flex: none; display: grid; place-items: center;
+    border-radius: 8px; color: var(--muted); background: var(--panel-2);
+    border: 1px solid var(--hair);
+  }
+  .mdl-use .ui-icon { width: 13px; height: 13px; }
+  .mdl:hover .mdl-use { color: var(--blue); border-color: color-mix(in srgb, var(--blue) 30%, var(--hair)); background: var(--blue-soft); }
+
+  .md-detail { max-width: 960px; margin: 0 auto; }
+  .md-hero {
+    margin: 0 0 14px; padding: 20px; align-items: center; gap: 16px;
+    border: 1px solid var(--hair); border-radius: 16px;
+    background: linear-gradient(145deg, color-mix(in srgb, var(--blue) 7%, var(--card)), var(--card));
+  }
+  .md-ic2 { width: 68px; height: 68px; border-radius: 17px; font-size: 31px; background: var(--card-strong); }
+  .md-eyebrow { margin-bottom: 4px; color: var(--blue); font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .7px; }
+  .md-nm { font-size: 24px; letter-spacing: -.55px; }
+  .md-sub { max-width: 620px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; word-break: normal; }
+  .md-caps { min-height: 0; margin-top: 9px; }
+  .md-hero-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+  .md-hero-actions .btn { min-height: 38px; padding: 8px 15px; }
+  .md-banner { margin-bottom: 12px; border-radius: 12px; }
+  .md-desc { max-width: 760px; margin: 18px 2px; font-size: 13.5px; line-height: 1.65; }
+  .md-specgrid { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 9px; margin-bottom: 14px; }
+  .md-spec { min-height: 64px; justify-content: center; border-radius: 12px; }
+  .md-fit {
+    margin: 0 0 14px; padding: 11px 13px; border-radius: 11px;
+    background: var(--panel-2); border: 1px solid var(--hair);
+  }
+  .md-adv {
+    margin-top: 16px; padding: 0; border: 1px solid var(--hair); border-radius: 12px;
+    background: color-mix(in srgb, var(--panel-2) 70%, transparent); overflow: hidden;
+  }
+  .md-adv-tog { width: 100%; padding: 12px 14px; justify-content: space-between; text-align: left; }
+  .md-adv-tog > span { flex: 1; }
+  .md-adv-tog > .ui-icon:first-child { width: 15px; height: 15px; }
+  .md-adv-tog .md-adv-chev { width: 14px; height: 14px; }
+  .md-adv-body { margin: 0; padding: 0 14px 14px; }
   .asst { right: 24px; bottom: 24px; border-radius: 20px; background: var(--card-strong); }
   .asst-head { min-height: 58px; }
   .msg.user { background: var(--blue); }
@@ -1271,6 +1684,20 @@
     main { padding-right: 26px; padding-left: 98px; }
     .cards { grid-template-columns: 1fr; }
     .pad { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .mdl-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .mdl { min-height: 224px; }
+    .mdl-top {
+      display: grid; grid-template-columns: 38px minmax(0, 1fr);
+      align-items: start; column-gap: 10px; row-gap: 7px;
+    }
+    .mdl-icon { grid-row: 1 / 3; }
+    .mdl-title { grid-column: 2; }
+    .mdl-status { grid-column: 2; justify-self: start; }
+    .mdl-name {
+      display: -webkit-box; white-space: normal;
+      -webkit-box-orient: vertical; -webkit-line-clamp: 2;
+    }
+    .ec-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
   @media (max-width: 700px) {
     .menubar { height: 56px; padding: 0 14px; }
@@ -1291,9 +1718,31 @@
     .ask::before { display: none; }
     .ghost-chat { grid-column: 1; }
     .apps-sec, .card { padding: 17px; }
-    .pad { grid-template-columns: 1fr; }
+    .pad { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .overlay { padding: 12px 12px 76px; }
     .lp, .mm, .set { width: 100%; max-width: 100%; height: 100%; max-height: none; border-radius: 16px; }
+    .mm .mm-head { min-height: 62px; padding: 0 15px; }
+    .mm-head-sub { display: none; }
+    .mm-body { padding: 16px 16px 28px; }
+    .mm-tabs { width: 100%; }
+    .mm-tab { flex: 1; justify-content: center; }
+    .mm-bar { grid-template-columns: 1fr; gap: 12px; padding: 12px; }
+    .mm-filter-row { align-items: flex-start; }
+    .mm-filter-label { display: none; }
+    .mm-result-count { padding-top: 8px; }
+    .mdl-grid { grid-template-columns: 1fr; }
+    .inf-tabs { padding-bottom: 2px; }
+    .inf-tabs .mm-tab { min-width: 112px; flex: 0 0 auto; }
+    .inf-page-hero { align-items: flex-start; flex-wrap: wrap; padding: 15px; }
+    .inf-page-hero .inf-state-pill { margin-left: 62px; }
+    .ec-grid, .api-access-grid { grid-template-columns: 1fr; }
+    .ec { min-height: 0; }
+    .api-section { padding: 14px; }
+    .api-section-head { align-items: center; }
+    .api-endpoint { grid-template-columns: 72px minmax(0, 1fr) 30px; }
+    .md-hero { align-items: flex-start; flex-wrap: wrap; padding: 16px; }
+    .md-hero-actions { width: 100%; margin: 2px 0 0 84px; }
+    .md-sub { white-space: normal; overflow-wrap: anywhere; }
     .lp-cols { grid-template-columns: 1fr; }
     .lp-side { width: auto; max-height: 38%; border-right: 0; border-bottom: 1px solid var(--hair); }
     .set-sidebar { width: 150px; }
@@ -1303,15 +1752,25 @@
     .hero h1 { font-size: 32px; }
     .ask input { font-size: 13px; }
     .card-head { margin-bottom: 15px; }
+    .pad { grid-template-columns: 1fr; }
     .set { flex-direction: column; }
     .set-sidebar { width: 100%; max-height: 120px; border-right: 0; border-bottom: 1px solid var(--hair); }
     .theme-grid { grid-template-columns: 1fr; }
+    .api-section-head { align-items: stretch; flex-direction: column; }
+    .api-section-head .btn { width: 100%; justify-content: center; }
+    .api-endpoint { grid-template-columns: 1fr 30px; gap: 5px 8px; }
+    .api-endpoint-label { grid-column: 1 / -1; }
   }
 </style>
 </head>
 <body>
 <div class="wall"></div>
 <canvas id="bg"></canvas>
+
+<div class="boot-intro hidden" id="boot-intro" aria-hidden="true">
+  <div class="boot-dim"></div>
+  <iframe id="boot-intro-frame" title="Cloudless launch animation" tabindex="-1"></iframe>
+</div>
 
 <!-- Cloudless brand mark (sparkle) — one source of truth, referenced via <use> -->
 <svg width="0" height="0" aria-hidden="true" focusable="false" style="position:absolute;width:0;height:0;overflow:hidden">
@@ -1336,6 +1795,13 @@
     <symbol id="ui-machine" viewBox="0 0 24 24"><path d="M12 20v2m0-20v2m5 16v2m0-20v2M2 12h2m-2 5h2M2 7h2m16 5h2m-2 5h2m-2-10h2M7 20v2M7 2v2"/><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="8" y="8" width="8" height="8" rx="1"/></symbol>
     <symbol id="ui-appearance" viewBox="0 0 24 24"><path d="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z"/><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/></symbol>
     <symbol id="ui-general" viewBox="0 0 24 24"><path d="M10 5H3m9 14H3M14 3v4m2 10v4m5-9h-9m9 7h-5m5-14h-7M8 10v4m0-2H3"/></symbol>
+    <symbol id="ui-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></symbol>
+    <symbol id="ui-key" viewBox="0 0 24 24"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m11.5 11.5 9-9M15 8l3 3m-6-6 3 3"/></symbol>
+    <symbol id="ui-network" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="16" y="16" width="6" height="6" rx="1"/><path d="M5 16v-3h14v3M12 8v5"/></symbol>
+    <symbol id="ui-terminal" viewBox="0 0 24 24"><path d="m4 17 6-5-6-5m8 10h8"/></symbol>
+    <symbol id="ui-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></symbol>
+    <symbol id="ui-rocket" viewBox="0 0 24 24"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09Z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.87 12.87 0 0 1 22 2c0 2.72-.78 7.5-6.05 11a22.35 22.35 0 0 1-3.95 2Z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0m1 7v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/><circle cx="16" cy="8" r="1"/></symbol>
+    <symbol id="ui-alert" viewBox="0 0 24 24"><path d="M10.3 2.9 1.8 17a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 2.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4m0 4h.01"/></symbol>
     <symbol id="ui-close" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
     <symbol id="ui-expand" viewBox="0 0 24 24"><path d="M15 3h6v6m0-6-7 7M3 21l7-7m-1 7H3v-6"/></symbol>
     <symbol id="ui-collapse" viewBox="0 0 24 24"><path d="m14 10 7-7m-1 7h-6V4M3 21l7-7m-6 0h6v6"/></symbol>
@@ -1350,9 +1816,6 @@
   <div class="mi"><span class="led" id="led-sys"></span> <span id="mi-sys">System</span></div>
   <div class="mi mi-net" id="mi-net" title="Network status"><span class="led" id="led-net"></span> <span id="net-label">Network</span></div>
   <div id="clock">--:--</div>
-  <button class="gear" id="open-inference" title="Metrics" aria-label="Metrics"><svg class="ui-icon" aria-hidden="true"><use href="#ui-metrics"/></svg></button>
-  <button class="gear" id="open-models" title="Model Manager" aria-label="Model Manager"><svg class="ui-icon" aria-hidden="true"><use href="#ui-models"/></svg></button>
-  <button class="gear" id="gear" title="Settings" aria-label="Settings"><svg class="ui-icon" aria-hidden="true"><use href="#ui-settings"/></svg></button>
   <button class="gear shutdown" id="shutdown" title="Shut down CloudlessOS" aria-label="Shut down CloudlessOS"><svg class="ui-icon" aria-hidden="true"><use href="#ui-power"/></svg></button>
 </div>
 <div id="net-pop" class="net-pop hidden"></div>
@@ -1445,9 +1908,10 @@
 <!-- Model Manager (full-screen, opened from the dashboard) -->
 <div class="overlay hidden" id="models">
   <div class="mm">
-    <div class="lp-head">
+    <div class="lp-head mm-head">
       <span class="win-traffic"><i class="t-c" title="Close"></i><i class="t-m"></i><i class="t-f"></i></span>
-      <div class="lp-ttl">Model Manager</div>
+      <span class="mm-head-icon" aria-hidden="true"><svg class="ui-icon"><use href="#ui-models"/></svg></span>
+      <div class="mm-head-copy"><div class="lp-ttl">Model Manager</div><div class="mm-head-sub">Choose what powers your local AI</div></div>
       <button class="lp-x" id="mm-x" title="Close" aria-label="Close Model Manager"><svg class="ui-icon" aria-hidden="true"><use href="#ui-close"/></svg></button>
     </div>
     <div class="mm-body" id="mm-body"></div>
@@ -1595,7 +2059,6 @@ function applyTheme(h, force) {
   if (!force && t === currentTheme) return;
   currentTheme = t;
   document.documentElement.setAttribute('data-theme', t);
-  if (window.bgSetTheme) window.bgSetTheme();
 }
 function setThemePreference(id) {
   if (!THEME_OPTIONS.some(t => t.id === id)) return;
@@ -1755,8 +2218,8 @@ async function renderApps() {
       const cls = 'tile' + (isRun && !gated ? ' running' : '') + (gated ? ' gated' : (app.image ? '' : ' disabled'));
       const meta = gated ? '<span class="dot wait"></span>Waiting for AI' : (isRun ? '<span class="dot"></span>Running' : (app.image ? '' : 'Coming soon'));
       return `<div class="${cls}" data-id="${app.id}">
-        <div class="ic">${glyph(app.id)}<button class="stopx" title="Stop">×</button></div>
-        <div class="nm">${app.name}</div><div class="meta">${meta}</div>
+        <div class="ic">${glyph(app.id)}</div><button class="stopx" title="Stop ${escapeAttr(app.name)}" aria-label="Stop ${escapeAttr(app.name)}">${uiIcon('close', 'ui-icon sm')}</button>
+        <div class="tile-copy"><div class="nm">${escapeHtml(app.name)}</div><div class="meta">${meta}</div></div>
         <div class="tbar indet"><i></i></div></div>`;
     }).join('');
     if (!appsEntered) { appsEntered = true; pad.classList.add('enter'); setTimeout(() => pad.classList.remove('enter'), 1400); }
@@ -2011,6 +2474,40 @@ function toast(msg, isErr) {
 }
 
 /* ---- onboarding ---- */
+const FIRST_LAUNCH_INTRO_KEY = 'cloudless.firstLaunchIntro.v1';
+let firstLaunchIntroTimer = 0;
+function showFirstLaunchIntro(next, force = false) {
+  const intro = document.getElementById('boot-intro');
+  const frame = document.getElementById('boot-intro-frame');
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let seen = false;
+  try { seen = localStorage.getItem(FIRST_LAUNCH_INTRO_KEY) === '1'; } catch {}
+  if (!intro || !frame || reduce || (seen && !force)) { next(); return; }
+  try { localStorage.setItem(FIRST_LAUNCH_INTRO_KEY, '1'); } catch {}
+  let finished = false;
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    clearTimeout(firstLaunchIntroTimer);
+    intro.classList.add('out');
+    setTimeout(() => {
+      frame.onload = null;
+      frame.src = 'about:blank';
+      intro.classList.add('hidden');
+      intro.classList.remove('out', 'play');
+      next();
+    }, 720);
+  };
+  clearTimeout(firstLaunchIntroTimer);
+  intro.classList.remove('hidden', 'out', 'play');
+  frame.onload = () => {
+    clearTimeout(firstLaunchIntroTimer);
+    requestAnimationFrame(() => intro.classList.add('play'));
+    firstLaunchIntroTimer = setTimeout(finish, 5200);
+  };
+  frame.src = `first-launch/index.html?run=${Date.now()}`;
+  firstLaunchIntroTimer = setTimeout(finish, 8500);
+}
 function showOnboarding() {
   const ov = document.getElementById('onboarding'), body = document.getElementById('ob-body');
   const dots = document.getElementById('ob-dots').children, act = document.getElementById('ob-act');
@@ -2183,30 +2680,42 @@ async function renderApiPage(c) {
   let g; try { g = await api('/api/gateway'); } catch { c.innerHTML = '<div class="set-hint">Could not load API access.</div>'; return; }
   const keys = g.keys || [];
   const curl = `curl ${g.localURL}/chat/completions \\\n  -H "Authorization: Bearer YOUR_KEY" \\\n  -H "Content-Type: application/json" \\\n  -d '{"model":"${g.servedName}","messages":[{"role":"user","content":"Hello!"}]}'`;
-  c.innerHTML = `
-    <div class="set-block"><h3>your AI as an API</h3>
-      <div class="fld-help" style="margin:0 0 12px">Cloudless serves your local model as a drop-in <b>OpenAI-compatible API</b>. Point any OpenAI client at the base URL below and authenticate with a key you generate here — it all still runs on your GPU.</div>
-      <div class="adm-creds">
-        <div class="adm-row"><span class="adm-k">Base URL</span><code class="adm-v">${escapeHtml(g.localURL)}</code></div>
-        <div class="adm-row"><span class="adm-k">Model name</span><code class="adm-v">${escapeHtml(g.servedName)}</code></div>
-        <div class="adm-row"><span class="adm-k">Backed by</span><span>${escapeHtml(g.model || '—')}</span></div>
+  c.innerHTML = `<div class="inf-page">
+    <div class="inf-page-hero">
+      <span class="inf-page-icon">${uiIcon('key')}</span>
+      <div class="inf-page-copy"><div class="inf-page-eyebrow">OpenAI compatible</div><div class="inf-page-title">API access</div>
+      <div class="inf-page-desc">Connect local tools and apps to the model running on this machine. Requests stay on your hardware unless you enable network access.</div></div>
+      <span class="inf-state-pill ready">Local</span>
+    </div>
+    <section class="api-section">
+      <div class="api-section-head"><div><div class="api-section-title">Connect a client</div><div class="api-section-desc">Use these values with any OpenAI-compatible SDK.</div></div></div>
+      <div class="api-endpoints">
+        <div class="api-endpoint"><span class="api-endpoint-label">Base URL</span><code>${escapeHtml(g.localURL)}</code><button class="api-copy" data-copy="${escapeAttr(g.localURL)}" title="Copy base URL" aria-label="Copy base URL">${uiIcon('copy')}</button></div>
+        <div class="api-endpoint"><span class="api-endpoint-label">Model</span><code>${escapeHtml(g.servedName)}</code><button class="api-copy" data-copy="${escapeAttr(g.servedName)}" title="Copy model name" aria-label="Copy model name">${uiIcon('copy')}</button></div>
+        <div class="api-endpoint"><span class="api-endpoint-label">Backed by</span><code>${escapeHtml(g.model || '—')}</code><span></span></div>
       </div>
-      <div class="code-box"><pre>${escapeHtml(curl)}</pre></div>
-    </div>
-    <div class="set-block"><h3>keys</h3>
-      <div id="key-list">${keys.length ? keys.map(apiKeyRow).join('') : '<div class="set-hint">No keys yet. Generate one to start serving your AI as an API.</div>'}</div>
+      <div class="api-code"><div class="code-box"><pre id="api-curl">${escapeHtml(curl)}</pre></div><button class="api-copy" data-copy-target="api-curl" title="Copy example" aria-label="Copy cURL example">${uiIcon('copy')}</button></div>
+    </section>
+    <section class="api-section">
+      <div class="api-section-head"><div><div class="api-section-title">API keys</div><div class="api-section-desc">Keys control who can send requests to your model.</div></div><button class="btn primary" id="key-gen">${uiIcon('key', 'ui-icon sm')}Generate key</button></div>
+      <div id="key-list">${keys.length ? keys.map(apiKeyRow).join('') : '<div class="api-keys-empty">No keys yet. Generate one when you are ready to connect a client.</div>'}</div>
       <div id="key-new" class="tun-out hidden"></div>
-      <div class="cfg-actions" style="justify-content:flex-start"><button class="btn primary" id="key-gen">Generate new key</button></div>
-    </div>
-    <div class="set-block"><h3>serve it to others</h3>
-      <div class="set-row"><span>On your local network</span>
-        <span class="row-actions"><label class="switch"><input type="checkbox" id="gw-lan" ${g.lan && g.lan.enabled ? 'checked' : ''}><span class="track2"></span></label></span></div>
-      <div class="fld-help">Lets other devices on your Wi-Fi reach the API${g.lan && g.lan.url ? ` at <b>${escapeHtml(g.lan.url)}</b>` : ''}. A key is still required.</div>
-      <div class="set-row"><span>On the internet (public link)</span>
-        <span class="row-actions"><label class="switch"><input type="checkbox" id="gw-tun" ${g.tunnel && g.tunnel.enabled ? 'checked' : ''}><span class="track2"></span></label></span></div>
-      <div id="gw-tun-out" class="tun-out hidden"></div>
-      <div class="sec-warn">⚠ Anyone you give a key to can use your AI and your GPU from anywhere this is reachable. Share keys only with people you trust, and revoke them if needed.</div>
-    </div>`;
+    </section>
+    <section class="api-section">
+      <div class="api-section-head"><div><div class="api-section-title">Network access</div><div class="api-section-desc">Choose where the API can be reached. Authentication is always required.</div></div></div>
+      <div class="api-access-grid">
+        <div class="api-access-card"><div class="api-access-top"><span class="api-access-icon">${uiIcon('network')}</span><span class="api-access-name">Local network</span><label class="switch"><input type="checkbox" id="gw-lan" ${g.lan && g.lan.enabled ? 'checked' : ''}><span class="track2"></span></label></div>
+        <div class="fld-help">Reach Cloudless from devices on your Wi-Fi${g.lan && g.lan.url ? ` at <b>${escapeHtml(g.lan.url)}</b>` : ''}.</div></div>
+        <div class="api-access-card"><div class="api-access-top"><span class="api-access-icon">${uiIcon('expand')}</span><span class="api-access-name">Public link</span><label class="switch"><input type="checkbox" id="gw-tun" ${g.tunnel && g.tunnel.enabled ? 'checked' : ''}><span class="track2"></span></label></div>
+        <div class="fld-help">Create a secure internet address for approved remote clients.</div><div id="gw-tun-out" class="tun-out hidden"></div></div>
+      </div>
+      <div class="sec-warn api-warning">${uiIcon('alert')}<span>Anyone with a valid key can use your model and GPU while an access route is enabled. Share keys carefully and revoke unused ones.</span></div>
+    </section>
+  </div>`;
+  c.querySelectorAll('[data-copy], [data-copy-target]').forEach(b => b.onclick = () => {
+    const value = b.dataset.copyTarget ? (document.getElementById(b.dataset.copyTarget)?.textContent || '') : b.dataset.copy;
+    try { navigator.clipboard.writeText(value); toast('Copied'); } catch { toast('Select and copy it'); }
+  });
   apiWireRevokes(document.getElementById('key-list'));
   const tout = document.getElementById('gw-tun-out');
   if (g.tunnel && g.tunnel.enabled && g.tunnel.url) apiTunRender(tout, g.tunnel.url);
@@ -2248,30 +2757,37 @@ async function renderApiPage(c) {
 }
 // Plain-English comparison of the inference engines — what each is best at.
 const ENGINE_INFO = {
-  vllm: { ic: '🚀', best: 'Maximum speed on a capable GPU', runs: 'GPU', traits: ['Highest throughput when the model fits in VRAM', 'Full-precision Hugging Face models', 'Needs enough GPU memory'] },
-  sglang: { ic: '🧩', best: 'Fast GPU serving, strong for agents', runs: 'GPU', traits: ['High throughput & low latency (RadixAttention)', 'Great at structured output and tool calling', 'Full-precision Hugging Face models'] },
-  llamacpp: { ic: '🦙', best: 'Runs anywhere — even low on VRAM', runs: 'CPU + GPU', traits: ['Offloads to system RAM — run models bigger than your VRAM', 'Works on CPU alone, or CPU + GPU together', 'Uses compact GGUF model files'] },
+  vllm: { icon: 'rocket', best: 'Maximum throughput on a capable GPU', runs: 'GPU', traits: ['Fastest when the model fits in VRAM', 'Serves Hugging Face model weights', 'Best for many simultaneous requests'] },
+  sglang: { icon: 'network', best: 'Responsive serving for agents and tools', runs: 'GPU', traits: ['Low latency with RadixAttention', 'Strong structured output and tool calling', 'Efficient prompt and prefix reuse'] },
+  llamacpp: { icon: 'machine', best: 'Flexible local inference on almost any machine', runs: 'CPU + GPU', traits: ['Offloads models between RAM and VRAM', 'Can run entirely on the CPU', 'Uses compact GGUF model files'] },
 };
 async function renderEnginePage(c) {
   c.innerHTML = '<div class="set-hint">Loading…</div>';
   let engine; try { engine = await api('/api/engine'); } catch { return; }
   const state = engineSwitching ? 'switching…' : (engine.ready ? 'ready' : 'starting…');
   const cards = (engine.engines || []).map(e => {
-    const info = ENGINE_INFO[e.id] || { ic: '', best: '', runs: '', traits: [] };
+    const info = ENGINE_INFO[e.id] || { icon: 'machine', best: '', runs: '', traits: [] };
     const traits = info.traits.map(t => `<li>${escapeHtml(t)}</li>`).join('');
     const foot = e.active
-      ? '<span class="ec-active">● Active</span>'
+      ? '<span class="ec-active">Active engine</span>'
       : `<button class="btn" data-eng="${e.id}" ${engineSwitching ? 'disabled' : ''}>Use this engine</button>`;
     return `<div class="ec ${e.active ? 'on' : ''}">
-        <div class="ec-head">${info.ic ? `<span class="ec-ic">${info.ic}</span>` : ''}<span class="ec-name">${escapeHtml(e.name.replace(' Engine', ''))}</span>${info.runs ? `<span class="ec-runs">${escapeHtml(info.runs)}</span>` : ''}</div>
+        <div class="ec-head"><span class="ec-ic">${uiIcon(info.icon)}</span><span class="ec-title"><span class="ec-name">${escapeHtml(e.name.replace(' Engine', ''))}</span>${info.runs ? `<span class="ec-runs">${escapeHtml(info.runs)}</span>` : ''}</span></div>
         <div class="ec-best">${escapeHtml(info.best)}</div>
         <ul class="ec-traits">${traits}</ul>
         <div class="ec-foot">${foot}</div>
       </div>`;
   }).join('');
-  c.innerHTML = `<div class="set-block"><h3>inference engine</h3>
-    <div class="ec-bar"><span class="fld-help" style="margin:0">One engine runs at a time and powers everything — chat, apps and the API. Switching briefly reloads the model; pick the model itself in the Model Manager.</span><span class="er-state ${engine.ready ? 'ready' : ''}">${state}</span></div>
-    <div class="ec-grid">${cards}</div></div>`;
+  c.innerHTML = `<div class="inf-page">
+    <div class="inf-page-hero">
+      <span class="inf-page-icon">${uiIcon('machine')}</span>
+      <div class="inf-page-copy"><div class="inf-page-eyebrow">Runtime</div><div class="inf-page-title">Inference engine</div>
+      <div class="inf-page-desc">Choose the runtime that powers chat, apps, and the API. Switching reloads the current model and usually takes under a minute.</div></div>
+      <span class="inf-state-pill ${engine.ready ? 'ready' : ''}">${state}</span>
+    </div>
+    <div class="ec-grid">${cards}</div>
+    <div class="fld-help">The model itself is selected in Model Manager. Engine availability depends on your hardware and installation.</div>
+  </div>`;
   c.querySelectorAll('.ec [data-eng]').forEach(b => b.onclick = () => { switchEngine(b.dataset.eng); toast('Switching engine…'); });
 }
 
@@ -2286,30 +2802,36 @@ function modelCard(m) {
     + (m.vision ? '<span class="mdl-cap vis">vision</span>' : '') + (m.toolCalling ? '<span class="mdl-cap">tools</span>' : '')
     + (m.gated ? '<span class="mdl-cap gated">gated</span>' : '');
   const tags = (m.tags || []).map(t => `<span class="mdl-t">${escapeHtml(t)}</span>`).join('');
-  const status = m.active ? '<span class="mdl-active">● loaded</span>' : (m.downloaded ? '<span class="mdl-disk">on disk</span>' : '');
+  const status = m.active ? '<span class="mdl-status active"><i></i>Loaded</span>' : (m.downloaded ? '<span class="mdl-status">Downloaded</span>' : '');
   return `<button class="mdl ${m.active ? 'on' : ''}${m.recommended ? ' rec' : ''} fit-${m.fit}" data-mid="${escapeAttr(m.id)}">
-      <div class="mdl-top"><span class="mdl-name">${escapeHtml(m.name)}</span>${status}</div>
-      <div class="mdl-meta">${escapeHtml(m.params || '')}${m.quant ? ' · ' + escapeHtml(m.quant) : ''}${m.contextK ? ' · ' + m.contextK + 'K ctx' : ''}${m.minVramGB ? ' · ~' + m.minVramGB + ' GB' : ''}</div>
+      <div class="mdl-top">
+        <span class="mdl-icon">${uiIcon('models')}</span>
+        <span class="mdl-title"><span class="mdl-name">${escapeHtml(m.name)}</span><span class="mdl-meta">${escapeHtml(m.params || '')}${m.quant ? ' · ' + escapeHtml(m.quant) : ''}${m.contextK ? ' · ' + m.contextK + 'K ctx' : ''}</span></span>
+        ${status}
+      </div>
       <div class="mdl-notes">${escapeHtml(m.description || '')}</div>
       <div class="mdl-tags">${caps}${tags}</div>
-      <div class="mdl-foot"><span class="mdl-fit fit-${m.fit}">${FIT_LABEL[m.fit] || ''}</span><span class="mdl-use">details ›</span></div>
+      <div class="mdl-foot"><span class="mdl-fit fit-${m.fit}">${FIT_LABEL[m.fit] || ''}${m.minVramGB ? ' · ~' + m.minVramGB + ' GB' : ''}</span><span class="mdl-use" aria-hidden="true">${uiIcon('arrow-right')}</span></div>
     </button>`;
 }
 function diffCard(m) {
   const tags = (m.tags || []).map(t => `<span class="mdl-t">${escapeHtml(t)}</span>`).join('');
   const base = m.base ? `<span class="mdl-cap">${escapeHtml(m.base)}</span>` : '';
-  const status = m.downloaded ? '<span class="mdl-active">● downloaded</span>' : '';
+  const status = m.downloaded ? '<span class="mdl-status active"><i></i>Downloaded</span>' : '';
   return `<button class="mdl ${m.downloaded ? 'on' : ''} fit-${m.fit}" data-did="${escapeAttr(m.id)}">
-      <div class="mdl-top"><span class="mdl-name">${escapeHtml(m.name)}</span>${status}</div>
-      <div class="mdl-meta">${escapeHtml(m.type || 'checkpoint')}${m.sizeGB ? ' · ' + m.sizeGB + ' GB' : ''}${m.minVramGB ? ' · ~' + m.minVramGB + ' GB VRAM' : ''}</div>
+      <div class="mdl-top">
+        <span class="mdl-icon image">${uiIcon('appearance')}</span>
+        <span class="mdl-title"><span class="mdl-name">${escapeHtml(m.name)}</span><span class="mdl-meta">${escapeHtml(m.type || 'checkpoint')}${m.sizeGB ? ' · ' + m.sizeGB + ' GB' : ''}</span></span>
+        ${status}
+      </div>
       <div class="mdl-notes">${escapeHtml(m.description || '')}</div>
       <div class="mdl-tags">${base}${tags}</div>
-      <div class="mdl-foot"><span class="mdl-fit fit-${m.fit}">${FIT_LABEL[m.fit] || ''}</span><span class="mdl-use">details ›</span></div>
+      <div class="mdl-foot"><span class="mdl-fit fit-${m.fit}">${FIT_LABEL[m.fit] || ''}${m.minVramGB ? ' · ~' + m.minVramGB + ' GB' : ''}</span><span class="mdl-use" aria-hidden="true">${uiIcon('arrow-right')}</span></div>
     </button>`;
 }
 function modelSection(title, list, cardFn) {
   if (!list || !list.length) return '';
-  return `<div class="mdl-sec">${escapeHtml(title)}</div><div class="mdl-grid">${list.map(cardFn).join('')}</div>`;
+  return `<div class="mdl-sec"><span>${escapeHtml(title)}</span><span class="mdl-count">${list.length}</span></div><div class="mdl-grid">${list.map(cardFn).join('')}</div>`;
 }
 function downloadModel(m) {
   toast('Downloading ' + m.name + '… (runs in background)');
@@ -2360,9 +2882,9 @@ function modelMatches(m, lm) {
 function renderModelManager() {
   const c = document.getElementById('mm-body'); if (!c) return;
   if (mmDetail) { renderModelDetail(c); return; }
-  c.innerHTML = `<div class="mm-tabs">
-      <button class="mm-tab ${mmTab === 'language' ? 'on' : ''}" data-tab="language">Language models</button>
-      <button class="mm-tab ${mmTab === 'image' ? 'on' : ''}" data-tab="image">Image models</button>
+  c.innerHTML = `<div class="mm-tabs" role="tablist" aria-label="Model type">
+      <button class="mm-tab ${mmTab === 'language' ? 'on' : ''}" data-tab="language" role="tab" aria-selected="${mmTab === 'language'}">${uiIcon('models')}<span>Language models</span></button>
+      <button class="mm-tab ${mmTab === 'image' ? 'on' : ''}" data-tab="image" role="tab" aria-selected="${mmTab === 'image'}">${uiIcon('appearance')}<span>Image models</span></button>
     </div><div id="mm-tab-body"><div class="set-hint">Loading…</div></div>`;
   c.querySelectorAll('.mm-tab').forEach(b => b.onclick = () => { if (mmTab === b.dataset.tab) return; mmTab = b.dataset.tab; mmFilter = { q: '', fits: false, vision: false, tools: false }; renderModelManager(); });
   const body = document.getElementById('mm-tab-body');
@@ -2391,10 +2913,10 @@ function paintImageModels(c, d) { paintModelList(c, d, 'diff'); }
 function paintModelList(c, data, kind) {
   const lm = kind === 'lm', gpu = data.gpuVRAMGB || 0;
   const summary = gpu > 0
-    ? `${lm ? 'Your GPU' : 'Used by ComfyUI · your GPU'}: <b>${gpu} GB</b> · <span class="mm-sum-fit">green fits comfortably</span>`
-    : (lm ? 'No GPU detected — models run on CPU (slow)' : 'No GPU detected');
-  const chips = `<button class="mm-chip ${mmFilter.fits ? 'on' : ''}" data-f="fits">Fits my GPU</button>`
-    + (lm ? `<button class="mm-chip ${mmFilter.vision ? 'on' : ''}" data-f="vision">Vision</button><button class="mm-chip ${mmFilter.tools ? 'on' : ''}" data-f="tools">Tool-calling</button>` : '');
+    ? `${uiIcon('machine')}<span><small>${lm ? 'Your hardware' : 'ComfyUI hardware'}</small><b>${gpu} GB VRAM</b></span>`
+    : `${uiIcon('machine')}<span><small>Hardware</small><b>No GPU detected</b></span>`;
+  const chip = (key, label) => `<button class="mm-chip ${mmFilter[key] ? 'on' : ''}" data-f="${key}" aria-pressed="${mmFilter[key]}">${label}</button>`;
+  const chips = chip('fits', 'Fits my GPU') + (lm ? chip('vision', 'Vision') + chip('tools', 'Tool calling') : '');
   const advanced = lm ? `
       <button class="adv-toggle" data-mdladv style="margin-top:20px">Advanced — use a custom Hugging Face model</button>
       <div class="adv hidden" id="mdl-adv">
@@ -2403,10 +2925,14 @@ function paintModelList(c, data, kind) {
       </div>` : '';
   c.innerHTML = `
     <div class="mm-bar">
-      <div class="mm-sum">${summary}</div>
-      <div class="mm-search"><span class="mm-search-ic">⌕</span><input id="mm-q" placeholder="Search ${lm ? 'language' : 'image'} models…" value="${escapeAttr(mmFilter.q)}" spellcheck="false"></div>
+      <div class="mm-machine">${summary}</div>
+      <label class="mm-search">${uiIcon('search')}<input id="mm-q" aria-label="Search models" placeholder="Search ${lm ? 'language' : 'image'} models…" value="${escapeAttr(mmFilter.q)}" spellcheck="false"></label>
     </div>
-    <div class="mm-filters">${chips}</div>
+    <div class="mm-filter-row">
+      <span class="mm-filter-label">Filter</span>
+      <div class="mm-filters">${chips}</div>
+      <span class="mm-result-count" id="mm-result-count"></span>
+    </div>
     <div id="mm-list"></div>
     ${advanced}`;
   const cardFn = lm ? modelCard : diffCard;
@@ -2414,6 +2940,8 @@ function paintModelList(c, data, kind) {
     const list = document.getElementById('mm-list'); if (!list) return;
     const fy = (data.yours || []).filter(m => modelMatches(m, lm));
     const fh = (data.highlights || []).filter(m => modelMatches(m, lm));
+    const count = document.getElementById('mm-result-count');
+    if (count) count.textContent = `${fy.length + fh.length} model${fy.length + fh.length === 1 ? '' : 's'}`;
     if (!fy.length && !fh.length) {
       const filtered = mmFilter.q || mmFilter.fits || mmFilter.vision || mmFilter.tools;
       list.innerHTML = `<div class="mm-empty">${filtered ? 'No models match your filters.' : (lm ? 'No models available.' : 'No image models available.')}${filtered ? ' <button class="lnk" id="mm-clearf">Clear filters</button>' : ''}</div>`;
@@ -2437,7 +2965,12 @@ function paintModelList(c, data, kind) {
   fill();
   const q = document.getElementById('mm-q');
   if (q) q.oninput = () => { mmFilter.q = q.value; fill(); };
-  c.querySelectorAll('.mm-chip').forEach(ch => ch.onclick = () => { mmFilter[ch.dataset.f] = !mmFilter[ch.dataset.f]; ch.classList.toggle('on'); fill(); });
+  c.querySelectorAll('.mm-chip').forEach(ch => ch.onclick = () => {
+    mmFilter[ch.dataset.f] = !mmFilter[ch.dataset.f];
+    ch.classList.toggle('on');
+    ch.setAttribute('aria-pressed', String(mmFilter[ch.dataset.f]));
+    fill();
+  });
   if (lm) {
     const adv = c.querySelector('[data-mdladv]'); if (adv) adv.onclick = () => document.getElementById('mdl-adv').classList.toggle('hidden');
     const ap = document.getElementById('set-model-apply'); if (ap) ap.onclick = () => { const v = document.getElementById('set-model').value.trim(); if (v) applyModel(v); };
@@ -2470,15 +3003,17 @@ function renderModelDetail(c) {
   const recNote = m.recommended ? `<div class="md-banner rec">★ ${escapeHtml(m.recommendBy || 'Recommended for your region')} — a French-built model from Mistral AI.</div>` : '';
   const gatedNote = (lm && m.gated && !m.downloaded) ? `<div class="md-fit" style="color:var(--warn)">⚠ This model's Hugging Face repo is gated — you'll need a free Hugging Face account to accept its terms before it can download.</div>` : '';
   c.innerHTML = `
-    <button class="lp-back" id="mm-back">← All models</button>
+    <button class="lp-back" id="mm-back">${uiIcon('arrow-right', 'ui-icon')}<span>All models</span></button>
     <div class="md-detail">
       <div class="md-hero">
         <div class="md-ic2">${lm ? '🧠' : '🎨'}</div>
         <div class="md-hd">
+          <div class="md-eyebrow">${lm ? 'Language model' : 'Image model'}</div>
           <div class="md-nm">${escapeHtml(m.name)}</div>
           <div class="md-sub">${escapeHtml(lm ? m.id : (m.file || ''))}</div>
           ${(caps || tags) ? `<div class="mdl-tags md-caps">${caps}${tags}</div>` : ''}
         </div>
+        ${actions ? `<div class="md-hero-actions">${actions}</div>` : ''}
       </div>
       ${recNote}
       ${banner}
@@ -2486,9 +3021,8 @@ function renderModelDetail(c) {
       ${m.description ? `<p class="md-desc">${escapeHtml(m.description)}</p>` : ''}
       <div class="md-specgrid">${specs}</div>
       ${fit}
-      <div class="md-acts">${actions}</div>
       ${lm ? `<div class="md-adv">
-        <button class="md-adv-tog" id="md-adv-tog">⚙ Advanced — engine launch command <span class="md-adv-chev">▸</span></button>
+        <button class="md-adv-tog" id="md-adv-tog">${uiIcon('settings', 'ui-icon sm')}<span>Advanced — engine launch command</span>${uiIcon('arrow-right', 'ui-icon md-adv-chev')}</button>
         <div class="md-adv-body hidden" id="md-adv-body"></div>
       </div>` : ''}
     </div>`;
@@ -2619,7 +3153,11 @@ function renderGeneralPage(c) {
       <div class="set-row"><span class="srow-label">system</span><span>CloudlessOS</span></div>
       <div class="set-row"><span class="srow-label">engine</span><span id="gen-engine">—</span></div>
     </div>`;
-  document.getElementById('gen-replay').onclick = () => { api('/api/onboarding/reset', { method: 'POST' }).then(() => { closeSettings(); showOnboarding(); }).catch(() => toast('Failed', true)); };
+  document.getElementById('gen-replay').onclick = () => {
+    api('/api/onboarding/reset', { method: 'POST' })
+      .then(() => { closeSettings(); showFirstLaunchIntro(showOnboarding, true); })
+      .catch(() => toast('Failed', true));
+  };
   api('/api/engine').then(e => { const el = document.getElementById('gen-engine'); if (el) { const a = (e.engines || []).find(x => x.active); el.textContent = a ? a.name : 'none'; } }).catch(() => {});
 }
 
@@ -2850,7 +3388,6 @@ function trackJobToast(jobId, label) {
   es.onerror = () => fin(true);
 }
 
-document.getElementById('gear').onclick = openSettings;
 document.getElementById('set-x').onclick = closeSettings;
 document.getElementById('settings').addEventListener('click', e => { if (e.target.id === 'settings') closeSettings(); });
 document.getElementById('shutdown').onclick = async () => {
@@ -2882,7 +3419,6 @@ document.getElementById('launcher').addEventListener('click', e => { if (e.targe
 document.getElementById('lp-search').addEventListener('input', e => { lpQuery = e.target.value; renderLauncher(); });
 
 /* ---- Model Manager wiring ---- */
-document.getElementById('open-models').onclick = openModelManager;
 document.getElementById('open-models-2').onclick = openModelManager;
 document.getElementById('mm-x').onclick = closeModelManager;
 document.getElementById('models').addEventListener('click', e => { if (e.target.id === 'models') closeModelManager(); });
@@ -2944,8 +3480,8 @@ function closeInference() {
 // The Inference hub: live Activity, plus Engine choice and API access in one place.
 function renderInference() {
   const body = document.getElementById('inf-body'); if (!body) return;
-  const tab = (id, label) => `<button class="mm-tab ${infTab === id ? 'on' : ''}" data-itab="${id}">${label}</button>`;
-  body.innerHTML = `<div class="mm-tabs">${tab('activity', 'Activity')}${tab('usage', 'Usage')}${tab('power', 'Power')}${tab('engine', 'Engine')}${tab('api', 'API access')}</div><div id="inf-panel"></div>`;
+  const tab = (id, label, icon) => `<button class="mm-tab ${infTab === id ? 'on' : ''}" data-itab="${id}" role="tab" aria-selected="${infTab === id}">${uiIcon(icon)}${label}</button>`;
+  body.innerHTML = `<div class="mm-tabs inf-tabs" role="tablist">${tab('activity', 'Activity', 'metrics')}${tab('usage', 'Usage', 'apps')}${tab('power', 'Power', 'power')}${tab('engine', 'Engine', 'machine')}${tab('api', 'API access', 'key')}</div><div id="inf-panel"></div>`;
   body.querySelectorAll('.mm-tab').forEach(b => b.onclick = () => { if (infTab === b.dataset.itab) return; infTab = b.dataset.itab; renderInference(); });
   const panel = document.getElementById('inf-panel');
   infStopPoll();
@@ -2959,8 +3495,7 @@ function renderInference() {
     renderUsage(panel); // full width — the daily chart wants room
   } else if (infTab === 'power') {
     renderPower(panel); // electricity log — full width, same chart footprint as Usage
-  } else { // engine / api — narrower centred column reads better in the wide overlay
-    panel.style.maxWidth = '780px'; panel.style.margin = '0 auto';
+  } else {
     if (infTab === 'engine') renderEnginePage(panel); else renderApiPage(panel);
   }
 }
@@ -3434,7 +3969,6 @@ function infShowTip(e, html) {
   infTipEl.style.top = Math.max(8, e.clientY - infTipEl.offsetHeight - 10) + 'px';
 }
 function infHideTip() { if (infTipEl) infTipEl.style.display = 'none'; }
-document.getElementById('open-inference').onclick = openInference;
 document.getElementById('open-inference-2').onclick = openInference;
 document.getElementById('inf-x').onclick = closeInference;
 document.getElementById('inference').addEventListener('click', e => { if (e.target.id === 'inference') closeInference(); });
@@ -3576,95 +4110,56 @@ document.addEventListener('keydown', e => {
   else if (settingsOpen()) closeSettings();
 });
 
-/* ---- three.js background: a slow, breathing instrument field ----
-   A wide grid of points drifting on layered sine waves — quiet, not busy.
-   Colour + presence come from the active theme's --sky / --sky-alpha vars,
-   so the field warms at dawn/dusk and glows blue at night. */
+/* ---- responsive wallpaper depth ----
+   The continuous movement is compositor-friendly CSS. Pointer input only nudges
+   four custom properties, eased through one short requestAnimationFrame loop. */
 function initBackground() {
-  // The wallpaper is now a pure-CSS iridescent gradient mesh (.wall) — lighter than the
-  // old WebGL point-field and matching the Cloudless brand. Nothing to init here.
-  return;
-  /* eslint-disable no-unreachable */
-  const canvas = document.getElementById('bg');
-  if (!canvas || typeof THREE === 'undefined') return;
-  let renderer;
-  try { renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true }); }
-  catch (e) { canvas.style.display = 'none'; return; } // no WebGL → flat base, no harm
+  const root = document.documentElement;
+  const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
+  let targetX = 0, targetY = 0, x = 0, y = 0, raf = 0;
 
-  const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 1000);
-  camera.position.set(0, 7.5, 14);
-  camera.lookAt(0, 0, -4);
-
-  const COLS = 64, ROWS = 40, GAP = 0.9;
-  const count = COLS * ROWS;
-  const positions = new Float32Array(count * 3);
-  const base = new Float32Array(count * 2); // x,z home for each point
-  let i = 0;
-  for (let r = 0; r < ROWS; r++) {
-    for (let c = 0; c < COLS; c++) {
-      const x = (c - COLS / 2) * GAP;
-      const z = (r - ROWS / 2) * GAP;
-      base[i * 2] = x; base[i * 2 + 1] = z;
-      positions[i * 3] = x; positions[i * 3 + 1] = 0; positions[i * 3 + 2] = z;
-      i++;
+  const paint = () => {
+    x += (targetX - x) * .12;
+    y += (targetY - y) * .12;
+    root.style.setProperty('--wall-parallax-x', x.toFixed(2) + 'px');
+    root.style.setProperty('--wall-parallax-y', y.toFixed(2) + 'px');
+    root.style.setProperty('--wall-glow-x', (-x * .65).toFixed(2) + 'px');
+    root.style.setProperty('--wall-glow-y', (-y * .65).toFixed(2) + 'px');
+    if (Math.abs(targetX - x) > .08 || Math.abs(targetY - y) > .08) raf = requestAnimationFrame(paint);
+    else raf = 0;
+  };
+  const aim = (nextX, nextY) => {
+    targetX = nextX; targetY = nextY;
+    if (!raf) raf = requestAnimationFrame(paint);
+  };
+  const onPointerMove = e => {
+    if (reduceMotion.matches || document.hidden || e.pointerType === 'touch') return;
+    aim(((e.clientX / innerWidth) - .5) * 12, ((e.clientY / innerHeight) - .5) * 9);
+  };
+  const resetDepth = () => aim(0, 0);
+  const syncMotion = () => {
+    root.classList.toggle('wall-motion-paused', document.hidden);
+    if (document.hidden) {
+      targetX = targetY = 0;
+      if (raf) cancelAnimationFrame(raf);
+      raf = 0;
     }
-  }
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-  const mat = new THREE.PointsMaterial({ size: 0.07, transparent: true, depthWrite: false });
-  const field = new THREE.Points(geo, mat);
-  field.rotation.x = -0.18;
-  scene.add(field);
-
-  function readVar(name, fallback) {
-    const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-    return v || fallback;
-  }
-  function syncTheme() {
-    const rgb = readVar('--sky', '31, 107, 255').split(',').map(n => parseFloat(n) / 255);
-    mat.color.setRGB(rgb[0] || 0.12, rgb[1] || 0.42, rgb[2] || 1);
-    mat.opacity = parseFloat(readVar('--sky-alpha', '0.16')) || 0.16;
-  }
-  window.bgSetTheme = syncTheme;
-  syncTheme();
-
-  function resize() {
-    const w = window.innerWidth, h = window.innerHeight;
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-    renderer.setSize(w, h, false);
-    camera.aspect = w / h; camera.updateProjectionMatrix();
-  }
-  window.addEventListener('resize', resize);
-  resize();
-
-  const pos = geo.attributes.position.array;
-  let t = 0, raf = 0, lastT = 0;
-  // The modals are translucent (blurred) — the field shows THROUGH them — so we keep it
-  // moving rather than freezing (a frozen backdrop reads as jank). It just runs slower
-  // under a modal. Capping fps is the real win vs the old uncapped 120/144Hz render.
-  const BG_DT_FG = 1000 / 30, BG_DT_OVERLAY = 1000 / 15;
-  function frame(now) {
-    now = now || performance.now();
-    raf = requestAnimationFrame(frame);
-    if (now - lastT < (anyOverlayOpen() ? BG_DT_OVERLAY : BG_DT_FG)) return; // frame-rate cap
-    const dt = Math.min(0.1, (now - lastT) / 1000); // seconds, clamped across throttles/pauses
-    lastT = now;
-    t += dt * 0.72; // preserve the original ~0.012-per-frame-at-60fps motion speed
-    for (let k = 0; k < count; k++) {
-      const x = base[k * 2], z = base[k * 2 + 1];
-      pos[k * 3 + 1] = Math.sin(x * 0.35 + t) * 0.6 + Math.cos(z * 0.4 - t * 0.7) * 0.6;
+    if (reduceMotion.matches) {
+      targetX = x = targetY = y = 0;
+      root.style.removeProperty('--wall-parallax-x');
+      root.style.removeProperty('--wall-parallax-y');
+      root.style.removeProperty('--wall-glow-x');
+      root.style.removeProperty('--wall-glow-y');
+      if (raf) cancelAnimationFrame(raf);
+      raf = 0;
     }
-    geo.attributes.position.needsUpdate = true;
-    field.rotation.z = Math.sin(t * 0.05) * 0.04;
-    renderer.render(scene, camera);
-  }
-  // Stop the loop entirely when the tab is hidden — no point spinning the GPU at all.
-  document.addEventListener('visibilitychange', () => {
-    if (document.hidden) { cancelAnimationFrame(raf); raf = 0; }
-    else if (!raf) { lastT = 0; frame(); }
-  });
-  frame();
+  };
+
+  addEventListener('pointermove', onPointerMove, { passive: true });
+  addEventListener('pointerleave', resetDepth);
+  document.addEventListener('visibilitychange', syncMotion);
+  if (reduceMotion.addEventListener) reduceMotion.addEventListener('change', syncMotion);
+  syncMotion();
 }
 
 /* ---- boot ---- */
@@ -3674,7 +4169,9 @@ refreshStatus(); renderGPUs(); renderSystem(); renderPlaces(); renderApps(); ren
 setInterval(() => { refreshStatus(); renderGPUs(); renderSystem(); if (!engineSwitching) renderEngine(); }, 4000);
 setInterval(() => { if (installing === 0) renderApps(); }, 8000);
 setInterval(refreshNetStatus, 20000);
-api('/api/onboarding').then(o => { if (!o || !o.completed) renderApps().then(showOnboarding); }).catch(() => {});
+api('/api/onboarding').then(o => {
+  if (!o || !o.completed) renderApps().then(() => showFirstLaunchIntro(showOnboarding));
+}).catch(() => {});
 </script>
 </body>
 </html>

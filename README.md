@@ -65,6 +65,12 @@ Stuck, or on Windows? The full setup, requirements and known gotchas are in
 [`docs/DEV_ENVIRONMENT.md`](./docs/DEV_ENVIRONMENT.md), and the daemon's own notes are in
 [`orchestrator/README.md`](./orchestrator/README.md).
 
+## Build the development ISO
+
+The Ubuntu 24.04 installer pipeline, Debian packages, systemd services, kiosk session,
+Plymouth branding, and USB instructions live in [`distro/`](./distro). Start with
+[`distro/README.md`](./distro/README.md).
+
 ## Repository
 
 - Start here: [`CLAUDE.md`](./CLAUDE.md) — project context overview.

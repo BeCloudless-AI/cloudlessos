@@ -1,0 +1,30 @@
+#!/bin/bash
+set -euo pipefail
+MARKER=/var/lib/cloudless/hardware-configured
+REPORT=/var/lib/cloudless/hardware-report.txt
+install -d -m 0750 /var/lib/cloudless
+if [ -e "$MARKER" ] && [ "${1:-}" != "--force" ]; then exit 0; fi
+exec > >(tee -a "$REPORT") 2>&1
+echo "CloudlessOS hardware configuration: $(date -u +%FT%TZ)"
+export DEBIAN_FRONTEND=noninteractive
+apt-get update
+apt-get install -y docker.io ubuntu-drivers-common pciutils curl ca-certificates gnupg
+systemctl enable docker.service
+
+if lspci -nn | grep -qi NVIDIA; then
+    echo "NVIDIA GPU detected; installing Ubuntu's recommended compute driver"
+    ubuntu-drivers install --gpgpu || ubuntu-drivers install
+    install -m 0755 -d /usr/share/keyrings
+    curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | gpg --dearmor --yes -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+    curl -fsSL https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list \
+      | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' \
+      > /etc/apt/sources.list.d/nvidia-container-toolkit.list
+    apt-get update
+    apt-get install -y nvidia-container-toolkit
+    nvidia-ctk runtime configure --runtime=docker
+else
+    echo "No NVIDIA GPU detected; CloudlessOS will run in limited mode"
+fi
+systemctl restart docker.service || true
+touch "$MARKER"
+echo "Hardware configuration complete"

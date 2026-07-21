@@ -1,0 +1,10 @@
+#!/bin/sh
+set -e
+if [ ! -e /usr/lib/os-release.ubuntu ]; then
+    dpkg-divert --package cloudless-branding --add --rename \
+        --divert /usr/lib/os-release.ubuntu /usr/lib/os-release
+fi
+install -m 0644 /usr/share/cloudless/os-release /usr/lib/os-release
+if command -v plymouth-set-default-theme >/dev/null 2>&1; then plymouth-set-default-theme cloudless || true; fi
+update-initramfs -u >/dev/null 2>&1 || true
+update-grub >/dev/null 2>&1 || true

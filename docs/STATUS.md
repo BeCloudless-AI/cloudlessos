@@ -3,7 +3,7 @@
 > The cold-start anchor. If resuming work, read this first (after `CLAUDE.md`).
 > Keep it current — update the date and sections whenever state changes.
 
-**Last updated:** 2026-06-20
+**Last updated:** 2026-07-21
 
 ## Where we are
 
@@ -15,6 +15,14 @@ removed via the API.
 
 ## Done
 
+- **First CloudlessOS development ISO pipeline** (`distro/`, D43): five Debian packages
+  (orchestrator, kiosk shell, branding, hardware setup, first-boot validation), guided
+  Ubuntu 24.04.4 Subiquity autoinstall, Chromium snap, Docker/NVIDIA provisioning,
+  installed-system GRUB + animated Plymouth branding, and a themed USB GRUB menu. Built
+  `cloudlessos-0.1.0-dev-amd64.iso` (3.41 GB) and verified its checksum, embedded seed and
+  packages, BIOS/UEFI El Torito entries, plus real QEMU BIOS and UEFI framebuffer boots.
+  Physical installation, Secure Boot/NVIDIA validation, update/recovery, and licensing
+  remain release blockers.
 - Defined vision, architecture (3 layers + thin kiosk shell), roadmap, and decisions.
 - Initialized git repo at `D:\Cloudless` with documentation structure.
 - Dev box fully set up: Windows 11 + RTX 5090, WSL2 + Ubuntu 24.04, Docker 29.6.0 +

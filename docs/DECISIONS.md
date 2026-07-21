@@ -1233,6 +1233,32 @@ running engine via one list (`scripts/engine-detect-check.sh`); latency measured
 
 ---
 
+## D43 - CloudlessOS v0 installer is a packaged Ubuntu 24.04 appliance
+
+**Decision:** Build the first installable CloudlessOS as a guided Ubuntu Server 24.04 LTS
+appliance ISO, using Subiquity and separately versioned Debian packages instead of forking
+Ubuntu or baking the application directly into a monolithic filesystem image.
+
+- **Packages, not an Ubuntu fork.** The orchestrator, kiosk shell, branding, hardware setup,
+  and first-boot validation are independent `.deb` artifacts. This gives Cloudless a normal
+  signed-package update path and keeps Ubuntu responsible for its kernel and security base.
+- **Online development installer.** The ISO carries Cloudless code but downloads Chromium,
+  NVIDIA components, containers, and models. Large offline/factory media is a later release
+  type. Network, storage, and administrator identity remain interactive; there is no default
+  password or silent disk wipe.
+- **Three branding stages.** The USB uses a Cloudless GRUB theme, the installed system uses
+  Cloudless GRUB + Plymouth, and the existing browser animation owns first launch after the
+  graphical shell is ready. Firmware-vendor artwork is outside OS control.
+- **Hardware setup is explicit.** Ubuntu's recommended compute driver is selected with
+  `ubuntu-drivers`; NVIDIA Container Toolkit configures Docker. A non-NVIDIA machine reaches
+  limited mode instead of making the base OS unbootable.
+- **Validation is layered.** Package structure and autoinstall YAML are checked first, the
+  remastered ISO is checked for BIOS/UEFI catalogs and payloads, and QEMU captures real BIOS
+  and UEFI framebuffers. Physical NVIDIA/Secure Boot installation remains mandatory before a
+  public release.
+
+---
+
 ## Open questions (not yet decided)
 
 - **Open-source CloudlessOS?** Leaning yes (trust/community for a privacy brand, like

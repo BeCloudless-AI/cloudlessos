@@ -1,0 +1,16 @@
+#!/bin/sh
+set -e
+getent group cloudless >/dev/null || addgroup --system cloudless
+getent passwd cloudless >/dev/null || adduser --system --home /home/cloudless --shell /bin/bash --ingroup cloudless cloudless
+getent group nopasswdlogin >/dev/null || addgroup --system nopasswdlogin
+adduser cloudless nopasswdlogin >/dev/null 2>&1 || true
+for group in video render audio; do
+    if getent group "$group" >/dev/null; then adduser cloudless "$group" >/dev/null 2>&1 || true; fi
+done
+install -d -o cloudless -g cloudless -m 0750 /home/cloudless /home/cloudless/.config /home/cloudless/.config/openbox
+install -o cloudless -g cloudless -m 0644 /usr/share/cloudless/openbox-autostart /home/cloudless/.config/openbox/autostart
+# set-default may be ignored in the installer's chroot. Create the canonical
+# default-target link directly, then also ask systemctl for normal upgrades.
+ln -sfn /lib/systemd/system/graphical.target /etc/systemd/system/default.target
+systemctl set-default graphical.target >/dev/null 2>&1 || true
+systemctl enable lightdm.service >/dev/null 2>&1 || true

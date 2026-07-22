@@ -28,6 +28,36 @@ func TestModelGuidanceRejectsUnknownModelWorkflow(t *testing.T) {
 	}
 }
 
+func TestModelGuidanceCatchesNaturalHardwareQuestions(t *testing.T) {
+	c := modelTestContext()
+	advice, handled := ModelGuidance("Does Qwen 3.6 run on this system?", c)
+	if !handled || !strings.Contains(advice.Reply, "don’t have enough detail") {
+		t.Fatalf("natural run question escaped deterministic guidance: handled=%v advice=%#v", handled, advice)
+	}
+
+	advice, handled = ModelGuidance("Qwen 3.6 35B needs 9 GB of VRAM? What?", c)
+	if !handled {
+		t.Fatal("VRAM follow-up escaped deterministic guidance")
+	}
+	for _, want := range []string{"35.0B", "16-bit", "about 81 GB", "unlikely to fit"} {
+		if !strings.Contains(advice.Reply, want) {
+			t.Fatalf("hardware reply %q does not contain %q", advice.Reply, want)
+		}
+	}
+}
+
+func TestModelGuidanceRecognizesFP8(t *testing.T) {
+	advice, handled := ModelGuidance("Will Qwen/Qwen3.6-35B-A3B-FP8 run locally?", modelTestContext())
+	if !handled || advice.ModelID != "Qwen/Qwen3.6-35B-A3B-FP8" {
+		t.Fatalf("FP8 model destination lost: handled=%v advice=%#v", handled, advice)
+	}
+	for _, want := range []string{"35.0B", "8-bit", "about 43 GB", "unlikely to fit"} {
+		if !strings.Contains(advice.Reply, want) {
+			t.Fatalf("FP8 reply %q does not contain %q", advice.Reply, want)
+		}
+	}
+}
+
 func TestModelGuidanceUsesModelManagerFit(t *testing.T) {
 	advice, handled := ModelGuidance("Would Qwen2.5 14B (4-bit) fit?", modelTestContext())
 	if !handled || !strings.Contains(advice.Reply, "should fit this machine") || !strings.Contains(advice.Reply, "about 13 GB") || advice.ModelID != "Qwen/Qwen2.5-14B-Instruct-AWQ" {

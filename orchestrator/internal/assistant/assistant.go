@@ -220,7 +220,7 @@ func ModelGuidance(text string, c Context) (ModelAdvice, bool) {
 		return ModelAdvice{}, false
 	}
 	modelWord := containsAny(lower, "model", "qwen", "llama", "mistral", "gemma", "deepseek", "phi", "nemotron")
-	lifecycle := containsAny(lower, "work here", "run here", "fit", "compatible", "support", "available", "install", "download", "switch", "use this", "use qwen", "which model", "better model", "larger model")
+	lifecycle := containsAny(lower, "work here", "run", "fit", "compatible", "support", "available", "install", "download", "switch", "use this", "use qwen", "which model", "better model", "larger model", "need", "require", "vram", "gpu memory")
 	if !modelWord || !lifecycle {
 		return ModelAdvice{}, false
 	}
@@ -300,7 +300,7 @@ func estimateModelVRAM(text string) (params float64, bits, estimateGB int, ok bo
 	switch {
 	case containsAny(text, "awq", "gptq", "4-bit", "4bit", "q4"):
 		bits = 4
-	case containsAny(text, "8-bit", "8bit", "q8", "int8"):
+	case containsAny(text, "8-bit", "8bit", "q8", "int8", "fp8"):
 		bits = 8
 	case containsAny(text, "fp32", "32-bit", "32bit"):
 		bits = 32

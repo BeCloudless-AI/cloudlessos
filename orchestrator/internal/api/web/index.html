@@ -552,10 +552,21 @@
   .us-tile .us-val { font-size: 23px; font-weight: 800; letter-spacing: -0.7px; color: var(--ink); font-variant-numeric: tabular-nums; line-height: 1.15; margin-top: 5px; }
   .us-tile .us-sub { font-size: 10.5px; color: var(--muted); margin-top: 3px; }
   .ku-section { margin-bottom: 20px; }
-  .ku-head { margin: 0 2px 10px; display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
-  .ku-title { color: var(--ink); font-size: 13px; font-weight: 760; letter-spacing: -.15px; }
-  .ku-subtitle { margin-top: 2px; color: var(--muted); font-size: 10.5px; }
+  .ku-head {
+    width: calc(100% - 4px); margin: 0 2px 10px; padding: 0; display: flex; align-items: center;
+    justify-content: space-between; gap: 12px; border: 0; background: transparent; text-align: left;
+  }
+  .ku-head[aria-expanded="false"] { margin-bottom: 0; }
+  .ku-head:hover .ku-title { color: var(--blue); }
+  .ku-title { display: block; color: var(--ink); font-size: 13px; font-weight: 760; letter-spacing: -.15px; }
+  .ku-subtitle { display: block; margin-top: 2px; color: var(--muted); font-size: 10.5px; }
+  .ku-head-side { flex: none; display: flex; align-items: center; gap: 8px; }
   .ku-lifetime { color: var(--faint); font-size: 9.5px; font-weight: 700; letter-spacing: .55px; text-transform: uppercase; }
+  .ku-chevron { width: 27px; height: 27px; display: grid; place-items: center; border-radius: 8px; color: var(--muted); background: var(--panel-2); transition: transform .18s, color .15s, background .15s; }
+  .ku-chevron .ui-icon { width: 13px; height: 13px; }
+  .ku-head[aria-expanded="true"] .ku-chevron { transform: rotate(90deg); }
+  .ku-head:hover .ku-chevron { color: var(--blue); background: var(--blue-soft); }
+  .ku-body.collapsed { display: none; }
   .ku-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 10px; }
   .ku-card {
     min-width: 0; padding: 14px; border: 1px solid var(--hair); border-radius: 14px;
@@ -3703,6 +3714,8 @@ document.querySelectorAll('.win-traffic .t-c').forEach(dot => {
 /* ---- Inference activity dashboard ---- */
 let infOpen = false, infTimer = null, infPrev = null, infBuf = null, infPeak = 0, infTab = 'activity';
 let infUsageTimer = null, infUsageCache = {}, infKeyUsageCache = [], infUsageRange = 'day', infTipEl = null; // usage auto-refresh + per-range cached snapshots + selected zoom + shared chart tooltip
+let infKeyUsageCollapsed = false;
+try { infKeyUsageCollapsed = localStorage.getItem('cloudless.metrics.keysCollapsed') === '1'; } catch {}
 let infPowerTimer = null, infPowerCache = {}, infPowerRange = 'day'; // electricity-log auto-refresh + per-range cache + selected zoom
 let infActRange = 'live'; // Activity zoom: 'live' (real-time stream) or a usage range (throughput over time)
 const PW_RANGES = { hour: { unit: 'hour', sub: 'last 24 hours', peak: 'Peak hour' }, day: { unit: 'day', sub: 'last 30 days', peak: 'Peak day' }, month: { unit: 'month', sub: 'last 12 months', peak: 'Peak month' }, year: { unit: 'year', sub: 'last 5 years', peak: 'Peak year' } };
@@ -3892,10 +3905,11 @@ function paintUsage(c, u, keys = []) {
   const peakVal = u.peakRequests > 0 ? `${infNum(u.peakRequests)} <span style="font-size:12px;font-weight:600;color:var(--muted)">${escapeHtml(u.peakLabel)}</span>` : '—';
   const cacheTotal = u.cacheHits + u.cacheMisses;
   const hitRate = cacheTotal > 0 ? Math.round(u.cacheHits / cacheTotal * 100) + '% hit rate' : '';
+  const keyCount = keys.length;
   c.innerHTML = `
     <section class="ku-section">
-      <div class="ku-head"><div><div class="ku-title">Usage by API key</div><div class="ku-subtitle">Lifetime requests, outcomes and tokens reported by the engine.</div></div><span class="ku-lifetime">Lifetime</span></div>
-      ${keyUsageCards(keys)}
+      <button class="ku-head" id="ku-toggle" type="button" aria-label="${infKeyUsageCollapsed ? 'Expand' : 'Collapse'} usage by API key" aria-expanded="${infKeyUsageCollapsed ? 'false' : 'true'}" aria-controls="ku-body"><span><span class="ku-title">Usage by API key</span><span class="ku-subtitle">Lifetime requests, outcomes and tokens reported by the engine.</span></span><span class="ku-head-side"><span class="ku-lifetime">${keyCount} key${keyCount === 1 ? '' : 's'} · lifetime</span><span class="ku-chevron">${uiIcon('arrow-right')}</span></span></button>
+      <div class="ku-body ${infKeyUsageCollapsed ? 'collapsed' : ''}" id="ku-body">${keyUsageCards(keys)}</div>
     </section>
     <div class="us-global-head"><div class="us-global-title">Global usage</div><div class="us-global-sub">All model traffic from CloudlessOS apps, chat, agents and API clients.</div></div>
     <div class="us-chartwrap">
@@ -3920,6 +3934,14 @@ function paintUsage(c, u, keys = []) {
       ${tile('Last request', infAgo(u.lastRequestAt))}
     </div>
     <div class="fld-help" style="margin-top:16px">The chart shows the selected range; totals, averages and cache are lifetime. Requests, tokens and cache are sampled from the engine across <b>all</b> traffic (chat, agents, API). Success rate covers requests through your API keys. Cache stats need a prefix-caching engine (vLLM).</div>`;
+  const keyToggle = document.getElementById('ku-toggle');
+  if (keyToggle) keyToggle.onclick = () => {
+    infKeyUsageCollapsed = !infKeyUsageCollapsed;
+    keyToggle.setAttribute('aria-expanded', String(!infKeyUsageCollapsed));
+    keyToggle.setAttribute('aria-label', (infKeyUsageCollapsed ? 'Expand' : 'Collapse') + ' usage by API key');
+    document.getElementById('ku-body')?.classList.toggle('collapsed', infKeyUsageCollapsed);
+    try { localStorage.setItem('cloudless.metrics.keysCollapsed', infKeyUsageCollapsed ? '1' : '0'); } catch {}
+  };
   // Range toggle.
   c.querySelectorAll('.us-rbtn').forEach(b => b.onclick = () => infSetRange(b.dataset.range));
   // Interactive bars: a floating tooltip with the exact period + request count.

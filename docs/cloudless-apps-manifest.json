@@ -1,8 +1,8 @@
 {
   "manifestVersion": 1,
   "channel": "stable",
-  "updated": "2026-06-21",
-  "description": "Cloudless validated versions. `apps` and `infra` pin Docker images (daemon pulls <image>@<digest>, overriding the catalog tag); `models` pins Hugging Face weights by revision. Anything not listed falls back to the catalog/default. The agents openclaw/hermes are Cloudless-built images on Docker Hub (rebuild from internal/apps/<name> and re-push, then update the digest here). Set `verified:true` only for things tested on Cloudless hardware; to ship a new validated version, move the current digest/revision to `rollback` and replace it.",
+  "updated": "2026-07-22",
+  "description": "Cloudless validated versions. `apps` and `infra` pin Docker images (daemon pulls <image>@<digest>, overriding the catalog tag); `models` pins Hugging Face weights by revision. Anything not listed falls back to the catalog/default. OpenClaw is Cloudless-built; Hermes uses the official Nous Research image. Set `verified:true` only for things tested on Cloudless hardware; to ship a new validated version, move the current digest/revision to `rollback` and replace it.",
   "apps": {
     "vllm": {
       "image": "vllm/vllm-openai",
@@ -61,11 +61,11 @@
       "rollback": null
     },
     "hermes": {
-      "image": "samuelcardillo/cloudless-hermes",
-      "tag": "v1",
-      "digest": "sha256:e62df417986ba86793b25a5e54e3c9c0fb840cc9d99d08821f41c3b888756e28",
+      "image": "nousresearch/hermes-agent",
+      "tag": "v2026.7.20",
+      "digest": "sha256:f7b35053268f532f98955195c909f15a230470fbcbdacaa9fdecb95707dad04a",
       "verified": false,
-      "notes": "Personal agent, built by Cloudless. Messaging (Telegram/Discord) integration not yet hardware-verified. Rebuild from internal/apps/hermes and re-push to update.",
+      "notes": "Official Hermes Agent v0.19.0 image. Registry digest pinned; dashboard, local Cloudless AI connection, persistence and messaging still require appliance validation.",
       "rollback": null
     }
   },

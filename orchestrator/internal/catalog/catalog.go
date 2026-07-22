@@ -63,23 +63,26 @@ type App struct {
 	Image       string            `json:"image"`              // empty = recipe not yet available
 	Ports       map[int]int       `json:"ports"`              // hostPort -> containerPort
 	Env         map[string]string `json:"env,omitempty"`
-	GPUs        string            `json:"gpus"`             // "all", "0", ... or "" for none
-	OpenPath    string            `json:"openPath"`         // URL path to open once running
-	MinVRAMGB   int               `json:"minVramGB"`        // rough VRAM floor for usefulness
-	Verified    bool              `json:"verified"`         // recipe validated on Cloudless dev hardware
-	Preinstall  bool              `json:"preinstall"`       // pulled AND run automatically on first boot
-	Prefetch    bool              `json:"-"`                // image pulled on boot but not run (ready alternative)
-	Service     bool              `json:"service"`          // infrastructure (engine), hidden from the launcher
-	Hidden      bool              `json:"hidden,omitempty"` // installed/usable but not shown as a launcher tile
-	Engine      bool              `json:"engine"`           // switchable inference engine (carries the stable alias)
-	NeedsEngine bool              `json:"needsEngine"`      // depends on the LLM engine (gated until the model is served)
-	Network     string            `json:"-"`                // docker network to join (for inter-app DNS)
-	Command     []string          `json:"-"`                // container command/args
-	Volumes     map[string]string `json:"-"`                // host-or-named-volume -> containerPath
-	Build       string            `json:"-"`                // embedded build-context name (build instead of pull)
-	Config      []ConfigFile      `json:"config,omitempty"` // editable config files (mounted)
-	Settings    []Field           `json:"-"`                // form fields (via /api/apps/{id}/settings)
-	Admin       *AdminInfo        `json:"-"`                // how the app is administered beyond Cloudless settings
+	GPUs        string            `json:"gpus"`                // "all", "0", ... or "" for none
+	OpenPath    string            `json:"openPath"`            // URL path to open once running
+	MinVRAMGB   int               `json:"minVramGB"`           // rough VRAM floor for usefulness
+	Verified    bool              `json:"verified"`            // recipe validated on Cloudless dev hardware
+	Preinstall  bool              `json:"preinstall"`          // pulled AND run automatically on first boot
+	Prefetch    bool              `json:"-"`                   // image pulled on boot but not run (ready alternative)
+	Service     bool              `json:"service"`             // infrastructure (engine), hidden from the launcher
+	Hidden      bool              `json:"hidden,omitempty"`    // installed/usable but not shown as a launcher tile
+	LocalOnly   bool              `json:"localOnly,omitempty"` // never create LAN or public tunnel sidecars
+	Engine      bool              `json:"engine"`              // switchable inference engine (carries the stable alias)
+	NeedsEngine bool              `json:"needsEngine"`         // depends on the LLM engine (gated until the model is served)
+	Network     string            `json:"-"`                   // docker network to join (for inter-app DNS)
+	Command     []string          `json:"-"`                   // container command/args
+	Volumes     map[string]string `json:"-"`                   // host-or-named-volume -> containerPath
+	DataPath    string            `json:"-"`                   // mount the app's complete Cloudless-managed state directory here
+	DataUID     int               `json:"-"`                   // container UID that must own DataPath (0 = keep host ownership)
+	Build       string            `json:"-"`                   // embedded build-context name (build instead of pull)
+	Config      []ConfigFile      `json:"config,omitempty"`    // editable config files (mounted)
+	Settings    []Field           `json:"-"`                   // form fields (via /api/apps/{id}/settings)
+	Admin       *AdminInfo        `json:"-"`                   // how the app is administered beyond Cloudless settings
 }
 
 // ContainerName is the orchestrator-managed container name for this app.
@@ -108,7 +111,7 @@ func (a App) LanName() string { return "cloudless-lan-" + a.ID }
 
 // HasWebPort reports whether an app serves a web port that can be exposed
 // (on the LAN or online). Engines/services are excluded.
-func (a App) HasWebPort() bool { return a.Launchable() && a.PrimaryHostPort() > 0 }
+func (a App) HasWebPort() bool { return a.Launchable() && !a.LocalOnly && a.PrimaryHostPort() > 0 }
 
 // Tunnelable reports whether an app can be exposed online.
 func (a App) Tunnelable() bool { return a.HasWebPort() }
@@ -509,26 +512,32 @@ var apps = []App{
 		Network: "host",
 	},
 	{
-		// Agent (D13/D14). Pulled from the Cloudless Docker Hub space (built from
-		// internal/apps/hermes, which stays the source of truth for rebuilds).
+		// The official Hermes container includes its gateway and browser dashboard.
+		// One private state directory preserves configuration, sessions and memory.
 		ID:          "hermes",
 		Name:        "Hermes",
-		Description: "Nous Research self-improving agent with persistent memory. Pre-wired to Cloudless AI.",
+		Description: "Nous Research's personal agent and dashboard, integrated with Cloudless AI.",
 		Category:    "Agents & automation",
-		Tagline:     "Personal agent on Telegram / Discord.",
-		Long:        "Hermes is a personal AI agent with persistent memory from Nous Research. Reach it from Telegram or Discord and it keeps context across conversations — an always-available assistant that runs entirely on your own hardware.",
+		Tagline:     "A persistent local agent with tools and memory.",
+		Long:        "Hermes is a personal AI agent from Nous Research with persistent memory, tools, scheduled tasks and messaging integrations. CloudlessOS opens its local dashboard directly and connects it to the active Cloudless AI engine, so chats and model inference stay on this machine.",
 		Examples: []string{
+			"Use the local dashboard for persistent agent conversations",
 			"Chat with your AI from Telegram or Discord",
-			"Keep memory and context across sessions",
-			"Set an allowlist of who is allowed to talk to it",
-			"Use it as a personal assistant on the go",
+			"Run tool-assisted tasks and scheduled automations",
+			"Keep memory and context across sessions and upgrades",
 		},
-		Image:       "samuelcardillo/cloudless-hermes:v1",
+		Image:       "nousresearch/hermes-agent:v2026.7.20",
+		Ports:       map[int]int{9119: 9119},
 		NeedsEngine: true, // agent that drives the local model
-		Env:         map[string]string{"OPENAI_API_KEY": "cloudless"},
+		Env: map[string]string{
+			"HERMES_DASHBOARD":      "1",
+			"HERMES_DASHBOARD_HOST": "127.0.0.1",
+			"HERMES_DASHBOARD_PORT": "9119",
+			"OPENAI_API_KEY":        "cloudless",
+		},
 		Config: []ConfigFile{
-			{File: "config.yaml", Path: "/root/.hermes/config.yaml", Lang: "yaml"},
-			{File: "hermes.env", Path: "/root/.hermes/.env", Lang: "env"},
+			{File: "config.yaml", Lang: "yaml"},
+			{File: "hermes.env", Lang: "env", Env: true},
 		},
 		Settings: []Field{
 			{Key: "allowAll", Label: "Allow all users", Help: "Let anyone message the agent (otherwise use the allowlist below).",
@@ -540,10 +549,16 @@ var apps = []App{
 			{Key: "discordToken", Label: "Discord bot token", Type: "password", Default: "",
 				File: "hermes.env", Path: "DISCORD_BOT_TOKEN"},
 		},
-		OpenPath:  "/",
+		OpenPath: "/",
+		// The official image runs its services as the unprivileged hermes user.
+		DataPath:  "/opt/data",
+		DataUID:   10000,
+		Command:   []string{"gateway", "run"},
 		MinVRAMGB: 0,
 		Verified:  false,
-		Network:   cloudlessNet,
+		LocalOnly: true, // dashboard can read/write credentials; never expose it implicitly
+		// Loopback dashboard + direct access to the host-published Cloudless engine.
+		Network: "host",
 	},
 }
 

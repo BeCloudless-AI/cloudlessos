@@ -567,13 +567,12 @@ func (s *Server) appConfigDir(appID string) string {
 
 // configVolumes seeds missing config files from their embedded defaults and
 // returns host->container mounts so the app reads the user's editable config.
+// Stateful apps can mount the complete directory, allowing their own UI to also
+// persist sessions, memory and settings alongside Cloudless-seeded files.
 func (s *Server) configVolumes(app catalog.App) map[string]string {
 	vols := map[string]string{}
 	dir := s.appConfigDir(app.ID)
 	for _, cf := range app.Config {
-		if cf.Env {
-			continue // injected into container ENV by appSpec, not mounted
-		}
 		host := filepath.Join(dir, cf.File)
 		if _, err := os.Stat(host); err != nil {
 			def, derr := apps.ReadDefault(app.ID, cf.File)
@@ -587,7 +586,24 @@ func (s *Server) configVolumes(app catalog.App) map[string]string {
 				continue
 			}
 		}
+		if app.DataUID > 0 {
+			// cloudlessd is root on the appliance. Ignore failures in unprivileged
+			// development environments, where ownership need not be translated.
+			_ = os.Chown(host, app.DataUID, app.DataUID)
+			_ = os.Chmod(host, 0o600)
+		}
+		if cf.Env || app.DataPath != "" {
+			continue // env is injected; DataPath mounts the containing directory
+		}
 		vols[host] = cf.Path
+	}
+	if app.DataPath != "" {
+		_ = os.MkdirAll(dir, 0o700)
+		_ = os.Chmod(dir, 0o700)
+		if app.DataUID > 0 {
+			_ = os.Chown(dir, app.DataUID, app.DataUID)
+		}
+		vols[dir] = app.DataPath
 	}
 	return vols
 }

@@ -31,11 +31,23 @@ type Context struct {
 	Onboarded   bool            // finished first-run tour
 	Running     map[string]bool // app id -> running
 	GPU         string          // human summary, e.g. "RTX 5090 (32 GB)"
+	Models      []ModelOption   // curated choices and fit verdicts shown by Model Manager
+}
+
+// ModelOption is the authoritative subset of Model Manager data needed for
+// compatibility answers. It prevents the assistant from guessing model fit.
+type ModelOption struct {
+	ID        string
+	Name      string
+	Params    string
+	Quant     string
+	MinVRAMGB int
+	Fit       string // fits | tight | over | unknown
 }
 
 // Action is a one-click follow-up the OS can execute on the user's behalf.
 type Action struct {
-	Kind  string `json:"kind"`         // install | open | chat | engine
+	Kind  string `json:"kind"`         // install | open | chat | engine | models
 	ID    string `json:"id,omitempty"` // app or engine id
 	Label string `json:"label"`        // button text
 }
@@ -68,6 +80,11 @@ func SystemPrompt(c Context) string {
 	b.WriteString("Your job is to help the user decide what to do and guide them through the OS. ")
 	b.WriteString("Be warm, concise and practical: a few short sentences, plain language, no walls of text. ")
 	b.WriteString("Only talk about the capabilities listed below — never invent apps and never claim cloud features.\n\n")
+	b.WriteString("CloudlessOS CONTROL RULES (mandatory): Model Manager is the only authority for discovering, downloading, installing, or switching AI models. ")
+	b.WriteString("Never create or invoke a Hermes skill, terminal command, shell script, package manager, Hugging Face CLI, or other workaround to manage a model. ")
+	b.WriteString("Never claim that an install, download, switch, or other OS action has started or completed merely because the user said yes. ")
+	b.WriteString("You may explain and offer a CloudlessOS action tag; the GUI performs the action only after the user clicks its button. ")
+	b.WriteString("For CloudlessOS settings, apps, engines, and models, answer directly without using Hermes tools. If an exact model is not listed below, say it is not currently verified in Model Manager and do not invent a way to install it.\n\n")
 
 	eng := c.Engine
 	if eng == "" {
@@ -108,11 +125,25 @@ func SystemPrompt(c Context) string {
 	b.WriteString("If the user just wants a plain conversation, they can keep chatting with you here — no app needed. ")
 	b.WriteString("Open WebUI is only for users who want a separate, dedicated chat app.\n")
 
+	b.WriteString("\nModels currently offered by Model Manager (its fit verdict is authoritative for this machine):\n")
+	for _, m := range c.Models {
+		quant := ""
+		if m.Quant != "" {
+			quant = ", " + m.Quant
+		}
+		memory := "VRAM need unknown"
+		if m.MinVRAMGB > 0 {
+			memory = fmt.Sprintf("needs about %d GB VRAM", m.MinVRAMGB)
+		}
+		fmt.Fprintf(&b, "- %s (id: %s; %s%s; %s) — %s.\n", m.Name, m.ID, m.Params, quant, memory, m.Fit)
+	}
+
 	b.WriteString("\nWhen you recommend a concrete next step, end your reply with the matching tag on its own line — ")
 	b.WriteString("the OS turns it into a button:\n")
 	b.WriteString("  [[do:install:<appId>]]  install an app\n")
 	b.WriteString("  [[do:open:<appId>]]     open an app that is already running\n")
 	b.WriteString("  [[do:engine:<id>]]      switch the inference engine\n")
+	b.WriteString("  [[do:models]]           open Model Manager for model discovery, download, compatibility, or switching\n")
 	b.WriteString("Use real ids from the lists above, at most 2 tags, only when genuinely useful.")
 	return b.String()
 }
@@ -148,6 +179,8 @@ func Suggest(reply, lastUser string, c Context) []Action {
 // actionFor turns a parsed tag into a concrete, valid Action (or a no-op).
 func actionFor(kind, id string, c Context) Action {
 	switch kind {
+	case "models":
+		return Action{Kind: "models", Label: "Open Model Manager"}
 	case "engine":
 		if e, ok := catalog.Get(id); ok && e.Engine {
 			return Action{Kind: "engine", ID: id, Label: "Switch to " + strings.TrimSuffix(e.Name, " Engine")}
@@ -165,6 +198,60 @@ func actionFor(kind, id string, c Context) Action {
 		}
 	}
 	return Action{}
+}
+
+// ModelGuidance handles model lifecycle and compatibility questions from live
+// Model Manager data before the request reaches Hermes. This prevents a general
+// agent from inventing skills or terminal workflows for an OS-owned operation.
+func ModelGuidance(text string, c Context) (string, bool) {
+	lower := strings.ToLower(strings.TrimSpace(text))
+	if lower == "" {
+		return "", false
+	}
+	modelWord := containsAny(lower, "model", "qwen", "llama", "mistral", "gemma", "deepseek", "phi", "nemotron")
+	lifecycle := containsAny(lower, "work here", "run here", "fit", "compatible", "support", "available", "install", "download", "switch", "use this", "use qwen", "which model", "better model", "larger model")
+	if !modelWord || !lifecycle {
+		return "", false
+	}
+
+	normalized := normalizeModelText(lower)
+	for _, m := range c.Models {
+		name := normalizeModelText(strings.ToLower(m.Name))
+		id := normalizeModelText(strings.ToLower(m.ID))
+		if (name != "" && strings.Contains(normalized, name)) || (id != "" && strings.Contains(normalized, id)) {
+			need := fmt.Sprintf("about %d GB of VRAM", m.MinVRAMGB)
+			switch m.Fit {
+			case "fits":
+				return fmt.Sprintf("%s is available in Model Manager and should fit this machine. It needs %s; CloudlessOS reports %s. Open Model Manager to download or launch it safely.", m.Name, need, c.GPU), true
+			case "tight":
+				return fmt.Sprintf("%s is available, but Model Manager marks it as a tight fit on this machine. It needs %s and may leave little room for context or other GPU apps. Review it in Model Manager before launching.", m.Name, need), true
+			case "over":
+				return fmt.Sprintf("%s is listed, but Model Manager estimates it needs %s—more than this machine can comfortably provide. Choose a smaller or quantized variant in Model Manager.", m.Name, need), true
+			default:
+				return fmt.Sprintf("%s is available in Model Manager, but CloudlessOS cannot verify its GPU fit right now. Open Model Manager to review it; model installation and switching should happen there.", m.Name), true
+			}
+		}
+	}
+
+	return fmt.Sprintf("I can’t verify that exact model in CloudlessOS’s current Model Manager catalog. This machine reports %s, but compatibility depends on the exact repository, parameter count, quantization, and context length. Open Model Manager to see supported choices and their Fits, Tight, or Too large verdicts; CloudlessOS will not install models through Hermes skills or terminal scripts.", c.GPU), true
+}
+
+func containsAny(text string, parts ...string) bool {
+	for _, part := range parts {
+		if strings.Contains(text, part) {
+			return true
+		}
+	}
+	return false
+}
+
+func normalizeModelText(text string) string {
+	return strings.Map(func(r rune) rune {
+		if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' {
+			return r
+		}
+		return -1
+	}, text)
 }
 
 // intentActions maps loose user intent to a helpful default action.

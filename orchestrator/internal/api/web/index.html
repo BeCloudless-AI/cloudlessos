@@ -4597,7 +4597,8 @@ async function asstSend(text) {
 }
 function asstAction(a) {
   if (!a) return;
-  if (a.kind === 'engine') { switchEngine(a.id); toast('Switching engine…'); }
+  if (a.kind === 'models') { closeAsst(); openModelManager(); }
+  else if (a.kind === 'engine') { switchEngine(a.id); toast('Switching engine…'); }
   else if (a.kind === 'open') { const app = catalogCache.find(x => x.id === a.id); if (app) openApp(app); }
   else if (a.kind === 'install') installApp(a.id);
 }

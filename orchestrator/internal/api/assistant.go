@@ -12,6 +12,7 @@ import (
 	"github.com/cloudless/orchestrator/internal/assistant"
 	"github.com/cloudless/orchestrator/internal/catalog"
 	"github.com/cloudless/orchestrator/internal/hardware"
+	modelcatalog "github.com/cloudless/orchestrator/internal/models"
 )
 
 // assistantChat streams a grounded reply from the built-in Cloudless Assistant.
@@ -41,6 +42,18 @@ func (s *Server) assistantChat(w http.ResponseWriter, r *http.Request) {
 
 	ctx := r.Context()
 	actx := s.assistantContext(ctx)
+	lastUser := ""
+	for i := len(body.Messages) - 1; i >= 0; i-- {
+		if body.Messages[i].Role == "user" {
+			lastUser = body.Messages[i].Content
+			break
+		}
+	}
+	if reply, handled := assistant.ModelGuidance(lastUser, actx); handled {
+		send(map[string]any{"delta": reply})
+		send(map[string]any{"done": true, "actions": []assistant.Action{{Kind: "models", Label: "Open Model Manager"}}})
+		return
+	}
 
 	if !actx.EngineReady {
 		send(map[string]any{"delta": "Your local AI engine is still warming up — give it a moment, then ask me again. " +
@@ -74,13 +87,6 @@ func (s *Server) assistantChat(w http.ResponseWriter, r *http.Request) {
 		send(map[string]any{"delta": "\n\n(Sorry — I lost contact with the engine. Try again in a moment.)"})
 	}
 
-	lastUser := ""
-	for i := len(body.Messages) - 1; i >= 0; i-- {
-		if body.Messages[i].Role == "user" {
-			lastUser = body.Messages[i].Content
-			break
-		}
-	}
 	send(map[string]any{"done": true, "actions": assistant.Suggest(full.String(), lastUser, actx)})
 }
 
@@ -130,6 +136,31 @@ func (s *Server) assistantContext(ctx context.Context) assistant.Context {
 			}
 		}
 	}
+	modelCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	modelList := s.mfModels.Highlights(modelCtx)
+	cancel()
+	if len(modelList) == 0 {
+		modelList = modelcatalog.All()
+	}
+	gpuGB := totalVRAMGB(ctx)
+	modelOptions := make([]assistant.ModelOption, 0, len(modelList))
+	currentListed := false
+	for _, m := range modelList {
+		if m.ID == model {
+			currentListed = true
+		}
+		modelOptions = append(modelOptions, assistant.ModelOption{
+			ID: m.ID, Name: m.Name, Params: m.Params, Quant: m.Quant,
+			MinVRAMGB: m.MinVRAMGB, Fit: fitFor(m.MinVRAMGB, gpuGB),
+		})
+	}
+	if !currentListed && model != "" {
+		name := model
+		if at := strings.LastIndex(name, "/"); at >= 0 && at+1 < len(name) {
+			name = name[at+1:]
+		}
+		modelOptions = append(modelOptions, assistant.ModelOption{ID: model, Name: name, Fit: "unknown"})
+	}
 	return assistant.Context{
 		Engine:      active,
 		EngineReady: active != "" && engineReady(ctx),
@@ -138,6 +169,7 @@ func (s *Server) assistantContext(ctx context.Context) assistant.Context {
 		Onboarded:   st.Onboarded,
 		Running:     running,
 		GPU:         gpuSummary(ctx),
+		Models:      modelOptions,
 	}
 }
 

@@ -61,7 +61,7 @@ func NewServer(eng engine.Engine, st *state.Store, mf *manifest.Store, mfModels 
 // imageFor returns the image reference to pull/run for an app: the manifest's
 // validated digest pin ("image@sha256:…") when present, else the catalog's tag.
 func (s *Server) imageFor(ctx context.Context, app catalog.App) string {
-	if p, ok := s.manifest.Pin(ctx, app.ID); ok {
+	if p, ok := s.manifest.PinFor(ctx, app.ID, app.Image); ok {
 		return p.Ref()
 	}
 	return app.Image
@@ -69,7 +69,7 @@ func (s *Server) imageFor(ctx context.Context, app catalog.App) string {
 
 // infraImage resolves an infra image (cloudflared/socat) to the manifest pin, else fallback.
 func (s *Server) infraImage(ctx context.Context, key, fallback string) string {
-	if p, ok := s.manifest.Pin(ctx, key); ok {
+	if p, ok := s.manifest.PinFor(ctx, key, fallback); ok {
 		return p.Ref()
 	}
 	return fallback

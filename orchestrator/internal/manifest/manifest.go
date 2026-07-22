@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -54,11 +55,11 @@ type Model struct {
 
 // Doc is the parsed manifest.
 type Doc struct {
-	ManifestVersion int            `json:"manifestVersion"`
-	Channel         string         `json:"channel"`
-	Updated         string         `json:"updated"`
-	Apps            map[string]Pin `json:"apps"`
-	Infra           map[string]Pin `json:"infra"`
+	ManifestVersion int              `json:"manifestVersion"`
+	Channel         string           `json:"channel"`
+	Updated         string           `json:"updated"`
+	Apps            map[string]Pin   `json:"apps"`
+	Infra           map[string]Pin   `json:"infra"`
 	Models          map[string]Model `json:"models"`
 }
 
@@ -145,6 +146,28 @@ func (s *Store) Pin(ctx context.Context, id string) (Pin, bool) {
 		return p, true
 	}
 	return Pin{}, false
+}
+
+// PinFor returns a pin only when it targets the same image repository as the
+// built-in catalog entry. A hosted manifest can lag behind a catalog migration;
+// accepting a pin for the old repository would run an incompatible image with
+// the new command, environment and mounts. In that case callers safely fall
+// back to the catalog image until the hosted manifest catches up.
+func (s *Store) PinFor(ctx context.Context, id, expectedImage string) (Pin, bool) {
+	p, ok := s.Pin(ctx, id)
+	if !ok || imageRepository(p.Image) != imageRepository(expectedImage) {
+		return Pin{}, false
+	}
+	return p, true
+}
+
+func imageRepository(ref string) string {
+	ref = strings.TrimSpace(strings.SplitN(ref, "@", 2)[0])
+	lastSlash := strings.LastIndex(ref, "/")
+	if colon := strings.LastIndex(ref, ":"); colon > lastSlash {
+		ref = ref[:colon]
+	}
+	return strings.ToLower(ref)
 }
 
 // ModelPin returns the validated model pin by key (e.g. "default").
@@ -244,7 +267,9 @@ type DiffusionStore struct {
 }
 
 // NewDiffusion returns a DiffusionStore ("" disables it → callers use the built-in list).
-func NewDiffusion(url string) *DiffusionStore { return &DiffusionStore{url: url, ttl: 10 * time.Minute} }
+func NewDiffusion(url string) *DiffusionStore {
+	return &DiffusionStore{url: url, ttl: 10 * time.Minute}
+}
 
 // Enabled reports whether a diffusion manifest URL is configured.
 func (s *DiffusionStore) Enabled() bool { return s != nil && s.url != "" }

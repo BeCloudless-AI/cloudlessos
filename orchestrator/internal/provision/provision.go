@@ -26,7 +26,7 @@ var EngineMu sync.Mutex
 
 // pinnedImage returns the manifest's validated digest ref for an app, else the catalog tag.
 func pinnedImage(ctx context.Context, mf *manifest.Store, app catalog.App) string {
-	if p, ok := mf.Pin(ctx, app.ID); ok {
+	if p, ok := mf.PinFor(ctx, app.ID, app.Image); ok {
 		return p.Ref()
 	}
 	return app.Image

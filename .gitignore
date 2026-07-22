@@ -30,7 +30,7 @@ npm-debug.log*
 *.out
 
 # Models / large artifacts (never commit weights)
-models/
+/models/
 *.gguf
 *.safetensors
 *.bin

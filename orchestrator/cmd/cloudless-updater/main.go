@@ -79,13 +79,19 @@ func check() error {
 			status.Message = "Cloudless update signing has not been configured yet."
 			return osupdate.Write(status)
 		}
-		if err := osupdate.Write(status); err != nil {
+		if err := writeProgress(&status, 5, "Preparing the update check…"); err != nil {
 			return err
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		defer cancel()
+		if err := writeProgress(&status, 15, "Refreshing the signed Cloudless repository…"); err != nil {
+			return err
+		}
 		if _, err := run(ctx, "apt-get", "update"); err != nil {
 			return failStatus(status, "Could not refresh the Cloudless repository", err)
+		}
+		if err := writeProgress(&status, 75, "Comparing installed packages…"); err != nil {
+			return err
 		}
 		status, err := candidates(ctx, status)
 		if err != nil {
@@ -99,6 +105,7 @@ func check() error {
 		} else {
 			status.State = "idle"
 		}
+		status.Progress = 100
 		return osupdate.Write(status)
 	})
 }
@@ -111,13 +118,19 @@ func apply() error {
 			status.Message = "Cloudless update signing has not been configured yet."
 			return osupdate.Write(status)
 		}
-		if err := osupdate.Write(status); err != nil {
+		if err := writeProgress(&status, 3, "Preparing the CloudlessOS update…"); err != nil {
 			return err
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 		defer cancel()
+		if err := writeProgress(&status, 8, "Refreshing the signed Cloudless repository…"); err != nil {
+			return err
+		}
 		if _, err := run(ctx, "apt-get", "update"); err != nil {
 			return failStatus(status, "Could not refresh the Cloudless repository", err)
+		}
+		if err := writeProgress(&status, 18, "Resolving the verified package update…"); err != nil {
+			return err
 		}
 		var err error
 		status, err = candidates(ctx, status)
@@ -128,15 +141,18 @@ func apply() error {
 			status.State = "idle"
 			status.Message = "CloudlessOS is already up to date."
 			status.CheckedAt = time.Now().UTC().Format(time.RFC3339)
+			status.Progress = 100
 			return osupdate.Write(status)
 		}
 
+		if err := writeProgress(&status, 24, "Creating a recovery snapshot…"); err != nil {
+			return err
+		}
 		rollbackDir := filepath.Join("/var/lib/cloudless-updater/rollback", time.Now().UTC().Format("20060102T150405Z"))
 		rollbackAvailable := copyDebs("/var/lib/cloudless-updater/current", rollbackDir) == nil
 
 		status.State = "installing"
-		status.Message = fmt.Sprintf("Installing %d verified package update(s)…", len(status.Packages))
-		if err := osupdate.Write(status); err != nil {
+		if err := writeProgress(&status, 30, fmt.Sprintf("Downloading %d verified package update(s)…", len(status.Packages))); err != nil {
 			return err
 		}
 		args := []string{"install", "-y", "--only-upgrade"}
@@ -154,15 +170,24 @@ func apply() error {
 		if _, err := runEnv(ctx, []string{"DEBIAN_FRONTEND=noninteractive"}, "apt-get", downloadArgs...); err != nil {
 			return failStatus(status, "Could not download the verified update", err)
 		}
+		if err := writeProgress(&status, 55, "Verifying downloaded packages…"); err != nil {
+			return err
+		}
 		stagedDir := "/var/lib/cloudless-updater/staged"
 		_ = os.RemoveAll(stagedDir)
 		if err := copyDebs("/var/cache/apt/archives", stagedDir); err != nil {
 			return failStatus(status, "Downloaded update packages were not found", err)
 		}
+		if err := writeProgress(&status, 62, fmt.Sprintf("Installing %d verified package update(s)…", len(status.Packages))); err != nil {
+			return err
+		}
 		if _, err := runEnv(ctx, []string{"DEBIAN_FRONTEND=noninteractive", "NEEDRESTART_MODE=a"}, "apt-get", args...); err != nil {
 			return failStatus(status, "Package installation failed", err)
 		}
 
+		if err := writeProgress(&status, 86, "Restarting Cloudless services and checking their health…"); err != nil {
+			return err
+		}
 		_, _ = run(ctx, "systemctl", "try-restart", "cloudlessd.service")
 		if !waitHealthy(90 * time.Second) {
 			if !rollbackAvailable {
@@ -185,6 +210,12 @@ func apply() error {
 		if _, err := os.Stat("/run/reboot-required"); err == nil {
 			status.RebootRequired = true
 		}
+		if err := writeProgress(&status, 96, "Saving recovery packages…"); err != nil {
+			return err
+		}
+		if err := copyDebs(stagedDir, "/var/lib/cloudless-updater/current"); err != nil {
+			return failStatus(status, "Update installed but its recovery packages could not be retained", err)
+		}
 		status.State = "updated"
 		status.CurrentVersion = status.AvailableVersion
 		status.Packages = nil
@@ -192,13 +223,11 @@ func apply() error {
 		status.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 		status.CheckedAt = status.UpdatedAt
 		status.Message = "Update installed successfully."
-		if err := copyDebs(stagedDir, "/var/lib/cloudless-updater/current"); err != nil {
-			return failStatus(status, "Update installed but its recovery packages could not be retained", err)
-		}
 		if status.RebootRequired {
 			status.State = "reboot_required"
 			status.Message = "Update installed. Restart CloudlessOS to finish."
 		}
+		status.Progress = 100
 		return osupdate.Write(status)
 	})
 }
@@ -211,8 +240,20 @@ func currentStatus(state, message string) osupdate.Status {
 	status.State = state
 	status.Message = message
 	status.Error = ""
+	status.Progress = 0
 	status.Configured = osupdate.Configured()
 	return status
+}
+
+func writeProgress(status *osupdate.Status, progress int, message string) error {
+	if progress < 0 {
+		progress = 0
+	} else if progress > 100 {
+		progress = 100
+	}
+	status.Progress = progress
+	status.Message = message
+	return osupdate.Write(*status)
 }
 
 func candidates(ctx context.Context, status osupdate.Status) (osupdate.Status, error) {

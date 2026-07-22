@@ -291,9 +291,14 @@
   .sys-update-title { font-size: 14px; font-weight: 700; color: var(--ink); }
   .sys-update-version { margin-top: 3px; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
   .sys-update-message { margin-top: 12px; font-size: 12.5px; line-height: 1.5; color: var(--ink-2); }
+  .sys-update-progress { margin-top: 13px; }
+  .sys-update-progress-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 7px; color: var(--muted); font-size: 11.5px; }
+  .sys-update-progress-head strong { color: var(--ink); font-variant-numeric: tabular-nums; }
+  .sys-update-progress-track { height: 7px; overflow: hidden; border-radius: 999px; background: color-mix(in srgb, var(--blue) 13%, var(--control)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--blue) 10%, transparent); }
+  .sys-update-progress-fill { height: 100%; min-width: 2px; border-radius: inherit; background: linear-gradient(90deg, var(--blue), color-mix(in srgb, var(--blue) 68%, var(--accent))); transition: width .35s ease; }
   .sys-update-error { margin-top: 8px; font-size: 11.5px; color: var(--err); overflow-wrap: anywhere; }
   .sys-update-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 13px; }
-  .sys-update-spin { animation: spin .9s linear infinite; }
+  .sys-update-spin .ui-icon { animation: spin .9s linear infinite; transform-origin: center; }
   .hw-card + .hw-card { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
   .set-row { display: flex; align-items: center; gap: 12px; padding: 7px 0; font-size: 13.5px; }
   .srow-label { width: 70px; color: var(--muted); flex: none; }
@@ -3165,6 +3170,8 @@ async function renderGeneralPage(c) {
   const busy = state === 'checking' || state === 'installing';
   const current = update.currentVersion || 'development';
   const available = update.availableVersion || '';
+  const progress = Math.max(0, Math.min(100, Number(update.progress) || 0));
+  const showProgress = busy || state === 'updated' || state === 'reboot_required';
   let updateTitle = 'CloudlessOS is up to date';
   if (!update.configured) updateTitle = 'Updates are not configured yet';
   else if (state === 'available') updateTitle = `CloudlessOS ${escapeHtml(available)} is available`;
@@ -3183,6 +3190,7 @@ async function renderGeneralPage(c) {
         <div class="sys-update-top"><span class="sys-update-mark ${busy ? 'sys-update-spin' : ''}">${uiIcon(busy ? 'restart' : 'download')}</span>
           <div class="sys-update-copy"><div class="sys-update-title">${updateTitle}</div><div class="sys-update-version">Installed ${escapeHtml(current)} · ${escapeHtml(update.channel || 'stable')} channel${available ? ' · Available ' + escapeHtml(available) : ''}</div></div></div>
         <div class="sys-update-message">${escapeHtml(update.message || (update.configured ? 'Cloudless checks updates.becloudless.ai for signed system packages.' : 'The archive signing key must be initialized before over-the-air updates can be enabled.'))}</div>
+        ${showProgress ? `<div class="sys-update-progress"><div class="sys-update-progress-head"><span>Overall progress</span><strong>${progress}%</strong></div><div class="sys-update-progress-track" role="progressbar" aria-label="System update progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progress}"><div class="sys-update-progress-fill" style="width:${progress}%"></div></div></div>` : ''}
         ${update.error ? `<div class="sys-update-error">${escapeHtml(update.error)}</div>` : ''}
         ${update.checkedAt ? `<div class="upd-src">Last checked ${new Date(update.checkedAt).toLocaleString()}</div>` : ''}
         ${updateActions ? `<div class="sys-update-actions">${updateActions}</div>` : ''}
@@ -3224,7 +3232,7 @@ async function startSystemUpdate(operation) {
     await new Promise(resolve => setTimeout(resolve, 1200));
     let status;
     try { status = await api('/api/system/update'); } catch { continue; }
-    if (settingsOpen() && setPage === 'general') renderGeneralPage(document.getElementById('set-content'));
+    if (settingsOpen() && setPage === 'general') await renderGeneralPage(document.getElementById('set-content'));
     if (status.state === 'checking' || status.state === 'installing') continue;
     if (status.state === 'updated') { toast('CloudlessOS updated'); setTimeout(() => location.reload(), 600); }
     else if (status.state === 'reboot_required') toast('Update installed — restart required');

@@ -1,0 +1,6 @@
+Types: deb
+URIs: https://updates.becloudless.ai
+Suites: stable
+Components: main
+Signed-By: /usr/share/keyrings/cloudless-archive-keyring.pgp
+Enabled: yes

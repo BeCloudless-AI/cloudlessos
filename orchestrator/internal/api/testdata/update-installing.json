@@ -1,0 +1,22 @@
+{
+  "state": "installing",
+  "channel": "stable",
+  "configured": true,
+  "currentVersion": "0.1.1",
+  "availableVersion": "0.1.2",
+  "message": "Installing 2 verified package updates…",
+  "progress": 62,
+  "rebootRequired": false,
+  "packages": [
+    {
+      "name": "cloudless-orchestrator",
+      "installed": "0.1.1",
+      "candidate": "0.1.2"
+    },
+    {
+      "name": "cloudless-updater",
+      "installed": "0.1.1",
+      "candidate": "0.1.2"
+    }
+  ]
+}

@@ -30,6 +30,7 @@ type Status struct {
 	CurrentVersion   string    `json:"currentVersion,omitempty"`
 	AvailableVersion string    `json:"availableVersion,omitempty"`
 	Message          string    `json:"message,omitempty"`
+	Progress         int       `json:"progress"`
 	Error            string    `json:"error,omitempty"`
 	CheckedAt        string    `json:"checkedAt,omitempty"`
 	UpdatedAt        string    `json:"updatedAt,omitempty"`

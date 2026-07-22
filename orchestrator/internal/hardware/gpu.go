@@ -5,6 +5,7 @@ package hardware
 import (
 	"bufio"
 	"context"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -55,7 +56,7 @@ func GPUs(ctx context.Context) ([]GPU, error) {
 // queryGPUs runs nvidia-smi for all NVIDIA GPUs. Returns an empty slice (and the
 // error) when nvidia-smi is absent or reports nothing.
 func queryGPUs(ctx context.Context) ([]GPU, error) {
-	cmd := exec.CommandContext(ctx, "nvidia-smi",
+	cmd := exec.CommandContext(ctx, nvidiaSMIPath(),
 		"--query-gpu=index,name,memory.used,memory.total,utilization.gpu,temperature.gpu,power.draw,power.limit,driver_version",
 		"--format=csv,noheader,nounits")
 	out, err := cmd.Output()
@@ -83,6 +84,19 @@ func queryGPUs(ctx context.Context) ([]GPU, error) {
 		})
 	}
 	return gpus, nil
+}
+
+// nvidiaSMIPath supports both a normal Linux installation and NVIDIA's WSL
+// driver bridge, which exposes nvidia-smi outside the default distro PATH.
+func nvidiaSMIPath() string {
+	if path, err := exec.LookPath("nvidia-smi"); err == nil {
+		return path
+	}
+	const wslPath = "/usr/lib/wsl/lib/nvidia-smi"
+	if info, err := os.Stat(wslPath); err == nil && !info.IsDir() {
+		return wslPath
+	}
+	return "nvidia-smi"
 }
 
 func splitCSV(line string) []string {

@@ -6,8 +6,8 @@ VERSION="${1:-}"
 CHANNEL="${2:-stable}"
 REPO="${CLOUDLESS_APT_REPO_OUT:-$DISTRO/out/apt-repository}"
 BASE_URL="${CLOUDLESS_APT_BASE_URL:-https://updates.becloudless.ai/apt}"
-KEY="$DISTRO/release/keys/cloudless-archive-keyring.pgp"
-FINGERPRINT_FILE="$DISTRO/release/keys/cloudless-archive-fingerprint.txt"
+KEY="${CLOUDLESS_ARCHIVE_KEY:-$DISTRO/release/keys/cloudless-archive-keyring.pgp}"
+FINGERPRINT_FILE="${CLOUDLESS_ARCHIVE_FINGERPRINT_FILE:-$DISTRO/release/keys/cloudless-archive-fingerprint.txt}"
 PACKAGES=(cloudless-orchestrator cloudless-shell cloudless-branding cloudless-hardware cloudless-firstboot cloudless-updater)
 
 if [ -z "$VERSION" ] || [[ "$VERSION" == *dev* ]]; then
@@ -138,6 +138,23 @@ for package in "${PACKAGES[@]}"; do
         reprepro --basedir "$REPO" includedeb "$CHANNEL" "$DISTRO/out/packages/${package}_${VERSION}_amd64.deb"
     fi
 done
+
+# APT's by-hash protocol makes index promotion race-free: clients fetch the
+# immutable SHA-256 path named by signed metadata instead of a mutable
+# Packages filename that may be changing during publication.
+release="$REPO/dists/$CHANNEL/Release"
+while IFS= read -r index; do
+    hash="$(sha256sum "$index" | awk '{print $1}')"
+    by_hash="$(dirname "$index")/by-hash/SHA256/$hash"
+    install -Dm0644 "$index" "$by_hash"
+done < <(find "$REPO/dists/$CHANNEL" -type f \( -name Packages -o -name Packages.gz \) ! -path '*/by-hash/*' -print)
+if ! grep -Fqx 'Acquire-By-Hash: yes' "$release"; then
+    sed -i '/^Suite:/a Acquire-By-Hash: yes' "$release"
+fi
+rm -f "$release.gpg" "$REPO/dists/$CHANNEL/InRelease"
+gpg --batch --yes --local-user "$fingerprint" --armor --detach-sign --output "$release.gpg" "$release"
+gpg --batch --yes --local-user "$fingerprint" --clearsign --output "$REPO/dists/$CHANNEL/InRelease" "$release"
+
 cp "$KEY" "$REPO/cloudless-archive-keyring.pgp"
 manifest="$REPO/releases/$VERSION.json"
 printf '{"version":"%s","channel":"%s","publishedAt":"%s","packages":[' \

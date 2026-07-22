@@ -85,6 +85,13 @@ Before promoting a release, verify
 first. Keep at least one known-good package generation and the archive signing backup
 outside R2.
 
+The publisher promotes releases in dependency order and never deletes the previous
+generation. Package indexes are available through APT's immutable SHA-256 `by-hash`
+paths; signed `InRelease` metadata is uploaded last as the commit point. Metadata is
+published with `no-store`, while packages and hash-addressed indexes are immutable. The
+command succeeds only after downloading the public repository, validating its archive
+signature, and checking every published index and package against the signed hashes.
+
 ## Existing installations
 
 An installation made before `cloudless-updater` existed needs a one-time bootstrap. Build

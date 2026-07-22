@@ -1802,6 +1802,7 @@
     background: linear-gradient(145deg, color-mix(in srgb, var(--blue) 7%, var(--card)), var(--card));
   }
   .md-ic2 { width: 68px; height: 68px; border-radius: 17px; font-size: 31px; background: var(--card-strong); }
+  .md-ic2 .ui-icon { width: 28px; height: 28px; color: var(--blue); }
   .md-eyebrow { margin-bottom: 4px; color: var(--blue); font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .7px; }
   .md-nm { font-size: 24px; letter-spacing: -.55px; }
   .md-sub { max-width: 620px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; word-break: normal; }
@@ -1825,6 +1826,99 @@
   .md-adv-tog > .ui-icon:first-child { width: 15px; height: 15px; }
   .md-adv-tog .md-adv-chev { width: 14px; height: 14px; }
   .md-adv-body { margin: 0; padding: 0 14px 14px; }
+
+  /* Model Manager v2: less chrome, faster scanning, clearer hardware fit. */
+  body:has(#models:not(.hidden)) { overflow: hidden; }
+  .mm-body { scrollbar-gutter: stable; }
+  .mm-tabs { margin-bottom: 16px; }
+  .mm-bar {
+    grid-template-columns: minmax(190px, .75fr) minmax(300px, 1.25fr); margin-bottom: 10px;
+    padding: 12px 14px; background: var(--panel-2);
+  }
+  .mm-machine-copy { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .mm-machine-label { color: var(--muted); font-size: 10px; font-weight: 650; }
+  .mm-machine-value { color: var(--ink); font-size: 13px; font-weight: 760; }
+  .mm-machine-note { color: var(--faint); font-size: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .mm-filter-row { margin-bottom: 16px; }
+  .mm-sort-wrap { margin-left: auto; display: inline-flex; align-items: center; gap: 7px; }
+  .mm-sort-wrap label { color: var(--faint); font-size: 10px; font-weight: 700; }
+  .mm-sort {
+    min-height: 30px; padding: 4px 28px 4px 9px; border: 1px solid var(--hair); border-radius: 8px;
+    background: var(--panel-2); color: var(--ink-2); font: inherit; font-size: 10.5px; cursor: pointer;
+  }
+  .mm-result-count { margin-left: 0; min-width: 58px; text-align: right; }
+  .mm-active-card {
+    width: 100%; margin: 0 0 20px; padding: 15px 16px; display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 14px; text-align: left;
+    border: 1px solid color-mix(in srgb, var(--blue) 34%, var(--hair)); border-radius: 15px;
+    background: linear-gradient(120deg, color-mix(in srgb, var(--blue) 10%, var(--card)), var(--card));
+    color: var(--ink); cursor: pointer; transition: border-color .15s, transform .15s, box-shadow .15s;
+  }
+  .mm-active-card:hover { border-color: var(--blue); transform: translateY(-1px); box-shadow: 0 18px 30px -26px var(--blue); }
+  .mm-active-icon {
+    width: 44px; height: 44px; display: grid; place-items: center; border-radius: 12px;
+    color: var(--blue); background: var(--blue-soft); border: 1px solid color-mix(in srgb, var(--blue) 22%, var(--hair));
+  }
+  .mm-active-icon .ui-icon { width: 20px; height: 20px; }
+  .mm-active-copy { min-width: 0; }
+  .mm-active-kicker { display: flex; align-items: center; gap: 7px; color: var(--blue); font-size: 9px; font-weight: 800; letter-spacing: .65px; text-transform: uppercase; }
+  .mm-active-kicker::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; box-shadow: 0 0 0 4px var(--blue-soft); }
+  .mm-active-name { display: block; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; font-weight: 780; letter-spacing: -.2px; }
+  .mm-active-meta { display: block; margin-top: 3px; color: var(--muted); font-size: 10.5px; }
+  .mm-active-action { display: inline-flex; align-items: center; gap: 6px; color: var(--blue); font-size: 11px; font-weight: 700; }
+  .mm-active-action .ui-icon { width: 13px; height: 13px; }
+  .mdl-sec { margin-top: 20px; }
+  .mdl-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .mdl {
+    min-height: 154px; padding: 13px 14px; gap: 9px; border-radius: 13px;
+    background: color-mix(in srgb, var(--card) 92%, transparent);
+  }
+  .mdl-icon { width: 34px; height: 34px; border-radius: 10px; }
+  .mdl-icon .ui-icon { width: 16px; height: 16px; }
+  .mdl-name { font-size: 13.5px; }
+  .mdl-notes { min-height: 34px; -webkit-line-clamp: 2; font-size: 11px; line-height: 1.48; }
+  .mdl-tags { min-height: 20px; flex-wrap: nowrap; overflow: hidden; }
+  .mdl-t, .mdl-cap { flex: none; }
+  .mdl-status { min-height: 21px; padding: 3px 6px; }
+  .mdl-compat { margin-top: auto; display: flex; flex-direction: column; gap: 6px; }
+  .mdl-compat-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .mdl-vram { color: var(--muted); font-size: 9.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .mdl-meter { height: 4px; overflow: hidden; border-radius: 999px; background: var(--hair); }
+  .mdl-meter > i { display: block; width: var(--meter); height: 100%; border-radius: inherit; background: #2faa5b; }
+  .fit-tight .mdl-meter > i { background: var(--warn); }
+  .fit-over .mdl-meter > i { background: var(--err); }
+  .mdl-foot { min-height: 28px; padding-top: 8px; }
+  .mdl-use { width: auto; height: 26px; padding: 0 8px; display: inline-flex; gap: 5px; font-size: 9.5px; font-weight: 700; }
+  .mdl-use .ui-icon { width: 11px; height: 11px; }
+  .mm-empty {
+    margin-top: 18px; padding: 42px 18px; border: 1px dashed var(--line-2); border-radius: 14px; background: var(--panel-2);
+  }
+  .mm-advanced {
+    margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--hair);
+  }
+  .mm-advanced .adv-toggle { margin: 0; display: inline-flex; align-items: center; gap: 7px; color: var(--muted); }
+  .mm-advanced .adv-toggle .ui-icon { width: 14px; height: 14px; }
+  .mm-advanced .adv { margin-top: 12px; padding: 14px; border: 1px solid var(--hair); border-radius: 12px; background: var(--panel-2); }
+  .md-compat-panel {
+    margin: 14px 0; padding: 14px 15px; display: grid; grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center; gap: 10px 18px; border: 1px solid var(--hair); border-radius: 13px; background: var(--panel-2);
+  }
+  .md-compat-title { color: var(--ink); font-size: 12.5px; font-weight: 750; }
+  .md-compat-copy { margin-top: 3px; color: var(--muted); font-size: 11px; line-height: 1.45; }
+  .md-compat-numbers { color: var(--ink-2); font-size: 11px; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .md-compat-panel .mdl-meter { grid-column: 1 / -1; height: 6px; }
+  .md-section-title { margin: 20px 2px 9px; color: var(--ink); font-size: 11px; font-weight: 780; letter-spacing: .45px; text-transform: uppercase; }
+  .md-desc { margin-top: 0; }
+  .md-state-line { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); font-size: 11px; font-weight: 650; }
+  .md-state-line i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  .md-state-line.active { color: var(--blue); }
+  .md-state-line.ready { color: #2faa5b; }
+  .md-state-line.remote { color: var(--muted); }
+  .model-confirm-facts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 14px 0; }
+  .model-confirm-fact { padding: 10px 11px; border: 1px solid var(--hair); border-radius: 10px; background: var(--panel-2); }
+  .model-confirm-fact small { display: block; color: var(--faint); font-size: 9px; font-weight: 750; text-transform: uppercase; letter-spacing: .45px; }
+  .model-confirm-fact b { display: block; margin-top: 3px; color: var(--ink); font-size: 12px; }
+  .model-confirm-warning { margin-top: 10px; color: var(--warn); font-size: 11px; line-height: 1.5; }
   .asst { right: 24px; bottom: 24px; border-radius: 20px; background: var(--card-strong); }
   .asst-head { min-height: 58px; }
   .msg.user { background: var(--blue); }
@@ -1874,7 +1968,7 @@
     .cards { grid-template-columns: 1fr; }
     .pad { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .mdl-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .mdl { min-height: 224px; }
+    .mdl { min-height: 174px; }
     .mdl-top {
       display: grid; grid-template-columns: 38px minmax(0, 1fr);
       align-items: start; column-gap: 10px; row-gap: 7px;
@@ -1916,9 +2010,13 @@
     .mm-tabs { width: 100%; }
     .mm-tab { flex: 1; justify-content: center; }
     .mm-bar { grid-template-columns: 1fr; gap: 12px; padding: 12px; }
-    .mm-filter-row { align-items: flex-start; }
+    .mm-filter-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; }
     .mm-filter-label { display: none; }
-    .mm-result-count { padding-top: 8px; }
+    .mm-filters { grid-column: 1 / -1; grid-row: 2; }
+    .mm-result-count { grid-column: 1; grid-row: 1; padding: 0; margin: 0; text-align: left; }
+    .mm-sort-wrap { grid-column: 2; grid-row: 1; width: auto; margin-left: 0; justify-content: flex-end; }
+    .mm-active-card { grid-template-columns: auto minmax(0, 1fr); }
+    .mm-active-action { grid-column: 2; justify-self: start; }
     .mdl-grid { grid-template-columns: 1fr; }
     .inf-tabs { padding-bottom: 2px; }
     .inf-tabs .mm-tab { min-width: 112px; flex: 0 0 auto; }
@@ -1932,6 +2030,8 @@
     .md-hero { align-items: flex-start; flex-wrap: wrap; padding: 16px; }
     .md-hero-actions { width: 100%; margin: 2px 0 0 84px; }
     .md-sub { white-space: normal; overflow-wrap: anywhere; }
+    .md-compat-panel { grid-template-columns: 1fr; }
+    .md-compat-panel .mdl-meter { grid-column: 1; }
     .lp-cols { grid-template-columns: 1fr; }
     .lp-side { width: auto; max-height: 38%; border-right: 0; border-bottom: 1px solid var(--hair); }
     .set-sidebar { width: 150px; }
@@ -3191,17 +3291,48 @@ async function renderEnginePage(c) {
   c.querySelectorAll('.ec [data-eng]').forEach(b => b.onclick = () => { switchEngine(b.dataset.eng); toast('Switching engine…'); });
 }
 
-const FIT_LABEL = { fits: 'fits your GPU', tight: 'tight fit', over: 'needs more VRAM', unknown: '' };
+const FIT_LABEL = { fits: 'Comfortable', tight: 'Close fit', over: 'Too large', unknown: 'Unknown fit' };
+const FIT_EXPLAIN = {
+  fits: 'Plenty of VRAM headroom for normal use.',
+  tight: 'Should run, but long contexts and concurrent requests may be limited.',
+  over: 'Needs more VRAM than this machine currently reports.',
+  unknown: 'CloudlessOS cannot estimate compatibility for this model yet.'
+};
+function modelMeter(m, gpu) {
+  if (!gpu || !m.minVramGB) return 0;
+  return Math.max(4, Math.min(100, Math.round((m.minVramGB / gpu) * 100)));
+}
+function modelCompatibility(m, gpu) {
+  const label = FIT_LABEL[m.fit] || FIT_LABEL.unknown;
+  const amount = m.minVramGB ? `~${m.minVramGB} GB${gpu ? ` of ${gpu} GB` : ''}` : 'No estimate';
+  return `<div class="mdl-compat">
+    <div class="mdl-compat-row"><span class="mdl-fit fit-${m.fit || 'unknown'}">${label}</span><span class="mdl-vram">${amount}</span></div>
+    ${gpu && m.minVramGB ? `<span class="mdl-meter" aria-hidden="true"><i style="--meter:${modelMeter(m, gpu)}%"></i></span>` : ''}
+  </div>`;
+}
+function modelSort(list) {
+  const fitRank = { fits: 0, tight: 1, unknown: 2, over: 3 };
+  return list.slice().sort((a, b) => {
+    if (mmSort === 'name') return (a.name || a.id || '').localeCompare(b.name || b.id || '');
+    if (mmSort === 'memory-low') return (a.minVramGB || 9999) - (b.minVramGB || 9999);
+    if (mmSort === 'memory-high') return (b.minVramGB || -1) - (a.minVramGB || -1);
+    if (!!a.recommended !== !!b.recommended) return a.recommended ? -1 : 1;
+    const fit = (fitRank[a.fit] ?? 2) - (fitRank[b.fit] ?? 2);
+    if (fit) return fit;
+    return (a.minVramGB || 9999) - (b.minVramGB || 9999);
+  });
+}
 function applyModel(id) { // advanced custom-id apply (explicit; no warning)
   toast('Switching model… (may download weights)');
   api('/api/settings/model', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: id }) })
     .then(r => { if (r.jobId) trackJobToast(r.jobId, 'Model'); }).catch(() => toast('Failed', true));
 }
 function modelCard(m) {
-  const caps = (m.recommended ? '<span class="mdl-cap rec">★ recommended</span>' : '')
-    + (m.vision ? '<span class="mdl-cap vis">vision</span>' : '') + (m.toolCalling ? '<span class="mdl-cap">tools</span>' : '')
-    + (m.gated ? '<span class="mdl-cap gated">gated</span>' : '');
-  const tags = (m.tags || []).map(t => `<span class="mdl-t">${escapeHtml(t)}</span>`).join('');
+  const caps = (m.recommended ? '<span class="mdl-cap rec">Recommended</span>' : '')
+    + (m.vision ? '<span class="mdl-cap vis">Vision</span>' : '') + (m.toolCalling ? '<span class="mdl-cap">Tools</span>' : '')
+    + (m.gated ? '<span class="mdl-cap gated">Gated</span>' : '');
+  const tags = (m.tags || []).filter(t => !['vision', 'tools'].includes(String(t).toLowerCase())).slice(0, 2)
+    .map(t => `<span class="mdl-t">${escapeHtml(t)}</span>`).join('');
   const status = m.active ? '<span class="mdl-status active"><i></i>Loaded</span>' : (m.downloaded ? '<span class="mdl-status">Downloaded</span>' : '');
   return `<button class="mdl ${m.active ? 'on' : ''}${m.recommended ? ' rec' : ''} fit-${m.fit}" data-mid="${escapeAttr(m.id)}">
       <div class="mdl-top">
@@ -3211,11 +3342,12 @@ function modelCard(m) {
       </div>
       <div class="mdl-notes">${escapeHtml(m.description || '')}</div>
       <div class="mdl-tags">${caps}${tags}</div>
-      <div class="mdl-foot"><span class="mdl-fit fit-${m.fit}">${FIT_LABEL[m.fit] || ''}${m.minVramGB ? ' · ~' + m.minVramGB + ' GB' : ''}</span><span class="mdl-use" aria-hidden="true">${uiIcon('arrow-right')}</span></div>
+      ${modelCompatibility(m, (mmLM || {}).gpuVRAMGB || 0)}
+      <div class="mdl-foot"><span class="mdl-meta">${escapeHtml(m.use || 'general')}</span><span class="mdl-use">View details ${uiIcon('arrow-right')}</span></div>
     </button>`;
 }
 function diffCard(m) {
-  const tags = (m.tags || []).map(t => `<span class="mdl-t">${escapeHtml(t)}</span>`).join('');
+  const tags = (m.tags || []).slice(0, 2).map(t => `<span class="mdl-t">${escapeHtml(t)}</span>`).join('');
   const base = m.base ? `<span class="mdl-cap">${escapeHtml(m.base)}</span>` : '';
   const status = m.downloaded ? '<span class="mdl-status active"><i></i>Downloaded</span>' : '';
   return `<button class="mdl ${m.downloaded ? 'on' : ''} fit-${m.fit}" data-did="${escapeAttr(m.id)}">
@@ -3226,12 +3358,22 @@ function diffCard(m) {
       </div>
       <div class="mdl-notes">${escapeHtml(m.description || '')}</div>
       <div class="mdl-tags">${base}${tags}</div>
-      <div class="mdl-foot"><span class="mdl-fit fit-${m.fit}">${FIT_LABEL[m.fit] || ''}${m.minVramGB ? ' · ~' + m.minVramGB + ' GB' : ''}</span><span class="mdl-use" aria-hidden="true">${uiIcon('arrow-right')}</span></div>
+      ${modelCompatibility(m, (mmDiff || {}).gpuVRAMGB || 0)}
+      <div class="mdl-foot"><span class="mdl-meta">${m.sizeGB ? `${m.sizeGB} GB download` : escapeHtml(m.type || 'checkpoint')}</span><span class="mdl-use">View details ${uiIcon('arrow-right')}</span></div>
     </button>`;
 }
 function modelSection(title, list, cardFn) {
   if (!list || !list.length) return '';
   return `<div class="mdl-sec"><span>${escapeHtml(title)}</span><span class="mdl-count">${list.length}</span></div><div class="mdl-grid">${list.map(cardFn).join('')}</div>`;
+}
+function activeModelCard(m, gpu) {
+  if (!m) return '';
+  const meta = [m.params, m.quant, m.contextK ? `${m.contextK}K context` : '', m.minVramGB ? `~${m.minVramGB} GB VRAM` : ''].filter(Boolean).join(' · ');
+  return `<button class="mm-active-card" data-active-model="${escapeAttr(m.id)}">
+    <span class="mm-active-icon">${uiIcon('models')}</span>
+    <span class="mm-active-copy"><span class="mm-active-kicker">Loaded now</span><span class="mm-active-name">${escapeHtml(m.name)}</span><span class="mm-active-meta">${escapeHtml(meta || m.id)}</span></span>
+    <span class="mm-active-action">Manage ${uiIcon('arrow-right')}</span>
+  </button>`;
 }
 function downloadModel(m) {
   toast('Downloading ' + m.name + '… (runs in background)');
@@ -3245,17 +3387,52 @@ function downloadDiffusion(m) {
 function launchModel(m) {
   const curId = (mmLM && mmLM.current) || '';
   const curName = (mmCache['lm:' + curId] && mmCache['lm:' + curId].name) || (curId.split('/').pop()) || 'the current model';
-  let msg = `Launch “${m.name}”?\n\nThis restarts the inference engine to load it. The model loaded now (${curName}) will be unloaded and any chats in progress interrupted — expect roughly 30–60 seconds of downtime.`;
-  if (m.fit === 'over') msg += `\n\n⚠ This model needs more VRAM (~${m.minVramGB} GB) than your GPU reports — it may fail to load.`;
-  if (!confirm(msg)) return;
-  toast('Launching ' + m.name + '… (engine restarting)');
-  api('/api/settings/model', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: m.id }) })
-    .then(r => { if (r.jobId) trackJobToast(r.jobId, 'Model'); }).catch(() => toast('Failed', true));
-  mmDetail = null; renderModelManager();
+  const gpu = (mmLM && mmLM.gpuVRAMGB) || 0;
+  keyDialogBusy = false;
+  keyDialogReturnFocus = document.activeElement;
+  const layer = document.getElementById('key-dialog-layer');
+  const content = document.getElementById('key-dialog-content');
+  content.innerHTML = `<div class="key-dialog-head">
+      <span class="key-dialog-icon">${uiIcon('rocket')}</span>
+      <div class="key-dialog-heading"><div class="key-dialog-title" id="key-dialog-title">Launch ${escapeHtml(m.name)}?</div><div class="key-dialog-sub">CloudlessOS will restart the inference engine. Chats and API requests will pause for about 30–60 seconds.</div></div>
+      <button class="key-dialog-close" id="model-launch-close" type="button" aria-label="Close launch dialog">${uiIcon('close')}</button>
+    </div>
+    <div class="key-dialog-body">
+      <div class="model-confirm-facts">
+        <div class="model-confirm-fact"><small>Loaded now</small><b>${escapeHtml(curName)}</b></div>
+        <div class="model-confirm-fact"><small>Compatibility</small><b>${escapeHtml(FIT_LABEL[m.fit] || FIT_LABEL.unknown)}${m.minVramGB ? ` · ~${m.minVramGB} GB` : ''}</b></div>
+      </div>
+      ${m.fit === 'over' ? `<div class="model-confirm-warning">This model needs about ${m.minVramGB} GB of VRAM, but this machine reports ${gpu || 'less available'} GB. Launching may fail.</div>` : ''}
+      <div class="key-dialog-actions">
+        <button class="btn" id="model-launch-cancel" type="button">Cancel</button>
+        <button class="btn primary" id="model-launch-confirm" type="button">${uiIcon('rocket')}<span>Launch model</span></button>
+      </div>
+    </div>`;
+  layer.classList.remove('hidden');
+  const cancel = () => closeKeyDialog();
+  document.getElementById('model-launch-close').onclick = cancel;
+  document.getElementById('model-launch-cancel').onclick = cancel;
+  const confirmButton = document.getElementById('model-launch-confirm');
+  confirmButton.onclick = async () => {
+    keyDialogBusy = true; confirmButton.disabled = true;
+    confirmButton.innerHTML = '<span class="key-dialog-spinner"></span><span>Launching…</span>';
+    try {
+      const r = await api('/api/settings/model', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: m.id }) });
+      keyDialogBusy = false; closeKeyDialog();
+      toast('Launching ' + m.name + '…');
+      if (r.jobId) trackJobToast(r.jobId, 'Model');
+      mmDetail = null; renderModelManager();
+    } catch {
+      keyDialogBusy = false; confirmButton.disabled = false;
+      confirmButton.innerHTML = `${uiIcon('rocket')}<span>Try again</span>`;
+      toast('Could not launch model', true);
+    }
+  };
+  requestAnimationFrame(() => confirmButton.focus());
 }
 /* ---- Model Manager (standalone, opened from the dashboard) ---- */
-let mmTab = 'language', mmDetail = null, mmLM = null, mmDiff = null, mmCustomPrefill = '';
-let mmFilter = { q: '', fits: false, vision: false, tools: false };
+let mmTab = 'language', mmDetail = null, mmLM = null, mmDiff = null, mmCustomPrefill = '', mmSort = 'recommended';
+let mmFilter = { q: '', fits: false, vision: false, tools: false, downloaded: false };
 const mmCache = {};
 function modelsOpen() { return !document.getElementById('models').classList.contains('hidden'); }
 // True when a full-screen overlay covers the dashboard. Used to pause the WebGL
@@ -3268,7 +3445,7 @@ function anyOverlayOpen() {
 function openModelManager() { mmDetail = null; mmCustomPrefill = ''; document.getElementById('models').classList.remove('hidden'); renderModelManager(); }
 async function openModelManagerFor(id) {
   closeAsst();
-  mmTab = 'language'; mmDetail = null; mmFilter = { q: '', fits: false, vision: false, tools: false };
+  mmTab = 'language'; mmDetail = null; mmFilter = { q: '', fits: false, vision: false, tools: false, downloaded: false };
   document.getElementById('models').classList.remove('hidden');
   if (!id) { mmCustomPrefill = ''; renderModelManager(); return; }
   let data = mmLM;
@@ -3286,6 +3463,7 @@ function openModelDetail(type, id) { mmDetail = { type, id }; renderModelManager
 function modelMatches(m, lm) {
   const f = mmFilter;
   if (f.fits && m.fit === 'over') return false;
+  if (f.downloaded && !m.downloaded) return false;
   if (lm && f.vision && !m.vision) return false;
   if (lm && f.tools && !m.toolCalling) return false;
   if (f.q) {
@@ -3301,7 +3479,7 @@ function renderModelManager() {
       <button class="mm-tab ${mmTab === 'language' ? 'on' : ''}" data-tab="language" role="tab" aria-selected="${mmTab === 'language'}">${uiIcon('models')}<span>Language models</span></button>
       <button class="mm-tab ${mmTab === 'image' ? 'on' : ''}" data-tab="image" role="tab" aria-selected="${mmTab === 'image'}">${uiIcon('appearance')}<span>Image models</span></button>
     </div><div id="mm-tab-body"><div class="set-hint">Loading…</div></div>`;
-  c.querySelectorAll('.mm-tab').forEach(b => b.onclick = () => { if (mmTab === b.dataset.tab) return; mmTab = b.dataset.tab; mmFilter = { q: '', fits: false, vision: false, tools: false }; renderModelManager(); });
+  c.querySelectorAll('.mm-tab').forEach(b => b.onclick = () => { if (mmTab === b.dataset.tab) return; mmTab = b.dataset.tab; mmFilter = { q: '', fits: false, vision: false, tools: false, downloaded: false }; renderModelManager(); });
   const body = document.getElementById('mm-tab-body');
   if (mmTab === 'image') renderImageModels(body); else renderLanguageModels(body);
 }
@@ -3328,51 +3506,65 @@ function paintImageModels(c, d) { paintModelList(c, d, 'diff'); }
 function paintModelList(c, data, kind) {
   const lm = kind === 'lm', gpu = data.gpuVRAMGB || 0;
   const summary = gpu > 0
-    ? `${uiIcon('machine')}<span><small>${lm ? 'Your hardware' : 'ComfyUI hardware'}</small><b>${gpu} GB VRAM</b></span>`
-    : `${uiIcon('machine')}<span><small>Hardware</small><b>No GPU detected</b></span>`;
+    ? `${uiIcon('machine')}<span class="mm-machine-copy"><span class="mm-machine-label">Available graphics memory</span><span class="mm-machine-value">${gpu} GB VRAM</span><span class="mm-machine-note">Compatibility is estimated with runtime headroom</span></span>`
+    : `${uiIcon('machine')}<span class="mm-machine-copy"><span class="mm-machine-label">Hardware</span><span class="mm-machine-value">No GPU detected</span><span class="mm-machine-note">Compatibility estimates are unavailable</span></span>`;
   const chip = (key, label) => `<button class="mm-chip ${mmFilter[key] ? 'on' : ''}" data-f="${key}" aria-pressed="${mmFilter[key]}">${label}</button>`;
-  const chips = chip('fits', 'Fits my GPU') + (lm ? chip('vision', 'Vision') + chip('tools', 'Tool calling') : '');
+  const chips = chip('fits', 'Runs on this GPU') + chip('downloaded', 'Downloaded') + (lm ? chip('vision', 'Vision') + chip('tools', 'Tool calling') : '');
+  const sort = `<span class="mm-sort-wrap"><label for="mm-sort">Sort</label><select class="mm-sort" id="mm-sort">
+    <option value="recommended" ${mmSort === 'recommended' ? 'selected' : ''}>Best match</option>
+    <option value="memory-low" ${mmSort === 'memory-low' ? 'selected' : ''}>Lowest VRAM</option>
+    <option value="memory-high" ${mmSort === 'memory-high' ? 'selected' : ''}>Highest VRAM</option>
+    <option value="name" ${mmSort === 'name' ? 'selected' : ''}>Name</option>
+  </select></span>`;
   const advanced = lm ? `
-      <button class="adv-toggle" data-mdladv style="margin-top:20px">Advanced — use a custom Hugging Face model</button>
+      <div class="mm-advanced"><button class="adv-toggle" data-mdladv>${uiIcon('settings')}<span>Use a custom Hugging Face model</span></button>
       <div class="adv hidden" id="mdl-adv">
         <div class="fld"><span class="fld-label">Model id</span><div class="model-edit"><input id="set-model" class="fld-input" value="${escapeAttr(data.current || '')}" placeholder="org/model-name" spellcheck="false"><button class="btn primary" id="set-model-apply">Launch</button></div></div>
         <div class="fld-help">Any compatible Hugging Face id (vLLM / SGLang). Gated models need a token; launching restarts the engine and may download weights.</div>
-      </div>` : '';
+      </div></div>` : '';
   c.innerHTML = `
     <div class="mm-bar">
       <div class="mm-machine">${summary}</div>
       <label class="mm-search">${uiIcon('search')}<input id="mm-q" aria-label="Search models" placeholder="Search ${lm ? 'language' : 'image'} models…" value="${escapeAttr(mmFilter.q)}" spellcheck="false"></label>
     </div>
+    <div id="mm-active-slot"></div>
     <div class="mm-filter-row">
       <span class="mm-filter-label">Filter</span>
       <div class="mm-filters">${chips}</div>
       <span class="mm-result-count" id="mm-result-count"></span>
+      ${sort}
     </div>
     <div id="mm-list"></div>
     ${advanced}`;
   const cardFn = lm ? modelCard : diffCard;
+  const active = lm ? (data.yours || []).find(m => m.active) : null;
+  const activeSlot = document.getElementById('mm-active-slot');
+  if (activeSlot && active) {
+    activeSlot.innerHTML = activeModelCard(active, gpu);
+    activeSlot.querySelector('[data-active-model]').onclick = () => openModelDetail('lm', active.id);
+  }
   const fill = () => {
     const list = document.getElementById('mm-list'); if (!list) return;
-    const fy = (data.yours || []).filter(m => modelMatches(m, lm));
-    const fh = (data.highlights || []).filter(m => modelMatches(m, lm));
+    const fy = modelSort((data.yours || []).filter(m => (!active || m.id !== active.id) && modelMatches(m, lm)));
+    const fh = modelSort((data.highlights || []).filter(m => modelMatches(m, lm)));
     const count = document.getElementById('mm-result-count');
-    if (count) count.textContent = `${fy.length + fh.length} model${fy.length + fh.length === 1 ? '' : 's'}`;
+    if (count) count.textContent = `${fy.length + fh.length} result${fy.length + fh.length === 1 ? '' : 's'}`;
     if (!fy.length && !fh.length) {
-      const filtered = mmFilter.q || mmFilter.fits || mmFilter.vision || mmFilter.tools;
+      const filtered = mmFilter.q || mmFilter.fits || mmFilter.vision || mmFilter.tools || mmFilter.downloaded;
       list.innerHTML = `<div class="mm-empty">${filtered ? 'No models match your filters.' : (lm ? 'No models available.' : 'No image models available.')}${filtered ? ' <button class="lnk" id="mm-clearf">Clear filters</button>' : ''}</div>`;
       const cf = document.getElementById('mm-clearf');
-      if (cf) cf.onclick = () => { mmFilter = { q: '', fits: false, vision: false, tools: false }; paintModelList(c, data, kind); };
+      if (cf) cf.onclick = () => { mmFilter = { q: '', fits: false, vision: false, tools: false, downloaded: false }; paintModelList(c, data, kind); };
       return;
     }
-    let sections = modelSection(lm ? 'Your models' : 'Your image models', fy, cardFn);
+    let sections = modelSection(lm ? 'Downloaded models' : 'Downloaded image models', fy, cardFn);
     const rec = fh.filter(m => m.recommended);
     if (lm && rec.length) {
       const rg = data.region || {};
       const label = 'Recommended in ' + (rg.countryName || 'your region') + (rg.inFrance ? ' 🇫🇷' : '');
       sections += modelSection(label, rec, cardFn);
-      sections += modelSection('Cloudless highlights', fh.filter(m => !m.recommended), cardFn);
+      sections += modelSection(lm ? 'Explore models' : 'Explore image models', fh.filter(m => !m.recommended), cardFn);
     } else {
-      sections += modelSection('Cloudless highlights', fh, cardFn);
+      sections += modelSection(lm ? 'Explore models' : 'Explore image models', fh, cardFn);
     }
     list.innerHTML = sections;
     list.querySelectorAll('.mdl[data-mid], .mdl[data-did]').forEach(b => b.onclick = () => openModelDetail(kind, b.dataset.mid || b.dataset.did));
@@ -3386,6 +3578,8 @@ function paintModelList(c, data, kind) {
     ch.setAttribute('aria-pressed', String(mmFilter[ch.dataset.f]));
     fill();
   });
+  const sortSelect = document.getElementById('mm-sort');
+  if (sortSelect) sortSelect.onchange = () => { mmSort = sortSelect.value; fill(); };
   if (lm) {
     const adv = c.querySelector('[data-mdladv]'); if (adv) adv.onclick = () => document.getElementById('mdl-adv').classList.toggle('hidden');
     const customInput = document.getElementById('set-model');
@@ -3404,47 +3598,56 @@ function renderModelDetail(c) {
   if (!m) { mmDetail = null; renderModelManager(); return; }
   const lm = type === 'lm';
   const gpu = ((lm ? mmLM : mmDiff) || {}).gpuVRAMGB || 0;
-  const caps = (m.recommended ? '<span class="mdl-cap rec">★ recommended</span>' : '')
-    + (lm ? ((m.vision ? '<span class="mdl-cap vis">vision</span>' : '') + (m.toolCalling ? '<span class="mdl-cap">tools</span>' : '') + (m.gated ? '<span class="mdl-cap gated">gated</span>' : ''))
+  const caps = (m.recommended ? '<span class="mdl-cap rec">Recommended</span>' : '')
+    + (lm ? ((m.vision ? '<span class="mdl-cap vis">Vision</span>' : '') + (m.toolCalling ? '<span class="mdl-cap">Tool calling</span>' : '') + (m.gated ? '<span class="mdl-cap gated">Gated</span>' : ''))
     : (m.base ? `<span class="mdl-cap">${escapeHtml(m.base)}</span>` : ''));
-  const tags = (m.tags || []).map(t => `<span class="mdl-t">${escapeHtml(t)}</span>`).join('');
+  const tags = (m.tags || []).filter(t => {
+    const key = String(t).toLowerCase();
+    return !(lm && ((m.vision && key === 'vision') || (m.toolCalling && key === 'tools')));
+  }).map(t => `<span class="mdl-t">${escapeHtml(t)}</span>`).join('');
   const spec = (k, v) => v ? `<div class="md-spec"><span class="md-k">${k}</span><span class="md-v">${escapeHtml(String(v))}</span></div>` : '';
   const specs = lm
-    ? spec('Parameters', m.params) + spec('Quantization', m.quant || 'none') + spec('Context', m.contextK ? m.contextK + 'K tokens' : '') + spec('VRAM needed', m.minVramGB ? '~' + m.minVramGB + ' GB' : '') + spec('License', m.license)
-    : spec('Base', m.base) + spec('Type', m.type || 'checkpoint') + spec('Download size', m.sizeGB ? m.sizeGB + ' GB' : '') + spec('VRAM needed', m.minVramGB ? '~' + m.minVramGB + ' GB' : '') + spec('License', m.license);
-  let banner = '', actions = '';
+    ? spec('Parameters', m.params) + spec('Quantization', m.quant || 'None') + spec('Context window', m.contextK ? m.contextK + 'K tokens' : '') + spec('Best for', m.use || 'General') + spec('License', m.license)
+    : spec('Base model', m.base) + spec('File type', m.type || 'Checkpoint') + spec('Download size', m.sizeGB ? m.sizeGB + ' GB' : '') + spec('License', m.license);
+  let state = '', actions = '';
   if (lm) {
-    if (m.active) { banner = `<div class="md-banner loaded">This model is loaded in ${escapeHtml(activeEngineName)} right now.</div>`; actions = '<button class="btn" data-redl>Re-download weights</button>'; }
-    else if (m.downloaded) { banner = '<div class="md-banner ready">Downloaded and ready to launch.</div>'; actions = '<button class="btn primary" data-launch>Launch</button>'; }
-    else { banner = '<div class="md-banner note">This model isn’t downloaded on your Cloudless system yet — download it, then you can launch it.</div>'; actions = '<button class="btn primary" data-dl>Download</button>'; }
+    if (m.active) { state = `<span class="md-state-line active"><i></i>Loaded in ${escapeHtml(activeEngineName)}</span>`; actions = '<button class="btn" data-redl>Re-download</button>'; }
+    else if (m.downloaded) { state = '<span class="md-state-line ready"><i></i>Downloaded and ready</span>'; actions = `<button class="btn primary" data-launch>${uiIcon('rocket')}<span>Launch model</span></button>`; }
+    else { state = '<span class="md-state-line remote"><i></i>Available to download</span>'; actions = `<button class="btn primary" data-dl>${uiIcon('download')}<span>Download model</span></button>`; }
   } else {
-    if (m.downloaded) { banner = '<div class="md-banner ready">Downloaded — choose it in ComfyUI’s checkpoint menu.</div>'; }
-    else { banner = '<div class="md-banner note">This model isn’t downloaded on your Cloudless system yet.</div>'; actions = '<button class="btn primary" data-dl>Download</button>'; }
+    if (m.downloaded) { state = '<span class="md-state-line ready"><i></i>Downloaded for ComfyUI</span>'; }
+    else { state = '<span class="md-state-line remote"><i></i>Available to download</span>'; actions = `<button class="btn primary" data-dl>${uiIcon('download')}<span>Download model</span></button>`; }
   }
-  const fit = (m.fit && m.fit !== 'unknown' && m.minVramGB) ? `<div class="md-fit"><span class="mdl-fit fit-${m.fit}">${FIT_LABEL[m.fit]}</span>${gpu ? ` — your GPU has ${gpu} GB, this needs ~${m.minVramGB} GB` : ''}.</div>` : '';
-  const recNote = m.recommended ? `<div class="md-banner rec">★ ${escapeHtml(m.recommendBy || 'Recommended for your region')} — a French-built model from Mistral AI.</div>` : '';
-  const gatedNote = (lm && m.gated && !m.downloaded) ? `<div class="md-fit" style="color:var(--warn)">⚠ This model's Hugging Face repo is gated — you'll need a free Hugging Face account to accept its terms before it can download.</div>` : '';
+  const fitClass = m.fit || 'unknown';
+  const fit = `<div class="md-compat-panel fit-${fitClass}">
+      <div><div class="md-compat-title">${escapeHtml(FIT_LABEL[fitClass] || FIT_LABEL.unknown)} on this machine</div><div class="md-compat-copy">${escapeHtml(FIT_EXPLAIN[fitClass] || FIT_EXPLAIN.unknown)}</div></div>
+      <div class="md-compat-numbers">${m.minVramGB ? `~${m.minVramGB} GB needed` : 'No estimate'}${gpu ? ` · ${gpu} GB available` : ''}</div>
+      ${gpu && m.minVramGB ? `<span class="mdl-meter" aria-hidden="true"><i style="--meter:${modelMeter(m, gpu)}%"></i></span>` : ''}
+    </div>`;
+  const recNote = m.recommended ? `<div class="md-banner rec">${escapeHtml(m.recommendBy || 'Recommended for your region')}.</div>` : '';
+  const gatedNote = (lm && m.gated && !m.downloaded) ? `<div class="md-banner note">This Hugging Face repository is gated. Accept its terms and provide your Hugging Face token before downloading.</div>` : '';
   c.innerHTML = `
     <button class="lp-back" id="mm-back">${uiIcon('arrow-right', 'ui-icon')}<span>All models</span></button>
     <div class="md-detail">
       <div class="md-hero">
-        <div class="md-ic2">${lm ? '🧠' : '🎨'}</div>
+        <div class="md-ic2">${uiIcon(lm ? 'models' : 'appearance')}</div>
         <div class="md-hd">
           <div class="md-eyebrow">${lm ? 'Language model' : 'Image model'}</div>
           <div class="md-nm">${escapeHtml(m.name)}</div>
           <div class="md-sub">${escapeHtml(lm ? m.id : (m.file || ''))}</div>
           ${(caps || tags) ? `<div class="mdl-tags md-caps">${caps}${tags}</div>` : ''}
+          <div style="margin-top:10px">${state}</div>
         </div>
         ${actions ? `<div class="md-hero-actions">${actions}</div>` : ''}
       </div>
       ${recNote}
-      ${banner}
       ${gatedNote}
-      ${m.description ? `<p class="md-desc">${escapeHtml(m.description)}</p>` : ''}
-      <div class="md-specgrid">${specs}</div>
       ${fit}
+      ${m.description ? `<div class="md-section-title">About this model</div><p class="md-desc">${escapeHtml(m.description)}</p>` : ''}
+      <div class="md-section-title">Specifications</div>
+      <div class="md-specgrid">${specs}</div>
       ${lm ? `<div class="md-adv">
-        <button class="md-adv-tog" id="md-adv-tog">${uiIcon('settings', 'ui-icon sm')}<span>Advanced — engine launch command</span>${uiIcon('arrow-right', 'ui-icon md-adv-chev')}</button>
+        <button class="md-adv-tog" id="md-adv-tog">${uiIcon('settings', 'ui-icon sm')}<span>Advanced engine settings</span>${uiIcon('arrow-right', 'ui-icon md-adv-chev')}</button>
         <div class="md-adv-body hidden" id="md-adv-body"></div>
       </div>` : ''}
     </div>`;

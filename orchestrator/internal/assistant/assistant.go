@@ -163,13 +163,15 @@ var tagRe = regexp.MustCompile(`\[\[do:([a-z]+)(?::([a-z0-9-]+))?\]\]`)
 
 // Suggest derives one-click actions from the model's reply (its [[do:...]] tags),
 // falling back to keyword intent on the user's last message so guidance is always
-// actionable even with a small model. Returns at most 3, deduped.
+// actionable even with a small model. Tags are treated as suggestions, not
+// authority: unrelated tags from a small model are discarded. Returns at most
+// 2 actions, deduped.
 func Suggest(reply, lastUser string, c Context) []Action {
 	var out []Action
 	seen := map[string]bool{}
 	add := func(a Action) {
 		key := a.Kind + ":" + a.ID
-		if a.Label == "" || seen[key] || len(out) >= 3 {
+		if a.Label == "" || !actionRelevant(a, lastUser) || seen[key] || len(out) >= 2 {
 			return
 		}
 		seen[key] = true
@@ -185,6 +187,24 @@ func Suggest(reply, lastUser string, c Context) []Action {
 		}
 	}
 	return out
+}
+
+func actionRelevant(a Action, userText string) bool {
+	lower := strings.ToLower(strings.TrimSpace(userText))
+	switch a.Kind {
+	case "models":
+		return MayNeedModelRouting(lower)
+	case "engine":
+		return containsAny(lower, "engine", "vllm", "sglang", "llama.cpp", "switch inference")
+	case "install", "open":
+		if app, ok := catalog.Get(a.ID); ok {
+			if strings.Contains(lower, strings.ToLower(app.ID)) || strings.Contains(lower, strings.ToLower(app.Name)) {
+				return true
+			}
+		}
+		return containsAny(lower, "app", "build", "image", "picture", "photo", "agent", "automate", "automation", "code", "coding", "tool", "chat", "telegram", "discord", "messaging")
+	}
+	return false
 }
 
 // actionFor turns a parsed tag into a concrete, valid Action (or a no-op).

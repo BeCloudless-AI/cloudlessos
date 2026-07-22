@@ -15,6 +15,29 @@ Return exactly MODEL_CONTROL when the user is asking to discover, compare, selec
 Return exactly OTHER for ordinary conversation, app management, image generation, coding tasks, or general conceptual questions about AI models that do not ask for a CloudlessOS model-management or hardware-fit decision.
 Do not answer the request and do not add punctuation.`
 
+// MayNeedModelRouting is a cheap precision gate in front of the local semantic
+// classifier. Small local models are useful for recognizing unfamiliar model
+// names, but should never get a chance to turn an unrelated chat request into
+// a Model Manager action. Explicit model vocabulary is always eligible. An
+// unfamiliar product name is eligible only when the user also asks a concrete
+// install, switch, run, fit, or machine-compatibility question.
+func MayNeedModelRouting(text string) bool {
+	lower := strings.ToLower(strings.TrimSpace(text))
+	if lower == "" {
+		return false
+	}
+	explicit := containsAny(lower,
+		"model", "llm", "language model", "hugging face", "huggingface", "vram", "gpu memory",
+		"parameter", "quantization", "quantized", "awq", "gptq", "gguf", "bf16", "fp16", "fp8",
+		"qwen", "llama", "mistral", "gemma", "deepseek", "phi", "nemotron")
+	if explicit || modelParamsRe.MatchString(lower) || hfRepoRe.MatchString(lower) {
+		return true
+	}
+	return containsAny(lower,
+		"run on this", "run here", "work on this", "work here", "fit on this", "fit here",
+		"usable on this", "compatible with this", "install ", "download ", "switch to ")
+}
+
 // SemanticModelControl uses the active local inference engine only as an intent
 // classifier. It is never trusted for model facts: a positive result is handed
 // to ForcedModelGuidance, which uses Model Manager data and deterministic math.

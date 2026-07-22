@@ -130,3 +130,17 @@ func TestSystemPromptMakesModelManagerAuthoritative(t *testing.T) {
 		t.Fatalf("model manager action = %#v", actions)
 	}
 }
+
+func TestSuggestRejectsIrrelevantModelAndAppTags(t *testing.T) {
+	actions := Suggest("Ready.\n[[do:models]]\n[[do:open:open-webui]]", "Reply with Ready and a two-item bullet list.", modelTestContext())
+	if len(actions) != 0 {
+		t.Fatalf("irrelevant actions leaked into ordinary chat: %#v", actions)
+	}
+}
+
+func TestSuggestKeepsRelevantAppRecommendation(t *testing.T) {
+	actions := Suggest("ComfyUI is a good fit.\n[[do:install:comfyui]]", "Which app should I use to build images?", modelTestContext())
+	if len(actions) != 1 || actions[0].ID != "comfyui" {
+		t.Fatalf("relevant app action was discarded: %#v", actions)
+	}
+}

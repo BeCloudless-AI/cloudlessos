@@ -27,6 +27,24 @@ func TestSemanticModelControlLeavesGeneralQuestionAlone(t *testing.T) {
 	}
 }
 
+func TestMayNeedModelRoutingRejectsOrdinaryFormattingRequest(t *testing.T) {
+	if MayNeedModelRouting("Reply with **Ready** and a two-item bullet list.") {
+		t.Fatal("ordinary chat was admitted to the model-control classifier")
+	}
+}
+
+func TestMayNeedModelRoutingAcceptsUnknownCompatibilityRequest(t *testing.T) {
+	if !MayNeedModelRouting("Would Command R+ be usable on this computer?") {
+		t.Fatal("unknown model compatibility request was not admitted to semantic routing")
+	}
+}
+
+func TestMayNeedModelRoutingAcceptsExplicitModelConceptQuestion(t *testing.T) {
+	if !MayNeedModelRouting("Why do mixture-of-experts models exist?") {
+		t.Fatal("explicit model question should reach semantic classification")
+	}
+}
+
 func TestRecentUserTextExcludesAssistantClaims(t *testing.T) {
 	text := RecentUserText([]Msg{
 		{Role: "user", Content: "Will acme/Model-40B-AWQ fit?"},

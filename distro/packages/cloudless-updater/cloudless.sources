@@ -1,0 +1,7 @@
+Enabled: no
+Types: deb
+URIs: https://updates.becloudless.ai/apt
+Suites: stable
+Components: main
+Architectures: amd64
+Signed-By: /usr/share/keyrings/cloudless-archive-keyring.pgp

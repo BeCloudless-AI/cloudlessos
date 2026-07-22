@@ -64,6 +64,15 @@ Pass `-VMUser yourname` if the administrator account created by the installer is
 updates may require a reboot; installer, partitioning, and autoinstall changes still
 require rebuilding and reinstalling the ISO.
 
+## Update real installations
+
+Physical CloudlessOS computers use the signed repository at
+`https://updates.becloudless.ai/apt`, not the VirtualBox deployment script. The
+`cloudless-updater` package checks, downloads, installs, health-checks, and can roll back
+Cloudless package generations independently of the web interface. Production signing,
+release creation, Cloudflare R2 publication, and one-time bootstrap instructions are in
+[`UPDATES.md`](./UPDATES.md).
+
 ## Installation behavior
 
 The installer asks for networking, target Grstorage, and administrator identity. It has no

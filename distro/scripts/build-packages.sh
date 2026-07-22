@@ -16,6 +16,7 @@ rm -f "$OUT"/cloudless-*.deb
 
 echo "==> Building cloudlessd $VERSION"
 ( cd "$ROOT/orchestrator"; CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o "$WORK/cloudlessd" ./cmd/cloudlessd )
+( cd "$ROOT/orchestrator"; CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o "$WORK/cloudless-updater-bin" ./cmd/cloudless-updater )
 
 make_control() {
     local root="$1" package="$2" description="$3" depends="$4"
@@ -86,4 +87,19 @@ install -Dm0755 "$DISTRO/packages/cloudless-firstboot/cloudless-validate" "$PKG/
 install -Dm0644 "$DISTRO/packages/cloudless-firstboot/cloudless-firstboot.service" "$PKG/lib/systemd/system/cloudless-firstboot.service"
 install -Dm0755 "$DISTRO/packages/cloudless-firstboot/postinst" "$PKG/DEBIAN/postinst"
 finish_package "$PKG" cloudless-firstboot
+
+PKG="$WORK/cloudless-updater"
+make_control "$PKG" cloudless-updater "CloudlessOS signed system updater" "apt, ca-certificates"
+install -Dm0755 "$WORK/cloudless-updater-bin" "$PKG/usr/lib/cloudless/cloudless-updater"
+install -Dm0644 "$DISTRO/packages/cloudless-updater/cloudless.sources" "$PKG/etc/apt/sources.list.d/cloudless.sources"
+install -Dm0644 "$DISTRO/packages/cloudless-updater/cloudless-update-check.service" "$PKG/lib/systemd/system/cloudless-update-check.service"
+install -Dm0644 "$DISTRO/packages/cloudless-updater/cloudless-update-check.timer" "$PKG/lib/systemd/system/cloudless-update-check.timer"
+install -Dm0644 "$DISTRO/packages/cloudless-updater/cloudless-update-apply.service" "$PKG/lib/systemd/system/cloudless-update-apply.service"
+install -Dm0755 "$DISTRO/packages/cloudless-updater/postinst" "$PKG/DEBIAN/postinst"
+install -Dm0755 "$DISTRO/packages/cloudless-updater/prerm" "$PKG/DEBIAN/prerm"
+if [ -s "$DISTRO/release/keys/cloudless-archive-keyring.pgp" ]; then
+    install -Dm0644 "$DISTRO/release/keys/cloudless-archive-keyring.pgp" "$PKG/usr/share/keyrings/cloudless-archive-keyring.pgp"
+    sed -i 's/^Enabled: no$/Enabled: yes/' "$PKG/etc/apt/sources.list.d/cloudless.sources"
+fi
+finish_package "$PKG" cloudless-updater
 echo "==> Packages written to $OUT"

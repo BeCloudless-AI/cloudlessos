@@ -29,9 +29,9 @@ grep -q '^autoinstall:' "$WORK/autoinstall.yaml"
 grep -q 'autoinstall ---' "$WORK/grub.cfg"
 grep -q 'CloudlessOS' "$WORK/grub.cfg"
 grep -q 'set theme=/cloudless/theme.txt' "$WORK/grub.cfg"
-test "$(find "$WORK/packages" -name '*.deb' | wc -l)" -eq 5
-for name in orchestrator shell branding hardware firstboot; do
+test "$(find "$WORK/packages" -name '*.deb' | wc -l)" -eq 6
+for name in orchestrator shell branding hardware firstboot updater; do
     find "$WORK/packages" -name "cloudless-${name}_*.deb" -print -quit | grep -q .
 done
 
-echo "ISO validation passed: BIOS + UEFI boot catalog, autoinstall, branding, and five packages"
+echo "ISO validation passed: BIOS + UEFI boot catalog, autoinstall, branding, and six packages"

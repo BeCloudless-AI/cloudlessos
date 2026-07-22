@@ -14,6 +14,10 @@ func systemShutdown() error {
 	return exec.Command("systemctl", "poweroff", "--no-wall").Run()
 }
 
+func systemReboot() error {
+	return exec.Command("systemctl", "reboot", "--no-wall").Run()
+}
+
 func (s *Server) systemShutdown(w http.ResponseWriter, r *http.Request) {
 	// A custom header makes this destructive endpoint unavailable to ordinary
 	// cross-origin form posts while keeping local API/CLI use straightforward.
@@ -59,6 +63,32 @@ func (s *Server) systemShutdown(w http.ResponseWriter, r *http.Request) {
 			s.shutdownMu.Lock()
 			s.shutdownQueued = false
 			s.shutdownMu.Unlock()
+		}
+	}()
+}
+
+func (s *Server) systemReboot(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("X-Cloudless-Action") != "reboot" {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "reboot confirmation header required"})
+		return
+	}
+	writeJSON(w, http.StatusAccepted, map[string]string{"status": "restarting"})
+	if f, ok := w.(http.Flusher); ok {
+		f.Flush()
+	}
+	go func() {
+		time.Sleep(time.Second)
+		if s.state != nil {
+			s.state.PersistIfDirty()
+		}
+		if s.usage != nil {
+			s.usage.Flush()
+		}
+		if s.power != nil {
+			s.power.Flush()
+		}
+		if err := systemReboot(); err != nil {
+			log.Printf("system reboot failed: %v", err)
 		}
 	}()
 }

@@ -19,6 +19,18 @@ func TestSystemShutdownRequiresConfirmationHeader(t *testing.T) {
 	}
 }
 
+func TestSystemRebootRequiresConfirmationHeader(t *testing.T) {
+	s := &Server{}
+	req := httptest.NewRequest(http.MethodPost, "/api/system/reboot", nil)
+	rec := httptest.NewRecorder()
+
+	s.systemReboot(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusForbidden)
+	}
+}
+
 func TestSystemShutdownQueuesPowerOff(t *testing.T) {
 	called := make(chan struct{}, 1)
 	s := &Server{

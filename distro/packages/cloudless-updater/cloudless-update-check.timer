@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily CloudlessOS update check
+
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec=24h
+RandomizedDelaySec=30min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -34,9 +34,11 @@ autoinstall:
   late-commands:
     - mkdir -p /target/tmp/cloudless-packages
     - cp -a /cdrom/cloudless/packages/. /target/tmp/cloudless-packages/
-    - "curtin in-target --target=/target -- bash -c 'dpkg -i /tmp/cloudless-packages/cloudless-orchestrator_*.deb /tmp/cloudless-packages/cloudless-shell_*.deb /tmp/cloudless-packages/cloudless-branding_*.deb /tmp/cloudless-packages/cloudless-hardware_*.deb /tmp/cloudless-packages/cloudless-firstboot_*.deb'"
+    - "curtin in-target --target=/target -- bash -c 'dpkg -i /tmp/cloudless-packages/cloudless-orchestrator_*.deb /tmp/cloudless-packages/cloudless-shell_*.deb /tmp/cloudless-packages/cloudless-branding_*.deb /tmp/cloudless-packages/cloudless-hardware_*.deb /tmp/cloudless-packages/cloudless-firstboot_*.deb /tmp/cloudless-packages/cloudless-updater_*.deb'"
+    - mkdir -p /target/var/lib/cloudless-updater/current
+    - cp -a /cdrom/cloudless/packages/. /target/var/lib/cloudless-updater/current/
     - curtin in-target --target=/target -- /usr/lib/cloudless/cloudless-hardware-install
-    - curtin in-target --target=/target -- systemctl enable cloudless-hardware.service cloudlessd.service lightdm.service cloudless-firstboot.service
+    - curtin in-target --target=/target -- systemctl enable cloudless-hardware.service cloudlessd.service lightdm.service cloudless-firstboot.service cloudless-update-check.timer
     - curtin in-target --target=/target -- ln -sfn /lib/systemd/system/graphical.target /etc/systemd/system/default.target
     - curtin in-target --target=/target -- update-initramfs -u
     - curtin in-target --target=/target -- update-grub

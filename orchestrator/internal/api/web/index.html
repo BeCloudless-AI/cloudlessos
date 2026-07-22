@@ -284,6 +284,16 @@
   .upd-ok { color: var(--accent); font-size: 13px; font-weight: 500; }
   .upd-muted { color: var(--muted); font-size: 12.5px; }
   .upd-src { font-size: 11px; color: var(--faint); margin-top: 7px; }
+  .sys-update { padding: 15px; border: 1px solid var(--hair); border-radius: 14px; background: var(--panel-2); }
+  .sys-update-top { display: flex; align-items: flex-start; gap: 12px; }
+  .sys-update-mark { width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; flex: none; background: var(--blue-soft); color: var(--blue); }
+  .sys-update-copy { min-width: 0; flex: 1; }
+  .sys-update-title { font-size: 14px; font-weight: 700; color: var(--ink); }
+  .sys-update-version { margin-top: 3px; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .sys-update-message { margin-top: 12px; font-size: 12.5px; line-height: 1.5; color: var(--ink-2); }
+  .sys-update-error { margin-top: 8px; font-size: 11.5px; color: var(--err); overflow-wrap: anywhere; }
+  .sys-update-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 13px; }
+  .sys-update-spin { animation: spin .9s linear infinite; }
   .hw-card + .hw-card { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
   .set-row { display: flex; align-items: center; gap: 12px; padding: 7px 0; font-size: 13.5px; }
   .srow-label { width: 70px; color: var(--muted); flex: none; }
@@ -1791,6 +1801,8 @@
     <symbol id="ui-assistant" viewBox="0 0 24 24"><path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"/><path d="M20 2v4m2-2h-4"/><circle cx="4" cy="20" r="2"/></symbol>
     <symbol id="ui-settings" viewBox="0 0 24 24"><path d="M14 17H5M19 7h-9"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></symbol>
     <symbol id="ui-power" viewBox="0 0 24 24"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/></symbol>
+    <symbol id="ui-download" viewBox="0 0 24 24"><path d="M12 3v12m-5-5 5 5 5-5"/><path d="M5 21h14"/></symbol>
+    <symbol id="ui-restart" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.34 5.66"/><path d="M20 4v7h-7"/></symbol>
     <symbol id="ui-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></symbol>
     <symbol id="ui-machine" viewBox="0 0 24 24"><path d="M12 20v2m0-20v2m5 16v2m0-20v2M2 12h2m-2 5h2M2 7h2m16 5h2m-2 5h2m-2-10h2M7 20v2M7 2v2"/><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="8" y="8" width="8" height="8" rx="1"/></symbol>
     <symbol id="ui-appearance" viewBox="0 0 24 24"><path d="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z"/><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/></symbol>
@@ -3144,8 +3156,38 @@ function renderAppearancePage(c) {
   });
 }
 
-function renderGeneralPage(c) {
+async function renderGeneralPage(c) {
+  c.innerHTML = '<div class="set-hint">Loading…</div>';
+  let update;
+  try { update = await api('/api/system/update'); }
+  catch { update = { state: 'failed', configured: false, message: 'Could not reach the system update service.' }; }
+  const state = update.state || 'idle';
+  const busy = state === 'checking' || state === 'installing';
+  const current = update.currentVersion || 'development';
+  const available = update.availableVersion || '';
+  let updateTitle = 'CloudlessOS is up to date';
+  if (!update.configured) updateTitle = 'Updates are not configured yet';
+  else if (state === 'available') updateTitle = `CloudlessOS ${escapeHtml(available)} is available`;
+  else if (state === 'checking') updateTitle = 'Checking for updates';
+  else if (state === 'installing') updateTitle = 'Installing verified update';
+  else if (state === 'updated') updateTitle = 'Update installed';
+  else if (state === 'reboot_required') updateTitle = 'Restart required';
+  else if (state === 'failed') updateTitle = 'Update needs attention';
+  let updateActions = '';
+  if (update.configured && state === 'available') updateActions = '<button class="btn" id="sys-update-check">Check again</button><button class="btn primary" id="sys-update-apply">Install update</button>';
+  else if (state === 'reboot_required') updateActions = '<button class="btn primary" id="sys-update-reboot">Restart now</button>';
+  else if (!busy && update.configured) updateActions = '<button class="btn" id="sys-update-check">Check for updates</button>';
   c.innerHTML = `
+    <div class="set-block"><h3>system update</h3>
+      <div class="sys-update">
+        <div class="sys-update-top"><span class="sys-update-mark ${busy ? 'sys-update-spin' : ''}">${uiIcon(busy ? 'restart' : 'download')}</span>
+          <div class="sys-update-copy"><div class="sys-update-title">${updateTitle}</div><div class="sys-update-version">Installed ${escapeHtml(current)} · ${escapeHtml(update.channel || 'stable')} channel${available ? ' · Available ' + escapeHtml(available) : ''}</div></div></div>
+        <div class="sys-update-message">${escapeHtml(update.message || (update.configured ? 'Cloudless checks updates.becloudless.ai for signed system packages.' : 'The archive signing key must be initialized before over-the-air updates can be enabled.'))}</div>
+        ${update.error ? `<div class="sys-update-error">${escapeHtml(update.error)}</div>` : ''}
+        ${update.checkedAt ? `<div class="upd-src">Last checked ${new Date(update.checkedAt).toLocaleString()}</div>` : ''}
+        ${updateActions ? `<div class="sys-update-actions">${updateActions}</div>` : ''}
+      </div>
+    </div>
     <div class="set-block"><h3>welcome</h3>
       <div class="set-row"><span>Replay the welcome tour</span><span class="row-actions"><button class="btn" id="gen-replay">Replay</button></span></div>
     </div>
@@ -3153,12 +3195,43 @@ function renderGeneralPage(c) {
       <div class="set-row"><span class="srow-label">system</span><span>CloudlessOS</span></div>
       <div class="set-row"><span class="srow-label">engine</span><span id="gen-engine">—</span></div>
     </div>`;
+  const check = document.getElementById('sys-update-check'); if (check) check.onclick = () => startSystemUpdate('check');
+  const apply = document.getElementById('sys-update-apply'); if (apply) apply.onclick = () => {
+    if (confirm(`Install CloudlessOS ${available}? The interface may restart for a moment.`)) startSystemUpdate('apply');
+  };
+  const reboot = document.getElementById('sys-update-reboot'); if (reboot) reboot.onclick = async () => {
+    if (!confirm('Restart CloudlessOS now to finish the update?')) return;
+    reboot.disabled = true; reboot.textContent = 'Restarting…';
+    try { await api('/api/system/reboot', { method: 'POST', headers: { 'X-Cloudless-Action': 'reboot' } }); } catch {}
+  };
   document.getElementById('gen-replay').onclick = () => {
     api('/api/onboarding/reset', { method: 'POST' })
       .then(() => { closeSettings(); showFirstLaunchIntro(showOnboarding, true); })
       .catch(() => toast('Failed', true));
   };
   api('/api/engine').then(e => { const el = document.getElementById('gen-engine'); if (el) { const a = (e.engines || []).find(x => x.active); el.textContent = a ? a.name : 'none'; } }).catch(() => {});
+}
+
+async function startSystemUpdate(operation) {
+  const path = operation === 'apply' ? '/api/system/update/apply' : '/api/system/update/check';
+  try {
+    const started = await api(path, { method: 'POST', headers: operation === 'apply' ? { 'X-Cloudless-Action': 'update' } : {} });
+    if (started.error) throw new Error(started.error);
+  } catch { toast('Could not start the update', true); return; }
+  toast(operation === 'apply' ? 'Installing CloudlessOS update…' : 'Checking for updates…');
+  const deadline = Date.now() + (operation === 'apply' ? 30 * 60 * 1000 : 10 * 60 * 1000);
+  while (Date.now() < deadline) {
+    await new Promise(resolve => setTimeout(resolve, 1200));
+    let status;
+    try { status = await api('/api/system/update'); } catch { continue; }
+    if (settingsOpen() && setPage === 'general') renderGeneralPage(document.getElementById('set-content'));
+    if (status.state === 'checking' || status.state === 'installing') continue;
+    if (status.state === 'updated') { toast('CloudlessOS updated'); setTimeout(() => location.reload(), 600); }
+    else if (status.state === 'reboot_required') toast('Update installed — restart required');
+    else if (status.state === 'failed') toast(status.message || 'Update failed', true);
+    return;
+  }
+  toast('The update is still running in the background');
 }
 
 const escapeHtml = s => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');

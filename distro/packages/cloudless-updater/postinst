@@ -1,0 +1,10 @@
+#!/bin/sh
+set -e
+install -d -m 0755 /var/lib/cloudless-updater
+install -d -m 0700 /var/lib/cloudless-updater/current /var/lib/cloudless-updater/rollback
+if [ ! -s /etc/cloudless/update-channel ]; then
+    printf '%s\n' stable > /etc/cloudless/update-channel
+fi
+systemctl daemon-reload >/dev/null 2>&1 || true
+systemctl enable cloudless-update-check.timer >/dev/null 2>&1 || true
+systemctl start cloudless-update-check.timer >/dev/null 2>&1 || true

@@ -2,7 +2,7 @@
 param(
     [string]$VMName = "CloudlessOS",
     [string]$VMUser = "samcllo",
-    [ValidateSet("orchestrator", "shell", "branding", "hardware", "firstboot", "all")]
+    [ValidateSet("orchestrator", "shell", "branding", "hardware", "firstboot", "updater", "all")]
     [string[]]$Packages = @("orchestrator"),
     [int]$SshPort = 2222,
     [SecureString]$Password,
@@ -84,6 +84,7 @@ try {
         branding      = "cloudless-branding"
         hardware      = "cloudless-hardware"
         firstboot     = "cloudless-firstboot"
+        updater       = "cloudless-updater"
     }
     $Selected = if ($Packages -contains "all") { @($PackageMap.Keys) } else { @($Packages) }
     $Debs = foreach ($shortName in $Selected) {

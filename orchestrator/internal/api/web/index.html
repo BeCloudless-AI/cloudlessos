@@ -3168,10 +3168,11 @@ async function renderGeneralPage(c) {
   catch { update = { state: 'failed', configured: false, message: 'Could not reach the system update service.' }; }
   const state = update.state || 'idle';
   const busy = state === 'checking' || state === 'installing';
+  const completed = state === 'updated' || state === 'reboot_required';
   const current = update.currentVersion || 'development';
   const available = update.availableVersion || '';
-  const progress = Math.max(0, Math.min(100, Number(update.progress) || 0));
-  const showProgress = busy || state === 'updated' || state === 'reboot_required';
+  const progress = update.progress == null && completed ? 100 : Math.max(0, Math.min(100, Number(update.progress) || 0));
+  const showProgress = busy || completed;
   let updateTitle = 'CloudlessOS is up to date';
   if (!update.configured) updateTitle = 'Updates are not configured yet';
   else if (state === 'available') updateTitle = `CloudlessOS ${escapeHtml(available)} is available`;
@@ -3188,7 +3189,7 @@ async function renderGeneralPage(c) {
     <div class="set-block"><h3>system update</h3>
       <div class="sys-update">
         <div class="sys-update-top"><span class="sys-update-mark ${busy ? 'sys-update-spin' : ''}">${uiIcon(busy ? 'restart' : 'download')}</span>
-          <div class="sys-update-copy"><div class="sys-update-title">${updateTitle}</div><div class="sys-update-version">Installed ${escapeHtml(current)} · ${escapeHtml(update.channel || 'stable')} channel${available ? ' · Available ' + escapeHtml(available) : ''}</div></div></div>
+          <div class="sys-update-copy"><div class="sys-update-title">${updateTitle}</div><div class="sys-update-version">Installed ${escapeHtml(current)} · ${escapeHtml(update.channel || 'stable')} channel${available && (state === 'available' || busy) ? ' · Available ' + escapeHtml(available) : ''}</div></div></div>
         <div class="sys-update-message">${escapeHtml(update.message || (update.configured ? 'Cloudless checks updates.becloudless.ai for signed system packages.' : 'The archive signing key must be initialized before over-the-air updates can be enabled.'))}</div>
         ${showProgress ? `<div class="sys-update-progress"><div class="sys-update-progress-head"><span>Overall progress</span><strong>${progress}%</strong></div><div class="sys-update-progress-track" role="progressbar" aria-label="System update progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progress}"><div class="sys-update-progress-fill" style="width:${progress}%"></div></div></div>` : ''}
         ${update.error ? `<div class="sys-update-error">${escapeHtml(update.error)}</div>` : ''}

@@ -218,6 +218,7 @@ func apply() error {
 		}
 		status.State = "updated"
 		status.CurrentVersion = status.AvailableVersion
+		status.AvailableVersion = ""
 		status.Packages = nil
 		status.Error = ""
 		status.UpdatedAt = time.Now().UTC().Format(time.RFC3339)

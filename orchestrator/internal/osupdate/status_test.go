@@ -3,6 +3,7 @@ package osupdate
 import (
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestStatusRoundTrip(t *testing.T) {
@@ -24,6 +25,36 @@ func TestStatusRoundTrip(t *testing.T) {
 	}
 	if got.State != want.State || got.AvailableVersion != want.AvailableVersion || got.Progress != want.Progress || len(got.Packages) != 1 {
 		t.Fatalf("Read() = %#v, want %#v", got, want)
+	}
+}
+
+func TestReconcileRebootClearsRequirementAfterNewBoot(t *testing.T) {
+	status := Status{
+		State:            "reboot_required",
+		AvailableVersion: "0.1.1",
+		RebootRequired:   true,
+		RebootBootID:     "old-boot",
+	}
+	reconcileReboot(&status, "new-boot", time.Time{})
+	if status.State != "updated" || status.RebootRequired || status.AvailableVersion != "" {
+		t.Fatalf("reconcileReboot() = %#v", status)
+	}
+}
+
+func TestReconcileRebootMigratesLegacyStatus(t *testing.T) {
+	updatedAt := time.Date(2026, 7, 22, 10, 0, 0, 0, time.UTC)
+	status := Status{State: "reboot_required", UpdatedAt: updatedAt.Format(time.RFC3339), RebootRequired: true}
+	reconcileReboot(&status, "current-boot", updatedAt.Add(time.Minute))
+	if status.State != "updated" || status.RebootRequired {
+		t.Fatalf("reconcileReboot() = %#v", status)
+	}
+}
+
+func TestReconcileRebootKeepsRequirementOnSameBoot(t *testing.T) {
+	status := Status{State: "reboot_required", RebootRequired: true, RebootBootID: "same-boot"}
+	reconcileReboot(&status, "same-boot", time.Now())
+	if status.State != "reboot_required" || !status.RebootRequired {
+		t.Fatalf("reconcileReboot() = %#v", status)
 	}
 }
 

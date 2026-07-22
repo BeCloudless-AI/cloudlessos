@@ -3,11 +3,14 @@
 package osupdate
 
 import (
+	"bufio"
 	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 )
 
 const (
@@ -35,6 +38,7 @@ type Status struct {
 	CheckedAt        string    `json:"checkedAt,omitempty"`
 	UpdatedAt        string    `json:"updatedAt,omitempty"`
 	RebootRequired   bool      `json:"rebootRequired"`
+	RebootBootID     string    `json:"rebootBootId,omitempty"`
 	Packages         []Package `json:"packages,omitempty"`
 }
 
@@ -88,6 +92,7 @@ func Read() (Status, error) {
 	if status.Channel == "" {
 		status.Channel = Channel()
 	}
+	reconcileReboot(&status, currentBootID(), systemBootTime())
 	return status, nil
 }
 
@@ -100,6 +105,9 @@ func Write(status Status) error {
 	if status.Channel == "" {
 		status.Channel = Channel()
 	}
+	if status.RebootRequired && status.RebootBootID == "" {
+		status.RebootBootID = currentBootID()
+	}
 	b, err := json.MarshalIndent(status, "", "  ")
 	if err != nil {
 		return err
@@ -109,4 +117,54 @@ func Write(status Status) error {
 		return err
 	}
 	return os.Rename(tmp, path)
+}
+
+func currentBootID() string {
+	b, err := os.ReadFile("/proc/sys/kernel/random/boot_id")
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(b))
+}
+
+func systemBootTime() time.Time {
+	f, err := os.Open("/proc/stat")
+	if err != nil {
+		return time.Time{}
+	}
+	defer f.Close()
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		fields := strings.Fields(scanner.Text())
+		if len(fields) != 2 || fields[0] != "btime" {
+			continue
+		}
+		seconds, err := strconv.ParseInt(fields[1], 10, 64)
+		if err == nil {
+			return time.Unix(seconds, 0).UTC()
+		}
+	}
+	return time.Time{}
+}
+
+func reconcileReboot(status *Status, bootID string, bootedAt time.Time) {
+	if !status.RebootRequired {
+		return
+	}
+	rebooted := status.RebootBootID != "" && bootID != "" && status.RebootBootID != bootID
+	if status.RebootBootID == "" && !bootedAt.IsZero() {
+		if updatedAt, err := time.Parse(time.RFC3339, status.UpdatedAt); err == nil {
+			rebooted = bootedAt.After(updatedAt)
+		}
+	}
+	if !rebooted {
+		return
+	}
+	status.RebootRequired = false
+	status.RebootBootID = ""
+	status.AvailableVersion = ""
+	if status.State == "reboot_required" {
+		status.State = "updated"
+		status.Message = "Update installed successfully."
+	}
 }

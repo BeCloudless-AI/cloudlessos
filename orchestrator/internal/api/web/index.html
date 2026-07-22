@@ -778,6 +778,11 @@
   .api-section-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 13px; }
   .api-section-title { color: var(--ink); font-size: 13.5px; font-weight: 760; letter-spacing: -.15px; }
   .api-section-desc { margin-top: 3px; color: var(--muted); font-size: 11px; line-height: 1.45; }
+  .api-key-generate {
+    min-height: 36px; padding: 8px 13px; flex: none; display: inline-flex; align-items: center;
+    justify-content: center; gap: 7px; line-height: 1; white-space: nowrap;
+  }
+  .api-key-generate .ui-icon { width: 15px; height: 15px; }
   .api-endpoints { overflow: hidden; border: 1px solid var(--hair); border-radius: 11px; background: var(--panel-2); }
   .api-endpoint { min-height: 44px; padding: 8px 10px 8px 12px; display: grid; grid-template-columns: 88px minmax(0, 1fr) 30px; align-items: center; gap: 10px; }
   .api-endpoint + .api-endpoint { border-top: 1px solid var(--hair); }
@@ -2720,7 +2725,7 @@ async function renderApiPage(c) {
       <div class="api-code"><div class="code-box"><pre id="api-curl">${escapeHtml(curl)}</pre></div><button class="api-copy" data-copy-target="api-curl" title="Copy example" aria-label="Copy cURL example">${uiIcon('copy')}</button></div>
     </section>
     <section class="api-section">
-      <div class="api-section-head"><div><div class="api-section-title">API keys</div><div class="api-section-desc">Keys control who can send requests to your model.</div></div><button class="btn primary" id="key-gen">${uiIcon('key', 'ui-icon sm')}Generate key</button></div>
+      <div class="api-section-head"><div><div class="api-section-title">API keys</div><div class="api-section-desc">Keys control who can send requests to your model.</div></div><button class="btn primary api-key-generate" id="key-gen" type="button">${uiIcon('key')}<span>Generate key</span></button></div>
       <div id="key-list">${keys.length ? keys.map(apiKeyRow).join('') : '<div class="api-keys-empty">No keys yet. Generate one when you are ready to connect a client.</div>'}</div>
       <div id="key-new" class="tun-out hidden"></div>
     </section>

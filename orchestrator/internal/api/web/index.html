@@ -262,11 +262,6 @@
   .key-name { font-weight: 600; font-size: 13.5px; color: var(--ink); }
   .key-prefix { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; color: var(--muted); }
   .key-meta { margin-left: auto; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
-  .key-reveal { background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent); border-radius: 10px; padding: 11px 13px; }
-  .kr-top { font-size: 12px; color: var(--ink-2); margin-bottom: 8px; }
-  .kr-key { display: flex; align-items: center; gap: 9px; }
-  .kr-key code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 12.5px; background: var(--card); border: 1px solid var(--hair); border-radius: 7px; padding: 7px 10px; color: var(--ink); user-select: all; }
   .app-head a { margin-left: auto; }
   /* share-online (Cloudflare quick tunnel) result */
   .tun-out { margin-top: 12px; } .tun-out.hidden { display: none; }
@@ -783,6 +778,67 @@
     justify-content: center; gap: 7px; line-height: 1; white-space: nowrap;
   }
   .api-key-generate .ui-icon { width: 15px; height: 15px; }
+  .key-dialog-layer {
+    position: fixed; inset: 0; z-index: 90; padding: 24px; display: grid; place-items: center;
+    background: rgba(11, 14, 25, .42); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+    animation: fade .2s ease;
+  }
+  .key-dialog-layer.hidden { display: none; }
+  .key-dialog {
+    width: min(470px, 100%); overflow: hidden; border: 1px solid var(--card-edge); border-radius: 20px;
+    background: var(--card-strong); box-shadow: 0 36px 100px -42px rgba(4, 8, 24, .85);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.5); backdrop-filter: blur(var(--glass-blur)) saturate(1.5);
+    animation: pop .22s cubic-bezier(.22, 1, .36, 1);
+  }
+  .key-dialog-head { padding: 20px 20px 0; display: flex; align-items: flex-start; gap: 12px; }
+  .key-dialog-icon {
+    width: 40px; height: 40px; flex: none; display: grid; place-items: center; border-radius: 12px;
+    color: var(--blue); background: var(--blue-soft); border: 1px solid color-mix(in srgb, var(--blue) 22%, var(--hair));
+  }
+  .key-dialog-icon .ui-icon { width: 18px; height: 18px; }
+  .key-dialog-heading { min-width: 0; flex: 1; }
+  .key-dialog-title { color: var(--ink); font-size: 16px; font-weight: 780; letter-spacing: -.25px; }
+  .key-dialog-sub { margin-top: 2px; color: var(--muted); font-size: 11.5px; line-height: 1.5; }
+  .key-dialog-close {
+    width: 32px; height: 32px; flex: none; display: grid; place-items: center; margin: -2px -2px 0 0;
+    border: 0; border-radius: 9px; color: var(--muted); background: var(--panel-2);
+  }
+  .key-dialog-close:hover { color: var(--ink); background: var(--hair); }
+  .key-dialog-close .ui-icon { width: 15px; height: 15px; }
+  .key-dialog-body { padding: 20px; }
+  .key-dialog-label { display: block; margin-bottom: 7px; color: var(--ink-2); font-size: 11.5px; font-weight: 700; }
+  .key-dialog-input {
+    width: 100%; min-height: 44px; padding: 10px 12px; border: 1px solid var(--line-2); border-radius: 11px;
+    outline: none; background: var(--control); color: var(--ink); font: inherit; font-size: 13px;
+    transition: border-color .15s, box-shadow .15s, background .15s;
+  }
+  .key-dialog-input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-soft); background: var(--card-strong); }
+  .key-dialog-help { margin-top: 7px; color: var(--faint); font-size: 10.5px; }
+  .key-dialog-error { min-height: 18px; margin-top: 7px; color: var(--err); font-size: 11px; }
+  .key-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 17px; }
+  .key-dialog-actions .btn { min-height: 38px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
+  .key-dialog-actions .ui-icon { width: 15px; height: 15px; }
+  .key-dialog-spinner {
+    width: 15px; height: 15px; flex: none; border: 2px solid rgba(255, 255, 255, .38);
+    border-top-color: #fff; border-radius: 50%; animation: spin .8s linear infinite;
+  }
+  .key-dialog-secret {
+    margin-top: 16px; padding: 12px; border: 1px solid color-mix(in srgb, var(--blue) 24%, var(--hair));
+    border-radius: 12px; background: var(--blue-soft);
+  }
+  .key-dialog-secret code {
+    display: block; width: 100%; padding: 10px 11px; overflow-x: auto; white-space: nowrap; user-select: all;
+    border: 1px solid var(--hair); border-radius: 9px; background: var(--card-strong); color: var(--ink);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px;
+  }
+  .key-dialog-note { margin-top: 9px; display: flex; align-items: flex-start; gap: 7px; color: var(--warn); font-size: 10.5px; line-height: 1.45; }
+  .key-dialog-note .ui-icon { width: 13px; height: 13px; margin-top: 1px; flex: none; }
+  @media (max-width: 520px) {
+    .key-dialog-layer { padding: 14px; }
+    .key-dialog-head, .key-dialog-body { padding-left: 16px; padding-right: 16px; }
+    .key-dialog-actions { flex-direction: column-reverse; }
+    .key-dialog-actions .btn { width: 100%; }
+  }
   .api-endpoints { overflow: hidden; border: 1px solid var(--hair); border-radius: 11px; background: var(--panel-2); }
   .api-endpoint { min-height: 44px; padding: 8px 10px 8px 12px; display: grid; grid-template-columns: 88px minmax(0, 1fr) 30px; align-items: center; gap: 10px; }
   .api-endpoint + .api-endpoint { border-top: 1px solid var(--hair); }
@@ -1959,6 +2015,13 @@
   </div>
 </div>
 
+<!-- API key creation stays inside the CloudlessOS interface (never a browser prompt). -->
+<div class="key-dialog-layer hidden" id="key-dialog-layer">
+  <section class="key-dialog" id="key-dialog" role="dialog" aria-modal="true" aria-labelledby="key-dialog-title">
+    <div id="key-dialog-content"></div>
+  </section>
+</div>
+
 <!-- Cloudless Assistant -->
 <button id="asst-fab" title="Ask the Cloudless Assistant"><span class="asst-spark"></span></button>
 <div id="asst-backdrop" class="hidden"></div>
@@ -2703,6 +2766,99 @@ function apiTunRender(out, url) {
   out.innerHTML = `<div class="tun-row"><span class="tun-dot"></span><a class="tun-link" href="${escapeAttr(url)}" target="_blank">${escapeHtml(url)}/v1</a></div>
     <div class="fld-help" style="margin-top:6px">Give this base URL + a key to whoever you want to serve.</div>`;
 }
+let keyDialogReturnFocus = null;
+function closeKeyDialog() {
+  const layer = document.getElementById('key-dialog-layer');
+  if (layer.classList.contains('hidden')) return;
+  layer.classList.add('hidden');
+  document.getElementById('key-dialog-content').innerHTML = '';
+  if (keyDialogReturnFocus && document.contains(keyDialogReturnFocus)) keyDialogReturnFocus.focus();
+  keyDialogReturnFocus = null;
+}
+function showCreatedAPIKey(result) {
+  const content = document.getElementById('key-dialog-content');
+  content.innerHTML = `<div class="key-dialog-head">
+      <span class="key-dialog-icon">${uiIcon('key')}</span>
+      <div class="key-dialog-heading"><div class="key-dialog-title" id="key-dialog-title">API key created</div><div class="key-dialog-sub">${escapeHtml(result.name || 'API key')} is ready to use.</div></div>
+      <button class="key-dialog-close" id="key-dialog-close" type="button" aria-label="Close key dialog">${uiIcon('close')}</button>
+    </div>
+    <div class="key-dialog-body">
+      <label class="key-dialog-label" for="key-dialog-secret">Your new key</label>
+      <div class="key-dialog-secret"><code id="key-dialog-secret" tabindex="0">${escapeHtml(result.key)}</code>
+        <div class="key-dialog-note">${uiIcon('alert')}<span>Copy this key now. For your security, CloudlessOS will not show it again.</span></div>
+      </div>
+      <div class="key-dialog-actions">
+        <button class="btn" id="key-dialog-done" type="button">Done</button>
+        <button class="btn primary" id="key-dialog-copy" type="button">${uiIcon('copy')}<span>Copy key</span></button>
+      </div>
+    </div>`;
+  document.getElementById('key-dialog-close').onclick = closeKeyDialog;
+  document.getElementById('key-dialog-done').onclick = closeKeyDialog;
+  const copy = document.getElementById('key-dialog-copy');
+  copy.onclick = async () => {
+    try {
+      await navigator.clipboard.writeText(result.key);
+      copy.innerHTML = `<span>Copied</span>`;
+      toast('API key copied');
+    } catch {
+      const secret = document.getElementById('key-dialog-secret');
+      const range = document.createRange(); range.selectNodeContents(secret);
+      const selection = getSelection(); selection.removeAllRanges(); selection.addRange(range);
+      toast('Key selected — copy it now');
+    }
+  };
+  copy.focus();
+}
+function openKeyDialog() {
+  keyDialogReturnFocus = document.activeElement;
+  const layer = document.getElementById('key-dialog-layer');
+  const content = document.getElementById('key-dialog-content');
+  content.innerHTML = `<div class="key-dialog-head">
+      <span class="key-dialog-icon">${uiIcon('key')}</span>
+      <div class="key-dialog-heading"><div class="key-dialog-title" id="key-dialog-title">Create an API key</div><div class="key-dialog-sub">Give this key a name so you can identify and revoke it later.</div></div>
+      <button class="key-dialog-close" id="key-dialog-close" type="button" aria-label="Close key dialog">${uiIcon('close')}</button>
+    </div>
+    <form class="key-dialog-body" id="key-dialog-form" novalidate>
+      <label class="key-dialog-label" for="key-dialog-name">Key name</label>
+      <input class="key-dialog-input" id="key-dialog-name" maxlength="64" placeholder="For example, My website" autocomplete="off" spellcheck="false" aria-describedby="key-dialog-help key-dialog-error">
+      <div class="key-dialog-help" id="key-dialog-help">Use a name that tells you where this key will be used.</div>
+      <div class="key-dialog-error" id="key-dialog-error" role="alert"></div>
+      <div class="key-dialog-actions">
+        <button class="btn" id="key-dialog-cancel" type="button">Cancel</button>
+        <button class="btn primary" id="key-dialog-submit" type="submit">${uiIcon('key')}<span>Generate key</span></button>
+      </div>
+    </form>`;
+  layer.classList.remove('hidden');
+  document.getElementById('key-dialog-close').onclick = closeKeyDialog;
+  document.getElementById('key-dialog-cancel').onclick = closeKeyDialog;
+  const form = document.getElementById('key-dialog-form');
+  const input = document.getElementById('key-dialog-name');
+  const error = document.getElementById('key-dialog-error');
+  const submit = document.getElementById('key-dialog-submit');
+  input.oninput = () => { error.textContent = ''; input.removeAttribute('aria-invalid'); };
+  form.onsubmit = async e => {
+    e.preventDefault();
+    const name = input.value.trim();
+    if (!name) {
+      error.textContent = 'Enter a name for this key.';
+      input.setAttribute('aria-invalid', 'true'); input.focus(); return;
+    }
+    input.disabled = true; submit.disabled = true;
+    submit.innerHTML = '<span class="key-dialog-spinner" aria-hidden="true"></span><span>Generating…</span>';
+    try {
+      const result = await api('/api/keys', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
+      if (!result || result.error || !result.key) throw new Error(result && result.error ? result.error : 'Key generation failed');
+      apiRefreshKeys();
+      showCreatedAPIKey(result);
+    } catch {
+      input.disabled = false; submit.disabled = false;
+      submit.innerHTML = `${uiIcon('key')}<span>Generate key</span>`;
+      error.textContent = 'CloudlessOS could not create the key. Try again.';
+      input.focus();
+    }
+  };
+  input.focus();
+}
 async function renderApiPage(c) {
   c.innerHTML = '<div class="set-hint">Loading…</div>';
   let g; try { g = await api('/api/gateway'); } catch { c.innerHTML = '<div class="set-hint">Could not load API access.</div>'; return; }
@@ -2727,7 +2883,6 @@ async function renderApiPage(c) {
     <section class="api-section">
       <div class="api-section-head"><div><div class="api-section-title">API keys</div><div class="api-section-desc">Keys control who can send requests to your model.</div></div><button class="btn primary api-key-generate" id="key-gen" type="button">${uiIcon('key')}<span>Generate key</span></button></div>
       <div id="key-list">${keys.length ? keys.map(apiKeyRow).join('') : '<div class="api-keys-empty">No keys yet. Generate one when you are ready to connect a client.</div>'}</div>
-      <div id="key-new" class="tun-out hidden"></div>
     </section>
     <section class="api-section">
       <div class="api-section-head"><div><div class="api-section-title">Network access</div><div class="api-section-desc">Choose where the API can be reached. Authentication is always required.</div></div></div>
@@ -2748,19 +2903,7 @@ async function renderApiPage(c) {
   const tout = document.getElementById('gw-tun-out');
   if (g.tunnel && g.tunnel.enabled && g.tunnel.url) apiTunRender(tout, g.tunnel.url);
 
-  document.getElementById('key-gen').onclick = async () => {
-    const raw = prompt('Name this key (e.g. "My website" or "Phone app"):'); if (raw === null) return;
-    toast('Generating key…');
-    try {
-      const r = await api('/api/keys', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: raw.trim() }) });
-      const box = document.getElementById('key-new');
-      box.classList.remove('hidden');
-      box.innerHTML = `<div class="key-reveal"><div class="kr-top">New key${r.name ? ' · ' + escapeHtml(r.name) : ''} — copy it now, you won't be able to see it again:</div>
-        <div class="kr-key"><code id="kr-secret">${escapeHtml(r.key)}</code><button class="btn" id="kr-copy">Copy</button></div></div>`;
-      document.getElementById('kr-copy').onclick = () => { try { navigator.clipboard.writeText(r.key); toast('Copied'); } catch { toast('Select and copy it'); } };
-      apiRefreshKeys();
-    } catch { toast('Failed', true); }
-  };
+  document.getElementById('key-gen').onclick = openKeyDialog;
   const lan = document.getElementById('gw-lan');
   lan.onchange = async () => {
     const enable = lan.checked; lan.disabled = true;
@@ -4185,6 +4328,9 @@ document.getElementById('asst-exp').onclick = () => setAsstFull(!document.getEle
 document.getElementById('asst-backdrop').onclick = () => setAsstFull(false); // collapse to docked
 document.getElementById('open-full-chat').onclick = () => openAsst(true);   // the assistant IS the full chat (not Open WebUI)
 document.getElementById('asst-form').addEventListener('submit', e => { e.preventDefault(); asstSend(document.getElementById('asst-text').value); });
+document.getElementById('key-dialog-layer').addEventListener('click', e => {
+  if (e.target.id === 'key-dialog-layer') closeKeyDialog();
+});
 // hero prompt bar → open the assistant (and send if the user typed something)
 document.getElementById('hero-ask').addEventListener('submit', e => {
   e.preventDefault();
@@ -4197,7 +4343,8 @@ document.getElementById('hero-ask').addEventListener('submit', e => {
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;
   const np = document.getElementById('net-pop');
-  if (!np.classList.contains('hidden')) np.classList.add('hidden');
+  if (!document.getElementById('key-dialog-layer').classList.contains('hidden')) closeKeyDialog();
+  else if (!np.classList.contains('hidden')) np.classList.add('hidden');
   else if (modelsOpen()) closeModelManager();
   else if (launcherOpen()) closeLauncher();
   else if (!document.getElementById('asst').classList.contains('hidden')) closeAsst();

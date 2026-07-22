@@ -37,6 +37,7 @@ grep -Fq 'Wants=docker.service' "$DISTRO/packages/cloudless-orchestrator/cloudle
 grep -Fq 'updates.becloudless.ai/apt' "$DISTRO/packages/cloudless-updater/cloudless.sources"
 grep -Fq 'cloudless-updater apply' "$DISTRO/packages/cloudless-updater/cloudless-update-apply.service"
 grep -Fq 'cloudless-updater check' "$DISTRO/packages/cloudless-updater/cloudless-update-check.service"
+bash "$DISTRO/scripts/test-package-content.sh"
 if grep -Eq '^After=.*docker\.service' "$DISTRO/packages/cloudless-orchestrator/cloudlessd.service"; then
     echo "cloudlessd must not delay the local UI behind Docker" >&2
     exit 1

@@ -50,8 +50,22 @@ gpg --import /secure/offline-backup/cloudless-archive-secret.asc
 bash distro/scripts/build-apt-repository.sh 0.1.1 stable
 ```
 
-This builds all Cloudless packages with version `0.1.1`, signs the repository metadata,
-and writes the static repository to `distro/out/apt-repository`.
+This builds candidate Cloudless packages, signs the repository metadata, and writes the
+static repository to `distro/out/apt-repository`.
+
+Release builds compare each candidate package with the currently published signed
+baseline. Only packages whose installed contents changed receive the new version and are
+added to the repository. For example, an interface-only `0.1.2` release updates
+`cloudless-orchestrator` while the other packages remain at `0.1.1`. A build with no
+package changes exits without creating an empty release. If the local repository cache is
+missing, the builder verifies and recovers the baseline from `updates.becloudless.ai`.
+
+Preview package selection without signing or modifying the repository:
+
+```bash
+CLOUDLESS_RELEASE_DRY_RUN=1 \
+  bash distro/scripts/build-apt-repository.sh 0.1.2 stable
+```
 
 ## Publish to Cloudflare R2
 

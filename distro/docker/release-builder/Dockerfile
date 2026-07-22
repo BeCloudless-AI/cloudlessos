@@ -3,6 +3,7 @@ FROM golang:1.26-bookworm
 RUN apt-get update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
         gnupg \
+        awscli \
         curl \
         imagemagick \
         librsvg2-bin \

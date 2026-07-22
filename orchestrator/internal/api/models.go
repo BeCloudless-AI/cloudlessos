@@ -89,9 +89,7 @@ func (s *Server) modelsList(w http.ResponseWriter, r *http.Request) {
 
 	// "Cloudless highlights": hosted manifest, falling back to the built-in catalog.
 	highlights := s.mfModels.Highlights(r.Context())
-	if len(highlights) == 0 {
-		highlights = models.All()
-	}
+	highlights = models.Merge(highlights)
 	// Ensure the region's recommended models are present even if the hosted manifest
 	// omits them, so e.g. Mistral always appears for a machine in France.
 	seen := map[string]bool{}

@@ -148,9 +148,7 @@ func (s *Server) assistantContext(ctx context.Context) assistant.Context {
 	modelCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	modelList := s.mfModels.Highlights(modelCtx)
 	cancel()
-	if len(modelList) == 0 {
-		modelList = modelcatalog.All()
-	}
+	modelList = modelcatalog.Merge(modelList)
 	gpuGB := totalVRAMGB(ctx)
 	modelOptions := make([]assistant.ModelOption, 0, len(modelList))
 	currentListed := false

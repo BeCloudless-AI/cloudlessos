@@ -1,6 +1,6 @@
 {
   "manifestVersion": 1,
-  "updated": "2026-06-24",
+  "updated": "2026-07-22",
   "highlights": [
     {
       "id": "mistralai/Mistral-7B-Instruct-v0.3",
@@ -178,6 +178,79 @@
       "vision": false,
       "license": "Apache-2.0",
       "description": "Flagship quality. Needs ~48GB — a big card or multiple GPUs."
+    },
+    {
+      "id": "Qwen/Qwen3.6-27B-FP8",
+      "name": "Qwen3.6 27B (FP8)",
+      "family": "Qwen",
+      "params": "27B",
+      "quant": "FP8",
+      "contextK": 262,
+      "minVramGB": 34,
+      "use": "general",
+      "tags": ["chat", "reasoning", "vision", "agentic"],
+      "toolCalling": true,
+      "vision": true,
+      "license": "Apache-2.0",
+      "description": "Qwen3.6's dense multimodal model in official FP8; strong general reasoning and coding, but tight on a 32GB GPU."
+    },
+    {
+      "id": "Qwen/Qwen3.6-35B-A3B-FP8",
+      "name": "Qwen3.6 35B-A3B (FP8)",
+      "family": "Qwen",
+      "params": "35B / 3B active",
+      "quant": "FP8",
+      "contextK": 262,
+      "minVramGB": 43,
+      "use": "coding",
+      "tags": ["coding", "reasoning", "vision", "agentic", "moe"],
+      "toolCalling": true,
+      "vision": true,
+      "license": "Apache-2.0",
+      "description": "Official FP8 Qwen3.6 MoE: 35B total, 3B active per token, tuned for agentic coding and multimodal work."
+    },
+    {
+      "id": "Qwen/Qwen3.6-27B",
+      "name": "Qwen3.6 27B",
+      "family": "Qwen",
+      "params": "27B",
+      "contextK": 262,
+      "minVramGB": 64,
+      "use": "general",
+      "tags": ["chat", "reasoning", "vision", "agentic"],
+      "toolCalling": true,
+      "vision": true,
+      "license": "Apache-2.0",
+      "description": "Full-precision Qwen3.6 27B multimodal checkpoint for larger multi-GPU systems."
+    },
+    {
+      "id": "Qwen/Qwen3.6-35B-A3B",
+      "name": "Qwen3.6 35B-A3B",
+      "family": "Qwen",
+      "params": "35B / 3B active",
+      "contextK": 262,
+      "minVramGB": 81,
+      "use": "coding",
+      "tags": ["coding", "reasoning", "vision", "agentic", "moe"],
+      "toolCalling": true,
+      "vision": true,
+      "license": "Apache-2.0",
+      "description": "Full-precision Qwen3.6 MoE checkpoint; all 35B weights must be resident even though only 3B activate per token."
+    },
+    {
+      "id": "deepseek-ai/DeepSeek-V4-Flash",
+      "name": "DeepSeek V4 Flash",
+      "family": "DeepSeek",
+      "params": "284B / 13B active",
+      "quant": "FP4 + FP8",
+      "contextK": 1000,
+      "minVramGB": 180,
+      "use": "coding",
+      "tags": ["coding", "reasoning", "agentic", "moe", "long-context"],
+      "toolCalling": true,
+      "vision": false,
+      "license": "MIT",
+      "description": "Official DeepSeek V4 Flash: 284B total, 13B active, mixed FP4/FP8 weights and up to a 1M-token context. Built for large multi-GPU or unified-memory systems."
     }
   ]
 }

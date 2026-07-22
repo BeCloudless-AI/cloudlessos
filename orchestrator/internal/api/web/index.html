@@ -2733,9 +2733,11 @@ function settingsOpen() { return !document.getElementById('settings').classList.
 
 let setPage = 'hardware';
 async function renderSettings() {
-  let catalog;
+  let catalog, containers;
   try { catalog = await api('/api/catalog'); catalogCache = catalog; } catch { catalog = catalogCache || []; }
-  const apps = catalog.filter(a => !a.service);
+  try { containers = await api('/api/apps'); } catch { containers = []; }
+  const installed = new Set((Array.isArray(containers) ? containers : []).map(c => c.name.replace(/^cloudless-/, '')));
+  const apps = catalog.filter(a => !a.service && installed.has(a.id));
   if (setPage.startsWith('app:') && !apps.some(a => 'app:' + a.id === setPage)) setPage = 'hardware';
 
   const groups = [
@@ -2744,7 +2746,7 @@ async function renderSettings() {
     { label: 'apps', items: apps.map(a => ({ id: 'app:' + a.id, glyph: glyph(a.id), label: a.name })) },
     { label: 'system', items: [{ id: 'appearance', icon: 'appearance', label: 'Appearance' }, { id: 'general', icon: 'general', label: 'General' }] },
   ];
-  document.getElementById('set-nav').innerHTML = groups.map(g =>
+  document.getElementById('set-nav').innerHTML = groups.filter(g => g.items.length).map(g =>
     `<div class="nav-group">${g.label}</div>` + g.items.map(it =>
       `<div class="nav-item ${it.id === setPage ? 'active' : ''}" data-page="${it.id}"><span class="nav-ic">${it.icon ? uiIcon(it.icon) : it.glyph}</span>${it.label}</div>`).join('')).join('');
   document.querySelectorAll('#set-nav .nav-item').forEach(n => n.onclick = () => { setPage = n.dataset.page; renderSettings(); });

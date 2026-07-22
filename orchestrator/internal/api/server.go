@@ -538,6 +538,23 @@ func (s *Server) appReset(w http.ResponseWriter, r *http.Request) {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 		defer cancel()
+		if app.ID == "hermes" {
+			job.Progress("resetting", "Restoring the Cloudless model connection…", -1, -1)
+			if err := apps.ResetHermesModel(s.appConfigDir(app.ID)); err != nil {
+				job.Fail(err)
+				return
+			}
+			_ = s.eng.Remove(ctx, app.ContainerName())
+			spec := s.appSpec(app)
+			spec.Image = s.imageFor(ctx, app)
+			id, err := s.eng.Run(ctx, spec)
+			if err != nil {
+				job.Fail(err)
+				return
+			}
+			job.Succeed(id)
+			return
+		}
 		_ = s.eng.Remove(ctx, app.ContainerName())
 		if app.Build != "" { // force a fresh rebuild of locally-built apps
 			_ = s.eng.RemoveImage(ctx, app.Image)
@@ -552,6 +569,10 @@ func (s *Server) appUninstall(w http.ResponseWriter, r *http.Request) {
 	app, ok := catalog.Get(r.PathValue("id"))
 	if !ok {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "unknown app"})
+		return
+	}
+	if app.ID == "hermes" {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "Hermes is a core CloudlessOS service and cannot be uninstalled"})
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)

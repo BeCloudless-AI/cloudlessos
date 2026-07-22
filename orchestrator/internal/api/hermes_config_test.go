@@ -1,6 +1,8 @@
 package api
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -11,6 +13,16 @@ import (
 	"github.com/cloudless/orchestrator/internal/catalog"
 	"github.com/cloudless/orchestrator/internal/state"
 )
+
+func TestHermesCannotBeUninstalled(t *testing.T) {
+	req := httptest.NewRequest(http.MethodPost, "/api/apps/hermes/uninstall", nil)
+	req.SetPathValue("id", "hermes")
+	recorder := httptest.NewRecorder()
+	(&Server{}).appUninstall(recorder, req)
+	if recorder.Code != http.StatusConflict {
+		t.Fatalf("Hermes uninstall status = %d, want %d", recorder.Code, http.StatusConflict)
+	}
+}
 
 func TestHermesMountsPersistentDataDirectory(t *testing.T) {
 	st, err := state.Open(t.TempDir())

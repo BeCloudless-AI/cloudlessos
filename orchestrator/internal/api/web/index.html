@@ -4006,10 +4006,15 @@ async function renderAppPage(c, id) {
       <div id="tun-out" class="tun-out hidden"></div></div>` : '';
   const updates = `<div class="set-block" id="upd-block"><h3>updates</h3>
       <div id="upd-body" class="upd-body"><span class="upd-muted">Checking for updates…</span></div></div>`;
-  const manage = `<div class="set-block"><h3>manage</h3>
-      <div class="set-row"><span>Reset to defaults</span><span class="row-actions"><button class="btn" data-appreset>Reset</button></span></div>
-      <div class="set-row"><span>Uninstall</span><span class="row-actions"><button class="btn danger" data-appuninstall>Uninstall</button></span></div>
-    </div>`;
+  const manage = id === 'hermes'
+    ? `<div class="set-block"><h3>Cloudless integration</h3>
+        <div class="set-row"><span>Use the model managed by CloudlessOS</span><span class="row-actions"><button class="btn" data-appreset>Restore</button></span></div>
+        <div class="fld-help">Restores only Hermes' model connection to Cloudless AI. Memory, conversations, messaging integrations, workspace files, and other Hermes settings are preserved.</div>
+      </div>`
+    : `<div class="set-block"><h3>manage</h3>
+        <div class="set-row"><span>Reset to defaults</span><span class="row-actions"><button class="btn" data-appreset>Reset</button></span></div>
+        <div class="set-row"><span>Uninstall</span><span class="row-actions"><button class="btn danger" data-appuninstall>Uninstall</button></span></div>
+      </div>`;
   c.innerHTML = `<div class="app-head"><div class="app-status"><span class="led ${running ? 'ok' : ''}"></span>${running ? 'running' : 'stopped'}</div>${openBtn}</div>${updates}${form}${admin}${adv}${local}${share}${manage}`;
 
   const appOpen = c.querySelector('[data-appopen]');
@@ -4034,11 +4039,12 @@ async function renderAppPage(c, id) {
       .then(r => { if (r.jobId) trackJobToast(r.jobId, id + ' config'); else toast('Saved'); }).catch(() => toast('Failed', true));
   };
   c.querySelector('[data-appreset]').onclick = () => {
-    if (!confirm(`Reset ${app.name || id} to defaults? This rebuilds it.`)) return;
-    toast('Resetting ' + id + '…');
+    if (id !== 'hermes' && !confirm(`Reset ${app.name || id} to defaults? This rebuilds it.`)) return;
+    toast(id === 'hermes' ? 'Restoring the Cloudless model connection…' : 'Resetting ' + id + '…');
     api(`/api/apps/${id}/reset`, { method: 'POST' }).then(r => { if (r.jobId) trackJobToast(r.jobId, id); }).catch(() => toast('Failed', true));
   };
-  c.querySelector('[data-appuninstall]').onclick = () => openUninstallDialog(id, app);
+  const uninstall = c.querySelector('[data-appuninstall]');
+  if (uninstall) uninstall.onclick = () => openUninstallDialog(id, app);
 
   const lanToggle = c.querySelector('#lan-toggle');
   if (lanToggle) {

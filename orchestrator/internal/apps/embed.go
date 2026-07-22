@@ -29,6 +29,71 @@ func ReadDefault(appID, file string) ([]byte, error) {
 	return buildFS.ReadFile(appID + "/" + file)
 }
 
+// ResetHermesModel restores only Hermes' model block to the CloudlessOS
+// defaults. The rest of config.yaml, hermes.env, memory, sessions and workspace
+// are deliberately left untouched.
+func ResetHermesModel(configDir string) error {
+	configMu.Lock()
+	defer configMu.Unlock()
+
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		return err
+	}
+	defaults, err := ReadDefault("hermes", "config.yaml")
+	if err != nil {
+		return err
+	}
+	path := filepath.Join(configDir, "config.yaml")
+	current, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		current = defaults
+	} else if err != nil {
+		return err
+	}
+	modelBlock, ok := yamlTopLevelBlock(string(defaults), "model")
+	if !ok {
+		return fmt.Errorf("embedded Hermes config has no model block")
+	}
+	updated := replaceYAMLTopLevelBlock(string(current), "model", modelBlock)
+	tmp := path + ".cloudless-reset"
+	if err := os.WriteFile(tmp, []byte(updated), 0o600); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return nil
+}
+
+func yamlTopLevelBlock(content, key string) (string, bool) {
+	lines := strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n")
+	start, end := -1, len(lines)
+	for i, line := range lines {
+		if line == key+":" {
+			start = i
+			continue
+		}
+		if start >= 0 && line != "" && line[0] != ' ' && line[0] != '\t' && !strings.HasPrefix(line, "#") {
+			end = i
+			break
+		}
+	}
+	if start < 0 {
+		return "", false
+	}
+	return strings.TrimRight(strings.Join(lines[start:end], "\n"), "\n") + "\n", true
+}
+
+func replaceYAMLTopLevelBlock(content, key, replacement string) string {
+	normalized := strings.ReplaceAll(content, "\r\n", "\n")
+	old, ok := yamlTopLevelBlock(normalized, key)
+	if !ok {
+		return strings.TrimRight(replacement, "\n") + "\n\n" + strings.TrimLeft(normalized, "\n")
+	}
+	return strings.Replace(normalized, old, replacement, 1)
+}
+
 // EnvOverrides reads the app's env-injected config files (ConfigFile.Env) from
 // configDir (the app's state dir; falling back to the embedded default), parses
 // their KEY=VALUE lines, and returns them to overlay onto the container env. This

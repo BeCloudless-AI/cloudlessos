@@ -3168,11 +3168,10 @@ async function renderGeneralPage(c) {
   catch { update = { state: 'failed', configured: false, message: 'Could not reach the system update service.' }; }
   const state = update.state || 'idle';
   const busy = state === 'checking' || state === 'installing';
-  const completed = state === 'updated' || state === 'reboot_required';
   const current = update.currentVersion || 'development';
   const available = update.availableVersion || '';
-  const progress = update.progress == null && completed ? 100 : Math.max(0, Math.min(100, Number(update.progress) || 0));
-  const showProgress = busy || completed;
+  const progress = Math.max(0, Math.min(100, Number(update.progress) || 0));
+  const showProgress = state === 'installing';
   let updateTitle = 'CloudlessOS is up to date';
   if (!update.configured) updateTitle = 'Updates are not configured yet';
   else if (state === 'available') updateTitle = `CloudlessOS ${escapeHtml(available)} is available`;

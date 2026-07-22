@@ -32,12 +32,14 @@ verify_local() {
     cmp -s "$extracted" "$DIST/Release" || { echo "InRelease does not sign the current Release file" >&2; return 1; }
     grep -Fqx 'Acquire-By-Hash: yes' "$DIST/Release" || { echo "Release does not enable Acquire-By-Hash" >&2; return 1; }
     while read -r hash size path; do
-        case "$path" in main/binary-amd64/Packages|main/binary-amd64/Packages.gz) ;; *) continue ;; esac
+        case "$path" in main/binary-amd64/Packages|main/binary-amd64/Packages.gz|cloudless-release.json) ;; *) continue ;; esac
         file="$DIST/$path"
-        by_hash="$(dirname "$file")/by-hash/SHA256/$hash"
         test "$(wc -c < "$file" | tr -d '[:space:]')" = "$size"
         printf '%s  %s\n' "$hash" "$file" | sha256sum --check --status
-        cmp -s "$file" "$by_hash" || { echo "Missing immutable index $by_hash" >&2; return 1; }
+        if [ "$path" != cloudless-release.json ]; then
+            by_hash="$(dirname "$file")/by-hash/SHA256/$hash"
+            cmp -s "$file" "$by_hash" || { echo "Missing immutable index $by_hash" >&2; return 1; }
+        fi
     done < <(release_entries "$DIST/Release")
     while read -r checksum filename; do
         test -s "$REPO/$filename" || { echo "Missing package $filename" >&2; return 1; }
@@ -62,9 +64,13 @@ verify_public() {
     done
     gpgv --keyring "$KEY" --output "$live_release" "$live_inrelease" >/dev/null 2>&1
     while read -r hash size path; do
-        case "$path" in main/binary-amd64/Packages|main/binary-amd64/Packages.gz) ;; *) continue ;; esac
+        case "$path" in main/binary-amd64/Packages|main/binary-amd64/Packages.gz|cloudless-release.json) ;; *) continue ;; esac
         target="$work/$(basename "$path")-$hash"
-        curl -fsS "$PUBLIC_BASE/dists/$CHANNEL/$(dirname "$path")/by-hash/SHA256/$hash?v=$cache_bust" -o "$target"
+        if [ "$path" = cloudless-release.json ]; then
+            curl -fsS "$PUBLIC_BASE/dists/$CHANNEL/cloudless-release.json?v=$cache_bust" -o "$target"
+        else
+            curl -fsS "$PUBLIC_BASE/dists/$CHANNEL/$(dirname "$path")/by-hash/SHA256/$hash?v=$cache_bust" -o "$target"
+        fi
         test "$(wc -c < "$target" | tr -d '[:space:]')" = "$size"
         printf '%s  %s\n' "$hash" "$target" | sha256sum --check --status
     done < <(release_entries "$live_release")
@@ -88,6 +94,8 @@ aws s3 cp "$KEY" "$DEST/cloudless-archive-keyring.pgp" --endpoint-url "$CLOUDLES
     --cache-control 'public,max-age=31536000,immutable' --only-show-errors
 aws s3 cp "$DIST/main/" "$DEST/dists/$CHANNEL/main/" --recursive --endpoint-url "$CLOUDLESS_R2_ENDPOINT" \
     --exclude '*' --include '*/by-hash/*' --cache-control 'public,max-age=31536000,immutable' --only-show-errors
+aws s3 cp "$DIST/cloudless-release.json" "$DEST/dists/$CHANNEL/cloudless-release.json" --endpoint-url "$CLOUDLESS_R2_ENDPOINT" \
+    --cache-control 'no-store,max-age=0,must-revalidate' --only-show-errors
 aws s3 cp "$DIST/Release.gpg" "$DEST/dists/$CHANNEL/Release.gpg" --endpoint-url "$CLOUDLESS_R2_ENDPOINT" \
     --cache-control 'no-store,max-age=0,must-revalidate' --only-show-errors
 aws s3 cp "$DIST/Release" "$DEST/dists/$CHANNEL/Release" --endpoint-url "$CLOUDLESS_R2_ENDPOINT" \

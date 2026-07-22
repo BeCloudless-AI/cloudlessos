@@ -44,6 +44,12 @@ inside the protected release environment when signing.
 Package versions must increase according to Debian version ordering. Development
 versions containing `dev` are intentionally rejected.
 
+Every release also requires curated notes at
+`distro/release/notes/VERSION.json`. The file must contain a non-empty `title` and
+`changes` array; `summary` is optional. Release creation stops before signing if the
+notes are missing or invalid. The resulting manifest is hashed into the signed APT
+metadata so devices can verify it before displaying the changelog.
+
 ```bash
 sudo apt install reprepro
 gpg --import /secure/offline-backup/cloudless-archive-secret.asc

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -24,6 +26,18 @@ var managedPackages = []string{
 	"cloudless-hardware",
 	"cloudless-firstboot",
 	"cloudless-updater",
+}
+
+const (
+	defaultAPTBaseURL = "https://updates.becloudless.ai/apt"
+	archiveKeyring    = "/usr/share/keyrings/cloudless-archive-keyring.pgp"
+)
+
+type releaseManifest struct {
+	Version string   `json:"version"`
+	Title   string   `json:"title"`
+	Summary string   `json:"summary"`
+	Changes []string `json:"changes"`
 }
 
 func main() {
@@ -219,6 +233,9 @@ func apply() error {
 		status.State = "updated"
 		status.CurrentVersion = status.AvailableVersion
 		status.AvailableVersion = ""
+		status.ReleaseTitle = ""
+		status.ReleaseSummary = ""
+		status.Changelog = nil
 		status.Packages = nil
 		status.Error = ""
 		status.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
@@ -260,6 +277,9 @@ func writeProgress(status *osupdate.Status, progress int, message string) error 
 func candidates(ctx context.Context, status osupdate.Status) (osupdate.Status, error) {
 	status.Packages = nil
 	status.AvailableVersion = ""
+	status.ReleaseTitle = ""
+	status.ReleaseSummary = ""
+	status.Changelog = nil
 	for _, name := range managedPackages {
 		installed, err := installedVersion(ctx, name)
 		if err != nil {
@@ -287,7 +307,109 @@ func candidates(ctx context.Context, status osupdate.Status) (osupdate.Status, e
 	if status.AvailableVersion == "" && len(status.Packages) > 0 {
 		status.AvailableVersion = status.Packages[0].Candidate
 	}
+	if status.AvailableVersion != "" {
+		release, err := loadReleaseManifest(ctx, status.Channel, status.AvailableVersion)
+		if err != nil {
+			return status, fmt.Errorf("could not verify release notes: %w", err)
+		}
+		status.ReleaseTitle = release.Title
+		status.ReleaseSummary = release.Summary
+		status.Changelog = release.Changes
+	}
 	return status, nil
+}
+
+func loadReleaseManifest(ctx context.Context, channel, version string) (releaseManifest, error) {
+	baseURL := strings.TrimRight(os.Getenv("CLOUDLESS_APT_BASE_URL"), "/")
+	if baseURL == "" {
+		baseURL = defaultAPTBaseURL
+	}
+	inRelease, err := fetch(ctx, fmt.Sprintf("%s/dists/%s/InRelease", baseURL, channel))
+	if err != nil {
+		return releaseManifest{}, err
+	}
+	manifest, err := fetch(ctx, fmt.Sprintf("%s/dists/%s/cloudless-release.json", baseURL, channel))
+	if err != nil {
+		return releaseManifest{}, err
+	}
+
+	tmp, err := os.MkdirTemp("", "cloudless-release-verify-")
+	if err != nil {
+		return releaseManifest{}, err
+	}
+	defer os.RemoveAll(tmp)
+	inReleasePath := filepath.Join(tmp, "InRelease")
+	releasePath := filepath.Join(tmp, "Release")
+	if err := os.WriteFile(inReleasePath, inRelease, 0o600); err != nil {
+		return releaseManifest{}, err
+	}
+	if output, err := exec.CommandContext(ctx, "gpgv", "--keyring", archiveKeyring, "--output", releasePath, inReleasePath).CombinedOutput(); err != nil {
+		return releaseManifest{}, fmt.Errorf("archive signature is invalid: %w: %s", err, strings.TrimSpace(string(output)))
+	}
+	release, err := os.ReadFile(releasePath)
+	if err != nil {
+		return releaseManifest{}, err
+	}
+	return validateReleaseManifest(release, manifest, version)
+}
+
+func fetch(ctx context.Context, url string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("%s returned %s", url, resp.Status)
+	}
+	return io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+}
+
+func validateReleaseManifest(release, manifest []byte, version string) (releaseManifest, error) {
+	wantHash := fmt.Sprintf("%x", sha256.Sum256(manifest))
+	wantSize := strconv.Itoa(len(manifest))
+	covered := false
+	inSHA256 := false
+	for _, line := range strings.Split(string(release), "\n") {
+		if line == "SHA256:" {
+			inSHA256 = true
+			continue
+		}
+		if inSHA256 && !strings.HasPrefix(line, " ") {
+			inSHA256 = false
+		}
+		if !inSHA256 {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) == 3 && fields[0] == wantHash && fields[1] == wantSize && fields[2] == "cloudless-release.json" {
+			covered = true
+			break
+		}
+	}
+	if !covered {
+		return releaseManifest{}, errors.New("release notes are not covered by signed metadata")
+	}
+	var parsed releaseManifest
+	if err := json.Unmarshal(manifest, &parsed); err != nil {
+		return releaseManifest{}, fmt.Errorf("invalid release notes: %w", err)
+	}
+	if parsed.Version != version {
+		return releaseManifest{}, fmt.Errorf("release notes describe %s, expected %s", parsed.Version, version)
+	}
+	if strings.TrimSpace(parsed.Title) == "" || len(parsed.Changes) == 0 {
+		return releaseManifest{}, errors.New("release notes are incomplete")
+	}
+	for _, change := range parsed.Changes {
+		if strings.TrimSpace(change) == "" {
+			return releaseManifest{}, errors.New("release notes contain an empty change")
+		}
+	}
+	return parsed, nil
 }
 
 func installedVersion(ctx context.Context, name string) (string, error) {

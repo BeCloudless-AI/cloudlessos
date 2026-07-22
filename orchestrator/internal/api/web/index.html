@@ -296,6 +296,12 @@
   .sys-update-progress-head strong { color: var(--ink); font-variant-numeric: tabular-nums; }
   .sys-update-progress-track { height: 7px; overflow: hidden; border-radius: 999px; background: color-mix(in srgb, var(--blue) 13%, var(--control)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--blue) 10%, transparent); }
   .sys-update-progress-fill { height: 100%; min-width: 2px; border-radius: inherit; background: linear-gradient(90deg, var(--blue), color-mix(in srgb, var(--blue) 68%, var(--accent))); transition: width .35s ease; }
+  .sys-update-changelog { margin-top: 13px; padding: 12px 13px; border: 1px solid var(--hair); border-radius: 11px; background: var(--control); }
+  .sys-update-changelog-title { font-size: 12.5px; font-weight: 700; color: var(--ink); }
+  .sys-update-changelog-summary { margin-top: 4px; font-size: 11.5px; line-height: 1.45; color: var(--muted); }
+  .sys-update-changelog ul { margin: 9px 0 0; padding-left: 17px; color: var(--ink-2); }
+  .sys-update-changelog li { padding-left: 2px; font-size: 11.5px; line-height: 1.5; }
+  .sys-update-changelog li + li { margin-top: 4px; }
   .sys-update-error { margin-top: 8px; font-size: 11.5px; color: var(--err); overflow-wrap: anywhere; }
   .sys-update-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 13px; }
   .sys-update-spin .ui-icon { animation: spin .9s linear infinite; transform-origin: center; }
@@ -3172,6 +3178,7 @@ async function renderGeneralPage(c) {
   const available = update.availableVersion || '';
   const progress = Math.max(0, Math.min(100, Number(update.progress) || 0));
   const showProgress = state === 'installing';
+  const changelog = Array.isArray(update.changelog) ? update.changelog.filter(change => typeof change === 'string' && change.trim()) : [];
   let updateTitle = 'CloudlessOS is up to date';
   if (!update.configured) updateTitle = 'Updates are not configured yet';
   else if (state === 'available') updateTitle = `CloudlessOS ${escapeHtml(available)} is available`;
@@ -3190,6 +3197,7 @@ async function renderGeneralPage(c) {
         <div class="sys-update-top"><span class="sys-update-mark ${busy ? 'sys-update-spin' : ''}">${uiIcon(busy ? 'restart' : 'download')}</span>
           <div class="sys-update-copy"><div class="sys-update-title">${updateTitle}</div><div class="sys-update-version">Installed ${escapeHtml(current)} · ${escapeHtml(update.channel || 'stable')} channel${available && (state === 'available' || busy) ? ' · Available ' + escapeHtml(available) : ''}</div></div></div>
         <div class="sys-update-message">${escapeHtml(update.message || (update.configured ? 'Cloudless checks updates.becloudless.ai for signed system packages.' : 'The archive signing key must be initialized before over-the-air updates can be enabled.'))}</div>
+        ${state === 'available' && changelog.length ? `<div class="sys-update-changelog"><div class="sys-update-changelog-title">${escapeHtml(update.releaseTitle || `What’s new in ${available}`)}</div>${update.releaseSummary ? `<div class="sys-update-changelog-summary">${escapeHtml(update.releaseSummary)}</div>` : ''}<ul>${changelog.map(change => `<li>${escapeHtml(change)}</li>`).join('')}</ul></div>` : ''}
         ${showProgress ? `<div class="sys-update-progress"><div class="sys-update-progress-head"><span>Overall progress</span><strong>${progress}%</strong></div><div class="sys-update-progress-track" role="progressbar" aria-label="System update progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progress}"><div class="sys-update-progress-fill" style="width:${progress}%"></div></div></div>` : ''}
         ${update.error ? `<div class="sys-update-error">${escapeHtml(update.error)}</div>` : ''}
         ${update.checkedAt ? `<div class="upd-src">Last checked ${new Date(update.checkedAt).toLocaleString()}</div>` : ''}

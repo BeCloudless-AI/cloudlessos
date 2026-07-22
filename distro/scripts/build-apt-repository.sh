@@ -8,6 +8,7 @@ REPO="${CLOUDLESS_APT_REPO_OUT:-$DISTRO/out/apt-repository}"
 BASE_URL="${CLOUDLESS_APT_BASE_URL:-https://updates.becloudless.ai/apt}"
 KEY="${CLOUDLESS_ARCHIVE_KEY:-$DISTRO/release/keys/cloudless-archive-keyring.pgp}"
 FINGERPRINT_FILE="${CLOUDLESS_ARCHIVE_FINGERPRINT_FILE:-$DISTRO/release/keys/cloudless-archive-fingerprint.txt}"
+NOTES="${CLOUDLESS_RELEASE_NOTES:-$DISTRO/release/notes/$VERSION.json}"
 PACKAGES=(cloudless-orchestrator cloudless-shell cloudless-branding cloudless-hardware cloudless-firstboot cloudless-updater)
 
 if [ -z "$VERSION" ] || [[ "$VERSION" == *dev* ]]; then
@@ -15,9 +16,19 @@ if [ -z "$VERSION" ] || [[ "$VERSION" == *dev* ]]; then
     exit 2
 fi
 case "$CHANNEL" in stable|beta) ;; *) echo "Channel must be stable or beta" >&2; exit 2 ;; esac
-for command in curl dpkg dpkg-deb gpg gpgv reprepro sha256sum; do command -v "$command" >/dev/null || { echo "Missing command: $command" >&2; exit 1; }; done
+for command in curl dpkg dpkg-deb gpg gpgv python3 reprepro sha256sum; do command -v "$command" >/dev/null || { echo "Missing command: $command" >&2; exit 1; }; done
 test -s "$KEY" || { echo "Initialize the archive signing key first." >&2; exit 1; }
 test -s "$FINGERPRINT_FILE" || { echo "Missing archive fingerprint file." >&2; exit 1; }
+test -s "$NOTES" || { echo "Missing release notes: $NOTES" >&2; exit 1; }
+python3 - "$NOTES" <<'PY'
+import json, sys
+with open(sys.argv[1], encoding="utf-8") as handle:
+    notes = json.load(handle)
+if not isinstance(notes.get("title"), str) or not notes["title"].strip():
+    raise SystemExit("Release notes require a non-empty title")
+if not isinstance(notes.get("changes"), list) or not notes["changes"] or not all(isinstance(item, str) and item.strip() for item in notes["changes"]):
+    raise SystemExit("Release notes require at least one non-empty change")
+PY
 fingerprint="$(tr -d '[:space:]' < "$FINGERPRINT_FILE")"
 if [ "${CLOUDLESS_RELEASE_DRY_RUN:-0}" != "1" ]; then
     gpg --batch --list-secret-keys "$fingerprint" >/dev/null 2>&1 || {
@@ -139,6 +150,39 @@ for package in "${PACKAGES[@]}"; do
     fi
 done
 
+changes_file="$work/changed-packages.tsv"
+for package in "${PACKAGES[@]}"; do
+    if ${CHANGED[$package]}; then
+        printf '%s\t%s\t%s\n' "$package" "${PREVIOUS_VERSION[$package]:-}" "$VERSION" >> "$changes_file"
+    fi
+done
+install -d "$REPO/releases"
+manifest="$REPO/releases/$VERSION.json"
+python3 - "$NOTES" "$changes_file" "$manifest" "$VERSION" "$CHANNEL" "$(date -u +%FT%TZ)" <<'PY'
+import json, sys
+notes_path, changes_path, output, version, channel, published_at = sys.argv[1:]
+with open(notes_path, encoding="utf-8") as handle:
+    notes = json.load(handle)
+packages = []
+with open(changes_path, encoding="utf-8") as handle:
+    for line in handle:
+        name, previous, current = line.rstrip("\n").split("\t")
+        packages.append({"name": name, "from": previous, "to": current})
+manifest = {
+    "version": version,
+    "channel": channel,
+    "publishedAt": published_at,
+    "title": notes["title"].strip(),
+    "summary": str(notes.get("summary", "")).strip(),
+    "changes": [item.strip() for item in notes["changes"]],
+    "packages": packages,
+}
+with open(output, "w", encoding="utf-8") as handle:
+    json.dump(manifest, handle, ensure_ascii=False, separators=(",", ":"))
+    handle.write("\n")
+PY
+cp "$manifest" "$REPO/dists/$CHANNEL/cloudless-release.json"
+
 # APT's by-hash protocol makes index promotion race-free: clients fetch the
 # immutable SHA-256 path named by signed metadata instead of a mutable
 # Packages filename that may be changing during publication.
@@ -151,21 +195,13 @@ done < <(find "$REPO/dists/$CHANNEL" -type f \( -name Packages -o -name Packages
 if ! grep -Fqx 'Acquire-By-Hash: yes' "$release"; then
     sed -i '/^Suite:/a Acquire-By-Hash: yes' "$release"
 fi
+manifest_hash="$(sha256sum "$REPO/dists/$CHANNEL/cloudless-release.json" | awk '{print $1}')"
+manifest_size="$(wc -c < "$REPO/dists/$CHANNEL/cloudless-release.json" | tr -d '[:space:]')"
+sed -i '/ cloudless-release\.json$/d' "$release"
+sed -i "/^SHA256:/a\\ $manifest_hash $manifest_size cloudless-release.json" "$release"
 rm -f "$release.gpg" "$REPO/dists/$CHANNEL/InRelease"
 gpg --batch --yes --local-user "$fingerprint" --armor --detach-sign --output "$release.gpg" "$release"
 gpg --batch --yes --local-user "$fingerprint" --clearsign --output "$REPO/dists/$CHANNEL/InRelease" "$release"
 
 cp "$KEY" "$REPO/cloudless-archive-keyring.pgp"
-manifest="$REPO/releases/$VERSION.json"
-printf '{"version":"%s","channel":"%s","publishedAt":"%s","packages":[' \
-    "$VERSION" "$CHANNEL" "$(date -u +%FT%TZ)" > "$manifest"
-separator=""
-for package in "${PACKAGES[@]}"; do
-    if ${CHANGED[$package]}; then
-        printf '%s{"name":"%s","from":"%s","to":"%s"}' \
-            "$separator" "$package" "${PREVIOUS_VERSION[$package]:-}" "$VERSION" >> "$manifest"
-        separator=,
-    fi
-done
-printf ']}\n' >> "$manifest"
 echo "Signed APT repository ready at $REPO"

@@ -1,0 +1,29 @@
+{
+  "state": "available",
+  "channel": "stable",
+  "configured": true,
+  "currentVersion": "0.1.3",
+  "availableVersion": "0.1.4",
+  "releaseTitle": "See what’s new before updating",
+  "releaseSummary": "CloudlessOS now presents verified release notes before an update is installed.",
+  "changelog": [
+    "Review a concise changelog directly from General before choosing Install update.",
+    "Release notes are covered by the signed APT repository and verified before display.",
+    "Update publishers must provide curated release notes for every new version."
+  ],
+  "message": "CloudlessOS 0.1.4 is ready.",
+  "progress": 0,
+  "rebootRequired": false,
+  "packages": [
+    {
+      "name": "cloudless-orchestrator",
+      "installed": "0.1.3",
+      "candidate": "0.1.4"
+    },
+    {
+      "name": "cloudless-updater",
+      "installed": "0.1.3",
+      "candidate": "0.1.4"
+    }
+  ]
+}

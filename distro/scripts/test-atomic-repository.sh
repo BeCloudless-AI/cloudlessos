@@ -13,16 +13,22 @@ gpg --batch --passphrase '' --quick-generate-key \
 fingerprint="$(gpg --batch --with-colons --list-keys | awk -F: '$1 == "fpr" {print $10; exit}')"
 gpg --batch --export "$fingerprint" > "$work/test-keyring.pgp"
 printf '%s\n' "$fingerprint" > "$work/test-fingerprint.txt"
+cat > "$work/test-notes.json" <<'EOF'
+{"title":"Test release","summary":"Signed test notes.","changes":["Shows verified release notes before installation."]}
+EOF
 
 CLOUDLESS_APT_REPO_OUT="$work/repository" \
 CLOUDLESS_APT_BASE_URL=https://invalid.invalid \
 CLOUDLESS_ARCHIVE_KEY="$work/test-keyring.pgp" \
 CLOUDLESS_ARCHIVE_FINGERPRINT_FILE="$work/test-fingerprint.txt" \
+CLOUDLESS_RELEASE_NOTES="$work/test-notes.json" \
     bash "$ROOT/distro/scripts/build-apt-repository.sh" 9.9.9 stable
 
 repo="$work/repository"
 gpgv --keyring "$work/test-keyring.pgp" "$repo/dists/stable/InRelease"
 grep -Fqx 'Acquire-By-Hash: yes' "$repo/dists/stable/Release"
+grep -Fq ' cloudless-release.json' "$repo/dists/stable/Release"
+cmp "$repo/releases/9.9.9.json" "$repo/dists/stable/cloudless-release.json"
 for index in \
     "$repo/dists/stable/main/binary-amd64/Packages" \
     "$repo/dists/stable/main/binary-amd64/Packages.gz"; do

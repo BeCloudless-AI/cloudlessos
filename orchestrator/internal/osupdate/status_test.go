@@ -14,6 +14,8 @@ func TestStatusRoundTrip(t *testing.T) {
 	want.State = "available"
 	want.CurrentVersion = "0.1.0"
 	want.AvailableVersion = "0.1.1"
+	want.ReleaseTitle = "A better update"
+	want.Changelog = []string{"Shows release notes before installation."}
 	want.Progress = 72
 	want.Packages = []Package{{Name: "cloudless-orchestrator", Installed: "0.1.0", Candidate: "0.1.1"}}
 	if err := Write(want); err != nil {
@@ -23,7 +25,7 @@ func TestStatusRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.State != want.State || got.AvailableVersion != want.AvailableVersion || got.Progress != want.Progress || len(got.Packages) != 1 {
+	if got.State != want.State || got.AvailableVersion != want.AvailableVersion || got.ReleaseTitle != want.ReleaseTitle || len(got.Changelog) != 1 || got.Progress != want.Progress || len(got.Packages) != 1 {
 		t.Fatalf("Read() = %#v, want %#v", got, want)
 	}
 }

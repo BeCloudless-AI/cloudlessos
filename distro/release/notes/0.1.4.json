@@ -1,0 +1,9 @@
+{
+  "title": "See what’s new before updating",
+  "summary": "CloudlessOS now presents verified release notes before an update is installed.",
+  "changes": [
+    "Review a concise changelog directly from General before choosing Install update.",
+    "Release notes are covered by the signed APT repository and verified before display.",
+    "Update publishers must provide curated release notes for every new version."
+  ]
+}

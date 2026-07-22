@@ -32,6 +32,9 @@ type Status struct {
 	Configured       bool      `json:"configured"`
 	CurrentVersion   string    `json:"currentVersion,omitempty"`
 	AvailableVersion string    `json:"availableVersion,omitempty"`
+	ReleaseTitle     string    `json:"releaseTitle,omitempty"`
+	ReleaseSummary   string    `json:"releaseSummary,omitempty"`
+	Changelog        []string  `json:"changelog,omitempty"`
 	Message          string    `json:"message,omitempty"`
 	Progress         int       `json:"progress"`
 	Error            string    `json:"error,omitempty"`

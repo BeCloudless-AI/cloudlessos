@@ -1808,7 +1808,11 @@
   .md-sub { max-width: 620px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; word-break: normal; }
   .md-caps { min-height: 0; margin-top: 9px; }
   .md-hero-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
-  .md-hero-actions .btn { min-height: 38px; padding: 8px 15px; }
+  .md-hero-actions .btn {
+    min-height: 40px; padding: 9px 16px; display: inline-flex; align-items: center; justify-content: center;
+    gap: 8px; white-space: nowrap; line-height: 1;
+  }
+  .md-hero-actions .btn .ui-icon { width: 15px; height: 15px; flex: none; }
   .md-banner { margin-bottom: 12px; border-radius: 12px; }
   .md-desc { max-width: 760px; margin: 18px 2px; font-size: 13.5px; line-height: 1.65; }
   .md-specgrid { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 9px; margin-bottom: 14px; }

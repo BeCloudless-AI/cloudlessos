@@ -31,6 +31,9 @@ func TestHermesUsesOfficialLocalDashboard(t *testing.T) {
 	if hermes.Env["API_SERVER_ENABLED"] != "true" || hermes.Env["API_SERVER_HOST"] != "127.0.0.1" {
 		t.Fatal("Hermes API must be enabled on loopback for the authenticated Cloudless gateway")
 	}
+	if hermes.Env["HERMES_MAX_TOKENS"] != "4096" {
+		t.Fatal("Hermes output must be capped independently from its context window")
+	}
 	if len(hermes.Command) != 2 || hermes.Command[0] != "gateway" || hermes.Command[1] != "run" {
 		t.Fatalf("unexpected Hermes command: %#v", hermes.Command)
 	}

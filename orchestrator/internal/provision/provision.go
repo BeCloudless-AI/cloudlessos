@@ -8,6 +8,7 @@ import (
 	"context"
 	"net"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/cloudless/orchestrator/internal/apps"
@@ -121,8 +122,16 @@ func Run(ctx context.Context, eng engine.Engine, st *state.Store, mf *manifest.S
 			continue
 		}
 		if c, _ := eng.Find(ctx, app.ContainerName()); c != nil && c.State == "running" {
-			logf(app.ID + ": already running")
-			continue
+			if app.ID != "hermes" || hermesRuntimeMatches(ctx, eng, st, app) {
+				logf(app.ID + ": already running")
+				continue
+			}
+			// Update persistent config from inside the still-running container;
+			// this also migrates installations whose /opt/data is owned by the
+			// official image's UID and unreadable to an unprivileged dev daemon.
+			_ = eng.Exec(ctx, app.ContainerName(), "hermes", "config", "set", "model.context_length", "65536")
+			_ = eng.Exec(ctx, app.ContainerName(), "hermes", "config", "set", "model.max_tokens", "4096")
+			logf(app.ID + ": runtime configuration changed; recreating")
 		}
 		img := pinnedImage(ctx, mf, app)
 		logf(app.ID + ": pulling " + img + " …")
@@ -167,12 +176,66 @@ func Run(ctx context.Context, eng engine.Engine, st *state.Store, mf *manifest.S
 			logf(app.ID + ": start failed: " + err.Error())
 			continue
 		}
+		if app.ID == "hermes" && !hermesModelConfigMatches(ctx, eng, app.ContainerName()) {
+			_ = eng.Exec(ctx, app.ContainerName(), "hermes", "config", "set", "model.context_length", "65536")
+			_ = eng.Exec(ctx, app.ContainerName(), "hermes", "config", "set", "model.max_tokens", "4096")
+			_ = eng.Remove(ctx, app.ContainerName())
+			if _, err := eng.Run(ctx, spec); err != nil {
+				logf(app.ID + ": restart after model configuration failed: " + err.Error())
+				continue
+			}
+		}
 		logf(app.ID + ": started")
 	}
 
 	// Local-network serving: match the persisted preference (default ON).
 	EnsureLAN(ctx, eng, mf, PrimaryLANIP(), st.LocalNetwork(), logf)
 	logf("done")
+}
+
+// hermesRuntimeMatches prevents a healthy-looking but unusable split-brain
+// state: Hermes can remain running with an older API_SERVER_KEY while a newly
+// upgraded cloudlessd has generated its daemon-owned credential. Never log
+// either value; simply recreate the container when they differ.
+func hermesRuntimeMatches(ctx context.Context, eng engine.Engine, st *state.Store, app catalog.App) bool {
+	want, err := apps.HermesAPIKey(filepath.Join(st.Dir(), "apps", app.ID))
+	if err != nil || want == "" {
+		return false
+	}
+	out, err := eng.Output(ctx, "inspect", "--format", "{{range .Config.Env}}{{println .}}{{end}}", app.ContainerName())
+	if err != nil {
+		return false
+	}
+	return hasEnvValue(out, apps.HermesAPIKeyEnv, want) &&
+		hasEnvValue(out, "HERMES_MAX_TOKENS", "4096") &&
+		hermesModelConfigMatches(ctx, eng, app.ContainerName())
+}
+
+func hasEnvValue(env, key, value string) bool {
+	for _, line := range strings.Split(env, "\n") {
+		if strings.TrimSpace(line) == key+"="+value {
+			return true
+		}
+	}
+	return false
+}
+
+func hermesModelConfigMatches(ctx context.Context, eng engine.Engine, container string) bool {
+	contextLength, err := eng.Output(ctx, "exec", container, "hermes", "config", "get", "model.context_length")
+	if err != nil || !hasLine(contextLength, "65536") {
+		return false
+	}
+	maxTokens, err := eng.Output(ctx, "exec", container, "hermes", "config", "get", "model.max_tokens")
+	return err == nil && hasLine(maxTokens, "4096")
+}
+
+func hasLine(output, value string) bool {
+	for _, line := range strings.Split(output, "\n") {
+		if strings.TrimSpace(line) == value {
+			return true
+		}
+	}
+	return false
 }
 
 // PrimaryLANIP returns this machine's primary non-loopback IPv4 address — the one

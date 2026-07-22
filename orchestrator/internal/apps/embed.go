@@ -59,6 +59,16 @@ func EnvOverrides(configDir string, app catalog.App) map[string]string {
 			}
 		}
 	}
+	// Hermes' credential belongs to Cloudless, not to Hermes' writable data
+	// directory. The official container takes ownership of /opt/data, which can
+	// make files there unreadable to an unprivileged development daemon after
+	// the first launch. Keep the credential in daemon-owned state and inject it
+	// directly into the container environment on every start.
+	if app.ID == "hermes" {
+		if key, err := HermesAPIKey(configDir); err == nil {
+			out[HermesAPIKeyEnv] = key
+		}
+	}
 	return out
 }
 
@@ -84,11 +94,6 @@ func ConfigVolumes(configDir string, app catalog.App) (map[string]string, error)
 				return nil, fmt.Errorf("seed %s: %w", host, err)
 			}
 		}
-		if app.ID == "hermes" && cf.File == "hermes.env" {
-			if _, err := ensureEnvSecretLocked(host, HermesAPIKeyEnv, "cloudless-hermes-"); err != nil {
-				return nil, err
-			}
-		}
 		if app.DataUID > 0 {
 			// cloudlessd runs as root on the appliance. Chown may fail in a
 			// non-root development environment, where no UID translation is needed.
@@ -103,7 +108,7 @@ func ConfigVolumes(configDir string, app catalog.App) (map[string]string, error)
 	if app.DataPath != "" {
 		if app.ID == "hermes" {
 			workspace := filepath.Join(configDir, "workspace")
-			if err := os.MkdirAll(workspace, 0o700); err != nil {
+			if err := os.MkdirAll(workspace, 0o700); err != nil && !os.IsPermission(err) {
 				return nil, err
 			}
 			_ = os.Chmod(workspace, 0o700)
@@ -121,56 +126,30 @@ func ConfigVolumes(configDir string, app catalog.App) (map[string]string, error)
 }
 
 // HermesAPIKey returns the stable, randomly generated loopback credential used
-// between cloudlessd and Hermes. It is never returned to the browser or clients.
+// between cloudlessd and Hermes. It is stored outside Hermes' container-writable
+// data mount and is never returned to the browser or clients.
 func HermesAPIKey(configDir string) (string, error) {
 	configMu.Lock()
 	defer configMu.Unlock()
-	if err := os.MkdirAll(configDir, 0o700); err != nil {
+	stateDir := filepath.Dir(filepath.Dir(filepath.Clean(configDir)))
+	secretDir := filepath.Join(stateDir, "secrets")
+	if err := os.MkdirAll(secretDir, 0o700); err != nil {
 		return "", err
 	}
-	path := filepath.Join(configDir, "hermes.env")
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		def, derr := ReadDefault("hermes", "hermes.env")
-		if derr != nil {
-			return "", derr
-		}
-		if err := os.WriteFile(path, def, 0o600); err != nil {
-			return "", err
-		}
-	}
-	return ensureEnvSecretLocked(path, HermesAPIKeyEnv, "cloudless-hermes-")
-}
-
-func ensureEnvSecretLocked(path, key, prefix string) (string, error) {
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return "", err
-	}
-	content := string(b)
-	for _, line := range strings.Split(content, "\n") {
-		if k, v, ok := strings.Cut(strings.TrimSpace(line), "="); ok && k == key && strings.TrimSpace(v) != "" {
-			return strings.TrimSpace(v), nil
-		}
+	path := filepath.Join(secretDir, "hermes-api-key")
+	if b, err := os.ReadFile(path); err == nil && strings.TrimSpace(string(b)) != "" {
+		return strings.TrimSpace(string(b)), nil
 	}
 	raw := make([]byte, 32)
 	if _, err := rand.Read(raw); err != nil {
 		return "", err
 	}
-	secret := prefix + hex.EncodeToString(raw)
-	var out []string
-	for _, line := range strings.Split(content, "\n") {
-		if strings.HasPrefix(strings.TrimSpace(line), key+"=") {
-			continue
-		}
-		out = append(out, line)
-	}
-	for len(out) > 0 && strings.TrimSpace(out[len(out)-1]) == "" {
-		out = out[:len(out)-1]
-	}
-	out = append(out, key+"="+secret)
-	if err := os.WriteFile(path, []byte(strings.Join(out, "\n")+"\n"), 0o600); err != nil {
+	secret := "cloudless-hermes-" + hex.EncodeToString(raw)
+	if err := os.WriteFile(path, []byte(secret+"\n"), 0o600); err != nil {
 		return "", err
 	}
+	_ = os.Chmod(secretDir, 0o700)
+	_ = os.Chmod(path, 0o600)
 	return secret, nil
 }
 

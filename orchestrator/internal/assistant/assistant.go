@@ -251,17 +251,29 @@ func Stream(ctx context.Context, baseURL, apiKey, model string, msgs []Msg, onTo
 			break
 		}
 		var chunk struct {
+			Error *struct {
+				Message string `json:"message"`
+			} `json:"error"`
 			Choices []struct {
 				Delta struct {
 					Content string `json:"content"`
 				} `json:"delta"`
+				FinishReason string `json:"finish_reason"`
 			} `json:"choices"`
 		}
 		if json.Unmarshal([]byte(data), &chunk) != nil {
 			continue
 		}
-		if len(chunk.Choices) > 0 && chunk.Choices[0].Delta.Content != "" {
-			onToken(chunk.Choices[0].Delta.Content)
+		if chunk.Error != nil && chunk.Error.Message != "" {
+			return fmt.Errorf("Hermes agent failed: %s", chunk.Error.Message)
+		}
+		if len(chunk.Choices) > 0 {
+			if chunk.Choices[0].FinishReason == "error" {
+				return fmt.Errorf("Hermes agent failed")
+			}
+			if chunk.Choices[0].Delta.Content != "" {
+				onToken(chunk.Choices[0].Delta.Content)
+			}
 		}
 	}
 	return sc.Err()

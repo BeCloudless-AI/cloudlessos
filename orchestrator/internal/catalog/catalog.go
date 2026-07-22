@@ -540,6 +540,7 @@ var apps = []App{
 			"API_SERVER_HOST":             "127.0.0.1",
 			"API_SERVER_PORT":             "8642",
 			"API_SERVER_MODEL_NAME":       "hermes-agent",
+			"HERMES_MAX_TOKENS":           "4096",
 			"OPENAI_API_KEY":              "cloudless",
 		},
 		Config: []ConfigFile{

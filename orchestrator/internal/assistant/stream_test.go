@@ -42,3 +42,17 @@ func TestStreamForwardsHermesTextAndToolProgress(t *testing.T) {
 		t.Fatalf("tool statuses = %#v, want %#v", got, want)
 	}
 }
+
+func TestStreamReturnsHermesTerminalError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"error\"}],\"error\":{\"message\":\"model context is too small\"}}\n\n")
+		fmt.Fprint(w, "data: [DONE]\n\n")
+	}))
+	defer server.Close()
+
+	err := Stream(context.Background(), server.URL, "secret", "hermes-agent", nil, func(string) {}, nil)
+	if err == nil || err.Error() != "Hermes agent failed: model context is too small" {
+		t.Fatalf("error = %v", err)
+	}
+}

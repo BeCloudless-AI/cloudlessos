@@ -3,6 +3,7 @@ package api
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -48,5 +49,12 @@ func TestHermesMountsPersistentDataDirectory(t *testing.T) {
 	}
 	if info, err := os.Stat(filepath.Join(wantDir, "workspace")); err != nil || !info.IsDir() {
 		t.Fatalf("Hermes workspace missing: %v", err)
+	}
+	secretPath := filepath.Join(st.Dir(), "secrets", "hermes-api-key")
+	if info, err := os.Stat(secretPath); err != nil || (runtime.GOOS != "windows" && info.Mode().Perm()&0o077 != 0) {
+		t.Fatalf("private Hermes credential has unsafe permissions: %v, %v", info, err)
+	}
+	if got := apps.EnvOverrides(wantDir, hermes)[apps.HermesAPIKeyEnv]; got != key {
+		t.Fatalf("Hermes runtime environment did not receive the private credential")
 	}
 }

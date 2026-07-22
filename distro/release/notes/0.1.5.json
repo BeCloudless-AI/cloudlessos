@@ -1,0 +1,12 @@
+{
+  "title": "Hermes agents and a guided CloudlessOS experience",
+  "summary": "CloudlessOS now integrates Hermes as its built-in agent system and makes the core interface easier to understand, configure, and navigate.",
+  "changes": [
+    "Use the built-in Cloudless Assistant powered by Hermes, with local, network, and optional public gateway access managed inside CloudlessOS.",
+    "Open app dashboards inside the CloudlessOS shell and manage installed apps through native install and uninstall dialogs.",
+    "Choose models with a redesigned Model Manager, expanded compatibility guidance, and current Qwen and DeepSeek catalog entries.",
+    "Configure the machine, inference engine, API access, and Hermes from a consistent full-size Settings experience.",
+    "Follow a new action-guided welcome tour that highlights the real controls while keeping the rest of the interface safely blurred and locked.",
+    "Benefit from more reliable model recommendations, API-key usage metrics, WSL GPU detection, and protected Hermes defaults."
+  ]
+}

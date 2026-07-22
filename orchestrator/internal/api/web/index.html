@@ -219,10 +219,9 @@
   @media (max-width: 560px) { .dock-item { width: 44px; height: 44px; font-size: 20px; } }
 
   /* settings sheet */
-  .set { width: min(800px, 95vw); height: min(580px, 90vh); display: flex;
+  .set { width: min(1180px, 95vw); height: min(760px, 90vh); display: flex;
     background: var(--card-strong); border: 1px solid var(--card-edge); border-radius: 26px;
     box-shadow: var(--shadow); animation: rise 0.3s ease; overflow: hidden; }
-  .set.set-wide { width: min(1180px, 95vw); height: min(760px, 90vh); }
   .set-sidebar { width: 200px; flex: none; background: var(--panel-2); border-right: 1px solid var(--line); padding: 14px 12px; overflow-x: hidden; overflow-y: auto; }
   .set-brand { font-weight: 700; font-size: 14px; padding: 6px 10px 8px; }
   .set-nav { display: flex; flex-direction: column; gap: 1px; }
@@ -2008,7 +2007,7 @@
     .apps-sec, .card { padding: 17px; }
     .pad { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .overlay { padding: 12px 12px 76px; }
-    .lp, .mm, .set, .set.set-wide { width: 100%; max-width: 100%; height: 100%; max-height: none; border-radius: 16px; }
+    .lp, .mm, .set { width: 100%; max-width: 100%; height: 100%; max-height: none; border-radius: 16px; }
     .mm .mm-head { min-height: 62px; padding: 0 15px; }
     .mm-head-sub { display: none; }
     .mm-body { padding: 16px 16px 28px; }
@@ -2961,7 +2960,6 @@ async function renderSettings() {
   let title = { profile: 'Profile', hardware: 'Machine', engine: 'Engine', api: 'API access', appearance: 'Appearance', general: 'General' }[setPage] || '';
   if (setPage.startsWith('app:')) { const a = apps.find(x => 'app:' + x.id === setPage); title = a ? a.name : ''; }
   document.getElementById('set-page-title').textContent = title;
-  document.querySelector('#settings .set').classList.toggle('set-wide', setPage === 'engine' || setPage === 'api');
 
   const c = document.getElementById('set-content');
   if (setPage === 'profile') renderProfilePage(c);

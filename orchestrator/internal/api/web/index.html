@@ -2736,7 +2736,9 @@ async function renderSettings() {
   let catalog, containers;
   try { catalog = await api('/api/catalog'); catalogCache = catalog; } catch { catalog = catalogCache || []; }
   try { containers = await api('/api/apps'); } catch { containers = []; }
-  const installed = new Set((Array.isArray(containers) ? containers : []).map(c => c.name.replace(/^cloudless-/, '')));
+  const installed = new Set((Array.isArray(containers) ? containers : [])
+    .filter(c => c.state === 'running')
+    .map(c => c.name.replace(/^cloudless-/, '')));
   const apps = catalog.filter(a => !a.service && installed.has(a.id));
   if (setPage.startsWith('app:') && !apps.some(a => 'app:' + a.id === setPage)) setPage = 'hardware';
 

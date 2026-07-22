@@ -10,5 +10,10 @@ test -s "$REPO/dists/stable/InRelease" -o -s "$REPO/dists/beta/InRelease" || {
     exit 1
 }
 aws s3 sync "$REPO/" "s3://$CLOUDLESS_R2_BUCKET/apt/" \
-    --endpoint-url "$CLOUDLESS_R2_ENDPOINT" --delete
+    --endpoint-url "$CLOUDLESS_R2_ENDPOINT" \
+    --exclude 'conf/*' --exclude 'db/*' --delete
+aws s3 rm "s3://$CLOUDLESS_R2_BUCKET/apt/conf/" \
+    --endpoint-url "$CLOUDLESS_R2_ENDPOINT" --recursive >/dev/null
+aws s3 rm "s3://$CLOUDLESS_R2_BUCKET/apt/db/" \
+    --endpoint-url "$CLOUDLESS_R2_ENDPOINT" --recursive >/dev/null
 echo "Published to https://updates.becloudless.ai/apt"

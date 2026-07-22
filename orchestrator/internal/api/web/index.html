@@ -1105,6 +1105,13 @@
   .tour-guard { position: fixed; z-index: 99; pointer-events: auto; background: rgba(20, 16, 36, .30);
     -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
     transition: left .28s cubic-bezier(.22,1,.36,1), top .28s cubic-bezier(.22,1,.36,1), width .28s cubic-bezier(.22,1,.36,1), height .28s cubic-bezier(.22,1,.36,1); }
+  .tour-corner { position: fixed; z-index: 99; pointer-events: auto; background: rgba(20, 16, 36, .30);
+    -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+    transition: left .28s cubic-bezier(.22,1,.36,1), top .28s cubic-bezier(.22,1,.36,1), width .28s cubic-bezier(.22,1,.36,1), height .28s cubic-bezier(.22,1,.36,1); }
+  .tour-corner[data-tour-corner="tl"] { -webkit-mask: radial-gradient(circle at 100% 100%, transparent 0 18px, #000 18.5px); mask: radial-gradient(circle at 100% 100%, transparent 0 18px, #000 18.5px); }
+  .tour-corner[data-tour-corner="tr"] { -webkit-mask: radial-gradient(circle at 0 100%, transparent 0 18px, #000 18.5px); mask: radial-gradient(circle at 0 100%, transparent 0 18px, #000 18.5px); }
+  .tour-corner[data-tour-corner="bl"] { -webkit-mask: radial-gradient(circle at 100% 0, transparent 0 18px, #000 18.5px); mask: radial-gradient(circle at 100% 0, transparent 0 18px, #000 18.5px); }
+  .tour-corner[data-tour-corner="br"] { -webkit-mask: radial-gradient(circle at 0 0, transparent 0 18px, #000 18.5px); mask: radial-gradient(circle at 0 0, transparent 0 18px, #000 18.5px); }
   .tour-spot { position: fixed; z-index: 100; border-radius: 18px; pointer-events: none;
     border: 2px solid color-mix(in srgb, var(--blue) 72%, white);
     box-shadow: 0 0 0 7px color-mix(in srgb, var(--blue) 13%, transparent), 0 18px 52px -18px color-mix(in srgb, var(--blue) 80%, transparent);
@@ -1144,7 +1151,7 @@
     color: #fff; background: rgba(8,11,20,.25); font: inherit; font-size: 11px; cursor: pointer; -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
   .boot-skip:hover { background: rgba(8,11,20,.48); }
   @media (prefers-reduced-motion: reduce) {
-    .tour-card, .tour-spot, .tour-guard { animation: none; transition: none; }
+    .tour-card, .tour-spot, .tour-guard, .tour-corner { animation: none; transition: none; }
   }
   .btn { padding: 9px 18px; border-radius: 12px; border: 1px solid var(--card-edge); background: var(--control); color: var(--ink); font-weight: 500; transition: filter 0.15s, background 0.15s, box-shadow .15s; }
   .btn:hover { background: var(--card-strong); }
@@ -2358,6 +2365,10 @@
   <div class="tour-guard" data-tour-guard="left"></div>
   <div class="tour-guard" data-tour-guard="right"></div>
   <div class="tour-guard" data-tour-guard="bottom"></div>
+  <div class="tour-corner" data-tour-corner="tl"></div>
+  <div class="tour-corner" data-tour-corner="tr"></div>
+  <div class="tour-corner" data-tour-corner="bl"></div>
+  <div class="tour-corner" data-tour-corner="br"></div>
   <div class="tour-spot center" id="tour-spot"></div>
   <section class="tour-card center" id="tour-card" role="dialog" aria-labelledby="tour-title" aria-describedby="tour-desc"></section>
 </div>
@@ -3015,10 +3026,13 @@ function clearTourTarget() {
 }
 function positionTourGuards(hole) {
   const guards = Object.fromEntries([...document.querySelectorAll('[data-tour-guard]')].map(el => [el.dataset.tourGuard, el]));
+  const corners = Object.fromEntries([...document.querySelectorAll('[data-tour-corner]')].map(el => [el.dataset.tourCorner, el]));
   const set = (el, left, top, width, height) => Object.assign(el.style, { left: `${left}px`, top: `${top}px`, width: `${Math.max(0, width)}px`, height: `${Math.max(0, height)}px` });
+  const hideCorners = () => Object.values(corners).forEach(el => set(el, 0, 0, 0, 0));
   if (!hole) {
     set(guards.top, 0, 0, innerWidth, innerHeight);
     set(guards.left, 0, 0, 0, 0); set(guards.right, 0, 0, 0, 0); set(guards.bottom, 0, 0, 0, 0);
+    hideCorners();
     return;
   }
   const { left, top, right, bottom } = hole, middleHeight = bottom - top;
@@ -3026,6 +3040,11 @@ function positionTourGuards(hole) {
   set(guards.left, 0, top, left, middleHeight);
   set(guards.right, right, top, innerWidth - right, middleHeight);
   set(guards.bottom, 0, bottom, innerWidth, innerHeight - bottom);
+  const radius = 19;
+  set(corners.tl, left, top, radius, radius);
+  set(corners.tr, right - radius, top, radius, radius);
+  set(corners.bl, left, bottom - radius, radius, radius);
+  set(corners.br, right - radius, bottom - radius, radius, radius);
 }
 function positionTour() {
   if (!tourActive) return;

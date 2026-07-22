@@ -1127,6 +1127,10 @@
   .tour-desc { margin: 7px 0 0; color: var(--muted); font-size: 12.5px; line-height: 1.58; }
   .tour-tip { margin-top: 13px; padding: 10px 11px; display: flex; align-items: flex-start; gap: 8px; border: 1px solid var(--hair); border-radius: 10px; color: var(--ink-2); background: var(--panel-2); font-size: 10.5px; line-height: 1.45; }
   .tour-tip .ui-icon { width: 14px; height: 14px; flex: none; margin-top: 1px; color: var(--blue); }
+  .tour-await { margin-top: 14px; padding: 11px 12px; display: flex; align-items: center; gap: 9px; border: 1px solid color-mix(in srgb, var(--blue) 28%, var(--hair)); border-radius: 11px;
+    color: var(--blue); background: var(--blue-soft); font-size: 10.5px; font-weight: 720; line-height: 1.4; }
+  .tour-await-dot { width: 7px; height: 7px; flex: none; border-radius: 50%; background: var(--blue); box-shadow: 0 0 0 0 color-mix(in srgb, var(--blue) 38%, transparent); animation: tour-await 1.55s ease-out infinite; }
+  @keyframes tour-await { 70%, 100% { box-shadow: 0 0 0 7px transparent; } }
   .tour-progress { height: 4px; margin-top: 18px; overflow: hidden; border-radius: 99px; background: var(--control); }
   .tour-progress > i { display: block; width: var(--tour-progress); height: 100%; border-radius: inherit; background: var(--blue); transition: width .28s ease; }
   .tour-actions { margin-top: 14px; display: flex; align-items: center; gap: 8px; }
@@ -2925,41 +2929,66 @@ function showFirstLaunchIntro(next, force = false) {
 }
 const TOUR_STEPS = [
   { center: true, icon: 'assistant', path: 'Welcome to CloudlessOS', title: 'Everything happens right here',
-    desc: 'This short tour points out where to chat, install apps, manage models, watch performance, and configure the system. You can skip it now and replay it later from Settings.',
-    tip: 'The highlighted controls remain usable during the tour.' },
-  { target: '#hero-ask', icon: 'assistant', path: 'Home · Ask Cloudless', title: 'Start with what you want to do',
-    desc: 'Ask a question in plain language. The Cloudless Assistant can explain your hardware, help choose a model, and guide you to the right system tool.',
-    tip: 'Use “Open the full chat” for longer conversations and agent tasks.' },
-  { target: '#dock-launcher', icon: 'apps', path: 'Dock · Apps', title: 'Install and open applications',
-    desc: 'Apps is your software library. Browse everything available, install what you need, and pin favorites so they appear in “Your apps” on the Home screen.',
-    tip: 'Click the highlighted Apps icon now if you want to look inside.' },
-  { target: '#dock-models', icon: 'models', path: 'Dock · Models', title: 'Choose what powers your AI',
-    desc: 'The Model Manager shows compatible language and image models, estimates whether they fit your GPU, downloads them, and launches the one you select.',
-    tip: 'Model compatibility is an estimate with runtime headroom, not just the raw download size.' },
-  { target: '#dock-inference', icon: 'metrics', path: 'Dock · Metrics', title: 'See what the engine is doing',
-    desc: 'Metrics shows live inference speed, latency, GPU activity, and API-key usage. Engine selection and API access are available here and in Settings.',
-    tip: 'Use API access when another app or device needs to call your Cloudless model.' },
+    desc: 'This guided tour opens the real parts of CloudlessOS with you. At each action step, click the highlighted control to continue; the following step explains what just opened.',
+    tip: 'You can skip now and replay the tutorial later from Settings → General.' },
+  { action: true, target: '#dock-asst', icon: 'assistant', path: 'Your turn · Assistant', title: 'Open the Cloudless Assistant',
+    desc: 'The Assistant is the fastest place to begin when you know what you want to achieve but not which system tool to use.',
+    await: 'Click the highlighted Assistant icon to continue.' },
+  { surface: 'assistant', target: '#asst', icon: 'assistant', path: 'Assistant · Opened', title: 'Ask in plain language',
+    desc: 'The compact assistant can explain hardware, compare models, and guide you to CloudlessOS features. Expand it for longer conversations, or open Hermes for the full agent dashboard.',
+    tip: 'The large Ask Cloudless bar on Home starts the same assistant.' },
+  { action: true, target: '#dock-launcher', icon: 'apps', path: 'Your turn · Apps', title: 'Open the App Launcher',
+    desc: 'Cloudless apps add chat interfaces, image generation, training, automation, and other capabilities to this machine.',
+    await: 'Click the highlighted Apps icon to continue.' },
+  { surface: 'apps', target: '.lp', icon: 'apps', path: 'Apps · Opened', title: 'Browse, install, and pin applications',
+    desc: 'Search the catalog on the left, inspect an app on the right, then install it from inside CloudlessOS. Pin favorites to place them in “Your apps” on Home.',
+    tip: 'Installed apps remain inside the CloudlessOS window when you open them.' },
+  { action: true, target: '#dock-models', icon: 'models', path: 'Your turn · Models', title: 'Open the Model Manager',
+    desc: 'The Model Manager controls which language or image model powers your local AI.',
+    await: 'Click the highlighted Models icon to continue.' },
+  { surface: 'models', target: '#models .mm', icon: 'models', path: 'Models · Opened', title: 'Choose what powers your AI',
+    desc: 'Browse compatible models, compare what they are best at, check estimated GPU fit, download one, and launch it on the active inference engine.',
+    tip: 'Compatibility includes runtime headroom; it is more useful than download size alone.' },
+  { action: true, target: '#dock-inference', icon: 'metrics', path: 'Your turn · Metrics', title: 'Open Metrics',
+    desc: 'Metrics is where CloudlessOS exposes live inference and GPU behavior instead of hiding it behind the apps.',
+    await: 'Click the highlighted Metrics icon to continue.' },
+  { surface: 'metrics', target: '#inference .mm', icon: 'metrics', path: 'Metrics · Opened', title: 'Inspect activity, usage, and access',
+    desc: 'Switch between live activity, historical usage, power, inference engines, and API access. API-key metrics help identify exactly which client is consuming the model.',
+    tip: 'Engine selection and API access are also mirrored in Settings without duplicating their code.' },
   { target: '.cards .card:first-child', icon: 'machine', path: 'Home · Hardware', title: 'Know what this machine can handle',
     desc: 'The Hardware card keeps GPU memory, utilization, temperature, power, CPU, and system memory visible. It also shows which model is currently active.',
     tip: 'Open Machine in Settings for the complete system overview.' },
   { target: '.cards .card:last-child', icon: 'apps', path: 'Home · Places', title: 'Your files stay easy to find',
     desc: 'Models, generated outputs, projects, and downloads each have a dedicated folder. Open any Place directly without leaving the CloudlessOS experience.',
     tip: 'Apps use these shared folders so your work remains available across tools.' },
-  { target: '#dock-settings', icon: 'settings', path: 'Dock · Settings', title: 'Configure CloudlessOS in one place',
-    desc: 'Settings contains machine information, inference engines, API access, installed-app options, themes, system updates, and this replayable tutorial.',
-    tip: 'To replay this tour: Settings → General → Replay tutorial.' },
+  { action: true, target: '#dock-settings', icon: 'settings', path: 'Your turn · Settings', title: 'Open Settings',
+    desc: 'Settings brings system configuration and the options for installed applications into one predictable place.',
+    await: 'Click the highlighted Settings icon to continue.' },
+  { surface: 'settings', target: '#settings .set', icon: 'settings', path: 'Settings · Opened', title: 'Configure CloudlessOS in one place',
+    desc: 'Use the sidebar for machine information, engines, API access, installed-app options, themes, updates, and profile preferences. Each page keeps the same window size.',
+    tip: 'Replay this tutorial anytime from General → Replay interactive tutorial.' },
   { center: true, icon: 'check', path: 'Tour complete', title: 'You are ready to explore',
     desc: 'Use the dock whenever you need a destination, or simply ask Cloudless when you are unsure where to begin. Everything remains local unless you explicitly enable sharing.',
     tip: 'You can replay this tutorial at any time from Settings → General.' },
 ];
-let tourIndex = 0, tourActive = false, tourTarget = null, tourPreviousFocus = null, tourPositionTimer = 0;
+let tourIndex = 0, tourActive = false, tourTarget = null, tourPreviousFocus = null, tourPositionTimer = 0, tourActionTarget = null, tourActionHandler = null;
 function closeTourSurfaces() {
-  ['launcher', 'models', 'inference', 'settings'].forEach(id => document.getElementById(id)?.classList.add('hidden'));
+  closeLauncher(); closeModelManager(); closeInference(); closeSettings(); closeAsst();
   document.getElementById('key-dialog-layer')?.classList.add('hidden');
-  document.getElementById('asst')?.classList.add('hidden');
-  document.getElementById('asst-backdrop')?.classList.add('hidden');
+}
+function ensureTourSurface(surface) {
+  if (surface === 'assistant' && document.getElementById('asst').classList.contains('hidden')) openAsst();
+  else if (surface === 'apps' && document.getElementById('launcher').classList.contains('hidden')) openLauncher();
+  else if (surface === 'models' && document.getElementById('models').classList.contains('hidden')) openModelManager();
+  else if (surface === 'metrics' && document.getElementById('inference').classList.contains('hidden')) openInference();
+  else if (surface === 'settings' && document.getElementById('settings').classList.contains('hidden')) openSettings();
+}
+function clearTourAction() {
+  if (tourActionTarget && tourActionHandler) tourActionTarget.removeEventListener('click', tourActionHandler);
+  tourActionTarget = null; tourActionHandler = null;
 }
 function clearTourTarget() {
+  clearTourAction();
   if (tourTarget) tourTarget.classList.remove('tour-target');
   tourTarget = null;
 }
@@ -2997,25 +3026,39 @@ function queueTourPosition(delay = 0) {
 function renderTourStep(index) {
   tourIndex = Math.max(0, Math.min(TOUR_STEPS.length - 1, index));
   clearTourTarget();
-  closeTourSurfaces();
   const step = TOUR_STEPS[tourIndex], card = document.getElementById('tour-card');
+  if (step.surface) ensureTourSurface(step.surface);
+  else closeTourSurfaces();
   if (!step.center) {
     tourTarget = document.querySelector(step.target);
     if (tourTarget) {
       tourTarget.classList.add('tour-target');
       tourTarget.scrollIntoView({ block: 'center', inline: 'center', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+      if (step.action) {
+        const actionIndex = tourIndex;
+        tourActionTarget = tourTarget;
+        tourActionHandler = () => {
+          if (!tourActive || tourIndex !== actionIndex) return;
+          clearTourAction();
+          setTimeout(() => renderTourStep(actionIndex + 1), 260);
+        };
+        tourActionTarget.addEventListener('click', tourActionHandler);
+      }
     }
   }
   const last = tourIndex === TOUR_STEPS.length - 1;
+  const canContinue = !step.action;
+  const continueLabel = last ? 'Start using CloudlessOS' : tourIndex === 0 ? 'Start tour' : 'Continue';
   card.innerHTML = `<div class="tour-head"><span class="tour-path">${escapeHtml(step.path)}</span><span class="tour-count">${tourIndex + 1} of ${TOUR_STEPS.length}</span></div>
-    <div class="tour-copy"><span class="tour-icon">${uiIcon(step.icon)}</span><h2 class="tour-title" id="tour-title">${escapeHtml(step.title)}</h2><p class="tour-desc" id="tour-desc">${escapeHtml(step.desc)}</p>${step.tip ? `<div class="tour-tip">${uiIcon('check')}<span>${escapeHtml(step.tip)}</span></div>` : ''}</div>
+    <div class="tour-copy"><span class="tour-icon">${uiIcon(step.icon)}</span><h2 class="tour-title" id="tour-title">${escapeHtml(step.title)}</h2><p class="tour-desc" id="tour-desc">${escapeHtml(step.desc)}</p>${step.tip ? `<div class="tour-tip">${uiIcon('check')}<span>${escapeHtml(step.tip)}</span></div>` : ''}${step.await ? `<div class="tour-await"><span class="tour-await-dot"></span><span>${escapeHtml(step.await)}</span></div>` : ''}</div>
     <div class="tour-progress" aria-hidden="true"><i style="--tour-progress:${((tourIndex + 1) / TOUR_STEPS.length * 100).toFixed(2)}%"></i></div>
-    <div class="tour-actions">${last ? '' : '<button class="btn link tour-skip" id="tour-skip" type="button">Skip tour</button>'}<span class="tour-spacer"></span>${tourIndex ? '<button class="btn" id="tour-back" type="button">Back</button>' : ''}<button class="btn primary" id="tour-next" type="button">${last ? 'Start using CloudlessOS' : tourIndex === 0 ? 'Start tour' : 'Next'}</button></div>`;
+    <div class="tour-actions">${last ? '' : '<button class="btn link tour-skip" id="tour-skip" type="button">Skip tour</button>'}<span class="tour-spacer"></span>${tourIndex ? '<button class="btn" id="tour-back" type="button">Back</button>' : ''}${canContinue ? `<button class="btn primary" id="tour-continue" type="button">${continueLabel}</button>` : ''}</div>`;
   card.querySelector('#tour-skip')?.addEventListener('click', () => finishOnboarding(true));
   card.querySelector('#tour-back')?.addEventListener('click', () => renderTourStep(tourIndex - 1));
-  card.querySelector('#tour-next').onclick = () => last ? finishOnboarding(false) : renderTourStep(tourIndex + 1);
+  const continueButton = card.querySelector('#tour-continue');
+  if (continueButton) continueButton.onclick = () => last ? finishOnboarding(false) : renderTourStep(tourIndex + 1);
   queueTourPosition(tourTarget ? 340 : 0);
-  setTimeout(() => card.querySelector('#tour-next')?.focus({ preventScroll: true }), 30);
+  setTimeout(() => (step.action ? tourTarget : continueButton)?.focus({ preventScroll: true }), 30);
 }
 function showOnboarding() {
   if (tourActive) return;
@@ -3047,7 +3090,7 @@ addEventListener('scroll', () => queueTourPosition(), { passive: true });
 document.addEventListener('keydown', e => {
   if (!tourActive || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
   if (e.key === 'Escape') { e.preventDefault(); finishOnboarding(true); }
-  else if (e.key === 'ArrowRight') { e.preventDefault(); tourIndex === TOUR_STEPS.length - 1 ? finishOnboarding(false) : renderTourStep(tourIndex + 1); }
+  else if (e.key === 'ArrowRight' && !TOUR_STEPS[tourIndex].action) { e.preventDefault(); tourIndex === TOUR_STEPS.length - 1 ? finishOnboarding(false) : renderTourStep(tourIndex + 1); }
   else if (e.key === 'ArrowLeft' && tourIndex > 0) { e.preventDefault(); renderTourStep(tourIndex - 1); }
 });
 

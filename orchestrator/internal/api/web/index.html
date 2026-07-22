@@ -222,7 +222,8 @@
   .set { width: min(800px, 95vw); height: min(580px, 90vh); display: flex;
     background: var(--card-strong); border: 1px solid var(--card-edge); border-radius: 26px;
     box-shadow: var(--shadow); animation: rise 0.3s ease; overflow: hidden; }
-  .set-sidebar { width: 200px; flex: none; background: var(--panel-2); border-right: 1px solid var(--line); padding: 14px 12px; overflow-y: auto; }
+  .set.set-wide { width: min(1180px, 95vw); height: min(760px, 90vh); }
+  .set-sidebar { width: 200px; flex: none; background: var(--panel-2); border-right: 1px solid var(--line); padding: 14px 12px; overflow-x: hidden; overflow-y: auto; }
   .set-brand { font-weight: 700; font-size: 14px; padding: 6px 10px 8px; }
   .set-nav { display: flex; flex-direction: column; gap: 1px; }
   .nav-group { font-size: 10px; text-transform: lowercase; letter-spacing: 0.6px; color: var(--faint); padding: 14px 10px 5px; }
@@ -235,7 +236,7 @@
   .set-page-title { font-weight: 700; font-size: 15px; }
   .set-x { margin-left: auto; border: none; background: none; font-size: 14px; color: var(--muted); cursor: pointer; }
   .set-x:hover { color: var(--ink); }
-  .set-content { padding: 18px 24px; overflow-y: auto; flex: 1; }
+  .set-content { padding: 18px 24px; overflow-x: hidden; overflow-y: auto; flex: 1; }
   .set-block { padding-bottom: 18px; margin-bottom: 18px; border-bottom: 1px solid var(--line); }
   .set-block:last-child { border-bottom: none; margin-bottom: 0; }
   .set-block h3 { margin: 0 0 10px; font-size: 11px; text-transform: lowercase; letter-spacing: 0.5px; color: var(--muted); }
@@ -2007,7 +2008,7 @@
     .apps-sec, .card { padding: 17px; }
     .pad { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .overlay { padding: 12px 12px 76px; }
-    .lp, .mm, .set { width: 100%; max-width: 100%; height: 100%; max-height: none; border-radius: 16px; }
+    .lp, .mm, .set, .set.set-wide { width: 100%; max-width: 100%; height: 100%; max-height: none; border-radius: 16px; }
     .mm .mm-head { min-height: 62px; padding: 0 15px; }
     .mm-head-sub { display: none; }
     .mm-body { padding: 16px 16px 28px; }
@@ -2025,6 +2026,7 @@
     .inf-tabs { padding-bottom: 2px; }
     .inf-tabs .mm-tab { min-width: 112px; flex: 0 0 auto; }
     .inf-page-hero { align-items: flex-start; flex-wrap: wrap; padding: 15px; }
+    .set-content .inf-page-copy { flex-basis: calc(100% - 62px); }
     .inf-page-hero .inf-state-pill { margin-left: 62px; }
     .ec-grid, .api-access-grid, .api-service-grid { grid-template-columns: 1fr; }
     .ec { min-height: 0; }
@@ -2791,6 +2793,8 @@ function applyEngineUI() {
 function engineUIRefresh() {
   const p = document.getElementById('inf-panel');
   if (infOpen && infTab === 'engine' && p) renderEnginePage(p);
+  const s = document.getElementById('set-content');
+  if (settingsOpen() && setPage === 'engine' && s) renderEnginePage(s);
 }
 function switchEngine(id) {
   if (engineSwitching) return;
@@ -2941,7 +2945,11 @@ async function renderSettings() {
 
   const groups = [
     { label: 'you', items: [{ id: 'profile', icon: 'user', label: 'Profile' }] },
-    { label: 'cloudless', items: [{ id: 'hardware', icon: 'machine', label: 'Machine' }] },
+    { label: 'cloudless', items: [
+      { id: 'hardware', icon: 'machine', label: 'Machine' },
+      { id: 'engine', icon: 'rocket', label: 'Engine' },
+      { id: 'api', icon: 'key', label: 'API access' },
+    ] },
     { label: 'apps', items: apps.map(a => ({ id: 'app:' + a.id, glyph: glyph(a.id), label: a.name })) },
     { label: 'system', items: [{ id: 'appearance', icon: 'appearance', label: 'Appearance' }, { id: 'general', icon: 'general', label: 'General' }] },
   ];
@@ -2950,13 +2958,16 @@ async function renderSettings() {
       `<div class="nav-item ${it.id === setPage ? 'active' : ''}" data-page="${it.id}"><span class="nav-ic">${it.icon ? uiIcon(it.icon) : it.glyph}</span>${it.label}</div>`).join('')).join('');
   document.querySelectorAll('#set-nav .nav-item').forEach(n => n.onclick = () => { setPage = n.dataset.page; renderSettings(); });
 
-  let title = { profile: 'Profile', hardware: 'Machine', appearance: 'Appearance', general: 'General' }[setPage] || '';
+  let title = { profile: 'Profile', hardware: 'Machine', engine: 'Engine', api: 'API access', appearance: 'Appearance', general: 'General' }[setPage] || '';
   if (setPage.startsWith('app:')) { const a = apps.find(x => 'app:' + x.id === setPage); title = a ? a.name : ''; }
   document.getElementById('set-page-title').textContent = title;
+  document.querySelector('#settings .set').classList.toggle('set-wide', setPage === 'engine' || setPage === 'api');
 
   const c = document.getElementById('set-content');
   if (setPage === 'profile') renderProfilePage(c);
   else if (setPage === 'hardware') renderHardwarePage(c);
+  else if (setPage === 'engine') renderEnginePage(c);
+  else if (setPage === 'api') renderApiPage(c);
   else if (setPage === 'appearance') renderAppearancePage(c);
   else if (setPage === 'general') renderGeneralPage(c);
   else if (setPage.startsWith('app:')) renderAppPage(c, setPage.slice(4));

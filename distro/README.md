@@ -36,6 +36,34 @@ For an emulated firmware smoke test, install QEMU, OVMF, Socat, and ImageMagick 
 The ISO and SHA-256 file are written to `distro/out/`. Set
 `CLOUDLESS_BASE_ISO=/path/to/ubuntu.iso` to use an existing Ubuntu Server image.
 
+## Update a development VM without reinstalling
+
+On the Windows development host, deploy interface and orchestrator changes directly to
+the installed VirtualBox VM:
+
+```powershell
+.\distro\scripts\deploy-vm.ps1
+```
+
+The script builds and validates the Debian packages in a cached Docker builder, starts
+the `CloudlessOS` VM if needed, prompts for the installer-created user's password, and
+updates the orchestrator. It restarts the kiosk session so Chromium immediately loads
+the new interface. The localhost-only SSH forwarding rule is removed when deployment
+finishes.
+
+Use the package selector when changing another OS component:
+
+```powershell
+.\distro\scripts\deploy-vm.ps1 -Packages shell
+.\distro\scripts\deploy-vm.ps1 -Packages orchestrator,shell
+.\distro\scripts\deploy-vm.ps1 -Packages all
+```
+
+Pass `-VMUser yourname` if the administrator account created by the installer is not
+`samcllo`. Use `-SkipBuild` to redeploy already-built packages. Branding and hardware
+updates may require a reboot; installer, partitioning, and autoinstall changes still
+require rebuilding and reinstalling the ISO.
+
 ## Installation behavior
 
 The installer asks for networking, target Grstorage, and administrator identity. It has no

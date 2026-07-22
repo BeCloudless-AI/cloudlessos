@@ -1316,6 +1316,7 @@
   @keyframes msg-in { from { opacity: 0; transform: translateY(6px); } }
   .msg.user { background: var(--blue); color: #fff; border-bottom-right-radius: 5px; white-space: pre-wrap; }
   .msg.bot { background: var(--panel-2); color: var(--ink); border: 1px solid var(--hair); border-bottom-left-radius: 5px; }
+  .msg.bot.streaming { white-space: pre-wrap; }
   .msg.bot p { margin: 0 0 9px; } .msg.bot p:last-child { margin-bottom: 0; }
   .msg.bot h3, .msg.bot h4 { margin: 2px 0 7px; font-size: 13px; }
   .msg.bot ul, .msg.bot ol { margin: 5px 0 9px; padding-left: 19px; }
@@ -2463,7 +2464,7 @@ const gb = mb => (mb / 1024).toFixed(1);
 let installing = 0, catalogCache = [], gpuBuilt = 0, appsEntered = false;
 let lastRunning = {}, engineReady = false, engineActive = '', engineSwitching = false, activeEngineName = 'the engine';
 let pinnedIds = [], lpQuery = '', lpView = '';
-let asstMsgs = [], asstBusy = false, asstController = null, asstRenderQueued = false;
+let asstMsgs = [], asstBusy = false, asstController = null, asstStreamQueued = false, asstStreamIndex = -1;
 
 /* ---- clock ---- */
 const DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
@@ -5127,10 +5128,58 @@ function asstTextHtml(text) {
     return `<pre><code>${escapeHtml(lines.join('\n').replace(/\n$/, ''))}</code></pre>`;
   }).join('');
 }
-function queueAsstRender() {
-  if (asstRenderQueued) return;
-  asstRenderQueued = true;
-  requestAnimationFrame(() => { asstRenderQueued = false; asstRender(); });
+function asstToolsHtml(m) {
+  if (!m.tools || !m.tools.length) return '';
+  return `<div class="msg-tools">${m.tools.map(t =>
+    `<div class="msg-tool ${t.status === 'completed' ? 'completed' : 'running'}"><span class="msg-tool-dot"></span><span>${escapeHtml((t.emoji ? t.emoji + ' ' : '') + (t.label || t.tool || 'Using a tool'))}</span></div>`).join('')}</div>`;
+}
+function asstAssistantRowHtml(m, mi) {
+  const txt = stripTags(m.content);
+  const inner = m.streaming
+    ? (txt ? `<span class="msg-stream-text">${escapeHtml(txt)}</span><span class="caret"></span>` : '<span class="typing"><i></i><i></i><i></i></span>')
+    : asstTextHtml(txt);
+  let html = `<div class="msg-row bot" data-msg="${mi}"><span class="msg-avatar"><svg class="cl-mark" aria-hidden="true"><use href="#cl-star"/></svg></span><div class="msg-stack"><span class="msg-label">Cloudless</span><div class="msg bot ${m.streaming ? 'streaming' : ''}">${inner}</div><div class="msg-tools-slot">${asstToolsHtml(m)}</div>`;
+  if (m.actions && m.actions.length) html += `<div class="msg-acts">${m.actions.map((a, ai) =>
+    `<button class="msg-act" data-mi="${mi}" data-ai="${ai}">${escapeHtml(a.label)}</button>`).join('')}</div>`;
+  if (!m.streaming && txt) html += `<div class="msg-foot"><button class="msg-copy" type="button" data-copy="${mi}">${uiIcon('copy')}Copy</button></div>`;
+  return html + '</div></div>';
+}
+function wireAsstMessageControls(scope) {
+  scope.querySelectorAll('.msg-act').forEach(btn => btn.onclick = () => asstAction(asstMsgs[+btn.dataset.mi].actions[+btn.dataset.ai]));
+  scope.querySelectorAll('[data-copy]').forEach(btn => btn.onclick = () => navigator.clipboard.writeText(stripTags(asstMsgs[+btn.dataset.copy].content)).then(() => { btn.innerHTML = `${uiIcon('check')}Copied`; }).catch(() => toast('Copy failed', true)));
+}
+function updateAsstStream(mi) {
+  const body = document.getElementById('asst-body'), row = document.querySelector(`#asst-thread [data-msg="${mi}"]`), m = asstMsgs[mi];
+  if (!row || !m || !m.streaming) return;
+  const stickToBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 90;
+  const bubble = row.querySelector('.msg.bot'), txt = stripTags(m.content);
+  let text = bubble.querySelector('.msg-stream-text');
+  if (txt && !text) {
+    bubble.innerHTML = '<span class="msg-stream-text"></span><span class="caret"></span>';
+    text = bubble.querySelector('.msg-stream-text');
+  }
+  if (text) text.textContent = txt;
+  row.querySelector('.msg-tools-slot').innerHTML = asstToolsHtml(m);
+  if (stickToBottom) body.scrollTop = body.scrollHeight;
+}
+function queueAsstStreamUpdate(mi) {
+  asstStreamIndex = mi;
+  if (asstStreamQueued) return;
+  asstStreamQueued = true;
+  requestAnimationFrame(() => {
+    asstStreamQueued = false;
+    const index = asstStreamIndex; asstStreamIndex = -1;
+    updateAsstStream(index);
+  });
+}
+function finalizeAsstMessage(mi, m) {
+  if (asstMsgs[mi] !== m) return;
+  const body = document.getElementById('asst-body'), row = document.querySelector(`#asst-thread [data-msg="${mi}"]`);
+  if (!row) return;
+  const stickToBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 90;
+  row.insertAdjacentHTML('afterend', asstAssistantRowHtml(m, mi));
+  const next = row.nextElementSibling; row.remove(); wireAsstMessageControls(next);
+  if (stickToBottom) body.scrollTop = body.scrollHeight;
 }
 function asstRender(forceBottom = false) {
   const body = document.getElementById('asst-body'), thread = document.getElementById('asst-thread');
@@ -5138,19 +5187,9 @@ function asstRender(forceBottom = false) {
   thread.innerHTML = asstMsgs.map((m, mi) => {
     if (m.welcome) return `<div class="asst-welcome"><span class="asst-welcome-mark"><svg class="cl-mark" aria-hidden="true"><use href="#cl-star"/></svg></span><h2>How can I help?</h2><p>${escapeHtml(m.content)}</p><span class="asst-private">Private on this machine</span></div>`;
     if (m.role === 'user') return `<div class="msg-row user"><div class="msg-stack"><span class="msg-label">You</span><div class="msg user">${escapeHtml(m.content)}</div></div></div>`;
-    const txt = stripTags(m.content);
-    const inner = (m.streaming && !txt) ? '<span class="typing"><i></i><i></i><i></i></span>'
-      : asstTextHtml(txt) + (m.streaming ? '<span class="caret"></span>' : '');
-    let html = `<div class="msg-row bot"><span class="msg-avatar"><svg class="cl-mark" aria-hidden="true"><use href="#cl-star"/></svg></span><div class="msg-stack"><span class="msg-label">Cloudless</span><div class="msg bot">${inner}</div>`;
-    if (m.tools && m.tools.length) html += `<div class="msg-tools">${m.tools.map(t =>
-      `<div class="msg-tool ${t.status === 'completed' ? 'completed' : 'running'}"><span class="msg-tool-dot"></span><span>${escapeHtml((t.emoji ? t.emoji + ' ' : '') + (t.label || t.tool || 'Using a tool'))}</span></div>`).join('')}</div>`;
-    if (m.actions && m.actions.length) html += `<div class="msg-acts">${m.actions.map((a, ai) =>
-      `<button class="msg-act" data-mi="${mi}" data-ai="${ai}">${escapeHtml(a.label)}</button>`).join('')}</div>`;
-    if (!m.streaming && txt) html += `<div class="msg-foot"><button class="msg-copy" type="button" data-copy="${mi}">${uiIcon('copy')}Copy</button></div>`;
-    return html + '</div></div>';
+    return asstAssistantRowHtml(m, mi);
   }).join('');
-  thread.querySelectorAll('.msg-act').forEach(btn => btn.onclick = () => asstAction(asstMsgs[+btn.dataset.mi].actions[+btn.dataset.ai]));
-  thread.querySelectorAll('[data-copy]').forEach(btn => btn.onclick = () => navigator.clipboard.writeText(stripTags(asstMsgs[+btn.dataset.copy].content)).then(() => { btn.innerHTML = `${uiIcon('check')}Copied`; }).catch(() => toast('Copy failed', true)));
+  wireAsstMessageControls(thread);
   if (stickToBottom) body.scrollTop = body.scrollHeight;
 }
 function updateAsstComposer() {
@@ -5174,7 +5213,7 @@ async function asstSend(text) {
   const input = document.getElementById('asst-text'); input.value = '';
   asstMsgs.push({ role: 'user', content: text });
   const bot = { role: 'assistant', content: '', streaming: true, tools: [] };
-  asstMsgs.push(bot);
+  const botIndex = asstMsgs.push(bot) - 1;
   renderChips(); updateAsstComposer(); asstRender(true);
   const payload = { messages: asstMsgs.filter(m => !m.streaming && !m.welcome && m.content).map(m => ({ role: m.role, content: m.content })) };
   asstController = new AbortController();
@@ -5192,12 +5231,12 @@ async function asstSend(text) {
         buf = buf.slice(boundary.index + boundary[0].length);
         if (!line) continue;
         let u; try { u = JSON.parse(line.slice(line.indexOf(':') + 1).trim()); } catch { continue; }
-        if (u.delta) { bot.content += u.delta; queueAsstRender(); }
+        if (u.delta) { bot.content += u.delta; queueAsstStreamUpdate(botIndex); }
         if (u.tool) {
           const at = bot.tools.findIndex(t => t.toolCallId === u.tool.toolCallId);
           if (at >= 0) bot.tools[at] = { ...bot.tools[at], ...u.tool };
           else bot.tools.push(u.tool);
-          queueAsstRender();
+          queueAsstStreamUpdate(botIndex);
         }
         if (u.done) { bot.actions = u.actions || []; }
       }
@@ -5207,7 +5246,7 @@ async function asstSend(text) {
     else bot.content = bot.content || 'I could not reach the local agent right now. Check that the model and Hermes are ready, then try again.';
   } finally {
     clearTimeout(timeout); bot.streaming = false; asstBusy = false; asstController = null;
-    updateAsstComposer(); asstRender(); input.focus();
+    updateAsstComposer(); finalizeAsstMessage(botIndex, bot); input.focus();
   }
 }
 function asstAction(a) {

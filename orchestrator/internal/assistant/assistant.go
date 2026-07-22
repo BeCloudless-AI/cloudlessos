@@ -9,8 +9,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/cloudless/orchestrator/internal/catalog"
@@ -31,6 +33,7 @@ type Context struct {
 	Onboarded   bool            // finished first-run tour
 	Running     map[string]bool // app id -> running
 	GPU         string          // human summary, e.g. "RTX 5090 (32 GB)"
+	GPUVRAMGB   int             // total VRAM used by Model Manager fit calculations
 	Models      []ModelOption   // curated choices and fit verdicts shown by Model Manager
 }
 
@@ -43,6 +46,14 @@ type ModelOption struct {
 	Quant     string
 	MinVRAMGB int
 	Fit       string // fits | tight | over | unknown
+}
+
+// ModelAdvice is a deterministic compatibility answer plus the Model Manager
+// destination the GUI should open for review.
+type ModelAdvice struct {
+	Reply   string
+	ModelID string
+	Label   string
 }
 
 // Action is a one-click follow-up the OS can execute on the user's behalf.
@@ -203,15 +214,22 @@ func actionFor(kind, id string, c Context) Action {
 // ModelGuidance handles model lifecycle and compatibility questions from live
 // Model Manager data before the request reaches Hermes. This prevents a general
 // agent from inventing skills or terminal workflows for an OS-owned operation.
-func ModelGuidance(text string, c Context) (string, bool) {
+func ModelGuidance(text string, c Context) (ModelAdvice, bool) {
 	lower := strings.ToLower(strings.TrimSpace(text))
 	if lower == "" {
-		return "", false
+		return ModelAdvice{}, false
 	}
 	modelWord := containsAny(lower, "model", "qwen", "llama", "mistral", "gemma", "deepseek", "phi", "nemotron")
 	lifecycle := containsAny(lower, "work here", "run here", "fit", "compatible", "support", "available", "install", "download", "switch", "use this", "use qwen", "which model", "better model", "larger model")
 	if !modelWord || !lifecycle {
-		return "", false
+		return ModelAdvice{}, false
+	}
+	installIntent := containsAny(lower, "install", "download", "get this", "add this")
+	labelFor := func(name string) string {
+		if installIntent {
+			return "Review " + name + " installation"
+		}
+		return "Review " + name + " in Model Manager"
 	}
 
 	normalized := normalizeModelText(lower)
@@ -220,20 +238,78 @@ func ModelGuidance(text string, c Context) (string, bool) {
 		id := normalizeModelText(strings.ToLower(m.ID))
 		if (name != "" && strings.Contains(normalized, name)) || (id != "" && strings.Contains(normalized, id)) {
 			need := fmt.Sprintf("about %d GB of VRAM", m.MinVRAMGB)
+			if c.GPUVRAMGB <= 0 {
+				return ModelAdvice{Reply: fmt.Sprintf("%s is available in Model Manager and needs %s, but CloudlessOS currently reports %s. It cannot run this model with the local GPU engine as configured. You can review or download it now, then launch it after a supported GPU is available.", m.Name, need, c.GPU), ModelID: m.ID, Label: labelFor(m.Name)}, true
+			}
 			switch m.Fit {
 			case "fits":
-				return fmt.Sprintf("%s is available in Model Manager and should fit this machine. It needs %s; CloudlessOS reports %s. Open Model Manager to download or launch it safely.", m.Name, need, c.GPU), true
+				return ModelAdvice{Reply: fmt.Sprintf("%s is available in Model Manager and should fit this machine. It needs %s; CloudlessOS reports %s. Open its Model Manager card to download or launch it safely.", m.Name, need, c.GPU), ModelID: m.ID, Label: labelFor(m.Name)}, true
 			case "tight":
-				return fmt.Sprintf("%s is available, but Model Manager marks it as a tight fit on this machine. It needs %s and may leave little room for context or other GPU apps. Review it in Model Manager before launching.", m.Name, need), true
+				return ModelAdvice{Reply: fmt.Sprintf("%s is available, but Model Manager marks it as a tight fit on this machine. It needs %s and may leave little room for context or other GPU apps. Review its card before launching.", m.Name, need), ModelID: m.ID, Label: labelFor(m.Name)}, true
 			case "over":
-				return fmt.Sprintf("%s is listed, but Model Manager estimates it needs %s—more than this machine can comfortably provide. Choose a smaller or quantized variant in Model Manager.", m.Name, need), true
+				return ModelAdvice{Reply: fmt.Sprintf("%s is listed, but Model Manager estimates it needs %s—more than this machine can comfortably provide. Its card can help you compare a smaller or quantized variant.", m.Name, need), ModelID: m.ID, Label: labelFor(m.Name)}, true
 			default:
-				return fmt.Sprintf("%s is available in Model Manager, but CloudlessOS cannot verify its GPU fit right now. Open Model Manager to review it; model installation and switching should happen there.", m.Name), true
+				return ModelAdvice{Reply: fmt.Sprintf("%s is available in Model Manager, but CloudlessOS cannot verify its GPU fit right now. Open its card to review it; model installation and switching should happen there.", m.Name), ModelID: m.ID, Label: labelFor(m.Name)}, true
 			}
 		}
 	}
 
-	return fmt.Sprintf("I can’t verify that exact model in CloudlessOS’s current Model Manager catalog. This machine reports %s, but compatibility depends on the exact repository, parameter count, quantization, and context length. Open Model Manager to see supported choices and their Fits, Tight, or Too large verdicts; CloudlessOS will not install models through Hermes skills or terminal scripts.", c.GPU), true
+	repo := strings.TrimRight(hfRepoRe.FindString(strings.TrimSpace(text)), ".,;:")
+	params, bits, estimate, estimated := estimateModelVRAM(lower)
+	modelName := "custom model"
+	if repo != "" {
+		modelName = repo
+	}
+	if estimated {
+		quant := fmt.Sprintf("%d-bit", bits)
+		if c.GPUVRAMGB <= 0 {
+			reply := fmt.Sprintf("Based on the name, I read this as roughly %.1fB parameters at %s, with a conservative requirement of about %d GB of VRAM including runtime overhead. CloudlessOS currently reports %s, so it cannot run this model with the local GPU engine as configured. This is an estimate—the exact architecture and context length can change it. You can still review the repository in Model Manager, but launching it requires a supported GPU with enough VRAM.", params, quant, estimate, c.GPU)
+			return ModelAdvice{Reply: reply, ModelID: repo, Label: labelFor(modelName)}, true
+		}
+		fit := "should fit"
+		detail := "with useful headroom"
+		switch {
+		case float64(estimate) > float64(c.GPUVRAMGB)*1.05:
+			fit, detail = "is unlikely to fit fully in GPU memory", "so choose a smaller or more heavily quantized variant"
+		case float64(estimate) > float64(c.GPUVRAMGB)*0.85:
+			fit, detail = "would be a tight fit", "with little room left for KV cache or other GPU apps"
+		}
+		reply := fmt.Sprintf("Based on the name, I read this as roughly %.1fB parameters at %s. A conservative estimate is about %d GB of VRAM including runtime overhead, so it %s on %s, %s. This is an estimate—the exact architecture and context length can change it. Review the exact Hugging Face repository in Model Manager before downloading or launching.", params, quant, estimate, fit, c.GPU, detail)
+		return ModelAdvice{Reply: reply, ModelID: repo, Label: labelFor(modelName)}, true
+	}
+
+	reply := fmt.Sprintf("I don’t have enough detail to judge that exact model yet. %s is the hardware available, but I need the exact Hugging Face repository or at least its parameter size and quantization—for example, 32B AWQ or 8B BF16. Model Manager remains the final check and handles the actual download or launch.", c.GPU)
+	return ModelAdvice{Reply: reply, ModelID: repo, Label: labelFor(modelName)}, true
+}
+
+var (
+	hfRepoRe      = regexp.MustCompile(`(?i)\b[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*\b`)
+	modelParamsRe = regexp.MustCompile(`(?i)\b(\d+(?:\.\d+)?)\s*b\b`)
+)
+
+func estimateModelVRAM(text string) (params float64, bits, estimateGB int, ok bool) {
+	m := modelParamsRe.FindStringSubmatch(text)
+	if len(m) != 2 {
+		return 0, 0, 0, false
+	}
+	params, err := strconv.ParseFloat(m[1], 64)
+	if err != nil || params <= 0 {
+		return 0, 0, 0, false
+	}
+	bits = 16
+	switch {
+	case containsAny(text, "awq", "gptq", "4-bit", "4bit", "q4"):
+		bits = 4
+	case containsAny(text, "8-bit", "8bit", "q8", "int8"):
+		bits = 8
+	case containsAny(text, "fp32", "32-bit", "32bit"):
+		bits = 32
+	}
+	weightsGB := params * float64(bits) / 8
+	// 10% covers common tensor/quantization metadata; 4 GB reserves a small
+	// but useful KV cache and runtime workspace. Model Manager is still final.
+	estimateGB = int(math.Ceil(weightsGB*1.10 + 4))
+	return params, bits, estimateGB, true
 }
 
 func containsAny(text string, parts ...string) bool {

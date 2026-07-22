@@ -3254,7 +3254,7 @@ function launchModel(m) {
   mmDetail = null; renderModelManager();
 }
 /* ---- Model Manager (standalone, opened from the dashboard) ---- */
-let mmTab = 'language', mmDetail = null, mmLM = null, mmDiff = null;
+let mmTab = 'language', mmDetail = null, mmLM = null, mmDiff = null, mmCustomPrefill = '';
 let mmFilter = { q: '', fits: false, vision: false, tools: false };
 const mmCache = {};
 function modelsOpen() { return !document.getElementById('models').classList.contains('hidden'); }
@@ -3265,8 +3265,23 @@ function anyOverlayOpen() {
   return infOpen || modelsOpen() || settingsOpen() || launcherOpen()
     || document.getElementById('asst').classList.contains('full');
 }
-function openModelManager() { mmDetail = null; document.getElementById('models').classList.remove('hidden'); renderModelManager(); }
-function closeModelManager() { document.getElementById('models').classList.add('hidden'); }
+function openModelManager() { mmDetail = null; mmCustomPrefill = ''; document.getElementById('models').classList.remove('hidden'); renderModelManager(); }
+async function openModelManagerFor(id) {
+  closeAsst();
+  mmTab = 'language'; mmDetail = null; mmFilter = { q: '', fits: false, vision: false, tools: false };
+  document.getElementById('models').classList.remove('hidden');
+  if (!id) { mmCustomPrefill = ''; renderModelManager(); return; }
+  let data = mmLM;
+  if (!data) { try { data = await api('/api/models'); } catch {} }
+  if (data) {
+    mmLM = data;
+    (data.yours || []).concat(data.highlights || []).forEach(m => { mmCache['lm:' + m.id] = m; });
+  }
+  if (mmCache['lm:' + id]) { mmCustomPrefill = ''; openModelDetail('lm', id); return; }
+  mmCustomPrefill = id;
+  renderModelManager();
+}
+function closeModelManager() { mmCustomPrefill = ''; document.getElementById('models').classList.add('hidden'); }
 function openModelDetail(type, id) { mmDetail = { type, id }; renderModelManager(); }
 function modelMatches(m, lm) {
   const f = mmFilter;
@@ -3373,7 +3388,14 @@ function paintModelList(c, data, kind) {
   });
   if (lm) {
     const adv = c.querySelector('[data-mdladv]'); if (adv) adv.onclick = () => document.getElementById('mdl-adv').classList.toggle('hidden');
-    const ap = document.getElementById('set-model-apply'); if (ap) ap.onclick = () => { const v = document.getElementById('set-model').value.trim(); if (v) applyModel(v); };
+    const customInput = document.getElementById('set-model');
+    if (customInput && mmCustomPrefill) {
+      document.getElementById('mdl-adv').classList.remove('hidden');
+      customInput.value = mmCustomPrefill;
+      customInput.oninput = () => { mmCustomPrefill = customInput.value; };
+      requestAnimationFrame(() => { customInput.focus(); customInput.select(); });
+    }
+    const ap = document.getElementById('set-model-apply'); if (ap) ap.onclick = () => { const v = document.getElementById('set-model').value.trim(); if (v) { mmCustomPrefill = ''; applyModel(v); } };
   }
 }
 function renderModelDetail(c) {
@@ -4597,7 +4619,7 @@ async function asstSend(text) {
 }
 function asstAction(a) {
   if (!a) return;
-  if (a.kind === 'models') { closeAsst(); openModelManager(); }
+  if (a.kind === 'models') { openModelManagerFor(a.id || ''); }
   else if (a.kind === 'engine') { switchEngine(a.id); toast('Switching engine…'); }
   else if (a.kind === 'open') { const app = catalogCache.find(x => x.id === a.id); if (app) openApp(app); }
   else if (a.kind === 'install') installApp(a.id);

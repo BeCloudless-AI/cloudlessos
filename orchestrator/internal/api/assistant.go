@@ -49,9 +49,9 @@ func (s *Server) assistantChat(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 	}
-	if reply, handled := assistant.ModelGuidance(lastUser, actx); handled {
-		send(map[string]any{"delta": reply})
-		send(map[string]any{"done": true, "actions": []assistant.Action{{Kind: "models", Label: "Open Model Manager"}}})
+	if advice, handled := assistant.ModelGuidance(lastUser, actx); handled {
+		send(map[string]any{"delta": advice.Reply})
+		send(map[string]any{"done": true, "actions": []assistant.Action{{Kind: "models", ID: advice.ModelID, Label: advice.Label}}})
 		return
 	}
 
@@ -169,6 +169,7 @@ func (s *Server) assistantContext(ctx context.Context) assistant.Context {
 		Onboarded:   st.Onboarded,
 		Running:     running,
 		GPU:         gpuSummary(ctx),
+		GPUVRAMGB:   gpuGB,
 		Models:      modelOptions,
 	}
 }

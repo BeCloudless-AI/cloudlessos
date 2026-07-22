@@ -7,7 +7,8 @@ import (
 
 func modelTestContext() Context {
 	return Context{
-		GPU: "RTX 5090 (31 GB)",
+		GPU:       "RTX 5090 (31 GB)",
+		GPUVRAMGB: 31,
 		Models: []ModelOption{
 			{ID: "Qwen/Qwen2.5-14B-Instruct-AWQ", Name: "Qwen2.5 14B (4-bit)", Params: "14B", Quant: "AWQ", MinVRAMGB: 13, Fit: "fits"},
 			{ID: "Qwen/Qwen2.5-72B-Instruct-AWQ", Name: "Qwen2.5 72B (4-bit)", Params: "72B", Quant: "AWQ", MinVRAMGB: 44, Fit: "over"},
@@ -16,32 +17,74 @@ func modelTestContext() Context {
 }
 
 func TestModelGuidanceRejectsUnknownModelWorkflow(t *testing.T) {
-	reply, handled := ModelGuidance("Would Qwen 3.6 work here?", modelTestContext())
+	advice, handled := ModelGuidance("Would Qwen 3.6 work here?", modelTestContext())
 	if !handled {
 		t.Fatal("model compatibility question was not handled")
 	}
-	for _, want := range []string{"can’t verify", "Model Manager", "will not install models through Hermes skills"} {
-		if !strings.Contains(reply, want) {
-			t.Fatalf("reply %q does not contain %q", reply, want)
+	for _, want := range []string{"don’t have enough detail", "exact Hugging Face repository", "Model Manager"} {
+		if !strings.Contains(advice.Reply, want) {
+			t.Fatalf("reply %q does not contain %q", advice.Reply, want)
 		}
 	}
 }
 
 func TestModelGuidanceUsesModelManagerFit(t *testing.T) {
-	reply, handled := ModelGuidance("Would Qwen2.5 14B (4-bit) fit?", modelTestContext())
-	if !handled || !strings.Contains(reply, "should fit this machine") || !strings.Contains(reply, "about 13 GB") {
-		t.Fatalf("unexpected fit reply: handled=%v reply=%q", handled, reply)
+	advice, handled := ModelGuidance("Would Qwen2.5 14B (4-bit) fit?", modelTestContext())
+	if !handled || !strings.Contains(advice.Reply, "should fit this machine") || !strings.Contains(advice.Reply, "about 13 GB") || advice.ModelID != "Qwen/Qwen2.5-14B-Instruct-AWQ" {
+		t.Fatalf("unexpected fit advice: handled=%v advice=%#v", handled, advice)
 	}
 
-	reply, handled = ModelGuidance("Can I install Qwen2.5 72B (4-bit)?", modelTestContext())
-	if !handled || !strings.Contains(reply, "more than this machine") {
-		t.Fatalf("unexpected oversized reply: handled=%v reply=%q", handled, reply)
+	advice, handled = ModelGuidance("Can I install Qwen2.5 72B (4-bit)?", modelTestContext())
+	if !handled || !strings.Contains(advice.Reply, "more than this machine") || !strings.Contains(advice.Label, "installation") {
+		t.Fatalf("unexpected oversized advice: handled=%v advice=%#v", handled, advice)
+	}
+}
+
+func TestModelGuidanceEstimatesCustomModelAndPreservesRepo(t *testing.T) {
+	advice, handled := ModelGuidance("Can I install acme/Qwen3-32B-AWQ? It is a 32B AWQ model.", modelTestContext())
+	if !handled || advice.ModelID != "acme/Qwen3-32B-AWQ" {
+		t.Fatalf("custom model destination lost: handled=%v advice=%#v", handled, advice)
+	}
+	for _, want := range []string{"32.0B", "4-bit", "about 22 GB", "should fit"} {
+		if !strings.Contains(advice.Reply, want) {
+			t.Fatalf("estimate %q does not contain %q", advice.Reply, want)
+		}
+	}
+}
+
+func TestModelGuidanceExplainsMissingGPUForKnownCustomSize(t *testing.T) {
+	c := modelTestContext()
+	c.GPU = "no NVIDIA GPU detected"
+	c.GPUVRAMGB = 0
+	advice, handled := ModelGuidance("Can I install acme/Qwen3-32B-AWQ? It is a 32B AWQ model.", c)
+	if !handled || advice.ModelID != "acme/Qwen3-32B-AWQ" {
+		t.Fatalf("custom model destination lost: handled=%v advice=%#v", handled, advice)
+	}
+	for _, want := range []string{"about 22 GB", "no NVIDIA GPU detected", "cannot run this model"} {
+		if !strings.Contains(advice.Reply, want) {
+			t.Fatalf("missing-GPU reply %q does not contain %q", advice.Reply, want)
+		}
+	}
+}
+
+func TestModelGuidanceExplainsMissingGPUForCatalogModel(t *testing.T) {
+	c := modelTestContext()
+	c.GPU = "no NVIDIA GPU detected"
+	c.GPUVRAMGB = 0
+	advice, handled := ModelGuidance("Can I install Qwen2.5 14B (4-bit)?", c)
+	if !handled || advice.ModelID != "Qwen/Qwen2.5-14B-Instruct-AWQ" {
+		t.Fatalf("catalog destination lost: handled=%v advice=%#v", handled, advice)
+	}
+	for _, want := range []string{"about 13 GB", "no NVIDIA GPU detected", "cannot run this model"} {
+		if !strings.Contains(advice.Reply, want) {
+			t.Fatalf("missing-GPU reply %q does not contain %q", advice.Reply, want)
+		}
 	}
 }
 
 func TestModelGuidanceLeavesOrdinaryChatToHermes(t *testing.T) {
-	if reply, handled := ModelGuidance("Tell me why the sky is blue", modelTestContext()); handled || reply != "" {
-		t.Fatalf("ordinary chat was intercepted: handled=%v reply=%q", handled, reply)
+	if advice, handled := ModelGuidance("Tell me why the sky is blue", modelTestContext()); handled || advice.Reply != "" {
+		t.Fatalf("ordinary chat was intercepted: handled=%v advice=%#v", handled, advice)
 	}
 }
 

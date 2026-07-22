@@ -23,13 +23,17 @@ type Profile struct {
 // APIKey is a user-generated credential for the Cloudless Proxy (the OpenAI-compatible
 // gateway). The full key is shown ONCE at creation; only its SHA-256 hash is stored.
 type APIKey struct {
-	ID       string `json:"id"`      // short opaque id (for revoke)
-	Name     string `json:"name"`    // user label, e.g. "My website"
-	Prefix   string `json:"prefix"`  // first chars, shown to identify the key (e.g. "sk-cloudless-ab12cd")
-	Hash     string `json:"hash"`    // sha256(fullKey) hex — the secret is never stored
-	Created  string `json:"created"` // RFC3339
-	LastUsed string `json:"lastUsed,omitempty"`
-	Requests int64  `json:"requests"` // lifetime request count through the gateway
+	ID               string `json:"id"`      // short opaque id (for revoke)
+	Name             string `json:"name"`    // user label, e.g. "My website"
+	Prefix           string `json:"prefix"`  // first chars, shown to identify the key (e.g. "sk-cloudless-ab12cd")
+	Hash             string `json:"hash"`    // sha256(fullKey) hex — the secret is never stored
+	Created          string `json:"created"` // RFC3339
+	LastUsed         string `json:"lastUsed,omitempty"`
+	Requests         int64  `json:"requests"`         // lifetime request count through the gateway
+	Successes        int64  `json:"successes"`        // successful (< 400) gateway responses
+	Failures         int64  `json:"failures"`         // failed (>= 400) gateway responses
+	PromptTokens     int64  `json:"promptTokens"`     // input tokens reported by the engine
+	CompletionTokens int64  `json:"completionTokens"` // output tokens reported by the engine
 }
 
 // State is the persisted state.
@@ -307,16 +311,27 @@ func (s *Store) ValidateAPIKey(secret string) (id string, ok bool) {
 	return "", false
 }
 
-// RecordUsage bumps a key's request count + last-used time IN MEMORY, marking the
-// store dirty for a lazy flush (PersistIfDirty) — so per-request proxying doesn't
-// hit the disk on every call.
-func (s *Store) RecordUsage(id string) {
+// RecordAPIUsage updates one key's lifetime metrics IN MEMORY, marking the store
+// dirty for a lazy flush (PersistIfDirty) so request proxying never writes to disk.
+func (s *Store) RecordAPIUsage(id string, success bool, promptTokens, completionTokens int64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for i := range s.st.APIKeys {
 		if s.st.APIKeys[i].ID == id {
-			s.st.APIKeys[i].Requests++
-			s.st.APIKeys[i].LastUsed = now()
+			k := &s.st.APIKeys[i]
+			k.Requests++
+			if success {
+				k.Successes++
+			} else {
+				k.Failures++
+			}
+			if promptTokens > 0 {
+				k.PromptTokens += promptTokens
+			}
+			if completionTokens > 0 {
+				k.CompletionTokens += completionTokens
+			}
+			k.LastUsed = now()
 			s.dirty = true
 			return
 		}

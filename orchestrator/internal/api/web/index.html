@@ -551,6 +551,33 @@
   .us-tile .us-label { font-size: 10px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); }
   .us-tile .us-val { font-size: 23px; font-weight: 800; letter-spacing: -0.7px; color: var(--ink); font-variant-numeric: tabular-nums; line-height: 1.15; margin-top: 5px; }
   .us-tile .us-sub { font-size: 10.5px; color: var(--muted); margin-top: 3px; }
+  .ku-section { margin-bottom: 20px; }
+  .ku-head { margin: 0 2px 10px; display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+  .ku-title { color: var(--ink); font-size: 13px; font-weight: 760; letter-spacing: -.15px; }
+  .ku-subtitle { margin-top: 2px; color: var(--muted); font-size: 10.5px; }
+  .ku-lifetime { color: var(--faint); font-size: 9.5px; font-weight: 700; letter-spacing: .55px; text-transform: uppercase; }
+  .ku-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 10px; }
+  .ku-card {
+    min-width: 0; padding: 14px; border: 1px solid var(--hair); border-radius: 14px;
+    background: color-mix(in srgb, var(--card) 88%, transparent);
+  }
+  .ku-card-head { display: flex; align-items: center; gap: 10px; padding-bottom: 11px; border-bottom: 1px solid var(--hair); }
+  .ku-icon { width: 32px; height: 32px; flex: none; display: grid; place-items: center; border-radius: 9px; color: var(--blue); background: var(--blue-soft); }
+  .ku-icon .ui-icon { width: 14px; height: 14px; }
+  .ku-identity { min-width: 0; flex: 1; }
+  .ku-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); font-size: 12.5px; font-weight: 740; }
+  .ku-prefix { display: block; margin-top: 1px; overflow: hidden; text-overflow: ellipsis; color: var(--faint); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 9.5px; }
+  .ku-state { flex: none; padding: 3px 7px; border-radius: 999px; color: var(--ok); background: color-mix(in srgb, var(--ok) 11%, transparent); font-size: 9px; font-weight: 750; }
+  .ku-state.idle { color: var(--muted); background: var(--panel-2); }
+  .ku-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 11px 14px; padding-top: 12px; }
+  .ku-stat { min-width: 0; }
+  .ku-stat-label { color: var(--muted); font-size: 9px; font-weight: 700; letter-spacing: .45px; text-transform: uppercase; }
+  .ku-stat-value { margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); font-size: 16px; font-weight: 790; font-variant-numeric: tabular-nums; }
+  .ku-stat-sub { margin-top: 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--faint); font-size: 9.5px; }
+  .ku-empty { padding: 16px; border: 1px dashed var(--line-2); border-radius: 13px; color: var(--muted); background: color-mix(in srgb, var(--panel-2) 65%, transparent); font-size: 11px; text-align: center; }
+  .us-global-head { margin: 0 2px 10px; }
+  .us-global-title { color: var(--ink); font-size: 13px; font-weight: 760; letter-spacing: -.15px; }
+  .us-global-sub { margin-top: 2px; color: var(--muted); font-size: 10.5px; }
   /* floating tooltip shared by the live charts + the usage bars */
   .chart-tip { position: fixed; z-index: 9999; pointer-events: none; display: none;
     background: var(--ink); color: var(--bg); padding: 6px 9px; border-radius: 8px; font-size: 11px;
@@ -3675,7 +3702,7 @@ document.querySelectorAll('.win-traffic .t-c').forEach(dot => {
 
 /* ---- Inference activity dashboard ---- */
 let infOpen = false, infTimer = null, infPrev = null, infBuf = null, infPeak = 0, infTab = 'activity';
-let infUsageTimer = null, infUsageCache = {}, infUsageRange = 'day', infTipEl = null; // usage auto-refresh + per-range cached snapshots + selected zoom + shared chart tooltip
+let infUsageTimer = null, infUsageCache = {}, infKeyUsageCache = [], infUsageRange = 'day', infTipEl = null; // usage auto-refresh + per-range cached snapshots + selected zoom + shared chart tooltip
 let infPowerTimer = null, infPowerCache = {}, infPowerRange = 'day'; // electricity-log auto-refresh + per-range cache + selected zoom
 let infActRange = 'live'; // Activity zoom: 'live' (real-time stream) or a usage range (throughput over time)
 const PW_RANGES = { hour: { unit: 'hour', sub: 'last 24 hours', peak: 'Peak hour' }, day: { unit: 'day', sub: 'last 30 days', peak: 'Peak day' }, month: { unit: 'month', sub: 'last 12 months', peak: 'Peak month' }, year: { unit: 'year', sub: 'last 5 years', peak: 'Peak year' } };
@@ -3804,14 +3831,19 @@ function infAgo(iso) {
 }
 async function renderUsage(c) {
   const cached = infUsageCache[infUsageRange];
-  if (cached) paintUsage(c, cached); // instant repaint from the last snapshot for this range — no flash
+  if (cached) paintUsage(c, cached, infKeyUsageCache); // instant repaint from the last snapshot for this range — no flash
   else c.innerHTML = '<div class="inf-empty">Loading usage…</div>';
   const load = async () => {
     if (!infOpen || infTab !== 'usage') return;
     const r = infUsageRange;
-    let u; try { u = await api('/api/engine/usage?range=' + r); } catch { if (!infUsageCache[r]) c.innerHTML = '<div class="inf-empty">Could not load usage.</div>'; return; }
+    const [usageResult, gatewayResult] = await Promise.allSettled([
+      api('/api/engine/usage?range=' + r), api('/api/gateway')
+    ]);
+    if (usageResult.status !== 'fulfilled') { if (!infUsageCache[r]) c.innerHTML = '<div class="inf-empty">Could not load usage.</div>'; return; }
+    const u = usageResult.value;
     if (!infOpen || infTab !== 'usage' || infUsageRange !== r) return; // range/tab changed while awaiting
-    infUsageCache[r] = u; paintUsage(c, u);
+    if (gatewayResult.status === 'fulfilled') infKeyUsageCache = gatewayResult.value.keys || [];
+    infUsageCache[r] = u; paintUsage(c, u, infKeyUsageCache);
   };
   await load();
   infUsageTimer = setInterval(load, 5000); // keep the figures live while the tab is open
@@ -3823,7 +3855,25 @@ function infSetRange(r) {
   if (infUsageTimer) { clearInterval(infUsageTimer); infUsageTimer = null; }
   renderUsage(document.getElementById('inf-panel'));
 }
-function paintUsage(c, u) {
+function keyUsageCards(keys) {
+  if (!keys.length) return '<div class="ku-empty">No API keys yet. Generate one in API access to track its usage separately.</div>';
+  return `<div class="ku-grid">${keys.map(k => {
+    const outcomes = (k.successes || 0) + (k.failures || 0);
+    const success = outcomes > 0 ? Math.round((k.successes || 0) / outcomes * 100) + '%' : '—';
+    const tokens = (k.totalTokens || 0);
+    const used = !!k.lastUsed;
+    return `<article class="ku-card">
+      <div class="ku-card-head"><span class="ku-icon">${uiIcon('key')}</span><div class="ku-identity"><div class="ku-name">${escapeHtml(k.name)}</div><code class="ku-prefix">${escapeHtml(k.prefix)}…</code></div><span class="ku-state ${used ? '' : 'idle'}">${used ? 'Active' : 'Never used'}</span></div>
+      <div class="ku-stats">
+        <div class="ku-stat"><div class="ku-stat-label">Requests</div><div class="ku-stat-value">${infNum(k.requests || 0)}</div><div class="ku-stat-sub">lifetime calls</div></div>
+        <div class="ku-stat"><div class="ku-stat-label">Tokens</div><div class="ku-stat-value">${infNum(tokens)}</div><div class="ku-stat-sub">${infNum(k.promptTokens || 0)} in · ${infNum(k.completionTokens || 0)} out</div></div>
+        <div class="ku-stat"><div class="ku-stat-label">Success</div><div class="ku-stat-value">${success}</div><div class="ku-stat-sub">${outcomes ? infNum(outcomes) + ' classified calls' : 'tracked after this update'}</div></div>
+        <div class="ku-stat"><div class="ku-stat-label">Last used</div><div class="ku-stat-value">${infAgo(k.lastUsed)}</div><div class="ku-stat-sub">created ${infAgo(k.created)}</div></div>
+      </div>
+    </article>`;
+  }).join('')}</div>`;
+}
+function paintUsage(c, u, keys = []) {
   const meta = US_RANGES[u.range] || US_RANGES.day;
   const series = u.series || [];
   const max = Math.max(1, ...series.map(d => d.requests));
@@ -3843,6 +3893,11 @@ function paintUsage(c, u) {
   const cacheTotal = u.cacheHits + u.cacheMisses;
   const hitRate = cacheTotal > 0 ? Math.round(u.cacheHits / cacheTotal * 100) + '% hit rate' : '';
   c.innerHTML = `
+    <section class="ku-section">
+      <div class="ku-head"><div><div class="ku-title">Usage by API key</div><div class="ku-subtitle">Lifetime requests, outcomes and tokens reported by the engine.</div></div><span class="ku-lifetime">Lifetime</span></div>
+      ${keyUsageCards(keys)}
+    </section>
+    <div class="us-global-head"><div class="us-global-title">Global usage</div><div class="us-global-sub">All model traffic from CloudlessOS apps, chat, agents and API clients.</div></div>
     <div class="us-chartwrap">
       <div class="us-head">
         <div><span class="us-htitle">${meta.title}</span> <span class="us-time">${meta.sub}</span></div>

@@ -50,11 +50,13 @@ func (s *Server) GatewayHandler() http.Handler {
 			writeOpenAIError(w, http.StatusUnauthorized, "Invalid API key. Pass a Cloudless key as 'Authorization: Bearer sk-cloudless-…'.")
 			return
 		}
-		s.state.RecordUsage(id)
 		rewriteModel(r) // let callers use any model name; the engine serves exactly one
 		rec := &statusRec{ResponseWriter: w, status: 200}
 		rp.ServeHTTP(rec, r)
-		s.usage.RecordAPI(rec.status < 400) // success rate (API traffic)
+		success := rec.status < 400
+		promptTokens, completionTokens := responseUsage(rec.capture)
+		s.state.RecordAPIUsage(id, success, promptTokens, completionTokens)
+		s.usage.RecordAPI(success) // global success rate (API traffic)
 	})
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "service": "cloudless-proxy"})
@@ -72,9 +74,12 @@ func (s *Server) GatewayHandler() http.Handler {
 // while preserving Flusher so the reverse proxy can still stream SSE.
 type statusRec struct {
 	http.ResponseWriter
-	status int
-	wrote  bool
+	status  int
+	wrote   bool
+	capture []byte
 }
+
+const usageCaptureLimit = 256 << 10
 
 func (r *statusRec) WriteHeader(code int) {
 	if !r.wrote {
@@ -84,12 +89,82 @@ func (r *statusRec) WriteHeader(code int) {
 }
 func (r *statusRec) Write(b []byte) (int, error) {
 	r.wrote = true
+	// Keep only the tail: JSON usage is near the end and streaming APIs emit it in
+	// their final SSE event. This bounds memory even for very large generations.
+	if len(b) >= usageCaptureLimit {
+		r.capture = append(r.capture[:0], b[len(b)-usageCaptureLimit:]...)
+	} else {
+		over := len(r.capture) + len(b) - usageCaptureLimit
+		if over > 0 {
+			copy(r.capture, r.capture[over:])
+			r.capture = r.capture[:len(r.capture)-over]
+		}
+		r.capture = append(r.capture, b...)
+	}
 	return r.ResponseWriter.Write(b)
 }
 func (r *statusRec) Flush() {
 	if f, ok := r.ResponseWriter.(http.Flusher); ok {
 		f.Flush()
 	}
+}
+
+// responseUsage extracts OpenAI-compatible token counts from a regular JSON
+// response or from the final `data:` event of a streaming SSE response.
+func responseUsage(body []byte) (prompt, completion int64) {
+	type usageFields struct {
+		PromptTokens     int64 `json:"prompt_tokens"`
+		CompletionTokens int64 `json:"completion_tokens"`
+		InputTokens      int64 `json:"input_tokens"`
+		OutputTokens     int64 `json:"output_tokens"`
+	}
+	type envelope struct {
+		Usage *usageFields `json:"usage"`
+	}
+	parse := func(b []byte) (int64, int64, bool) {
+		var e envelope
+		if json.Unmarshal(b, &e) != nil || e.Usage == nil {
+			return 0, 0, false
+		}
+		p, c := e.Usage.PromptTokens, e.Usage.CompletionTokens
+		if p == 0 {
+			p = e.Usage.InputTokens
+		}
+		if c == 0 {
+			c = e.Usage.OutputTokens
+		}
+		return p, c, true
+	}
+	if p, c, ok := parse(bytes.TrimSpace(body)); ok {
+		return p, c
+	}
+	// A large non-streaming response may exceed the rolling capture. Decode the
+	// trailing usage object directly even when the beginning of the JSON was dropped.
+	if at := bytes.LastIndex(body, []byte(`"usage"`)); at >= 0 {
+		if colon := bytes.IndexByte(body[at:], ':'); colon >= 0 {
+			var u usageFields
+			if json.NewDecoder(bytes.NewReader(body[at+colon+1:])).Decode(&u) == nil {
+				p, c := u.PromptTokens, u.CompletionTokens
+				if p == 0 {
+					p = u.InputTokens
+				}
+				if c == 0 {
+					c = u.OutputTokens
+				}
+				return p, c
+			}
+		}
+	}
+	for _, line := range bytes.Split(body, []byte{'\n'}) {
+		line = bytes.TrimSpace(line)
+		if !bytes.HasPrefix(line, []byte("data:")) {
+			continue
+		}
+		if p, c, ok := parse(bytes.TrimSpace(bytes.TrimPrefix(line, []byte("data:")))); ok {
+			prompt, completion = p, c
+		}
+	}
+	return prompt, completion
 }
 
 // bearerToken pulls the key from "Authorization: Bearer <key>" (case-insensitive scheme).
@@ -145,12 +220,17 @@ func writeOpenAIError(w http.ResponseWriter, code int, msg string) {
 
 // keyView is an API key without its secret hash (safe to send to the UI).
 type keyView struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	Prefix   string `json:"prefix"`
-	Created  string `json:"created"`
-	LastUsed string `json:"lastUsed,omitempty"`
-	Requests int64  `json:"requests"`
+	ID               string `json:"id"`
+	Name             string `json:"name"`
+	Prefix           string `json:"prefix"`
+	Created          string `json:"created"`
+	LastUsed         string `json:"lastUsed,omitempty"`
+	Requests         int64  `json:"requests"`
+	Successes        int64  `json:"successes"`
+	Failures         int64  `json:"failures"`
+	PromptTokens     int64  `json:"promptTokens"`
+	CompletionTokens int64  `json:"completionTokens"`
+	TotalTokens      int64  `json:"totalTokens"`
 }
 
 func (s *Server) gatewayGet(w http.ResponseWriter, r *http.Request) {
@@ -159,7 +239,12 @@ func (s *Server) gatewayGet(w http.ResponseWriter, r *http.Request) {
 
 	keys := []keyView{}
 	for _, k := range s.state.APIKeys() {
-		keys = append(keys, keyView{k.ID, k.Name, k.Prefix, k.Created, k.LastUsed, k.Requests})
+		keys = append(keys, keyView{
+			ID: k.ID, Name: k.Name, Prefix: k.Prefix, Created: k.Created, LastUsed: k.LastUsed,
+			Requests: k.Requests, Successes: k.Successes, Failures: k.Failures,
+			PromptTokens: k.PromptTokens, CompletionTokens: k.CompletionTokens,
+			TotalTokens: k.PromptTokens + k.CompletionTokens,
+		})
 	}
 
 	// Exposure status (reuses the same socat/cloudflared sidecars as apps).

@@ -271,6 +271,7 @@
   .tun-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--accent); animation: breathe 2s ease-in-out infinite; }
   .tun-link { flex: 1; min-width: 170px; color: var(--blue); font-size: 13px; text-decoration: none; word-break: break-all; }
   .tun-link:hover { text-decoration: underline; }
+  button.tun-link { padding: 0; border: 0; text-align: left; background: transparent; cursor: pointer; }
   .tun-status { font-size: 12.5px; color: var(--muted); padding: 8px 2px; }
   .tun-status.err { color: var(--err); }
   /* app updates */
@@ -888,6 +889,39 @@
   }
   .key-dialog-note { margin-top: 9px; display: flex; align-items: flex-start; gap: 7px; color: var(--warn); font-size: 10.5px; line-height: 1.45; }
   .key-dialog-note .ui-icon { width: 13px; height: 13px; margin-top: 1px; flex: none; }
+  .app-surface {
+    position: fixed; inset: 0; z-index: 85; display: flex; flex-direction: column;
+    background: var(--w-base); animation: fade .18s ease;
+  }
+  .app-surface.hidden { display: none; }
+  .app-surface-bar {
+    height: 52px; flex: none; display: flex; align-items: center; gap: 10px; padding: 0 12px;
+    border-bottom: 1px solid var(--hair); background: color-mix(in srgb, var(--card-strong) 94%, transparent);
+    -webkit-backdrop-filter: blur(18px) saturate(1.4); backdrop-filter: blur(18px) saturate(1.4);
+    box-shadow: 0 10px 28px -24px rgba(5, 9, 24, .7);
+  }
+  .app-surface-back, .app-surface-action {
+    height: 34px; display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+    border: 1px solid var(--hair); border-radius: 10px; color: var(--ink-2); background: var(--panel-2);
+  }
+  .app-surface-back { padding: 0 11px 0 9px; font-size: 11.5px; font-weight: 720; }
+  .app-surface-action { width: 34px; padding: 0; }
+  .app-surface-back:hover, .app-surface-action:hover { color: var(--ink); border-color: var(--line-2); background: var(--hair); }
+  .app-surface-back .ui-icon, .app-surface-action .ui-icon { width: 15px; height: 15px; }
+  .app-surface-identity { min-width: 0; flex: 1; display: flex; align-items: center; justify-content: center; gap: 9px; }
+  .app-surface-glyph { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 9px; background: var(--blue-soft); font-size: 14px; }
+  .app-surface-title { overflow: hidden; color: var(--ink); font-size: 12.5px; font-weight: 780; text-overflow: ellipsis; white-space: nowrap; }
+  .app-surface-frame-wrap { position: relative; min-height: 0; flex: 1; background: var(--card); }
+  .app-surface-loading { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 11.5px; background: var(--card); }
+  .app-surface-loading.hidden { display: none; }
+  .app-surface-loading span { display: inline-flex; align-items: center; gap: 9px; }
+  .app-surface-loading i { width: 16px; height: 16px; border: 2px solid var(--hair); border-top-color: var(--blue); border-radius: 50%; animation: spin .8s linear infinite; }
+  .app-surface-frame { width: 100%; height: 100%; display: block; border: 0; background: #fff; }
+  @media (max-width: 520px) {
+    .app-surface-bar { padding: 0 8px; }
+    .app-surface-back span { display: none; }
+    .app-surface-back { width: 34px; padding: 0; }
+  }
   @media (max-width: 520px) {
     .key-dialog-layer { padding: 14px; }
     .key-dialog-head, .key-dialog-body { padding-left: 16px; padding-right: 16px; }
@@ -1966,6 +2000,8 @@
     <symbol id="ui-collapse" viewBox="0 0 24 24"><path d="m14 10 7-7m-1 7h-6V4M3 21l7-7m-6 0h6v6"/></symbol>
     <symbol id="ui-arrow-up" viewBox="0 0 24 24"><path d="m5 12 7-7 7 7M12 19V5"/></symbol>
     <symbol id="ui-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14m-7-7 7 7-7 7"/></symbol>
+    <symbol id="ui-arrow-left" viewBox="0 0 24 24"><path d="M19 12H5m7 7-7-7 7-7"/></symbol>
+    <symbol id="ui-reload" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.34 5.66"/><path d="M20 4v7h-7"/></symbol>
   </defs>
 </svg>
 
@@ -2096,6 +2132,20 @@
     <div id="key-dialog-content"></div>
   </section>
 </div>
+
+<!-- Local apps stay inside the CloudlessOS shell instead of opening browser windows. -->
+<section class="app-surface hidden" id="app-surface" aria-label="CloudlessOS app">
+  <header class="app-surface-bar">
+    <button class="app-surface-back" id="app-surface-back" type="button" title="Back to CloudlessOS"><svg class="ui-icon" aria-hidden="true"><use href="#ui-arrow-left"/></svg><span>CloudlessOS</span></button>
+    <div class="app-surface-identity"><span class="app-surface-glyph" id="app-surface-glyph">⚙️</span><span class="app-surface-title" id="app-surface-title">App</span></div>
+    <button class="app-surface-action" id="app-surface-reload" type="button" title="Reload app" aria-label="Reload app"><svg class="ui-icon" aria-hidden="true"><use href="#ui-reload"/></svg></button>
+    <button class="app-surface-action" id="app-surface-close" type="button" title="Close app" aria-label="Close app"><svg class="ui-icon" aria-hidden="true"><use href="#ui-close"/></svg></button>
+  </header>
+  <div class="app-surface-frame-wrap">
+    <div class="app-surface-loading" id="app-surface-loading"><span><i></i>Opening app…</span></div>
+    <iframe class="app-surface-frame" id="app-surface-frame" title="CloudlessOS app" allow="clipboard-read; clipboard-write; microphone; camera; fullscreen"></iframe>
+  </div>
+</section>
 
 <!-- Cloudless Assistant -->
 <button id="asst-fab" title="Ask the Cloudless Assistant"><span class="asst-spark"></span></button>
@@ -2350,6 +2400,31 @@ async function renderPlaces() {
 // hardcoded "localhost": when you reach Cloudless from another device via its LAN
 // IP, the app lives at that same IP — "localhost" would point at your own device.
 function appURL(port, path) { return `http://${location.hostname}:${port}${path || '/'}`; }
+let appSurfaceReturnFocus = null;
+function appSurfaceOpen() { return !document.getElementById('app-surface').classList.contains('hidden'); }
+function openAppSurface(name, url, appGlyph) {
+  if (!url) { toast('This app does not have a local address yet.', true); return; }
+  appSurfaceReturnFocus = document.activeElement;
+  const surface = document.getElementById('app-surface');
+  const frame = document.getElementById('app-surface-frame');
+  const loading = document.getElementById('app-surface-loading');
+  document.getElementById('app-surface-title').textContent = name || 'App';
+  document.getElementById('app-surface-glyph').textContent = appGlyph || '⚙️';
+  frame.title = name || 'CloudlessOS app';
+  loading.classList.remove('hidden');
+  surface.classList.remove('hidden');
+  frame.src = url;
+  document.getElementById('app-surface-back').focus();
+}
+function closeAppSurface() {
+  const surface = document.getElementById('app-surface');
+  if (surface.classList.contains('hidden')) return;
+  surface.classList.add('hidden');
+  document.getElementById('app-surface-frame').src = 'about:blank';
+  document.getElementById('app-surface-loading').classList.remove('hidden');
+  if (appSurfaceReturnFocus && document.contains(appSurfaceReturnFocus)) appSurfaceReturnFocus.focus();
+  appSurfaceReturnFocus = null;
+}
 // An app that depends on the LLM engine can't be used until the model is served.
 function engineBlocked(app) {
   if (app && app.needsEngine && !engineReady) {
@@ -2361,7 +2436,7 @@ function engineBlocked(app) {
 function openApp(app) {
   if (engineBlocked(app)) return;
   const port = app.ports ? Object.keys(app.ports)[0] : '';
-  window.open(appURL(port, app.openPath), '_blank');
+  openAppSurface(app.name, appURL(port, app.openPath), glyph(app.id));
 }
 async function renderApps() {
   const [catalog, apps, pins, eng] = await Promise.all([
@@ -3578,7 +3653,7 @@ async function renderAppPage(c, id) {
   } catch { return toast('Could not load app', true); }
   const app = (catalog || []).find(a => a.id === id) || {};
   const port = app.ports ? Object.keys(app.ports)[0] : '';
-  const openBtn = (running && port) ? `<a href="${appURL(port, app.openPath)}" target="_blank"><button class="btn primary">Open</button></a>` : '';
+  const openBtn = (running && port) ? `<button class="btn primary" data-appopen>Open</button>` : '';
   const fields = st.fields || [];
   // Security: an app exposed publicly (cloudflared) with no login means anyone with the
   // link can use it. Warn when this app has an account system that's off / wide open.
@@ -3628,6 +3703,9 @@ async function renderAppPage(c, id) {
     </div>`;
   c.innerHTML = `<div class="app-head"><div class="app-status"><span class="led ${running ? 'ok' : ''}"></span>${running ? 'running' : 'stopped'}</div>${openBtn}</div>${updates}${form}${admin}${adv}${local}${share}${manage}`;
 
+  const appOpen = c.querySelector('[data-appopen]');
+  if (appOpen) appOpen.onclick = () => openAppSurface(app.name || id, appURL(port, app.openPath), glyph(id));
+
   const save = c.querySelector('[data-fldsave]');
   if (save) save.onclick = () => {
     const values = {};
@@ -3656,7 +3734,7 @@ async function renderAppPage(c, id) {
   const lanToggle = c.querySelector('#lan-toggle');
   if (lanToggle) {
     const out = c.querySelector('#lan-out');
-    if (lan.enabled && lan.url) lanRender(out, lan);
+    if (lan.enabled && lan.url) lanRender(out, lan, app);
     lanToggle.onchange = async () => {
       const enable = lanToggle.checked;
       lanToggle.disabled = true;
@@ -3665,7 +3743,7 @@ async function renderAppPage(c, id) {
       try {
         const r = await api(`/api/apps/${id}/lan`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enable }) });
         if (!enable) { out.classList.add('hidden'); out.innerHTML = ''; toast('Local network access off'); }
-        else if (r.url) { lanRender(out, r); toast('Now reachable on your network'); }
+        else if (r.url) { lanRender(out, r, app); toast('Now reachable on your network'); }
         else { out.innerHTML = `<div class="tun-status err">Couldn't detect this machine's network address.</div>`; lanToggle.checked = false; }
       } catch { out.innerHTML = `<div class="tun-status err">Couldn't ${enable ? 'enable' : 'disable'} local network access. Is the app running?</div>`; lanToggle.checked = !enable; }
       lanToggle.disabled = false;
@@ -3675,7 +3753,7 @@ async function renderAppPage(c, id) {
   const tunToggle = c.querySelector('#tun-toggle');
   if (tunToggle) {
     const out = c.querySelector('#tun-out');
-    if (tun.enabled && tun.url) tunRender(out, tun.url);
+    if (tun.enabled && tun.url) tunRender(out, tun.url, app);
     tunToggle.onchange = async () => {
       const enable = tunToggle.checked;
       if (enable && shareWarn && !confirm(`⚠ Security warning\n\n${shareWarn}\n\nCreate the public link anyway?`)) {
@@ -3687,7 +3765,7 @@ async function renderAppPage(c, id) {
       try {
         const r = await api(`/api/apps/${id}/tunnel`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enable }) });
         if (!enable) { out.classList.add('hidden'); out.innerHTML = ''; toast('Public link removed'); }
-        else if (r.url) { tunRender(out, r.url); toast('Public link ready'); }
+        else if (r.url) { tunRender(out, r.url, app); toast('Public link ready'); }
         else { out.innerHTML = `<div class="tun-status">Link is starting — reopen this page in a moment to get the URL.</div>`; }
       } catch { out.innerHTML = `<div class="tun-status err">Couldn't ${enable ? 'create' : 'remove'} the link. Is the app running?</div>`; tunToggle.checked = !enable; }
       tunToggle.disabled = false;
@@ -3740,27 +3818,29 @@ function updSource(d) {
 // public-link result row (clickable URL + copy + open)
 function tunRow(url) {
   return `<div class="tun-row"><span class="tun-dot" title="live"></span>
-    <a class="tun-link" href="${url}" target="_blank">${escapeHtml(url.replace(/^https:\/\//, ''))}</a>
-    <button class="btn" data-tuncopy>Copy</button><a href="${url}" target="_blank"><button class="btn">Open</button></a></div>`;
+    <button class="tun-link" type="button" data-surface-open>${escapeHtml(url.replace(/^https:\/\//, ''))}</button>
+    <button class="btn" data-tuncopy>Copy</button><button class="btn" type="button" data-surface-open>Open</button></div>`;
 }
-function tunRender(out, url) {
+function tunRender(out, url, app) {
   out.classList.remove('hidden');
   out.innerHTML = tunRow(url);
   const cp = out.querySelector('[data-tuncopy]');
   if (cp) cp.onclick = () => navigator.clipboard.writeText(url).then(() => toast('Link copied')).catch(() => toast('Copy failed', true));
+  out.querySelectorAll('[data-surface-open]').forEach(el => el.onclick = () => openAppSurface((app && app.name) || 'Shared app', url, glyph(app && app.id)));
 }
 // local-network address row (clickable URL + copy + open + how-to)
 function lanRow(o) {
   return `<div class="tun-row"><span class="tun-dot" title="live"></span>
-      <a class="tun-link" href="${o.url}" target="_blank">${escapeHtml((o.ip || '') + ':' + o.port)}</a>
-      <button class="btn" data-lancopy>Copy</button><a href="${o.url}" target="_blank"><button class="btn">Open</button></a></div>
+      <button class="tun-link" type="button" data-surface-open>${escapeHtml((o.ip || '') + ':' + o.port)}</button>
+      <button class="btn" data-lancopy>Copy</button><button class="btn" type="button" data-surface-open>Open</button></div>
     <div class="fld-help" style="margin-top:8px">On another device on the same network, open <b>${escapeHtml(o.url)}</b> in its browser.</div>`;
 }
-function lanRender(out, o) {
+function lanRender(out, o, app) {
   out.classList.remove('hidden');
   out.innerHTML = lanRow(o);
   const cp = out.querySelector('[data-lancopy]');
   if (cp) cp.onclick = () => navigator.clipboard.writeText(o.url).then(() => toast('Address copied')).catch(() => toast('Copy failed', true));
+  out.querySelectorAll('[data-surface-open]').forEach(el => el.onclick = () => openAppSurface((app && app.name) || 'Local app', o.url, glyph(app && app.id)));
 }
 
 function trackJobToast(jobId, label) {
@@ -4528,8 +4608,19 @@ document.getElementById('asst-hermes').onclick = async () => {
   try {
     const h = await api('/api/hermes');
     if (!h.ready) { toast('Hermes is still starting. Try again in a moment.'); return; }
-    window.open(h.dashboardURL, '_blank');
+    openAppSurface('Hermes', h.dashboardURL, glyph('hermes'));
   } catch { toast('Could not reach Hermes', true); }
+};
+document.getElementById('app-surface-frame').addEventListener('load', () => {
+  if (appSurfaceOpen()) document.getElementById('app-surface-loading').classList.add('hidden');
+});
+document.getElementById('app-surface-back').onclick = closeAppSurface;
+document.getElementById('app-surface-close').onclick = closeAppSurface;
+document.getElementById('app-surface-reload').onclick = () => {
+  const frame = document.getElementById('app-surface-frame');
+  if (!appSurfaceOpen() || !frame.src || frame.src === 'about:blank') return;
+  document.getElementById('app-surface-loading').classList.remove('hidden');
+  frame.src = frame.src;
 };
 document.getElementById('asst-backdrop').onclick = () => setAsstFull(false); // collapse to docked
 document.getElementById('open-full-chat').onclick = () => openAsst(true);   // the assistant IS the full chat (not Open WebUI)
@@ -4550,6 +4641,7 @@ document.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;
   const np = document.getElementById('net-pop');
   if (!document.getElementById('key-dialog-layer').classList.contains('hidden')) closeKeyDialog();
+  else if (appSurfaceOpen()) closeAppSurface();
   else if (!np.classList.contains('hidden')) np.classList.add('hidden');
   else if (modelsOpen()) closeModelManager();
   else if (launcherOpen()) closeLauncher();

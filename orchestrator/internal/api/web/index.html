@@ -1096,39 +1096,49 @@
     animation: fade 0.3s ease; }
   .overlay.hidden { display: none; } .overlay.out { animation: fadeo 0.3s ease forwards; }
   @keyframes fade { from { opacity: 0 } } @keyframes fadeo { to { opacity: 0 } }
-  .ob { width: min(520px, 92vw); background: var(--card-strong); border: 1px solid var(--card-edge);
-    border-radius: 26px; box-shadow: var(--shadow);
-    -webkit-backdrop-filter: blur(var(--glass-blur)); backdrop-filter: blur(var(--glass-blur));
-    padding: 38px 38px 28px; animation: rise 0.35s ease; }
   @keyframes rise { from { transform: translateY(12px); opacity: 0 } }
-  .ob-body { min-height: 218px; }
-  .ob-logo { margin: 0 auto 22px; display: flex; align-items: center; justify-content: center; }
-  .ob-logo svg { width: 40px; height: 62px; filter: drop-shadow(0 6px 16px rgba(120, 80, 200, 0.28)); }
-  .ob-body h2 { margin: 0 0 10px; font-size: 24px; font-weight: 700; letter-spacing: -0.4px; text-align: center; }
-  .ob-body .lead { color: var(--muted); font-size: 13px; margin: 0 0 18px; text-align: center; }
-  .hw { display: flex; align-items: center; gap: 13px; padding: 14px 16px; border-radius: 10px;
-    background: var(--panel-2); border: 1px solid var(--hair); }
-  .hw .hi { font-size: 22px; } .hw .hn { font-weight: 700; } .hw .hs { color: var(--muted); font-size: 12px; }
-  .hw .verdict { margin-left: auto; font-weight: 700; font-size: 12px; }
-  .verdict.ok { color: var(--accent); } .verdict.warn { color: var(--warn); }
-  .net-opt { display: flex; align-items: flex-start; gap: 13px; padding: 16px; border-radius: 10px;
-    background: var(--panel-2); border: 1px solid var(--hair); }
-  .net-opt .net-ic { font-size: 22px; flex: none; line-height: 1.3; }
-  .net-opt .net-tx { flex: 1; min-width: 0; }
-  .net-opt .net-t { font-weight: 700; font-size: 13.5px; }
-  .net-opt .net-d { color: var(--muted); font-size: 12px; line-height: 1.55; margin-top: 5px; }
-  .net-opt .switch { flex: none; margin-top: 2px; }
-  .pick { display: flex; flex-direction: column; gap: 9px; }
-  .pi { display: flex; align-items: center; gap: 12px; padding: 11px 13px; border-radius: 10px;
-    cursor: pointer; border: 1px solid var(--hair); transition: background 0.15s, border-color 0.15s; }
-  .pi:hover { background: var(--panel-2); } .pi.sel { border-color: var(--blue); background: var(--blue-soft); }
-  .pi .pic { width: 36px; height: 36px; border-radius: 9px; display: grid; place-items: center; font-size: 18px; background: var(--panel-2); border: 1px solid var(--hair); }
-  .pi .t { font-weight: 700; } .pi .d { color: var(--muted); font-size: 11.5px; }
-  .pi .ck { margin-left: auto; color: var(--blue); font-weight: 700; opacity: 0; } .pi.sel .ck { opacity: 1; }
-  .ob-foot { display: flex; align-items: center; margin-top: 24px; }
-  .dots { display: flex; gap: 7px; } .dots span { width: 7px; height: 7px; border-radius: 50%; background: var(--line-2); transition: width 0.3s, background 0.3s; }
-  .dots span.on { background: var(--blue); width: 18px; border-radius: 3px; }
-  .ob-act { margin-left: auto; display: flex; gap: 9px; }
+  /* Contextual welcome tour. The spotlight is transparent; its enormous shadow
+     dims everything around the real control being explained. */
+  .tour { position: fixed; inset: 0; z-index: 100; pointer-events: none; }
+  .tour.hidden { display: none; }
+  .tour.out { animation: fadeo .24s ease forwards; }
+  .tour-spot { position: fixed; z-index: 100; border-radius: 18px; pointer-events: none;
+    border: 2px solid color-mix(in srgb, var(--blue) 72%, white);
+    box-shadow: 0 0 0 9999px rgba(5, 8, 18, .62), 0 0 0 7px color-mix(in srgb, var(--blue) 13%, transparent), 0 18px 52px -18px color-mix(in srgb, var(--blue) 80%, transparent);
+    transition: left .28s cubic-bezier(.22,1,.36,1), top .28s cubic-bezier(.22,1,.36,1), width .28s cubic-bezier(.22,1,.36,1), height .28s cubic-bezier(.22,1,.36,1), opacity .18s; }
+  .tour-spot.center { inset: 0; width: 0 !important; height: 0 !important; opacity: 0; border: 0; border-radius: 0; box-shadow: 0 0 0 9999px rgba(5, 8, 18, .64); }
+  .tour-card { position: fixed; z-index: 101; width: min(390px, calc(100vw - 28px)); padding: 20px;
+    border: 1px solid var(--card-edge); border-radius: 20px; color: var(--ink); background: var(--card-strong);
+    box-shadow: 0 30px 90px -34px rgba(2, 5, 18, .9); pointer-events: auto;
+    -webkit-backdrop-filter: blur(24px) saturate(1.35); backdrop-filter: blur(24px) saturate(1.35);
+    animation: tour-card-in .26s cubic-bezier(.22,1,.36,1); transition: left .28s cubic-bezier(.22,1,.36,1), top .28s cubic-bezier(.22,1,.36,1); }
+  @keyframes tour-card-in { from { opacity: 0; transform: translateY(8px) scale(.98); } }
+  .tour-card.center { left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(470px, calc(100vw - 28px)); padding: 28px; }
+  .tour-card.center .tour-head { justify-content: center; }
+  .tour-card.center .tour-copy { text-align: center; }
+  .tour-card.center .tour-icon { margin: 0 auto 16px; width: 52px; height: 52px; }
+  .tour-head { display: flex; align-items: center; gap: 9px; margin-bottom: 13px; }
+  .tour-path { min-width: 0; color: var(--blue); font-size: 9px; font-weight: 800; letter-spacing: .72px; text-transform: uppercase; }
+  .tour-count { margin-left: auto; flex: none; color: var(--faint); font-size: 9px; font-weight: 750; letter-spacing: .35px; }
+  .tour-icon { width: 38px; height: 38px; margin-bottom: 13px; display: grid; place-items: center; border-radius: 11px;
+    color: var(--blue); background: var(--blue-soft); border: 1px solid color-mix(in srgb, var(--blue) 25%, var(--hair)); }
+  .tour-icon .ui-icon { width: 18px; height: 18px; }
+  .tour-title { margin: 0; color: var(--ink); font-size: 20px; font-weight: 790; letter-spacing: -.45px; }
+  .tour-desc { margin: 7px 0 0; color: var(--muted); font-size: 12.5px; line-height: 1.58; }
+  .tour-tip { margin-top: 13px; padding: 10px 11px; display: flex; align-items: flex-start; gap: 8px; border: 1px solid var(--hair); border-radius: 10px; color: var(--ink-2); background: var(--panel-2); font-size: 10.5px; line-height: 1.45; }
+  .tour-tip .ui-icon { width: 14px; height: 14px; flex: none; margin-top: 1px; color: var(--blue); }
+  .tour-progress { height: 4px; margin-top: 18px; overflow: hidden; border-radius: 99px; background: var(--control); }
+  .tour-progress > i { display: block; width: var(--tour-progress); height: 100%; border-radius: inherit; background: var(--blue); transition: width .28s ease; }
+  .tour-actions { margin-top: 14px; display: flex; align-items: center; gap: 8px; }
+  .tour-skip { padding-left: 0; color: var(--muted); }
+  .tour-spacer { flex: 1; }
+  .tour-target { position: relative; z-index: 101 !important; }
+  .boot-skip { position: fixed; z-index: 3; top: 22px; right: 24px; padding: 8px 13px; border: 1px solid rgba(255,255,255,.25); border-radius: 999px;
+    color: #fff; background: rgba(8,11,20,.25); font: inherit; font-size: 11px; cursor: pointer; -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
+  .boot-skip:hover { background: rgba(8,11,20,.48); }
+  @media (prefers-reduced-motion: reduce) {
+    .tour-card, .tour-spot { animation: none; transition: none; }
+  }
   .btn { padding: 9px 18px; border-radius: 12px; border: 1px solid var(--card-edge); background: var(--control); color: var(--ink); font-weight: 500; transition: filter 0.15s, background 0.15s, box-shadow .15s; }
   .btn:hover { background: var(--card-strong); }
   .btn.primary { background: var(--blue); border-color: transparent; color: #fff; box-shadow: 0 8px 20px -8px color-mix(in srgb, var(--blue) 70%, transparent); }
@@ -2115,6 +2125,7 @@
 <div class="boot-intro hidden" id="boot-intro" aria-hidden="true">
   <div class="boot-dim"></div>
   <iframe id="boot-intro-frame" title="Cloudless launch animation" tabindex="-1"></iframe>
+  <button class="boot-skip" id="boot-intro-skip" type="button">Skip intro</button>
 </div>
 
 <!-- Cloudless brand mark (sparkle) — one source of truth, referenced via <use> -->
@@ -2335,14 +2346,9 @@
   </div>
 </div>
 
-<div class="overlay hidden" id="onboarding">
-  <div class="ob">
-    <div class="ob-body" id="ob-body"></div>
-    <div class="ob-foot">
-      <div class="dots" id="ob-dots"><span></span><span></span><span></span><span></span></div>
-      <div class="ob-act" id="ob-act"></div>
-    </div>
-  </div>
+<div class="tour hidden" id="onboarding" aria-hidden="true">
+  <div class="tour-spot center" id="tour-spot"></div>
+  <section class="tour-card center" id="tour-card" role="dialog" aria-labelledby="tour-title" aria-describedby="tour-desc"></section>
 </div>
 
 <script src="vendor/three.min.js"></script>
@@ -2883,6 +2889,7 @@ let firstLaunchIntroTimer = 0;
 function showFirstLaunchIntro(next, force = false) {
   const intro = document.getElementById('boot-intro');
   const frame = document.getElementById('boot-intro-frame');
+  const skip = document.getElementById('boot-intro-skip');
   const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   let seen = false;
   try { seen = localStorage.getItem(FIRST_LAUNCH_INTRO_KEY) === '1'; } catch {}
@@ -2897,13 +2904,17 @@ function showFirstLaunchIntro(next, force = false) {
     setTimeout(() => {
       frame.onload = null;
       frame.src = 'about:blank';
+      if (skip) skip.onclick = null;
       intro.classList.add('hidden');
       intro.classList.remove('out', 'play');
+      intro.setAttribute('aria-hidden', 'true');
       next();
     }, 720);
   };
   clearTimeout(firstLaunchIntroTimer);
   intro.classList.remove('hidden', 'out', 'play');
+  intro.setAttribute('aria-hidden', 'false');
+  if (skip) skip.onclick = finish;
   frame.onload = () => {
     clearTimeout(firstLaunchIntroTimer);
     requestAnimationFrame(() => intro.classList.add('play'));
@@ -2912,70 +2923,133 @@ function showFirstLaunchIntro(next, force = false) {
   frame.src = `first-launch/index.html?run=${Date.now()}`;
   firstLaunchIntroTimer = setTimeout(finish, 8500);
 }
-function showOnboarding() {
-  const ov = document.getElementById('onboarding'), body = document.getElementById('ob-body');
-  const dots = document.getElementById('ob-dots').children, act = document.getElementById('ob-act');
-  let sel = null, localNet = true; ov.classList.remove('hidden');
-  const setDots = i => { for (let k = 0; k < dots.length; k++) dots[k].classList.toggle('on', k === i); };
-  async function step(i) {
-    setDots(i);
-    if (i === 0) {
-      body.innerHTML = `<div class="ob-logo"><svg class="cl-mark" aria-hidden="true"><use href="#cl-star"/></svg></div><h2>Welcome to Cloudless</h2>
-        <p class="lead">A private AI workstation that runs on your own machine — no cloud, no accounts.
-        Your models and data stay with you.</p>`;
-      act.innerHTML = `<button class="btn primary" id="nx">Get started</button>`;
-      document.getElementById('nx').onclick = () => step(1);
-    } else if (i === 1) {
-      body.innerHTML = `<h2>Your machine</h2><p class="lead">Checking what your hardware can run…</p>
-        <div class="hw" id="hw"><div class="hi">🖥️</div><div><div class="hn">Detecting…</div><div class="hs">reading GPU</div></div></div>`;
-      act.innerHTML = `<button class="btn link" id="bk">Back</button><button class="btn primary" id="nx">Continue</button>`;
-      document.getElementById('bk').onclick = () => step(0); document.getElementById('nx').onclick = () => step(2);
-      try { const d = await api('/api/gpu'); const hw = document.getElementById('hw');
-        if (d.gpus && d.gpus.length) { const g = d.gpus[0];
-          hw.innerHTML = `<div class="hi">⚡</div><div><div class="hn">${g.name}${d.gpus.length > 1 ? ' ×' + d.gpus.length : ''}</div>
-            <div class="hs">${gb(g.memTotalMB)} GB VRAM · driver ${g.driver}</div></div><div class="verdict ok">✓ Ready</div>`;
-        } else { hw.innerHTML = `<div class="hi">🖥️</div><div><div class="hn">No GPU detected</div><div class="hs">apps run on CPU (slower)</div></div><div class="verdict warn">Limited</div>`; }
-      } catch {}
-    } else if (i === 2) {
-      body.innerHTML = `<h2>Local network</h2><p class="lead">Reach your AI from your other devices at home.</p>
-        <div class="net-opt"><div class="net-ic">📡</div>
-          <div class="net-tx"><div class="net-t">Make this machine reachable on your network</div>
-            <div class="net-d">When on, you can open your apps — like the chat — from your phone, tablet or laptop on the
-            same Wi-Fi, not just this computer. Everything still runs on your hardware; nothing goes to the cloud.
-            You can change this anytime in Settings.</div></div>
-          <label class="switch"><input type="checkbox" id="ob-lan" checked><span class="track2"></span></label></div>`;
-      act.innerHTML = `<button class="btn link" id="bk">Back</button><button class="btn primary" id="nx">Continue</button>`;
-      document.getElementById('bk').onclick = () => step(1);
-      document.getElementById('nx').onclick = () => step(3);
-      const t = document.getElementById('ob-lan'); t.checked = localNet;
-      t.onchange = () => { localNet = t.checked; };
-    } else {
-      const picks = catalogCache.filter(a => a.image && !a.service && !a.hidden).slice(0, 3);
-      body.innerHTML = `<h2>Your first app</h2><p class="lead">Install one now, or explore Launchpad yourself.</p>
-        <div class="pick">${picks.map(a => `<div class="pi" data-id="${a.id}">
-          <span class="pic">${glyph(a.id)}</span>
-          <div><div class="t">${a.name}${a.verified ? ' · recommended' : ''}</div><div class="d">${a.description}</div></div>
-          <span class="ck">✓</span></div>`).join('')}</div>`;
-      act.innerHTML = `<button class="btn link" id="bk">Back</button><button class="btn primary" id="fin">Finish</button>`;
-      document.getElementById('bk').onclick = () => step(2);
-      document.getElementById('fin').onclick = () => finishOnboarding(sel, localNet);
-      body.querySelectorAll('.pi').forEach(el => el.onclick = () => {
-        const was = el.classList.contains('sel');
-        body.querySelectorAll('.pi').forEach(x => x.classList.remove('sel'));
-        sel = was ? null : el.dataset.id; if (!was) el.classList.add('sel');
-        document.getElementById('fin').textContent = sel ? 'Install & finish' : 'Finish';
-      });
+const TOUR_STEPS = [
+  { center: true, icon: 'assistant', path: 'Welcome to CloudlessOS', title: 'Everything happens right here',
+    desc: 'This short tour points out where to chat, install apps, manage models, watch performance, and configure the system. You can skip it now and replay it later from Settings.',
+    tip: 'The highlighted controls remain usable during the tour.' },
+  { target: '#hero-ask', icon: 'assistant', path: 'Home · Ask Cloudless', title: 'Start with what you want to do',
+    desc: 'Ask a question in plain language. The Cloudless Assistant can explain your hardware, help choose a model, and guide you to the right system tool.',
+    tip: 'Use “Open the full chat” for longer conversations and agent tasks.' },
+  { target: '#dock-launcher', icon: 'apps', path: 'Dock · Apps', title: 'Install and open applications',
+    desc: 'Apps is your software library. Browse everything available, install what you need, and pin favorites so they appear in “Your apps” on the Home screen.',
+    tip: 'Click the highlighted Apps icon now if you want to look inside.' },
+  { target: '#dock-models', icon: 'models', path: 'Dock · Models', title: 'Choose what powers your AI',
+    desc: 'The Model Manager shows compatible language and image models, estimates whether they fit your GPU, downloads them, and launches the one you select.',
+    tip: 'Model compatibility is an estimate with runtime headroom, not just the raw download size.' },
+  { target: '#dock-inference', icon: 'metrics', path: 'Dock · Metrics', title: 'See what the engine is doing',
+    desc: 'Metrics shows live inference speed, latency, GPU activity, and API-key usage. Engine selection and API access are available here and in Settings.',
+    tip: 'Use API access when another app or device needs to call your Cloudless model.' },
+  { target: '.cards .card:first-child', icon: 'machine', path: 'Home · Hardware', title: 'Know what this machine can handle',
+    desc: 'The Hardware card keeps GPU memory, utilization, temperature, power, CPU, and system memory visible. It also shows which model is currently active.',
+    tip: 'Open Machine in Settings for the complete system overview.' },
+  { target: '.cards .card:last-child', icon: 'apps', path: 'Home · Places', title: 'Your files stay easy to find',
+    desc: 'Models, generated outputs, projects, and downloads each have a dedicated folder. Open any Place directly without leaving the CloudlessOS experience.',
+    tip: 'Apps use these shared folders so your work remains available across tools.' },
+  { target: '#dock-settings', icon: 'settings', path: 'Dock · Settings', title: 'Configure CloudlessOS in one place',
+    desc: 'Settings contains machine information, inference engines, API access, installed-app options, themes, system updates, and this replayable tutorial.',
+    tip: 'To replay this tour: Settings → General → Replay tutorial.' },
+  { center: true, icon: 'check', path: 'Tour complete', title: 'You are ready to explore',
+    desc: 'Use the dock whenever you need a destination, or simply ask Cloudless when you are unsure where to begin. Everything remains local unless you explicitly enable sharing.',
+    tip: 'You can replay this tutorial at any time from Settings → General.' },
+];
+let tourIndex = 0, tourActive = false, tourTarget = null, tourPreviousFocus = null, tourPositionTimer = 0;
+function closeTourSurfaces() {
+  ['launcher', 'models', 'inference', 'settings'].forEach(id => document.getElementById(id)?.classList.add('hidden'));
+  document.getElementById('key-dialog-layer')?.classList.add('hidden');
+  document.getElementById('asst')?.classList.add('hidden');
+  document.getElementById('asst-backdrop')?.classList.add('hidden');
+}
+function clearTourTarget() {
+  if (tourTarget) tourTarget.classList.remove('tour-target');
+  tourTarget = null;
+}
+function positionTour() {
+  if (!tourActive) return;
+  const step = TOUR_STEPS[tourIndex], spot = document.getElementById('tour-spot'), card = document.getElementById('tour-card');
+  if (step.center || !tourTarget) {
+    spot.className = 'tour-spot center';
+    spot.removeAttribute('style');
+    card.className = 'tour-card center';
+    card.removeAttribute('style');
+    return;
+  }
+  const r = tourTarget.getBoundingClientRect(), pad = 8, vw = innerWidth, vh = innerHeight;
+  const left = Math.max(8, r.left - pad), top = Math.max(8, r.top - pad);
+  const right = Math.min(vw - 8, r.right + pad), bottom = Math.min(vh - 8, r.bottom + pad);
+  spot.className = 'tour-spot';
+  Object.assign(spot.style, { left: `${left}px`, top: `${top}px`, width: `${Math.max(0, right - left)}px`, height: `${Math.max(0, bottom - top)}px` });
+  card.className = 'tour-card';
+  Object.assign(card.style, { visibility: 'hidden', left: '0px', top: '0px' });
+  const cw = card.offsetWidth, ch = card.offsetHeight, gap = 18, edge = 14;
+  let cx, cy;
+  if (right + gap + cw <= vw - edge) { cx = right + gap; cy = top + (bottom - top - ch) / 2; }
+  else if (left - gap - cw >= edge) { cx = left - gap - cw; cy = top + (bottom - top - ch) / 2; }
+  else if (bottom + gap + ch <= vh - edge) { cx = left + (right - left - cw) / 2; cy = bottom + gap; }
+  else { cx = left + (right - left - cw) / 2; cy = top - gap - ch; }
+  cx = Math.max(edge, Math.min(vw - cw - edge, cx));
+  cy = Math.max(edge, Math.min(vh - ch - edge, cy));
+  Object.assign(card.style, { left: `${Math.round(cx)}px`, top: `${Math.round(cy)}px`, visibility: 'visible' });
+}
+function queueTourPosition(delay = 0) {
+  clearTimeout(tourPositionTimer);
+  tourPositionTimer = setTimeout(() => requestAnimationFrame(positionTour), delay);
+}
+function renderTourStep(index) {
+  tourIndex = Math.max(0, Math.min(TOUR_STEPS.length - 1, index));
+  clearTourTarget();
+  closeTourSurfaces();
+  const step = TOUR_STEPS[tourIndex], card = document.getElementById('tour-card');
+  if (!step.center) {
+    tourTarget = document.querySelector(step.target);
+    if (tourTarget) {
+      tourTarget.classList.add('tour-target');
+      tourTarget.scrollIntoView({ block: 'center', inline: 'center', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
     }
   }
-  step(0);
+  const last = tourIndex === TOUR_STEPS.length - 1;
+  card.innerHTML = `<div class="tour-head"><span class="tour-path">${escapeHtml(step.path)}</span><span class="tour-count">${tourIndex + 1} of ${TOUR_STEPS.length}</span></div>
+    <div class="tour-copy"><span class="tour-icon">${uiIcon(step.icon)}</span><h2 class="tour-title" id="tour-title">${escapeHtml(step.title)}</h2><p class="tour-desc" id="tour-desc">${escapeHtml(step.desc)}</p>${step.tip ? `<div class="tour-tip">${uiIcon('check')}<span>${escapeHtml(step.tip)}</span></div>` : ''}</div>
+    <div class="tour-progress" aria-hidden="true"><i style="--tour-progress:${((tourIndex + 1) / TOUR_STEPS.length * 100).toFixed(2)}%"></i></div>
+    <div class="tour-actions">${last ? '' : '<button class="btn link tour-skip" id="tour-skip" type="button">Skip tour</button>'}<span class="tour-spacer"></span>${tourIndex ? '<button class="btn" id="tour-back" type="button">Back</button>' : ''}<button class="btn primary" id="tour-next" type="button">${last ? 'Start using CloudlessOS' : tourIndex === 0 ? 'Start tour' : 'Next'}</button></div>`;
+  card.querySelector('#tour-skip')?.addEventListener('click', () => finishOnboarding(true));
+  card.querySelector('#tour-back')?.addEventListener('click', () => renderTourStep(tourIndex - 1));
+  card.querySelector('#tour-next').onclick = () => last ? finishOnboarding(false) : renderTourStep(tourIndex + 1);
+  queueTourPosition(tourTarget ? 340 : 0);
+  setTimeout(() => card.querySelector('#tour-next')?.focus({ preventScroll: true }), 30);
 }
-function finishOnboarding(pendingId, localNet) {
-  api('/api/network/local', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enable: localNet !== false }) }).catch(() => {});
+function showOnboarding() {
+  if (tourActive) return;
+  tourActive = true;
+  tourPreviousFocus = document.activeElement;
+  closeTourSurfaces();
+  scrollTo({ top: 0, behavior: 'auto' });
+  const tour = document.getElementById('onboarding');
+  tour.classList.remove('hidden', 'out');
+  tour.setAttribute('aria-hidden', 'false');
+  renderTourStep(0);
+}
+function finishOnboarding(skipped = false) {
+  if (!tourActive) return;
+  tourActive = false;
+  clearTimeout(tourPositionTimer);
+  clearTourTarget();
   api('/api/onboarding/complete', { method: 'POST' }).catch(() => {});
-  const ov = document.getElementById('onboarding'); ov.classList.add('out');
-  setTimeout(() => { ov.classList.add('hidden'); ov.classList.remove('out'); }, 360);
-  if (pendingId) renderApps().then(() => installById(pendingId));
+  const tour = document.getElementById('onboarding');
+  tour.classList.add('out');
+  setTimeout(() => {
+    tour.classList.add('hidden'); tour.classList.remove('out'); tour.setAttribute('aria-hidden', 'true');
+    if (tourPreviousFocus && tourPreviousFocus.isConnected) tourPreviousFocus.focus({ preventScroll: true });
+  }, 260);
+  if (skipped) toast('Tour skipped — replay it anytime in Settings');
 }
+addEventListener('resize', () => queueTourPosition());
+addEventListener('scroll', () => queueTourPosition(), { passive: true });
+document.addEventListener('keydown', e => {
+  if (!tourActive || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
+  if (e.key === 'Escape') { e.preventDefault(); finishOnboarding(true); }
+  else if (e.key === 'ArrowRight') { e.preventDefault(); tourIndex === TOUR_STEPS.length - 1 ? finishOnboarding(false) : renderTourStep(tourIndex + 1); }
+  else if (e.key === 'ArrowLeft' && tourIndex > 0) { e.preventDefault(); renderTourStep(tourIndex - 1); }
+});
 
 /* ---- settings ---- */
 function openSettings() { document.getElementById('settings').classList.remove('hidden'); renderSettings(); }
@@ -3891,7 +3965,8 @@ async function renderGeneralPage(c) {
       </div>
     </div>
     <div class="set-block"><h3>welcome</h3>
-      <div class="set-row"><span>Replay the welcome tour</span><span class="row-actions"><button class="btn" id="gen-replay">Replay</button></span></div>
+      <div class="set-row"><span>Replay the interactive tutorial</span><span class="row-actions"><button class="btn" id="gen-replay">Replay</button></span></div>
+      <div class="fld-help">Walk through the Assistant, Apps, Models, Metrics, hardware, Places, and Settings again.</div>
     </div>
     <div class="set-block"><h3>about</h3>
       <div class="set-row"><span class="srow-label">system</span><span>CloudlessOS</span></div>
@@ -3907,9 +3982,8 @@ async function renderGeneralPage(c) {
     try { await api('/api/system/reboot', { method: 'POST', headers: { 'X-Cloudless-Action': 'reboot' } }); } catch {}
   };
   document.getElementById('gen-replay').onclick = () => {
-    api('/api/onboarding/reset', { method: 'POST' })
-      .then(() => { closeSettings(); showFirstLaunchIntro(showOnboarding, true); })
-      .catch(() => toast('Failed', true));
+    closeSettings();
+    showFirstLaunchIntro(showOnboarding, true);
   };
   api('/api/engine').then(e => { const el = document.getElementById('gen-engine'); if (el) { const a = (e.engines || []).find(x => x.active); el.textContent = a ? a.name : 'none'; } }).catch(() => {});
 }

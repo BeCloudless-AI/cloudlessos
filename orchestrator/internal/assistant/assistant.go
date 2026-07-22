@@ -215,13 +215,25 @@ func actionFor(kind, id string, c Context) Action {
 // Model Manager data before the request reaches Hermes. This prevents a general
 // agent from inventing skills or terminal workflows for an OS-owned operation.
 func ModelGuidance(text string, c Context) (ModelAdvice, bool) {
+	return modelGuidance(text, c, false)
+}
+
+// ForcedModelGuidance is used after the semantic router has classified a
+// conversation as model management. It deliberately skips keyword intent
+// matching; compatibility facts still come from the same deterministic path.
+func ForcedModelGuidance(text string, c Context) ModelAdvice {
+	advice, _ := modelGuidance(text, c, true)
+	return advice
+}
+
+func modelGuidance(text string, c Context, forced bool) (ModelAdvice, bool) {
 	lower := strings.ToLower(strings.TrimSpace(text))
 	if lower == "" {
 		return ModelAdvice{}, false
 	}
 	modelWord := containsAny(lower, "model", "qwen", "llama", "mistral", "gemma", "deepseek", "phi", "nemotron")
 	lifecycle := containsAny(lower, "work here", "run", "fit", "compatible", "support", "available", "install", "download", "switch", "use this", "use qwen", "which model", "better model", "larger model", "need", "require", "vram", "gpu memory")
-	if !modelWord || !lifecycle {
+	if !forced && (!modelWord || !lifecycle) {
 		return ModelAdvice{}, false
 	}
 	installIntent := containsAny(lower, "install", "download", "get this", "add this")

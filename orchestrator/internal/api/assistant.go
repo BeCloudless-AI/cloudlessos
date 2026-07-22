@@ -61,6 +61,15 @@ func (s *Server) assistantChat(w http.ResponseWriter, r *http.Request) {
 		send(map[string]any{"done": true, "actions": []assistant.Action{}})
 		return
 	}
+	// Keyword routing catches obvious requests without latency. For every other
+	// conversation, the local engine performs a fact-free semantic classification.
+	// A positive result still goes through the deterministic Model Manager advisor.
+	if modelControl, err := assistant.SemanticModelControl(ctx, fmt.Sprintf("http://127.0.0.1:%d", catalog.EnginePort), "cloudless", body.Messages); err == nil && modelControl {
+		advice := assistant.ForcedModelGuidance(assistant.RecentUserText(body.Messages, 3), actx)
+		send(map[string]any{"delta": advice.Reply})
+		send(map[string]any{"done": true, "actions": []assistant.Action{{Kind: "models", ID: advice.ModelID, Label: advice.Label}}})
+		return
+	}
 	if !hermesReady(ctx) {
 		send(map[string]any{"delta": "Your Cloudless agent is still starting. Hermes will be ready as soon as its local service finishes loading."})
 		send(map[string]any{"done": true, "actions": []assistant.Action{}})

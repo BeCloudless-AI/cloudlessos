@@ -1,0 +1,65 @@
+package assistant
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+)
+
+func TestSemanticModelControlRoutesUnknownModelFamily(t *testing.T) {
+	server := classifierServer(t, "MODEL_CONTROL")
+	defer server.Close()
+	handled, err := SemanticModelControl(context.Background(), server.URL, "cloudless", []Msg{{Role: "user", Content: "Would Command R+ be usable on this computer?"}})
+	if err != nil || !handled {
+		t.Fatalf("semantic model request not routed: handled=%v err=%v", handled, err)
+	}
+}
+
+func TestSemanticModelControlLeavesGeneralQuestionAlone(t *testing.T) {
+	server := classifierServer(t, "OTHER")
+	defer server.Close()
+	handled, err := SemanticModelControl(context.Background(), server.URL, "cloudless", []Msg{{Role: "user", Content: "Why do mixture-of-experts models exist?"}})
+	if err != nil || handled {
+		t.Fatalf("general question was routed: handled=%v err=%v", handled, err)
+	}
+}
+
+func TestRecentUserTextExcludesAssistantClaims(t *testing.T) {
+	text := RecentUserText([]Msg{
+		{Role: "user", Content: "Will acme/Model-40B-AWQ fit?"},
+		{Role: "assistant", Content: "It only needs 2 GB."},
+		{Role: "user", Content: "Are you sure?"},
+	}, 3)
+	if strings.Contains(text, "2 GB") || !strings.Contains(text, "40B-AWQ") || !strings.Contains(text, "Are you sure") {
+		t.Fatalf("unsafe follow-up context: %q", text)
+	}
+	advice := ForcedModelGuidance(text, modelTestContext())
+	if !strings.Contains(advice.Reply, "about 26 GB") {
+		t.Fatalf("forced advice did not use user-provided model facts: %q", advice.Reply)
+	}
+}
+
+func TestRecentUserTextDoesNotLeakAnOlderModelIntoNewRequest(t *testing.T) {
+	text := RecentUserText([]Msg{
+		{Role: "user", Content: "Will Qwen2.5 14B fit?"},
+		{Role: "assistant", Content: "Yes."},
+		{Role: "user", Content: "Would Command R+ be usable on this computer?"},
+	}, 3)
+	if text != "Would Command R+ be usable on this computer?" {
+		t.Fatalf("new request inherited stale model context: %q", text)
+	}
+}
+
+func classifierServer(t *testing.T, answer string) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/chat/completions" {
+			t.Fatalf("classifier path = %q", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"choices":[{"message":{"role":"assistant","content":%q}}]}`, answer)
+	}))
+}

@@ -3163,8 +3163,10 @@ async function renderSettings() {
   const installed = new Set((Array.isArray(containers) ? containers : [])
     .filter(c => c.state === 'running')
     .map(c => c.name.replace(/^cloudless-/, '')));
-  const apps = catalog.filter(a => !a.service && installed.has(a.id));
-  if (setPage.startsWith('app:') && !apps.some(a => 'app:' + a.id === setPage)) setPage = 'hardware';
+  const hermes = catalog.find(a => a.id === 'hermes');
+  const apps = catalog.filter(a => a.id !== 'hermes' && !a.service && installed.has(a.id));
+  const configurableApps = hermes ? [hermes, ...apps] : apps;
+  if (setPage.startsWith('app:') && !configurableApps.some(a => 'app:' + a.id === setPage)) setPage = 'hardware';
 
   const groups = [
     { label: 'you', items: [{ id: 'profile', icon: 'user', label: 'Profile' }] },
@@ -3172,6 +3174,7 @@ async function renderSettings() {
       { id: 'hardware', icon: 'machine', label: 'Machine' },
       { id: 'engine', icon: 'rocket', label: 'Engine' },
       { id: 'api', icon: 'key', label: 'API access' },
+      ...(hermes ? [{ id: 'app:hermes', glyph: glyph('hermes'), label: hermes.name }] : []),
     ] },
     { label: 'apps', items: apps.map(a => ({ id: 'app:' + a.id, glyph: glyph(a.id), label: a.name })) },
     { label: 'system', items: [{ id: 'appearance', icon: 'appearance', label: 'Appearance' }, { id: 'general', icon: 'general', label: 'General' }] },
@@ -3182,7 +3185,7 @@ async function renderSettings() {
   document.querySelectorAll('#set-nav .nav-item').forEach(n => n.onclick = () => { setPage = n.dataset.page; renderSettings(); });
 
   let title = { profile: 'Profile', hardware: 'Machine', engine: 'Engine', api: 'API access', appearance: 'Appearance', general: 'General' }[setPage] || '';
-  if (setPage.startsWith('app:')) { const a = apps.find(x => 'app:' + x.id === setPage); title = a ? a.name : ''; }
+  if (setPage.startsWith('app:')) { const a = configurableApps.find(x => 'app:' + x.id === setPage); title = a ? a.name : ''; }
   document.getElementById('set-page-title').textContent = title;
 
   const c = document.getElementById('set-content');

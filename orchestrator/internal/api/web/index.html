@@ -781,6 +781,53 @@
   }
   .inf-state-pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
   .inf-state-pill.ready { color: #2faa5b; background: color-mix(in srgb, #2faa5b 9%, var(--card)); border-color: color-mix(in srgb, #2faa5b 25%, var(--hair)); }
+  /* Settings: Machine */
+  .machine-page { display: flex; flex-direction: column; gap: 14px; }
+  .machine-layout { display: grid; grid-template-columns: minmax(0, .92fr) minmax(0, 1.08fr); gap: 14px; align-items: stretch; }
+  .machine-card { min-width: 0; padding: 17px; border: 1px solid var(--hair); border-radius: 16px;
+    background: color-mix(in srgb, var(--card) 88%, transparent); }
+  .machine-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 14px; }
+  .machine-card-title { color: var(--ink); font-size: 13.5px; font-weight: 780; letter-spacing: -.15px; }
+  .machine-card-desc { margin-top: 3px; color: var(--muted); font-size: 11px; line-height: 1.45; }
+  .machine-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .machine-fact { min-width: 0; min-height: 70px; padding: 11px 12px; border: 1px solid var(--hair); border-radius: 11px; background: var(--panel-2); }
+  .machine-fact-label { color: var(--muted); font-size: 9px; font-weight: 760; letter-spacing: .48px; text-transform: uppercase; }
+  .machine-fact-value { margin-top: 6px; overflow: hidden; color: var(--ink); font-size: 12px; font-weight: 680; line-height: 1.35;
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere; }
+  .machine-gpu-list { display: flex; flex-direction: column; gap: 10px; }
+  .machine-gpu { padding: 13px; border: 1px solid var(--hair); border-radius: 13px; background: var(--panel-2); }
+  .machine-gpu-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .machine-gpu-icon { width: 34px; height: 34px; flex: none; display: grid; place-items: center; border-radius: 9px;
+    color: var(--blue); background: var(--blue-soft); border: 1px solid color-mix(in srgb, var(--blue) 22%, var(--hair)); }
+  .machine-gpu-icon .ui-icon { width: 17px; height: 17px; }
+  .machine-gpu-name { min-width: 0; overflow: hidden; color: var(--ink); font-size: 13px; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
+  .machine-gpu-index { margin-left: auto; flex: none; padding: 3px 7px; border: 1px solid var(--hair); border-radius: 6px; color: var(--muted); font-size: 9px; font-weight: 760; }
+  .machine-vram { margin-top: 13px; }
+  .machine-vram-copy { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 10px; }
+  .machine-vram-copy strong { color: var(--ink); font-size: 10.5px; font-variant-numeric: tabular-nums; }
+  .machine-vram-track { height: 6px; margin-top: 7px; overflow: hidden; border-radius: 999px; background: var(--control); }
+  .machine-vram-fill { width: var(--machine-meter); height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--blue), color-mix(in srgb, var(--blue) 58%, var(--accent))); }
+  .machine-gpu-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; margin-top: 11px; }
+  .machine-gpu-metric { min-width: 0; padding: 8px 9px; border-radius: 9px; background: var(--control); }
+  .machine-gpu-metric span { display: block; color: var(--muted); font-size: 8.5px; font-weight: 720; letter-spacing: .35px; text-transform: uppercase; }
+  .machine-gpu-metric b { display: block; margin-top: 4px; overflow: hidden; color: var(--ink); font-size: 11px; font-weight: 720; text-overflow: ellipsis; white-space: nowrap; }
+  .machine-empty { min-height: 194px; padding: 28px 18px; display: grid; place-items: center; text-align: center; border: 1px dashed var(--line-2); border-radius: 13px; color: var(--muted); background: var(--panel-2); }
+  .machine-empty .ui-icon { width: 24px; height: 24px; margin-bottom: 9px; color: var(--faint); }
+  .machine-empty strong { display: block; color: var(--ink); font-size: 12.5px; }
+  .machine-empty span { display: block; margin-top: 4px; font-size: 10.5px; line-height: 1.45; }
+  .machine-places { grid-column: 1 / -1; }
+  .machine-place-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
+  button.machine-place { width: 100%; min-width: 0; padding: 11px; display: flex; align-items: center; gap: 11px; border: 1px solid var(--hair); border-radius: 12px;
+    color: var(--ink); background: var(--panel-2); font: inherit; text-align: left; cursor: pointer; transition: border-color .16s, background .16s, transform .16s; }
+  button.machine-place:hover { border-color: color-mix(in srgb, var(--blue) 32%, var(--hair)); background: color-mix(in srgb, var(--blue) 6%, var(--panel-2)); transform: translateY(-1px); }
+  button.machine-place:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+  .machine-place-icon { width: 38px; height: 38px; flex: none; display: grid; place-items: center; border: 1px solid var(--hair); border-radius: 10px; background: var(--control); font-size: 17px; }
+  .machine-place-copy { min-width: 0; flex: 1; }
+  .machine-place-name { display: block; font-size: 12.5px; font-weight: 740; }
+  .machine-place-path { display: block; margin-top: 3px; overflow: hidden; color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 9.5px; text-overflow: ellipsis; white-space: nowrap; }
+  .machine-place-go { width: 26px; height: 26px; flex: none; display: grid; place-items: center; border-radius: 8px; color: var(--muted); background: var(--control); transition: color .16s, transform .16s; }
+  .machine-place-go .ui-icon { width: 13px; height: 13px; }
+  button.machine-place:hover .machine-place-go { color: var(--blue); transform: translateX(2px); }
   .ec-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 11px; }
   .ec {
     min-width: 0; min-height: 250px; padding: 16px; border-color: var(--hair); border-radius: 15px;
@@ -2032,6 +2079,8 @@
     .api-section { padding: 14px; }
     .api-section-head { align-items: center; }
     .api-endpoint { grid-template-columns: 72px minmax(0, 1fr) 30px; }
+    .machine-layout { grid-template-columns: 1fr; }
+    .machine-places { grid-column: 1; }
     .md-hero { align-items: flex-start; flex-wrap: wrap; padding: 16px; }
     .md-hero-actions { width: 100%; margin: 2px 0 0 84px; }
     .md-sub { white-space: normal; overflow-wrap: anywhere; }
@@ -2054,6 +2103,8 @@
     .api-section-head .btn { width: 100%; justify-content: center; }
     .api-endpoint { grid-template-columns: 1fr 30px; gap: 5px 8px; }
     .api-endpoint-label { grid-column: 1 / -1; }
+    .machine-facts, .machine-place-grid { grid-template-columns: 1fr; }
+    .machine-gpu-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
 </style>
 </head>
@@ -3735,30 +3786,50 @@ async function renderHardwarePage(c) {
   let gpu, folders, sys;
   try { [gpu, folders, sys] = await Promise.all([api('/api/gpu'), api('/api/folders'), api('/api/system').catch(() => null)]); } catch { return; }
   const gpus = gpu.gpus || [];
-  const gpuHtml = gpus.length ? gpus.map(g =>
-    `<div class="hw-card"><div class="gpu-name">${g.name}<span class="idx">#${g.index}</span></div>
-      <div class="chips"><span>vram <b>${gb(g.memUsedMB)} / ${gb(g.memTotalMB)} gb</b></span><span>util <b>${g.utilPct}%</b></span><span>temp <b>${g.tempC}°c</b></span><span>power <b>${g.powerW >= 0 ? Math.round(g.powerW) + ' w' : 'n/a'}</b></span><span>driver <b>${g.driver}</b></span></div></div>`).join('')
-    : '<div class="set-hint">No NVIDIA GPU detected.</div>';
-  let sysHtml = '';
-  if (sys && sys.system) {
-    const s = sys.system, l = sys.locale || {};
-    const row = (k, v) => v ? `<div class="set-row"><span class="srow-label">${k}</span><span>${escapeHtml(String(v))}</span></div>` : '';
-    sysHtml = `<div class="set-block"><h3>system</h3>
-      ${row('device', s.hostname)}
-      ${row('os', s.os)}
-      ${row('kernel', s.kernel)}
-      ${row('cpu', s.cpu + (s.cores ? ' · ' + s.cores + ' cores' : ''))}
-      ${row('memory', s.memTotalMB ? (s.memTotalMB / 1024).toFixed(1) + ' GB RAM' : '')}
-      ${row('arch', s.arch)}
-      ${row('uptime', fmtUptime(s.uptimeSec))}
-      ${row('timezone', (l.timezone || 'unknown') + (l.utcOffset ? ' (UTC ' + l.utcOffset + ')' : ''))}
-      ${row('region', l.countryName || l.country || 'unknown')}
-    </div>`;
-  }
-  c.innerHTML = `${sysHtml}<div class="set-block"><h3>graphics</h3>${gpuHtml}</div>
-    <div class="set-block"><h3>places</h3>${folders.map(p => `<button class="place" data-folder="${p.id}"><span class="pic">${PLACE_ICON[p.id] || '📁'}</span><span class="pl">${p.label}</span><span class="pp" title="${p.path}">${p.path}</span></button>`).join('')}</div>`;
+  const s = sys && sys.system ? sys.system : {};
+  const l = sys && sys.locale ? sys.locale : {};
+  const fact = (label, value, title = '') => value ? `<div class="machine-fact"><div class="machine-fact-label">${escapeHtml(label)}</div><div class="machine-fact-value"${title ? ` title="${escapeAttr(title)}"` : ''}>${escapeHtml(String(value))}</div></div>` : '';
+  const cpu = s.cpu ? s.cpu + (s.cores ? ` · ${s.cores} cores` : '') : '';
+  const timezone = l.timezone ? l.timezone + (l.utcOffset ? ` · UTC ${l.utcOffset}` : '') : '';
+  const systemFacts = [
+    fact('Processor', cpu, cpu),
+    fact('Memory', s.memTotalMB ? `${(s.memTotalMB / 1024).toFixed(1)} GB RAM` : ''),
+    fact('Kernel', s.kernel, s.kernel),
+    fact('Architecture', s.arch),
+    fact('Uptime', Number.isFinite(Number(s.uptimeSec)) ? fmtUptime(Number(s.uptimeSec)) : ''),
+    fact('Time zone', timezone, timezone),
+  ].join('') || '<div class="set-hint">System information is unavailable.</div>';
+  const gpuHtml = gpus.length ? gpus.map(g => {
+    const used = Number(g.memUsedMB) || 0, total = Number(g.memTotalMB) || 0;
+    const meter = total > 0 ? Math.max(0, Math.min(100, Math.round(used / total * 100))) : 0;
+    const power = Number(g.powerW);
+    return `<article class="machine-gpu">
+      <div class="machine-gpu-head"><span class="machine-gpu-icon">${uiIcon('machine')}</span><span class="machine-gpu-name" title="${escapeAttr(String(g.name || 'Graphics processor'))}">${escapeHtml(String(g.name || 'Graphics processor'))}</span><span class="machine-gpu-index">#${escapeHtml(String(g.index ?? 0))}</span></div>
+      <div class="machine-vram"><div class="machine-vram-copy"><span>Graphics memory</span><strong>${gb(used)} / ${gb(total)} GB</strong></div><div class="machine-vram-track"><div class="machine-vram-fill" style="--machine-meter:${meter}%"></div></div></div>
+      <div class="machine-gpu-metrics">
+        <div class="machine-gpu-metric"><span>Utilization</span><b>${escapeHtml(String(g.utilPct ?? 0))}%</b></div>
+        <div class="machine-gpu-metric"><span>Temperature</span><b>${escapeHtml(String(g.tempC ?? 0))}°C</b></div>
+        <div class="machine-gpu-metric"><span>Power</span><b>${power >= 0 ? `${Math.round(power)} W` : 'N/A'}</b></div>
+        <div class="machine-gpu-metric"><span>Driver</span><b title="${escapeAttr(String(g.driver || 'Unknown'))}">${escapeHtml(String(g.driver || 'Unknown'))}</b></div>
+      </div>
+    </article>`;
+  }).join('') : `<div class="machine-empty"><div>${uiIcon('machine')}<strong>No NVIDIA GPU detected</strong><span>CloudlessOS will show graphics memory and live GPU metrics here when one is available.</span></div></div>`;
+  const folderList = Array.isArray(folders) ? folders : [];
+  const placesHtml = folderList.length ? folderList.map(p => `<button class="machine-place" type="button" data-folder="${escapeAttr(String(p.id || ''))}">
+    <span class="machine-place-icon" aria-hidden="true">${PLACE_ICON[p.id] || '📁'}</span><span class="machine-place-copy"><span class="machine-place-name">${escapeHtml(String(p.label || 'Folder'))}</span><span class="machine-place-path" title="${escapeAttr(String(p.path || ''))}">${escapeHtml(String(p.path || ''))}</span></span><span class="machine-place-go" aria-hidden="true">${uiIcon('arrow-right')}</span>
+  </button>`).join('') : '<div class="set-hint">No CloudlessOS folders are configured.</div>';
+  const hostname = s.hostname || 'This device';
+  const heroDescription = [s.os, s.kernel].filter(Boolean).join(' · ') || 'System information and local storage for this CloudlessOS device.';
+  c.innerHTML = `<div class="machine-page">
+    <div class="inf-page-hero"><span class="inf-page-icon">${uiIcon('machine')}</span><div class="inf-page-copy"><div class="inf-page-eyebrow">This CloudlessOS device</div><div class="inf-page-title">${escapeHtml(String(hostname))}</div><div class="inf-page-desc">${escapeHtml(heroDescription)}</div></div><span class="inf-state-pill ready">Online</span></div>
+    <div class="machine-layout">
+      <section class="machine-card"><div class="machine-card-head"><div><div class="machine-card-title">System overview</div><div class="machine-card-desc">The hardware and environment powering CloudlessOS.</div></div></div><div class="machine-facts">${systemFacts}</div></section>
+      <section class="machine-card"><div class="machine-card-head"><div><div class="machine-card-title">Graphics</div><div class="machine-card-desc">Live capacity and activity across detected NVIDIA GPUs.</div></div><span class="inf-state-pill ${gpus.length ? 'ready' : ''}">${gpus.length ? `${gpus.length} detected` : 'Not detected'}</span></div><div class="machine-gpu-list">${gpuHtml}</div></section>
+      <section class="machine-card machine-places"><div class="machine-card-head"><div><div class="machine-card-title">Places</div><div class="machine-card-desc">Open the folders CloudlessOS uses for models, projects, downloads, and generated files.</div></div></div><div class="machine-place-grid">${placesHtml}</div></section>
+    </div>
+  </div>`;
   c.querySelectorAll('[data-folder]').forEach(b => b.onclick = async () => {
-    try { const r = await api(`/api/folders/${b.dataset.folder}/open`, { method: 'POST' }); toast(r.opened ? 'Opened ' + b.querySelector('.pl').textContent : (r.error || 'Could not open folder'), !r.opened); } catch { toast('Could not open folder', true); }
+    try { const r = await api(`/api/folders/${b.dataset.folder}/open`, { method: 'POST' }); toast(r.opened ? 'Opened ' + b.querySelector('.machine-place-name').textContent : (r.error || 'Could not open folder'), !r.opened); } catch { toast('Could not open folder', true); }
   });
 }
 

@@ -1,6 +1,6 @@
 // Package assistant powers the built-in CloudlessOS guide. It grounds a chat in
-// live OS state + the app catalog, talks to the local OpenAI-compatible engine,
-// and turns guidance into one-click OS actions. Stdlib-only.
+// live OS state + the app catalog, talks to the local Hermes agent API, and
+// turns guidance into one-click OS actions. Stdlib-only.
 package assistant
 
 import (
@@ -40,12 +40,20 @@ type Action struct {
 	Label string `json:"label"`        // button text
 }
 
+type ToolProgress struct {
+	Tool       string `json:"tool"`
+	Emoji      string `json:"emoji,omitempty"`
+	Label      string `json:"label,omitempty"`
+	ToolCallID string `json:"toolCallId"`
+	Status     string `json:"status"`
+}
+
 // plain-language "what it's for", beyond the catalog one-liners.
 var useCase = map[string]string{
-	"comfyui":     "generate and edit images locally (Stable Diffusion / Flux) with node-based workflows",
-	"open-webui":  "a separate, optional full-featured chat app (multi-session, file uploads) for the local model",
-	"openclaw":    "an autonomous coding agent that can read files and use tools",
-	"hermes":      "a personal AI agent you can reach from Telegram or Discord",
+	"comfyui":    "generate and edit images locally (Stable Diffusion / Flux) with node-based workflows",
+	"open-webui": "a separate, optional full-featured chat app (multi-session, file uploads) for the local model",
+	"openclaw":   "an autonomous coding agent that can read files and use tools",
+	"hermes":     "a personal AI agent you can reach from Telegram or Discord",
 }
 
 // SystemPrompt builds the grounding prompt from OS facts + catalog + live state.
@@ -190,7 +198,7 @@ func intentActions(text string, c Context) []Action {
 
 // Stream POSTs an OpenAI chat-completions request with stream=true and invokes
 // onToken for each content delta. Blocks until the stream ends or ctx is done.
-func Stream(ctx context.Context, baseURL, model string, msgs []Msg, onToken func(string)) error {
+func Stream(ctx context.Context, baseURL, apiKey, model string, msgs []Msg, onToken func(string), onTool func(ToolProgress)) error {
 	payload, _ := json.Marshal(map[string]any{
 		"model":       model,
 		"messages":    msgs,
@@ -204,7 +212,7 @@ func Stream(ctx context.Context, baseURL, model string, msgs []Msg, onToken func
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer cloudless")
+	req.Header.Set("Authorization", "Bearer "+apiKey)
 
 	resp, err := http.DefaultClient.Do(req) // no client timeout — streaming; ctx governs lifetime
 	if err != nil {
@@ -219,12 +227,26 @@ func Stream(ctx context.Context, baseURL, model string, msgs []Msg, onToken func
 
 	sc := bufio.NewScanner(resp.Body)
 	sc.Buffer(make([]byte, 0, 64*1024), 1<<20)
+	eventName := ""
 	for sc.Scan() {
 		line := strings.TrimSpace(sc.Text())
+		if strings.HasPrefix(line, "event:") {
+			eventName = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
+			continue
+		}
 		if !strings.HasPrefix(line, "data:") {
 			continue
 		}
 		data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+		if eventName == "hermes.tool.progress" {
+			var progress ToolProgress
+			if json.Unmarshal([]byte(data), &progress) == nil && onTool != nil {
+				onTool(progress)
+			}
+			eventName = ""
+			continue
+		}
+		eventName = ""
 		if data == "[DONE]" {
 			break
 		}

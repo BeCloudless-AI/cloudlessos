@@ -262,6 +262,7 @@
   .key-name { font-weight: 600; font-size: 13.5px; color: var(--ink); }
   .key-prefix { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; color: var(--muted); }
   .key-meta { margin-left: auto; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .key-scope { padding: 3px 7px; border-radius: 99px; color: var(--blue); background: var(--blue-soft); font-size: 9px; font-weight: 760; text-transform: uppercase; letter-spacing: .35px; }
   .app-head a { margin-left: auto; }
   /* share-online (Cloudflare quick tunnel) result */
   .tun-out { margin-top: 12px; } .tun-out.hidden { display: none; }
@@ -878,6 +879,15 @@
     .key-dialog-actions .btn { width: 100%; }
   }
   .api-endpoints { overflow: hidden; border: 1px solid var(--hair); border-radius: 11px; background: var(--panel-2); }
+  .api-service-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .api-service { padding: 13px; border: 1px solid var(--hair); border-radius: 12px; background: var(--panel-2); }
+  .api-service-head { display: flex; align-items: center; gap: 9px; margin-bottom: 10px; }
+  .api-service-icon { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 9px; color: var(--blue); background: var(--blue-soft); }
+  .api-service-icon .ui-icon { width: 15px; height: 15px; }
+  .api-service-name { font-size: 12px; font-weight: 760; }
+  .api-service-state { margin-left: auto; color: var(--muted); font-size: 9px; font-weight: 740; text-transform: uppercase; }
+  .api-service-state.ready { color: var(--ok); }
+  .api-service .api-endpoints { background: var(--card); }
   .api-endpoint { min-height: 44px; padding: 8px 10px 8px 12px; display: grid; grid-template-columns: 88px minmax(0, 1fr) 30px; align-items: center; gap: 10px; }
   .api-endpoint + .api-endpoint { border-top: 1px solid var(--hair); }
   .api-endpoint-label { color: var(--muted); font-size: 9px; font-weight: 750; letter-spacing: .45px; text-transform: uppercase; }
@@ -1156,8 +1166,11 @@
   .asst.full .msg { max-width: 78%; font-size: 13.5px; }
   .asst.full .asst-in, .asst.full .asst-chips { padding-left: clamp(16px, 6%, 58px); padding-right: clamp(14px, 6%, 58px); }
   .asst-head { display: flex; align-items: center; gap: 11px; padding: 14px 16px; border-bottom: 1px solid var(--hair); flex: none; }
-  .asst-exp { margin-left: auto; font-size: 15px; line-height: 1; color: var(--muted); background: none; border: none; cursor: pointer; padding: 0 3px; transition: color .15s, transform .15s; }
+  .asst-exp { font-size: 15px; line-height: 1; color: var(--muted); background: none; border: none; cursor: pointer; padding: 0 3px; transition: color .15s, transform .15s; }
   .asst-exp:hover { color: var(--ink); transform: scale(1.12); }
+  .asst-hermes { margin-left: auto; width: 30px; height: 30px; display: grid; place-items: center; border: 0; border-radius: 9px; color: var(--muted); background: var(--panel-2); }
+  .asst-hermes:hover { color: var(--blue); background: var(--blue-soft); }
+  .asst-hermes .ui-icon { width: 14px; height: 14px; }
   .asst-mark { width: 18px; height: 27px; flex: none; }
   .asst-ttl { font-weight: 700; font-size: 13.5px; display: flex; flex-direction: column; line-height: 1.25; }
   .asst-sub { font-weight: 400; font-size: 10.5px; color: var(--muted); }
@@ -1168,6 +1181,12 @@
   @keyframes msg-in { from { opacity: 0; transform: translateY(6px); } }
   .msg.user { align-self: flex-end; background: var(--blue); color: #fff; border-bottom-right-radius: 5px; }
   .msg.bot { align-self: flex-start; background: var(--panel-2); color: var(--ink); border-bottom-left-radius: 5px; }
+  .msg-tools { align-self: flex-start; display: flex; flex-direction: column; gap: 5px; max-width: 86%; margin: -4px 0 0 4px; }
+  .msg-tool { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 11px; line-height: 1.25; }
+  .msg-tool-dot { width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid currentColor; flex: none; }
+  .msg-tool.running .msg-tool-dot { border-color: var(--blue); border-top-color: transparent; animation: spin .8s linear infinite; }
+  .msg-tool.completed { color: var(--ink-2); }
+  .msg-tool.completed .msg-tool-dot { background: var(--blue); border-color: var(--blue); }
   .msg .caret { display: inline-block; width: 7px; height: 14px; vertical-align: text-bottom; background: var(--ink-2); margin-left: 2px; animation: blink 1s steps(2) infinite; }
   @keyframes blink { 50% { opacity: 0; } }
   .typing { display: inline-flex; gap: 4px; padding: 2px 0; }
@@ -1855,7 +1874,7 @@
     .inf-tabs .mm-tab { min-width: 112px; flex: 0 0 auto; }
     .inf-page-hero { align-items: flex-start; flex-wrap: wrap; padding: 15px; }
     .inf-page-hero .inf-state-pill { margin-left: 62px; }
-    .ec-grid, .api-access-grid { grid-template-columns: 1fr; }
+    .ec-grid, .api-access-grid, .api-service-grid { grid-template-columns: 1fr; }
     .ec { min-height: 0; }
     .api-section { padding: 14px; }
     .api-section-head { align-items: center; }
@@ -2066,7 +2085,8 @@
 <div id="asst" class="asst hidden">
   <div class="asst-head">
     <svg class="cl-mark asst-mark" aria-hidden="true"><use href="#cl-star"/></svg>
-    <div class="asst-ttl">Cloudless Assistant<span class="asst-sub">here to help you decide</span></div>
+    <div class="asst-ttl">Cloudless Assistant<span class="asst-sub">powered locally by Hermes</span></div>
+    <button class="asst-hermes" id="asst-hermes" title="Open the full Hermes dashboard" aria-label="Open Hermes dashboard"><svg class="ui-icon" aria-hidden="true"><use href="#ui-assistant"/></svg></button>
     <button class="asst-exp" id="asst-exp" title="Expand" aria-label="Expand Assistant"><svg class="ui-icon" aria-hidden="true"><use href="#ui-expand"/></svg></button>
     <button class="asst-x" id="asst-x" title="Close" aria-label="Close Assistant"><svg class="ui-icon" aria-hidden="true"><use href="#ui-close"/></svg></button>
   </div>
@@ -2330,7 +2350,11 @@ async function renderApps() {
     api('/api/catalog'), api('/api/apps'), api('/api/pins').catch(() => ({ pinned: [] })), api('/api/engine').catch(() => null)]);
   catalogCache = catalog;
   if (eng) { engineReady = !!eng.ready; engineActive = eng.active || ''; setActiveEngine(eng); }
-  const running = {}; apps.forEach(c => running[c.name.replace(/^cloudless-/, '')] = c.state);
+  // Docker may be temporarily unavailable during boot or local development.
+  // The API then returns an error object; treat it as an empty runtime list so
+  // the shell stays usable and the next poll can recover without console spam.
+  const containers = Array.isArray(apps) ? apps : [];
+  const running = {}; containers.forEach(c => running[c.name.replace(/^cloudless-/, '')] = c.state);
   lastRunning = running;
   pinnedIds = (pins && pins.pinned) || [];
 
@@ -2779,9 +2803,11 @@ async function renderProfilePage(c) {
 /* ---- API access (Cloudless Proxy) ---- */
 function apiKeyRow(k) {
   const used = k.lastUsed ? 'last used ' + new Date(k.lastUsed).toLocaleDateString() : 'never used';
+  const scope = k.scope === 'both' ? 'Model + agent' : (k.scope === 'agent' ? 'Agent' : 'Model');
+  const split = k.scope === 'both' ? ` · ${k.modelRequests || 0} model / ${k.agentRequests || 0} agent` : '';
   return `<div class="key-row">
-      <div class="key-main"><span class="key-name">${escapeHtml(k.name)}</span><code class="key-prefix">${escapeHtml(k.prefix)}…</code></div>
-      <div class="key-meta">${k.requests} request${k.requests === 1 ? '' : 's'} · ${used}</div>
+      <div class="key-main"><span class="key-name">${escapeHtml(k.name)}</span><span class="key-scope">${scope}</span><code class="key-prefix">${escapeHtml(k.prefix)}…</code></div>
+      <div class="key-meta">${k.requests} request${k.requests === 1 ? '' : 's'}${split} · ${used}</div>
       <button class="btn danger" data-revoke="${escapeAttr(k.id)}">Revoke</button>
     </div>`;
 }
@@ -2799,10 +2825,10 @@ async function apiRefreshKeys() {
   list.innerHTML = keys.length ? keys.map(apiKeyRow).join('') : '<div class="set-hint">No keys yet. Generate one to start serving your AI as an API.</div>';
   apiWireRevokes(list);
 }
-function apiTunRender(out, url) {
+function apiTunRender(out, tunnel) {
   out.classList.remove('hidden');
-  out.innerHTML = `<div class="tun-row"><span class="tun-dot"></span><a class="tun-link" href="${escapeAttr(url)}" target="_blank">${escapeHtml(url)}/v1</a></div>
-    <div class="fld-help" style="margin-top:6px">Give this base URL + a key to whoever you want to serve.</div>`;
+  out.innerHTML = `<div class="tun-row"><span class="tun-dot"></span><div class="tun-link"><b>Model</b> ${escapeHtml(tunnel.modelURL || ((tunnel.url || '') + '/v1'))}<br><b>Agent</b> ${escapeHtml(tunnel.agentURL || ((tunnel.url || '') + '/agent/v1'))}</div></div>
+    <div class="fld-help" style="margin-top:6px">Give the appropriate base URL and a scoped key to an approved client.</div>`;
 }
 let keyDialogReturnFocus = null;
 function closeKeyDialog() {
@@ -2817,7 +2843,7 @@ function showCreatedAPIKey(result) {
   const content = document.getElementById('key-dialog-content');
   content.innerHTML = `<div class="key-dialog-head">
       <span class="key-dialog-icon">${uiIcon('key')}</span>
-      <div class="key-dialog-heading"><div class="key-dialog-title" id="key-dialog-title">API key created</div><div class="key-dialog-sub">${escapeHtml(result.name || 'API key')} is ready to use.</div></div>
+      <div class="key-dialog-heading"><div class="key-dialog-title" id="key-dialog-title">API key created</div><div class="key-dialog-sub">${escapeHtml(result.name || 'API key')} is ready with ${escapeHtml(result.scope === 'both' ? 'model and agent' : (result.scope || 'model'))} access.</div></div>
       <button class="key-dialog-close" id="key-dialog-close" type="button" aria-label="Close key dialog">${uiIcon('close')}</button>
     </div>
     <div class="key-dialog-body">
@@ -2860,6 +2886,13 @@ function openKeyDialog() {
       <label class="key-dialog-label" for="key-dialog-name">Key name</label>
       <input class="key-dialog-input" id="key-dialog-name" maxlength="64" placeholder="For example, My website" autocomplete="off" spellcheck="false" aria-describedby="key-dialog-help key-dialog-error">
       <div class="key-dialog-help" id="key-dialog-help">Use a name that tells you where this key will be used.</div>
+      <label class="key-dialog-label" for="key-dialog-scope" style="margin-top:16px">Permissions</label>
+      <select class="key-dialog-input" id="key-dialog-scope">
+        <option value="agent">Cloudless Agent (Hermes)</option>
+        <option value="both">Model and agent</option>
+        <option value="model">Model inference only</option>
+      </select>
+      <div class="key-dialog-help">Agent access can run approved tools. Give each client only the access it needs.</div>
       <div class="key-dialog-error" id="key-dialog-error" role="alert"></div>
       <div class="key-dialog-actions">
         <button class="btn" id="key-dialog-cancel" type="button">Cancel</button>
@@ -2873,6 +2906,7 @@ function openKeyDialog() {
   const input = document.getElementById('key-dialog-name');
   const error = document.getElementById('key-dialog-error');
   const submit = document.getElementById('key-dialog-submit');
+  const scope = document.getElementById('key-dialog-scope');
   input.oninput = () => { error.textContent = ''; input.removeAttribute('aria-invalid'); };
   form.onsubmit = async e => {
     e.preventDefault();
@@ -2884,7 +2918,7 @@ function openKeyDialog() {
     input.disabled = true; submit.disabled = true;
     submit.innerHTML = '<span class="key-dialog-spinner" aria-hidden="true"></span><span>Generating…</span>';
     try {
-      const result = await api('/api/keys', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name }) });
+      const result = await api('/api/keys', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, scope: scope.value }) });
       if (!result || result.error || !result.key) throw new Error(result && result.error ? result.error : 'Key generation failed');
       apiRefreshKeys();
       showCreatedAPIKey(result);
@@ -2902,31 +2936,39 @@ async function renderApiPage(c) {
   let g; try { g = await api('/api/gateway'); } catch { c.innerHTML = '<div class="set-hint">Could not load API access.</div>'; return; }
   const keys = g.keys || [];
   const curl = `curl ${g.localURL}/chat/completions \\\n  -H "Authorization: Bearer YOUR_KEY" \\\n  -H "Content-Type: application/json" \\\n  -d '{"model":"${g.servedName}","messages":[{"role":"user","content":"Hello!"}]}'`;
+  const agentURL = g.agent && g.agent.localURL ? g.agent.localURL : `http://localhost:${g.port}/agent/v1`;
+  const agentCurl = `curl ${agentURL}/chat/completions \\\n  -H "Authorization: Bearer YOUR_AGENT_KEY" \\\n  -H "Content-Type: application/json" \\\n  -d '{"model":"hermes-agent","messages":[{"role":"user","content":"Inspect my workspace and summarize it"}],"stream":true}'`;
   c.innerHTML = `<div class="inf-page">
     <div class="inf-page-hero">
       <span class="inf-page-icon">${uiIcon('key')}</span>
       <div class="inf-page-copy"><div class="inf-page-eyebrow">OpenAI compatible</div><div class="inf-page-title">API access</div>
-      <div class="inf-page-desc">Connect local tools and apps to the model running on this machine. Requests stay on your hardware unless you enable network access.</div></div>
+      <div class="inf-page-desc">Connect clients either to raw model inference or to the full Hermes agent. Requests stay on your hardware unless you enable network access.</div></div>
       <span class="inf-state-pill ready">Local</span>
     </div>
     <section class="api-section">
-      <div class="api-section-head"><div><div class="api-section-title">Connect a client</div><div class="api-section-desc">Use these values with any OpenAI-compatible SDK.</div></div></div>
-      <div class="api-endpoints">
-        <div class="api-endpoint"><span class="api-endpoint-label">Base URL</span><code>${escapeHtml(g.localURL)}</code><button class="api-copy" data-copy="${escapeAttr(g.localURL)}" title="Copy base URL" aria-label="Copy base URL">${uiIcon('copy')}</button></div>
-        <div class="api-endpoint"><span class="api-endpoint-label">Model</span><code>${escapeHtml(g.servedName)}</code><button class="api-copy" data-copy="${escapeAttr(g.servedName)}" title="Copy model name" aria-label="Copy model name">${uiIcon('copy')}</button></div>
-        <div class="api-endpoint"><span class="api-endpoint-label">Backed by</span><code>${escapeHtml(g.model || '—')}</code><span></span></div>
+      <div class="api-section-head"><div><div class="api-section-title">Connect a client</div><div class="api-section-desc">Both endpoints use the OpenAI format but have different capabilities and key permissions.</div></div></div>
+      <div class="api-service-grid">
+        <div class="api-service"><div class="api-service-head"><span class="api-service-icon">${uiIcon('machine')}</span><span class="api-service-name">Model inference</span><span class="api-service-state ready">Ready</span></div><div class="api-endpoints">
+          <div class="api-endpoint"><span class="api-endpoint-label">Base URL</span><code>${escapeHtml(g.localURL)}</code><button class="api-copy" data-copy="${escapeAttr(g.localURL)}" title="Copy model URL" aria-label="Copy model URL">${uiIcon('copy')}</button></div>
+          <div class="api-endpoint"><span class="api-endpoint-label">Model</span><code>${escapeHtml(g.servedName)}</code><button class="api-copy" data-copy="${escapeAttr(g.servedName)}" title="Copy model name" aria-label="Copy model name">${uiIcon('copy')}</button></div>
+        </div></div>
+        <div class="api-service"><div class="api-service-head"><span class="api-service-icon">${uiIcon('assistant')}</span><span class="api-service-name">Cloudless Agent</span><span class="api-service-state ${g.agent && g.agent.ready ? 'ready' : ''}">${g.agent && g.agent.ready ? 'Ready' : 'Starting'}</span></div><div class="api-endpoints">
+          <div class="api-endpoint"><span class="api-endpoint-label">Base URL</span><code>${escapeHtml(agentURL)}</code><button class="api-copy" data-copy="${escapeAttr(agentURL)}" title="Copy agent URL" aria-label="Copy agent URL">${uiIcon('copy')}</button></div>
+          <div class="api-endpoint"><span class="api-endpoint-label">Model</span><code>hermes-agent</code><button class="api-copy" data-copy="hermes-agent" title="Copy agent model" aria-label="Copy agent model">${uiIcon('copy')}</button></div>
+        </div></div>
       </div>
       <div class="api-code"><div class="code-box"><pre id="api-curl">${escapeHtml(curl)}</pre></div><button class="api-copy" data-copy-target="api-curl" title="Copy example" aria-label="Copy cURL example">${uiIcon('copy')}</button></div>
+      <div class="api-code"><div class="code-box"><pre id="api-agent-curl">${escapeHtml(agentCurl)}</pre></div><button class="api-copy" data-copy-target="api-agent-curl" title="Copy agent example" aria-label="Copy agent example">${uiIcon('copy')}</button></div>
     </section>
     <section class="api-section">
-      <div class="api-section-head"><div><div class="api-section-title">API keys</div><div class="api-section-desc">Keys control who can send requests to your model.</div></div><button class="btn primary api-key-generate" id="key-gen" type="button">${uiIcon('key')}<span>Generate key</span></button></div>
+      <div class="api-section-head"><div><div class="api-section-title">API keys</div><div class="api-section-desc">Each key is limited to model access, agent access, or both.</div></div><button class="btn primary api-key-generate" id="key-gen" type="button">${uiIcon('key')}<span>Generate key</span></button></div>
       <div id="key-list">${keys.length ? keys.map(apiKeyRow).join('') : '<div class="api-keys-empty">No keys yet. Generate one when you are ready to connect a client.</div>'}</div>
     </section>
     <section class="api-section">
       <div class="api-section-head"><div><div class="api-section-title">Network access</div><div class="api-section-desc">Choose where the API can be reached. Authentication is always required.</div></div></div>
       <div class="api-access-grid">
         <div class="api-access-card"><div class="api-access-top"><span class="api-access-icon">${uiIcon('network')}</span><span class="api-access-name">Local network</span><label class="switch"><input type="checkbox" id="gw-lan" ${g.lan && g.lan.enabled ? 'checked' : ''}><span class="track2"></span></label></div>
-        <div class="fld-help">Reach Cloudless from devices on your Wi-Fi${g.lan && g.lan.url ? ` at <b>${escapeHtml(g.lan.url)}</b>` : ''}.</div></div>
+        <div class="fld-help">Reach Cloudless from devices on your Wi-Fi${g.lan && g.lan.url ? `.<br><b>Model:</b> ${escapeHtml(g.lan.url)}<br><b>Agent:</b> ${escapeHtml(g.lan.agentURL || '')}` : ''}</div></div>
         <div class="api-access-card"><div class="api-access-top"><span class="api-access-icon">${uiIcon('expand')}</span><span class="api-access-name">Public link</span><label class="switch"><input type="checkbox" id="gw-tun" ${g.tunnel && g.tunnel.enabled ? 'checked' : ''}><span class="track2"></span></label></div>
         <div class="fld-help">Create a secure internet address for approved remote clients.</div><div id="gw-tun-out" class="tun-out hidden"></div></div>
       </div>
@@ -2939,7 +2981,7 @@ async function renderApiPage(c) {
   });
   apiWireRevokes(document.getElementById('key-list'));
   const tout = document.getElementById('gw-tun-out');
-  if (g.tunnel && g.tunnel.enabled && g.tunnel.url) apiTunRender(tout, g.tunnel.url);
+  if (g.tunnel && g.tunnel.enabled && g.tunnel.url) apiTunRender(tout, g.tunnel);
 
   document.getElementById('key-gen').onclick = openKeyDialog;
   const lan = document.getElementById('gw-lan');
@@ -2958,7 +3000,7 @@ async function renderApiPage(c) {
     try {
       const r = await api('/api/gateway/tunnel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enable }) });
       if (!enable) { tout.classList.add('hidden'); tout.innerHTML = ''; toast('Public link removed'); }
-      else if (r.url) { apiTunRender(tout, r.url); toast('Public API link ready'); }
+      else if (r.url) { apiTunRender(tout, { url: r.url, modelURL: r.url + '/v1', agentURL: r.url + '/agent/v1' }); toast('Public API link ready'); }
       else { tout.innerHTML = `<div class="tun-status">Link is starting — reopen this page in a moment to get the URL.</div>`; }
     } catch { tout.innerHTML = `<div class="tun-status err">Couldn't ${enable ? 'create' : 'remove'} the link.</div>`; tun.checked = !enable; }
     tun.disabled = false;
@@ -3458,7 +3500,7 @@ async function renderAppPage(c, id) {
   try {
     const [s, cf, appsList, cat, tn, ln] = await Promise.all([api(`/api/apps/${id}/settings`), api(`/api/apps/${id}/config`), api('/api/apps'), api('/api/catalog'), api(`/api/apps/${id}/tunnel`).catch(() => ({ supported: false })), api(`/api/apps/${id}/lan`).catch(() => ({ supported: false }))]);
     st = s; cfg = cf; catalog = cat; tun = tn || tun; lan = ln || lan;
-    running = appsList.some(x => x.name === 'cloudless-' + id && x.state === 'running');
+    running = Array.isArray(appsList) && appsList.some(x => x.name === 'cloudless-' + id && x.state === 'running');
   } catch { return toast('Could not load app', true); }
   const app = (catalog || []).find(a => a.id === id) || {};
   const port = app.ports ? Object.keys(app.ports)[0] : '';
@@ -3875,10 +3917,12 @@ function keyUsageCards(keys) {
     const success = outcomes > 0 ? Math.round((k.successes || 0) / outcomes * 100) + '%' : '—';
     const tokens = (k.totalTokens || 0);
     const used = !!k.lastUsed;
+    const scope = k.scope === 'both' ? 'Model + agent' : (k.scope === 'agent' ? 'Agent' : 'Model');
+    const requestSub = k.scope === 'both' ? `${infNum(k.modelRequests || 0)} model · ${infNum(k.agentRequests || 0)} agent` : 'lifetime calls';
     return `<article class="ku-card">
-      <div class="ku-card-head"><span class="ku-icon">${uiIcon('key')}</span><div class="ku-identity"><div class="ku-name">${escapeHtml(k.name)}</div><code class="ku-prefix">${escapeHtml(k.prefix)}…</code></div><span class="ku-state ${used ? '' : 'idle'}">${used ? 'Active' : 'Never used'}</span></div>
+      <div class="ku-card-head"><span class="ku-icon">${uiIcon('key')}</span><div class="ku-identity"><div class="ku-name">${escapeHtml(k.name)} <span class="key-scope">${scope}</span></div><code class="ku-prefix">${escapeHtml(k.prefix)}…</code></div><span class="ku-state ${used ? '' : 'idle'}">${used ? 'Active' : 'Never used'}</span></div>
       <div class="ku-stats">
-        <div class="ku-stat"><div class="ku-stat-label">Requests</div><div class="ku-stat-value">${infNum(k.requests || 0)}</div><div class="ku-stat-sub">lifetime calls</div></div>
+        <div class="ku-stat"><div class="ku-stat-label">Requests</div><div class="ku-stat-value">${infNum(k.requests || 0)}</div><div class="ku-stat-sub">${requestSub}</div></div>
         <div class="ku-stat"><div class="ku-stat-label">Tokens</div><div class="ku-stat-value">${infNum(tokens)}</div><div class="ku-stat-sub">${infNum(k.promptTokens || 0)} in · ${infNum(k.completionTokens || 0)} out</div></div>
         <div class="ku-stat"><div class="ku-stat-label">Success</div><div class="ku-stat-value">${success}</div><div class="ku-stat-sub">${outcomes ? infNum(outcomes) + ' classified calls' : 'tracked after this update'}</div></div>
         <div class="ku-stat"><div class="ku-stat-label">Last used</div><div class="ku-stat-value">${infAgo(k.lastUsed)}</div><div class="ku-stat-sub">created ${infAgo(k.created)}</div></div>
@@ -4349,6 +4393,8 @@ function asstRender() {
     const inner = (m.streaming && !txt) ? '<span class="typing"><i></i><i></i><i></i></span>'
       : escapeHtml(txt) + (m.streaming ? '<span class="caret"></span>' : '');
     let html = `<div class="msg bot">${inner}</div>`;
+    if (m.tools && m.tools.length) html += `<div class="msg-tools">${m.tools.map(t =>
+      `<div class="msg-tool ${t.status === 'completed' ? 'completed' : 'running'}"><span class="msg-tool-dot"></span><span>${escapeHtml((t.emoji ? t.emoji + ' ' : '') + (t.label || t.tool || 'Using a tool'))}</span></div>`).join('')}</div>`;
     if (m.actions && m.actions.length) html += `<div class="msg-acts">${m.actions.map((a, ai) =>
       `<button class="msg-act" data-mi="${mi}" data-ai="${ai}">${escapeHtml(a.label)}</button>`).join('')}</div>`;
     return html;
@@ -4367,7 +4413,7 @@ async function asstSend(text) {
   const input = document.getElementById('asst-text'); input.value = '';
   document.getElementById('asst-send').disabled = true;
   asstMsgs.push({ role: 'user', content: text });
-  const bot = { role: 'assistant', content: '', streaming: true };
+  const bot = { role: 'assistant', content: '', streaming: true, tools: [] };
   asstMsgs.push(bot);
   renderChips(); asstRender();
   const payload = { messages: asstMsgs.filter(m => !m.streaming).map(m => ({ role: m.role, content: m.content })) };
@@ -4385,6 +4431,12 @@ async function asstSend(text) {
         if (!line) continue;
         let u; try { u = JSON.parse(line.slice(line.indexOf(':') + 1).trim()); } catch { continue; }
         if (u.delta) { bot.content += u.delta; asstRender(); }
+        if (u.tool) {
+          const at = bot.tools.findIndex(t => t.toolCallId === u.tool.toolCallId);
+          if (at >= 0) bot.tools[at] = { ...bot.tools[at], ...u.tool };
+          else bot.tools.push(u.tool);
+          asstRender();
+        }
         if (u.done) { bot.actions = u.actions || []; }
       }
     }
@@ -4402,6 +4454,13 @@ function asstAction(a) {
 document.getElementById('asst-fab').onclick = () => openAsst();           // docked
 document.getElementById('asst-x').onclick = closeAsst;
 document.getElementById('asst-exp').onclick = () => setAsstFull(!document.getElementById('asst').classList.contains('full'));
+document.getElementById('asst-hermes').onclick = async () => {
+  try {
+    const h = await api('/api/hermes');
+    if (!h.ready) { toast('Hermes is still starting. Try again in a moment.'); return; }
+    window.open(h.dashboardURL, '_blank');
+  } catch { toast('Could not reach Hermes', true); }
+};
 document.getElementById('asst-backdrop').onclick = () => setAsstFull(false); // collapse to docked
 document.getElementById('open-full-chat').onclick = () => openAsst(true);   // the assistant IS the full chat (not Open WebUI)
 document.getElementById('asst-form').addEventListener('submit', e => { e.preventDefault(); asstSend(document.getElementById('asst-text').value); });

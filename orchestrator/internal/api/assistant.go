@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cloudless/orchestrator/internal/apps"
 	"github.com/cloudless/orchestrator/internal/assistant"
 	"github.com/cloudless/orchestrator/internal/catalog"
 	"github.com/cloudless/orchestrator/internal/hardware"
@@ -47,14 +48,27 @@ func (s *Server) assistantChat(w http.ResponseWriter, r *http.Request) {
 		send(map[string]any{"done": true, "actions": []assistant.Action{}})
 		return
 	}
+	if !hermesReady(ctx) {
+		send(map[string]any{"delta": "Your Cloudless agent is still starting. Hermes will be ready as soon as its local service finishes loading."})
+		send(map[string]any{"done": true, "actions": []assistant.Action{}})
+		return
+	}
 
 	msgs := append([]assistant.Msg{{Role: "system", Content: assistant.SystemPrompt(actx)}}, body.Messages...)
-	base := fmt.Sprintf("http://127.0.0.1:%d", catalog.EnginePort)
+	base := fmt.Sprintf("http://127.0.0.1:%d", catalog.HermesAPIPort)
+	apiKey, err := apps.HermesAPIKey(s.appConfigDir("hermes"))
+	if err != nil {
+		send(map[string]any{"delta": "Cloudless could not unlock the local Hermes service. Restart CloudlessOS and try again."})
+		send(map[string]any{"done": true, "actions": []assistant.Action{}})
+		return
+	}
 
 	var full strings.Builder
-	err := assistant.Stream(ctx, base, "cloudless", msgs, func(tok string) {
+	err = assistant.Stream(ctx, base, apiKey, "hermes-agent", msgs, func(tok string) {
 		full.WriteString(tok)
 		send(map[string]any{"delta": tok})
+	}, func(progress assistant.ToolProgress) {
+		send(map[string]any{"tool": progress})
 	})
 	if err != nil {
 		send(map[string]any{"delta": "\n\n(Sorry — I lost contact with the engine. Try again in a moment.)"})
@@ -68,6 +82,35 @@ func (s *Server) assistantChat(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	send(map[string]any{"done": true, "actions": assistant.Suggest(full.String(), lastUser, actx)})
+}
+
+func hermesReady(ctx context.Context) bool {
+	c, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(c, http.MethodGet, fmt.Sprintf("http://127.0.0.1:%d/health", catalog.HermesAPIPort), nil)
+	if err != nil {
+		return false
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	return resp.StatusCode == http.StatusOK
+}
+
+func (s *Server) hermesStatus(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 4*time.Second)
+	defer cancel()
+	container, _ := s.eng.Find(ctx, "cloudless-hermes")
+	running := container != nil && container.State == "running"
+	writeJSON(w, http.StatusOK, map[string]any{
+		"installed":    container != nil,
+		"running":      running,
+		"ready":        running && hermesReady(ctx),
+		"dashboardURL": fmt.Sprintf("http://127.0.0.1:%d/", catalog.HermesDashboardPort),
+		"agentURL":     fmt.Sprintf("http://127.0.0.1:%d/v1", catalog.HermesAPIPort),
+	})
 }
 
 // assistantContext snapshots live OS state for grounding.

@@ -231,8 +231,10 @@ const cloudlessNet = "cloudless"
 // engine; switching engines just moves this alias (see D15). EnginePort is the
 // fixed port every engine listens on (so the endpoint never changes).
 const (
-	EngineAlias = "cloudless-ai"
-	EnginePort  = 8000
+	EngineAlias         = "cloudless-ai"
+	EnginePort          = 8000
+	HermesAPIPort       = 8642
+	HermesDashboardPort = 9119
 )
 
 // EngineEndpoint is the stable OpenAI base URL clients are configured with.
@@ -527,13 +529,18 @@ var apps = []App{
 			"Keep memory and context across sessions and upgrades",
 		},
 		Image:       "nousresearch/hermes-agent:v2026.7.20",
-		Ports:       map[int]int{9119: 9119},
+		Ports:       map[int]int{HermesDashboardPort: HermesDashboardPort},
 		NeedsEngine: true, // agent that drives the local model
 		Env: map[string]string{
-			"HERMES_DASHBOARD":      "1",
-			"HERMES_DASHBOARD_HOST": "127.0.0.1",
-			"HERMES_DASHBOARD_PORT": "9119",
-			"OPENAI_API_KEY":        "cloudless",
+			"HERMES_DASHBOARD":            "1",
+			"HERMES_DASHBOARD_HOST":       "127.0.0.1",
+			"HERMES_DASHBOARD_PORT":       "9119",
+			"HERMES_DASHBOARD_FILES_ROOT": "/opt/data/workspace",
+			"API_SERVER_ENABLED":          "true",
+			"API_SERVER_HOST":             "127.0.0.1",
+			"API_SERVER_PORT":             "8642",
+			"API_SERVER_MODEL_NAME":       "hermes-agent",
+			"OPENAI_API_KEY":              "cloudless",
 		},
 		Config: []ConfigFile{
 			{File: "config.yaml", Lang: "yaml"},
@@ -551,12 +558,13 @@ var apps = []App{
 		},
 		OpenPath: "/",
 		// The official image runs its services as the unprivileged hermes user.
-		DataPath:  "/opt/data",
-		DataUID:   10000,
-		Command:   []string{"gateway", "run"},
-		MinVRAMGB: 0,
-		Verified:  false,
-		LocalOnly: true, // dashboard can read/write credentials; never expose it implicitly
+		DataPath:   "/opt/data",
+		DataUID:    10000,
+		Command:    []string{"gateway", "run"},
+		MinVRAMGB:  0,
+		Verified:   false,
+		Preinstall: true,
+		LocalOnly:  true, // dashboard can read/write credentials; never expose it implicitly
 		// Loopback dashboard + direct access to the host-published Cloudless engine.
 		Network: "host",
 	},

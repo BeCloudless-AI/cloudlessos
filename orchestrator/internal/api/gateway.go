@@ -12,9 +12,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cloudless/orchestrator/internal/apps"
 	"github.com/cloudless/orchestrator/internal/catalog"
 	"github.com/cloudless/orchestrator/internal/engine"
 	"github.com/cloudless/orchestrator/internal/provision"
+	"github.com/cloudless/orchestrator/internal/state"
 )
 
 // The Cloudless Proxy: an OpenAI-compatible gateway in front of the active engine,
@@ -27,47 +29,94 @@ const (
 	servedModelName   = "cloudless" // the engine's --served-model-name
 )
 
-// GatewayHandler builds the HTTP handler for the gateway listener: every /v1/* call
-// is key-checked, then reverse-proxied to the local engine.
+// GatewayHandler exposes two authenticated surfaces on one shareable listener:
+// /v1/* proxies raw model inference, while /agent/v1/* and /agent/api/* proxy
+// Hermes' agent APIs. Hermes' dashboard is deliberately not reachable here.
 func (s *Server) GatewayHandler() http.Handler {
-	target, _ := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", catalog.EnginePort))
-	rp := httputil.NewSingleHostReverseProxy(target)
-	rp.FlushInterval = -1 // flush immediately so token streaming (SSE) isn't buffered
-	orig := rp.Director
-	rp.Director = func(req *http.Request) {
+	engineTarget, _ := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", catalog.EnginePort))
+	engineProxy := httputil.NewSingleHostReverseProxy(engineTarget)
+	engineProxy.FlushInterval = -1
+	orig := engineProxy.Director
+	engineProxy.Director = func(req *http.Request) {
 		orig(req)
-		req.Host = target.Host
+		req.Host = engineTarget.Host
 		req.Header.Del("Authorization") // the engine doesn't need (and shouldn't see) the user's key
 	}
-	rp.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
+	engineProxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
 		writeOpenAIError(w, http.StatusBadGateway, "The Cloudless engine isn't reachable — make sure a model is loaded.")
+	}
+
+	hermesTarget, _ := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", catalog.HermesAPIPort))
+	hermesProxy := httputil.NewSingleHostReverseProxy(hermesTarget)
+	hermesProxy.FlushInterval = -1
+	hermesOrig := hermesProxy.Director
+	hermesProxy.Director = func(req *http.Request) {
+		hermesOrig(req)
+		req.Host = hermesTarget.Host
+		req.URL.Path = strings.TrimPrefix(req.URL.Path, "/agent")
+		if key, err := apps.HermesAPIKey(s.appConfigDir("hermes")); err == nil {
+			req.Header.Set("Authorization", "Bearer "+key)
+		} else {
+			req.Header.Del("Authorization")
+		}
+	}
+	hermesProxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
+		writeOpenAIError(w, http.StatusBadGateway, "The Cloudless agent isn't reachable — Hermes may still be starting.")
 	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/", func(w http.ResponseWriter, r *http.Request) {
-		id, ok := s.state.ValidateAPIKey(bearerToken(r))
+		id, ok := s.authorizeGateway(w, r, state.APIKeyScopeModel)
 		if !ok {
-			writeOpenAIError(w, http.StatusUnauthorized, "Invalid API key. Pass a Cloudless key as 'Authorization: Bearer sk-cloudless-…'.")
 			return
 		}
 		rewriteModel(r) // let callers use any model name; the engine serves exactly one
-		rec := &statusRec{ResponseWriter: w, status: 200}
-		rp.ServeHTTP(rec, r)
-		success := rec.status < 400
-		promptTokens, completionTokens := responseUsage(rec.capture)
-		s.state.RecordAPIUsage(id, success, promptTokens, completionTokens)
-		s.usage.RecordAPI(success) // global success rate (API traffic)
+		s.serveGatewayProxy(w, r, id, state.APIKeyScopeModel, engineProxy)
 	})
+	agent := func(w http.ResponseWriter, r *http.Request) {
+		id, ok := s.authorizeGateway(w, r, state.APIKeyScopeAgent)
+		if !ok {
+			return
+		}
+		s.serveGatewayProxy(w, r, id, state.APIKeyScopeAgent, hermesProxy)
+	}
+	mux.HandleFunc("/agent/v1/", agent)
+	mux.HandleFunc("/agent/api/", agent)
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "service": "cloudless-proxy"})
+		writeJSON(w, http.StatusOK, map[string]any{
+			"status": "ok", "service": "cloudless-proxy", "agentReady": hermesReady(r.Context()),
+		})
 	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{
 			"service": "Cloudless Proxy",
-			"hint":    "OpenAI-compatible API. POST /v1/chat/completions with Authorization: Bearer <your Cloudless key>.",
+			"hint":    "Use /v1 for model inference or /agent/v1 for Hermes. Both require a scoped Cloudless key.",
 		})
 	})
 	return mux
+}
+
+func (s *Server) authorizeGateway(w http.ResponseWriter, r *http.Request, scope string) (string, bool) {
+	token := bearerToken(r)
+	if _, ok := s.state.ValidateAPIKey(token); !ok {
+		writeOpenAIError(w, http.StatusUnauthorized, "Invalid API key. Pass a Cloudless key as 'Authorization: Bearer sk-cloudless-…'.")
+		return "", false
+	}
+	id, ok := s.state.ValidateAPIKeyFor(token, scope)
+	if !ok {
+		writeOpenAIError(w, http.StatusForbidden, "This API key does not have permission to use the requested Cloudless service.")
+		return "", false
+	}
+	return id, true
+}
+
+func (s *Server) serveGatewayProxy(w http.ResponseWriter, r *http.Request, id, kind string, proxy http.Handler) {
+	rec := &statusRec{ResponseWriter: w, status: http.StatusOK}
+	proxy.ServeHTTP(rec, r)
+	success := rec.status < 400
+	promptTokens, completionTokens := responseUsage(rec.capture)
+	s.state.RecordAPIUsageKind(id, kind, success, promptTokens, completionTokens)
+	s.usage.RecordAPI(success)
 }
 
 // statusRec wraps a ResponseWriter to capture the response status for usage tracking,
@@ -231,6 +280,9 @@ type keyView struct {
 	PromptTokens     int64  `json:"promptTokens"`
 	CompletionTokens int64  `json:"completionTokens"`
 	TotalTokens      int64  `json:"totalTokens"`
+	Scope            string `json:"scope"`
+	ModelRequests    int64  `json:"modelRequests"`
+	AgentRequests    int64  `json:"agentRequests"`
 }
 
 func (s *Server) gatewayGet(w http.ResponseWriter, r *http.Request) {
@@ -244,6 +296,7 @@ func (s *Server) gatewayGet(w http.ResponseWriter, r *http.Request) {
 			Requests: k.Requests, Successes: k.Successes, Failures: k.Failures,
 			PromptTokens: k.PromptTokens, CompletionTokens: k.CompletionTokens,
 			TotalTokens: k.PromptTokens + k.CompletionTokens,
+			Scope:       state.NormalizeAPIKeyScope(k.Scope), ModelRequests: k.ModelRequests, AgentRequests: k.AgentRequests,
 		})
 	}
 
@@ -267,9 +320,17 @@ func (s *Server) gatewayGet(w http.ResponseWriter, r *http.Request) {
 		"servedName": servedModelName, // what callers put in "model"
 		"model":      model,           // the real model behind it
 		"localURL":   fmt.Sprintf("http://localhost:%d/v1", GatewayPort),
-		"keys":       keys,
-		"lan":        map[string]any{"enabled": lanOn, "ip": ip, "url": lanURL(lanOn, ip)},
-		"tunnel":     map[string]any{"enabled": tunOn, "url": tunURL},
+		"agent": map[string]any{
+			"ready": hermesReady(ctx), "servedName": "hermes-agent",
+			"localURL": fmt.Sprintf("http://localhost:%d/agent/v1", GatewayPort),
+		},
+		"keys": keys,
+		"lan": map[string]any{
+			"enabled": lanOn, "ip": ip, "url": lanURL(lanOn, ip), "agentURL": agentLanURL(lanOn, ip),
+		},
+		"tunnel": map[string]any{
+			"enabled": tunOn, "url": tunURL, "modelURL": appendURLPath(tunURL, "/v1"), "agentURL": appendURLPath(tunURL, "/agent/v1"),
+		},
 	})
 }
 
@@ -280,23 +341,39 @@ func lanURL(on bool, ip string) string {
 	return ""
 }
 
+func agentLanURL(on bool, ip string) string {
+	if on && ip != "" {
+		return fmt.Sprintf("http://%s:%d/agent/v1", ip, GatewayPort)
+	}
+	return ""
+}
+
+func appendURLPath(base, path string) string {
+	if base == "" {
+		return ""
+	}
+	return strings.TrimRight(base, "/") + path
+}
+
 func (s *Server) keyCreate(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Name string `json:"name"`
+		Name  string `json:"name"`
+		Scope string `json:"scope"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&body)
 	name := strings.TrimSpace(body.Name)
 	if name == "" {
 		name = "API key"
 	}
-	secret, k, err := s.state.AddAPIKey(name)
+	scope := state.NormalizeAPIKeyScope(body.Scope)
+	secret, k, err := s.state.AddAPIKey(name, scope)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 	// The full secret is returned ONCE here and never again.
 	writeJSON(w, http.StatusOK, map[string]any{
-		"id": k.ID, "name": k.Name, "prefix": k.Prefix, "created": k.Created, "key": secret,
+		"id": k.ID, "name": k.Name, "prefix": k.Prefix, "created": k.Created, "scope": k.Scope, "key": secret,
 	})
 }
 
@@ -349,7 +426,9 @@ func (s *Server) gatewayLanSet(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"enabled": true, "ip": ip, "url": lanURL(true, ip)})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"enabled": true, "ip": ip, "url": lanURL(true, ip), "agentURL": agentLanURL(true, ip),
+	})
 }
 
 func (s *Server) gatewayTunnelSet(w http.ResponseWriter, r *http.Request) {
@@ -394,5 +473,7 @@ func (s *Server) gatewayTunnelSet(w http.ResponseWriter, r *http.Request) {
 		case <-time.After(600 * time.Millisecond):
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"enabled": true, "url": url})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"enabled": true, "url": url, "modelURL": appendURLPath(url, "/v1"), "agentURL": appendURLPath(url, "/agent/v1"),
+	})
 }

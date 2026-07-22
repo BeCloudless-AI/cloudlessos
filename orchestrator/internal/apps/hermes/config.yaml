@@ -4,6 +4,21 @@ model:
   base_url: "http://127.0.0.1:8000/v1"
   api_key: "cloudless"
 
+terminal:
+  backend: local
+  cwd: "/opt/data/workspace"
+  home_mode: profile
+
+approvals:
+  mode: smart
+  timeout: 60
+  cron_mode: deny
+  deny:
+    - "sudo *"
+    - "su *"
+    - "*mount *"
+    - "*docker.sock*"
+
 tool_loop_guardrails:
   hard_stop_enabled: true
   hard_stop_after:

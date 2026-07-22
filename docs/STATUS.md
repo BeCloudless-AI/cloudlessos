@@ -59,10 +59,9 @@ removed via the API.
 - **SGLang alternative engine** (D13): pre-fetched (image ready, ~41.6 GB) but not run by
   default — switch to it instead of vLLM. New `Prefetch` provisioning mode. Verified:
   provisioner fetches it without starting it.
-- **OpenClaw + Hermes agents** (D14): no upstream image, so **built locally** from embedded
-  Dockerfiles (new `apps` package + `engine.Build` + `building` install phase) and
-  pre-wired to Cloudless AI. Verified: both build and run; OpenClaw logs
-  `agent model: custom/cloudless`; daemon build-and-install path works via the API.
+- **OpenClaw + Hermes agents** (D14, Hermes architecture superseded): OpenClaw keeps its
+  Cloudless app integration. Hermes now uses the pinned official Nous Research image and is
+  preinstalled as the core agentic runtime, with persistent state and Cloudless AI wiring.
 - **OpenClaw plug-and-play** (D16): no auth wall — gateway runs `--auth none --bind loopback`
   under host networking (reachable at `localhost:18789`, nothing to enter), reaching the
   active engine via host `127.0.0.1:8000`. Engine gained `host` networking support. Verified.

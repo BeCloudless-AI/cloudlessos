@@ -30,7 +30,7 @@ func (s *Server) updateGet(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 18*time.Second)
 	defer cancel()
 
-	// Locally-built agents (OpenClaw/Hermes) have no upstream digest to compare;
+	// Locally-built apps (currently OpenClaw) have no upstream digest to compare;
 	// "update" for them means rebuilding (the Reset action).
 	if app.Build != "" {
 		c, _ := s.eng.Find(ctx, app.ContainerName())

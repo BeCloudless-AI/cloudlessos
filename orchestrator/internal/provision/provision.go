@@ -137,9 +137,23 @@ func Run(ctx context.Context, eng engine.Engine, st *state.Store, mf *manifest.S
 		_ = eng.Remove(ctx, app.ContainerName())
 		spec := app.Spec()
 		spec.Image = img
+		configDir := filepath.Join(st.Dir(), "apps", app.ID)
+		if vols, err := apps.ConfigVolumes(configDir, app); err != nil {
+			logf(app.ID + ": config failed: " + err.Error())
+			continue
+		} else if len(vols) > 0 {
+			merged := map[string]string{}
+			for host, container := range spec.Volumes {
+				merged[host] = container
+			}
+			for host, container := range vols {
+				merged[host] = container
+			}
+			spec.Volumes = merged
+		}
 		// Overlay env-injected config (e.g. Open WebUI's WEBUI_AUTH) so a setting
 		// chosen in the UI persists across reboots (same logic as the API's appSpec).
-		if ov := apps.EnvOverrides(filepath.Join(st.Dir(), "apps", app.ID), app); len(ov) > 0 {
+		if ov := apps.EnvOverrides(configDir, app); len(ov) > 0 {
 			env := map[string]string{}
 			for k, v := range spec.Env {
 				env[k] = v

@@ -3,8 +3,10 @@ package api
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/cloudless/orchestrator/internal/apps"
 	"github.com/cloudless/orchestrator/internal/catalog"
 	"github.com/cloudless/orchestrator/internal/state"
 )
@@ -32,5 +34,19 @@ func TestHermesMountsPersistentDataDirectory(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(wantDir, name)); err != nil {
 			t.Fatalf("seeded %s: %v", name, err)
 		}
+	}
+	key, err := apps.HermesAPIKey(wantDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(key, "cloudless-hermes-") || len(key) < 50 {
+		t.Fatalf("unexpected generated Hermes credential: %q", key)
+	}
+	again, err := apps.HermesAPIKey(wantDir)
+	if err != nil || again != key {
+		t.Fatalf("Hermes credential is not stable: %q, %v", again, err)
+	}
+	if info, err := os.Stat(filepath.Join(wantDir, "workspace")); err != nil || !info.IsDir() {
+		t.Fatalf("Hermes workspace missing: %v", err)
 	}
 }

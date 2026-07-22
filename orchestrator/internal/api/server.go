@@ -141,6 +141,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/apps/{id}/update", s.updateGet)
 	mux.HandleFunc("POST /api/apps/{id}/update", s.updateApply)
 	mux.HandleFunc("POST /api/assistant/chat", s.assistantChat)
+	mux.HandleFunc("GET /api/hermes", s.hermesStatus)
 
 	sub, err := fs.Sub(webFS, "web")
 	if err != nil {
@@ -570,40 +571,11 @@ func (s *Server) appConfigDir(appID string) string {
 // Stateful apps can mount the complete directory, allowing their own UI to also
 // persist sessions, memory and settings alongside Cloudless-seeded files.
 func (s *Server) configVolumes(app catalog.App) map[string]string {
-	vols := map[string]string{}
 	dir := s.appConfigDir(app.ID)
-	for _, cf := range app.Config {
-		host := filepath.Join(dir, cf.File)
-		if _, err := os.Stat(host); err != nil {
-			def, derr := apps.ReadDefault(app.ID, cf.File)
-			if derr != nil {
-				log.Printf("config: default %s/%s: %v", app.ID, cf.File, derr)
-				continue
-			}
-			_ = os.MkdirAll(dir, 0o755)
-			if werr := os.WriteFile(host, def, 0o644); werr != nil {
-				log.Printf("config: seed %s: %v", host, werr)
-				continue
-			}
-		}
-		if app.DataUID > 0 {
-			// cloudlessd is root on the appliance. Ignore failures in unprivileged
-			// development environments, where ownership need not be translated.
-			_ = os.Chown(host, app.DataUID, app.DataUID)
-			_ = os.Chmod(host, 0o600)
-		}
-		if cf.Env || app.DataPath != "" {
-			continue // env is injected; DataPath mounts the containing directory
-		}
-		vols[host] = cf.Path
-	}
-	if app.DataPath != "" {
-		_ = os.MkdirAll(dir, 0o700)
-		_ = os.Chmod(dir, 0o700)
-		if app.DataUID > 0 {
-			_ = os.Chown(dir, app.DataUID, app.DataUID)
-		}
-		vols[dir] = app.DataPath
+	vols, err := apps.ConfigVolumes(dir, app)
+	if err != nil {
+		log.Printf("config: prepare %s: %v", app.ID, err)
+		return map[string]string{}
 	}
 	return vols
 }

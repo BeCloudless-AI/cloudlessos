@@ -34,6 +34,26 @@ type APIKey struct {
 	Failures         int64  `json:"failures"`         // failed (>= 400) gateway responses
 	PromptTokens     int64  `json:"promptTokens"`     // input tokens reported by the engine
 	CompletionTokens int64  `json:"completionTokens"` // output tokens reported by the engine
+	Scope            string `json:"scope,omitempty"`  // model | agent | both; empty legacy keys are model-only
+	ModelRequests    int64  `json:"modelRequests,omitempty"`
+	AgentRequests    int64  `json:"agentRequests,omitempty"`
+}
+
+const (
+	APIKeyScopeModel = "model"
+	APIKeyScopeAgent = "agent"
+	APIKeyScopeBoth  = "both"
+)
+
+// NormalizeAPIKeyScope keeps persisted and request-provided values on the
+// intentionally small permission surface. Empty legacy keys remain model-only.
+func NormalizeAPIKeyScope(scope string) string {
+	switch scope {
+	case APIKeyScopeAgent, APIKeyScopeBoth:
+		return scope
+	default:
+		return APIKeyScopeModel
+	}
 }
 
 // State is the persisted state.
@@ -255,7 +275,7 @@ func (s *Store) APIKeys() []APIKey {
 
 // AddAPIKey creates a new gateway key, returning the FULL secret (shown once) plus
 // the stored record (hash only). The secret is never persisted in plaintext.
-func (s *Store) AddAPIKey(name string) (secret string, key APIKey, err error) {
+func (s *Store) AddAPIKey(name string, requestedScope ...string) (secret string, key APIKey, err error) {
 	raw := make([]byte, 24)
 	if _, err = rand.Read(raw); err != nil {
 		return "", APIKey{}, err
@@ -272,6 +292,10 @@ func (s *Store) AddAPIKey(name string) (secret string, key APIKey, err error) {
 		Prefix:  secret[:20], // "sk-cloudless-" + 7 hex chars
 		Hash:    hex.EncodeToString(sum[:]),
 		Created: now(),
+		Scope:   APIKeyScopeModel,
+	}
+	if len(requestedScope) > 0 {
+		key.Scope = NormalizeAPIKeyScope(requestedScope[0])
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -311,15 +335,45 @@ func (s *Store) ValidateAPIKey(secret string) (id string, ok bool) {
 	return "", false
 }
 
+// ValidateAPIKeyFor authenticates a key and enforces its model/agent scope.
+func (s *Store) ValidateAPIKeyFor(secret, requiredScope string) (id string, ok bool) {
+	if secret == "" {
+		return "", false
+	}
+	sum := sha256.Sum256([]byte(secret))
+	h := hex.EncodeToString(sum[:])
+	requiredScope = NormalizeAPIKeyScope(requiredScope)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, k := range s.st.APIKeys {
+		if k.Hash != h {
+			continue
+		}
+		scope := NormalizeAPIKeyScope(k.Scope)
+		return k.ID, scope == APIKeyScopeBoth || scope == requiredScope
+	}
+	return "", false
+}
+
 // RecordAPIUsage updates one key's lifetime metrics IN MEMORY, marking the store
 // dirty for a lazy flush (PersistIfDirty) so request proxying never writes to disk.
 func (s *Store) RecordAPIUsage(id string, success bool, promptTokens, completionTokens int64) {
+	s.RecordAPIUsageKind(id, APIKeyScopeModel, success, promptTokens, completionTokens)
+}
+
+// RecordAPIUsageKind records aggregate usage plus the selected gateway surface.
+func (s *Store) RecordAPIUsageKind(id, kind string, success bool, promptTokens, completionTokens int64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for i := range s.st.APIKeys {
 		if s.st.APIKeys[i].ID == id {
 			k := &s.st.APIKeys[i]
 			k.Requests++
+			if NormalizeAPIKeyScope(kind) == APIKeyScopeAgent {
+				k.AgentRequests++
+			} else {
+				k.ModelRequests++
+			}
 			if success {
 				k.Successes++
 			} else {

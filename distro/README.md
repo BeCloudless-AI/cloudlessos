@@ -83,6 +83,9 @@ On the installed system:
 
 - `cloudless-hardware.service` detects NVIDIA hardware and configures the Ubuntu driver,
   Docker, and NVIDIA Container Toolkit.
+- Settings → Machine checks Ubuntu's signed repositories daily for the driver recommended
+  for the detected NVIDIA GPU. Installation is user-confirmed, reports progress, warns
+  about Secure Boot, and requires a restart before the new kernel driver becomes active.
 - `cloudlessd.service` serves the OS on loopback ports 8765 and 8766.
 - LightDM signs into an unprivileged `cloudless` account and launches the browser in kiosk
   mode through Openbox.

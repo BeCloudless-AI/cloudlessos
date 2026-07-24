@@ -8,3 +8,5 @@ fi
 systemctl daemon-reload >/dev/null 2>&1 || true
 systemctl enable cloudless-update-check.timer >/dev/null 2>&1 || true
 systemctl start cloudless-update-check.timer >/dev/null 2>&1 || true
+systemctl enable cloudless-nvidia-check.timer >/dev/null 2>&1 || true
+systemctl start cloudless-nvidia-check.timer >/dev/null 2>&1 || true

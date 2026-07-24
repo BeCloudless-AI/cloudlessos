@@ -1,0 +1,11 @@
+[Unit]
+Description=Install the recommended NVIDIA driver update
+Wants=network-online.target
+After=network-online.target
+Conflicts=shutdown.target
+Before=shutdown.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/cloudless/cloudless-updater nvidia-apply
+TimeoutStartSec=45min

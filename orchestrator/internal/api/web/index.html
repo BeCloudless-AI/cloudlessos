@@ -811,6 +811,36 @@
   .machine-gpu-metric { min-width: 0; padding: 8px 9px; border-radius: 9px; background: var(--control); }
   .machine-gpu-metric span { display: block; color: var(--muted); font-size: 8.5px; font-weight: 720; letter-spacing: .35px; text-transform: uppercase; }
   .machine-gpu-metric b { display: block; margin-top: 4px; overflow: hidden; color: var(--ink); font-size: 11px; font-weight: 720; text-overflow: ellipsis; white-space: nowrap; }
+  .machine-driver {
+    margin-top: 11px; padding: 13px; border: 1px solid color-mix(in srgb, var(--blue) 18%, var(--hair));
+    border-radius: 13px; background: linear-gradient(145deg, color-mix(in srgb, var(--blue) 5%, var(--panel-2)), var(--panel-2));
+  }
+  .machine-driver-top { display: flex; align-items: flex-start; gap: 11px; }
+  .machine-driver-icon {
+    width: 36px; height: 36px; flex: none; display: grid; place-items: center; border-radius: 10px;
+    color: var(--blue); background: var(--blue-soft); border: 1px solid color-mix(in srgb, var(--blue) 24%, var(--hair));
+  }
+  .machine-driver-icon .ui-icon { width: 17px; height: 17px; }
+  .machine-driver-copy { min-width: 0; flex: 1; }
+  .machine-driver-title { color: var(--ink); font-size: 12.5px; font-weight: 760; }
+  .machine-driver-sub { margin-top: 3px; color: var(--muted); font-size: 10.5px; line-height: 1.45; overflow-wrap: anywhere; }
+  .machine-driver-status {
+    flex: none; padding: 4px 8px; border: 1px solid var(--hair); border-radius: 999px;
+    color: var(--muted); background: var(--control); font-size: 8.5px; font-weight: 800; letter-spacing: .4px; text-transform: uppercase;
+  }
+  .machine-driver-status.available { color: var(--blue); border-color: color-mix(in srgb, var(--blue) 32%, var(--hair)); background: var(--blue-soft); }
+  .machine-driver-status.ready { color: #2faa5b; border-color: color-mix(in srgb, #2faa5b 28%, var(--hair)); background: color-mix(in srgb, #2faa5b 8%, var(--card)); }
+  .machine-driver-status.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 32%, var(--hair)); background: color-mix(in srgb, var(--warn) 8%, var(--card)); }
+  .machine-driver-meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; margin-top: 11px; }
+  .machine-driver-fact { min-width: 0; padding: 8px 9px; border-radius: 9px; background: var(--control); }
+  .machine-driver-fact span { display: block; color: var(--muted); font-size: 8.5px; font-weight: 720; letter-spacing: .35px; text-transform: uppercase; }
+  .machine-driver-fact b { display: block; margin-top: 4px; overflow: hidden; color: var(--ink); font-size: 10.5px; text-overflow: ellipsis; white-space: nowrap; }
+  .machine-driver-progress { height: 6px; margin-top: 11px; overflow: hidden; border-radius: 999px; background: var(--control); }
+  .machine-driver-progress > span { display: block; width: var(--driver-progress); height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--blue), var(--accent)); transition: width .25s; }
+  .machine-driver-note { display: flex; align-items: flex-start; gap: 7px; margin-top: 10px; color: var(--warn); font-size: 9.5px; line-height: 1.45; }
+  .machine-driver-note .ui-icon { width: 13px; height: 13px; margin-top: 1px; flex: none; }
+  .machine-driver-actions { display: flex; justify-content: flex-end; gap: 7px; margin-top: 11px; }
+  .machine-driver-actions .btn { min-height: 32px; }
   .machine-empty { min-height: 194px; padding: 28px 18px; display: grid; place-items: center; text-align: center; border: 1px dashed var(--line-2); border-radius: 13px; color: var(--muted); background: var(--panel-2); }
   .machine-empty .ui-icon { width: 24px; height: 24px; margin-bottom: 9px; color: var(--faint); }
   .machine-empty strong { display: block; color: var(--ink); font-size: 12.5px; }
@@ -4028,10 +4058,111 @@ function fmtUptime(sec) {
   const d = Math.floor(sec / 86400), h = Math.floor((sec % 86400) / 3600), m = Math.floor((sec % 3600) / 60);
   if (d) return `${d}d ${h}h`; if (h) return `${h}h ${m}m`; return `${m}m`;
 }
+function nvidiaDriverCard(driver, gpus) {
+  driver = driver || {};
+  const state = driver.state || 'idle';
+  const busy = state === 'checking' || state === 'installing';
+  const detected = !!driver.hardwareDetected || gpus.length > 0;
+  if (!detected) return '';
+  const current = driver.currentDriver || gpus.find(g => g.driver)?.driver || 'Not reported';
+  const recommendation = driver.recommendedPackage
+    ? `${driver.recommendedPackage}${driver.candidateVersion ? ` · ${driver.candidateVersion}` : ''}`
+    : 'Check to find the hardware-matched release';
+  let label = 'Not checked', tone = '', actions = '<button class="btn" id="nvidia-check">Check for updates</button>';
+  if (state === 'available') {
+    label = 'Update available'; tone = 'available';
+    actions = '<button class="btn" id="nvidia-check">Check again</button><button class="btn primary" id="nvidia-apply">Download &amp; install</button>';
+  } else if (state === 'checking') {
+    label = 'Checking'; tone = 'available'; actions = '';
+  } else if (state === 'installing') {
+    label = 'Installing'; tone = 'available'; actions = '';
+  } else if (state === 'reboot_required') {
+    label = 'Restart required'; tone = 'warn'; actions = '<button class="btn primary" id="nvidia-reboot">Restart now</button>';
+  } else if (state === 'failed') {
+    label = 'Needs attention'; tone = 'warn'; actions = '<button class="btn" id="nvidia-check">Try again</button>';
+  } else if (driver.checkedAt) {
+    label = 'Up to date'; tone = 'ready';
+  }
+  const progress = Math.max(0, Math.min(100, Number(driver.progress) || 0));
+  const secureBoot = driver.secureBoot === 'enabled'
+    ? `<div class="machine-driver-note">${uiIcon('alert')}<span>Secure Boot is enabled. Ubuntu may ask you to enroll a Machine Owner Key during the next restart.</span></div>` : '';
+  return `<div class="machine-driver">
+    <div class="machine-driver-top">
+      <span class="machine-driver-icon">${uiIcon(busy ? 'restart' : 'download')}</span>
+      <div class="machine-driver-copy"><div class="machine-driver-title">NVIDIA driver updates</div><div class="machine-driver-sub">${escapeHtml(driver.message || 'CloudlessOS checks Ubuntu for the newest driver recommended for this exact GPU.')}${driver.error ? ` ${escapeHtml(driver.error)}` : ''}</div></div>
+      <span class="machine-driver-status ${tone}">${escapeHtml(label)}</span>
+    </div>
+    <div class="machine-driver-meta">
+      <div class="machine-driver-fact"><span>Active driver</span><b title="${escapeAttr(String(current))}">${escapeHtml(String(current))}</b></div>
+      <div class="machine-driver-fact"><span>Ubuntu recommendation</span><b title="${escapeAttr(recommendation)}">${escapeHtml(recommendation)}</b></div>
+    </div>
+    ${busy ? `<div class="machine-driver-progress" role="progressbar" aria-label="NVIDIA driver update progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progress}"><span style="--driver-progress:${progress}%"></span></div>` : ''}
+    ${secureBoot}
+    ${driver.checkedAt ? `<div class="upd-src">Automatically checked daily · Last checked ${new Date(driver.checkedAt).toLocaleString()}</div>` : '<div class="upd-src">CloudlessOS checks automatically each day.</div>'}
+    ${actions ? `<div class="machine-driver-actions">${actions}</div>` : ''}
+  </div>`;
+}
+function openNVIDIADriverDialog(driver, action) {
+  const restart = action === 'reboot';
+  const layer = document.getElementById('key-dialog-layer'), content = document.getElementById('key-dialog-content');
+  const packageText = driver.recommendedPackage
+    ? `${driver.recommendedPackage}${driver.candidateVersion ? ` (${driver.candidateVersion})` : ''}` : 'Ubuntu’s recommended NVIDIA driver';
+  content.innerHTML = `<div class="key-dialog-head">
+      <span class="key-dialog-icon">${uiIcon(restart ? 'restart' : 'download')}</span>
+      <div class="key-dialog-heading"><div class="key-dialog-title" id="key-dialog-title">${restart ? 'Restart to activate the driver?' : 'Install the NVIDIA driver update?'}</div><div class="key-dialog-sub">${restart ? 'CloudlessOS will restart and load the newly installed kernel driver.' : `${escapeHtml(packageText)} will be downloaded from Ubuntu’s signed repositories.`}</div></div>
+      <button class="key-dialog-close" id="nvidia-dialog-close" type="button" aria-label="Close driver update dialog">${uiIcon('close')}</button>
+    </div>
+    <div class="key-dialog-body">
+      <div class="key-dialog-help">${restart ? 'Running models and apps will stop during the restart.' : 'The active driver will not change until you restart CloudlessOS. Existing containers and models remain installed.'}</div>
+      ${driver.secureBoot === 'enabled' && !restart ? `<div class="key-dialog-note">${uiIcon('alert')}<span>Secure Boot is enabled. Ubuntu may require Machine Owner Key enrollment on the next boot.</span></div>` : ''}
+      <div class="key-dialog-error" id="nvidia-dialog-error" role="alert"></div>
+      <div class="key-dialog-actions"><button class="btn" id="nvidia-dialog-cancel" type="button">Cancel</button><button class="btn primary" id="nvidia-dialog-confirm" type="button">${uiIcon(restart ? 'restart' : 'download')}<span>${restart ? 'Restart CloudlessOS' : 'Download & install'}</span></button></div>
+    </div>`;
+  layer.classList.remove('hidden');
+  document.getElementById('nvidia-dialog-close').onclick = closeKeyDialog;
+  document.getElementById('nvidia-dialog-cancel').onclick = closeKeyDialog;
+  document.getElementById('nvidia-dialog-confirm').onclick = async e => {
+    const button = e.currentTarget, error = document.getElementById('nvidia-dialog-error');
+    button.disabled = true;
+    button.innerHTML = `<span class="key-dialog-spinner"></span><span>${restart ? 'Restarting…' : 'Starting…'}</span>`;
+    try {
+      if (restart) {
+        await api('/api/system/reboot', { method: 'POST', headers: { 'X-Cloudless-Action': 'reboot' } });
+        content.querySelector('.key-dialog-body').innerHTML = '<div class="key-dialog-help">CloudlessOS is restarting. This screen will reconnect when the system is ready.</div>';
+      } else {
+        await api('/api/system/nvidia-driver/apply', { method: 'POST', headers: { 'X-Cloudless-Action': 'nvidia-driver' } });
+        closeKeyDialog(); pollNVIDIADriver();
+      }
+    } catch (err) {
+      button.disabled = false; error.textContent = err.message || 'Could not start the driver update.';
+      button.innerHTML = `${uiIcon(restart ? 'restart' : 'download')}<span>${restart ? 'Restart CloudlessOS' : 'Download & install'}</span>`;
+    }
+  };
+}
+async function startNVIDIACheck() {
+  try {
+    await api('/api/system/nvidia-driver/check', { method: 'POST' });
+    toast('Checking NVIDIA driver updates…'); pollNVIDIADriver();
+  } catch { toast('Could not start the NVIDIA driver check', true); }
+}
+async function pollNVIDIADriver() {
+  for (let i = 0; i < 180 && setPage === 'hardware'; i++) {
+    await new Promise(resolve => setTimeout(resolve, 1000));
+    let status; try { status = await api('/api/system/nvidia-driver'); } catch { continue; }
+    const content = document.getElementById('set-content');
+    if (content && setPage === 'hardware') await renderHardwarePage(content);
+    if (status.state !== 'checking' && status.state !== 'installing') {
+      if (status.state === 'available') toast('NVIDIA driver update available');
+      else if (status.state === 'reboot_required') toast('Driver installed — restart required');
+      else if (status.state === 'failed') toast(status.message || 'Driver update failed', true);
+      return;
+    }
+  }
+}
 async function renderHardwarePage(c) {
   c.innerHTML = '<div class="set-hint">Loading…</div>';
-  let gpu, folders, sys;
-  try { [gpu, folders, sys] = await Promise.all([api('/api/gpu'), api('/api/folders'), api('/api/system').catch(() => null)]); } catch { return; }
+  let gpu, folders, sys, driver;
+  try { [gpu, folders, sys, driver] = await Promise.all([api('/api/gpu'), api('/api/folders'), api('/api/system').catch(() => null), api('/api/system/nvidia-driver').catch(() => null)]); } catch { return; }
   const gpus = gpu.gpus || [];
   const s = sys && sys.system ? sys.system : {};
   const l = sys && sys.locale ? sys.locale : {};
@@ -4071,13 +4202,16 @@ async function renderHardwarePage(c) {
     <div class="inf-page-hero"><span class="inf-page-icon">${uiIcon('machine')}</span><div class="inf-page-copy"><div class="inf-page-eyebrow">This CloudlessOS device</div><div class="inf-page-title">${escapeHtml(String(hostname))}</div><div class="inf-page-desc">${escapeHtml(heroDescription)}</div></div><span class="inf-state-pill ready">Online</span></div>
     <div class="machine-layout">
       <section class="machine-card"><div class="machine-card-head"><div><div class="machine-card-title">System overview</div><div class="machine-card-desc">The hardware and environment powering CloudlessOS.</div></div></div><div class="machine-facts">${systemFacts}</div></section>
-      <section class="machine-card"><div class="machine-card-head"><div><div class="machine-card-title">Graphics</div><div class="machine-card-desc">Live capacity and activity across detected NVIDIA GPUs.</div></div><span class="inf-state-pill ${gpus.length ? 'ready' : ''}">${gpus.length ? `${gpus.length} detected` : 'Not detected'}</span></div><div class="machine-gpu-list">${gpuHtml}</div></section>
+      <section class="machine-card"><div class="machine-card-head"><div><div class="machine-card-title">Graphics</div><div class="machine-card-desc">Live capacity, activity, and signed driver updates for detected NVIDIA GPUs.</div></div><span class="inf-state-pill ${gpus.length ? 'ready' : ''}">${gpus.length ? `${gpus.length} detected` : 'Not detected'}</span></div><div class="machine-gpu-list">${gpuHtml}</div>${nvidiaDriverCard(driver, gpus)}</section>
       <section class="machine-card machine-places"><div class="machine-card-head"><div><div class="machine-card-title">Places</div><div class="machine-card-desc">Open the folders CloudlessOS uses for models, projects, downloads, and generated files.</div></div></div><div class="machine-place-grid">${placesHtml}</div></section>
     </div>
   </div>`;
   c.querySelectorAll('[data-folder]').forEach(b => b.onclick = async () => {
     try { const r = await api(`/api/folders/${b.dataset.folder}/open`, { method: 'POST' }); toast(r.opened ? 'Opened ' + b.querySelector('.machine-place-name').textContent : (r.error || 'Could not open folder'), !r.opened); } catch { toast('Could not open folder', true); }
   });
+  const driverCheck = document.getElementById('nvidia-check'); if (driverCheck) driverCheck.onclick = startNVIDIACheck;
+  const driverApply = document.getElementById('nvidia-apply'); if (driverApply) driverApply.onclick = () => openNVIDIADriverDialog(driver || {}, 'apply');
+  const driverReboot = document.getElementById('nvidia-reboot'); if (driverReboot) driverReboot.onclick = () => openNVIDIADriverDialog(driver || {}, 'reboot');
 }
 
 function renderAppearancePage(c) {

@@ -1,0 +1,11 @@
+[Unit]
+Description=Check for compatible NVIDIA driver updates
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/cloudless/cloudless-updater nvidia-check
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7

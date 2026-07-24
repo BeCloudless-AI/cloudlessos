@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily NVIDIA driver update check
+
+[Timer]
+OnBootSec=20min
+OnUnitActiveSec=24h
+RandomizedDelaySec=45min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

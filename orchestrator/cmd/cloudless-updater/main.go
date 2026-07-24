@@ -16,6 +16,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/cloudless/orchestrator/internal/nvidiaupdate"
 	"github.com/cloudless/orchestrator/internal/osupdate"
 )
 
@@ -42,7 +43,7 @@ type releaseManifest struct {
 
 func main() {
 	if len(os.Args) != 2 {
-		fatalf("usage: cloudless-updater check|apply|status")
+		fatalf("usage: cloudless-updater check|apply|status|nvidia-check|nvidia-apply|nvidia-status")
 	}
 	var err error
 	switch os.Args[1] {
@@ -56,12 +57,229 @@ func main() {
 		if err == nil {
 			err = json.NewEncoder(os.Stdout).Encode(status)
 		}
+	case "nvidia-check":
+		err = checkNVIDIA()
+	case "nvidia-apply":
+		err = applyNVIDIA()
+	case "nvidia-status":
+		var status nvidiaupdate.Status
+		status, err = nvidiaupdate.Read()
+		if err == nil {
+			err = json.NewEncoder(os.Stdout).Encode(status)
+		}
 	default:
 		fatalf("unknown command %q", os.Args[1])
 	}
 	if err != nil {
 		fatalf("%v", err)
 	}
+}
+
+func checkNVIDIA() error {
+	return withLock(func() error {
+		status := currentNVIDIAStatus("checking", "Checking Ubuntu's signed NVIDIA drivers…")
+		_ = nvidiaupdate.Write(status)
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		defer cancel()
+		if !nvidiaHardwareDetected(ctx) {
+			status.State = "unavailable"
+			status.Message = "No NVIDIA graphics hardware was detected."
+			status.Progress = 100
+			status.CheckedAt = time.Now().UTC().Format(time.RFC3339)
+			return nvidiaupdate.Write(status)
+		}
+		status.HardwareDetected = true
+		status.Progress = 15
+		status.Message = "Refreshing Ubuntu's signed driver repository…"
+		_ = nvidiaupdate.Write(status)
+		if _, err := run(ctx, "apt-get", "update"); err != nil {
+			return failNVIDIAStatus(status, "Could not refresh Ubuntu's driver repository", err)
+		}
+		status.Progress = 65
+		status.Message = "Matching the safest driver to this GPU…"
+		_ = nvidiaupdate.Write(status)
+		var err error
+		status, err = inspectNVIDIA(ctx, status)
+		if err != nil {
+			return failNVIDIAStatus(status, "Could not inspect NVIDIA driver updates", err)
+		}
+		status.CheckedAt = time.Now().UTC().Format(time.RFC3339)
+		status.Progress = 100
+		status.State = "idle"
+		status.Message = "The recommended NVIDIA driver is installed."
+		if status.UpdateAvailable {
+			status.State = "available"
+			status.Message = "A compatible NVIDIA driver update is available."
+		}
+		return nvidiaupdate.Write(status)
+	})
+}
+
+func applyNVIDIA() error {
+	return withLock(func() error {
+		status := currentNVIDIAStatus("installing", "Preparing the NVIDIA driver update…")
+		_ = nvidiaupdate.Write(status)
+		ctx, cancel := context.WithTimeout(context.Background(), 45*time.Minute)
+		defer cancel()
+		if !nvidiaHardwareDetected(ctx) {
+			status.State = "unavailable"
+			status.Message = "No NVIDIA graphics hardware was detected."
+			status.Progress = 100
+			return nvidiaupdate.Write(status)
+		}
+		status.HardwareDetected = true
+		status.Progress = 10
+		status.Message = "Refreshing Ubuntu's signed driver repository…"
+		_ = nvidiaupdate.Write(status)
+		if _, err := run(ctx, "apt-get", "update"); err != nil {
+			return failNVIDIAStatus(status, "Could not refresh Ubuntu's driver repository", err)
+		}
+		var err error
+		status, err = inspectNVIDIA(ctx, status)
+		if err != nil {
+			return failNVIDIAStatus(status, "Could not select a compatible NVIDIA driver", err)
+		}
+		if !status.UpdateAvailable {
+			status.State = "idle"
+			status.Message = "The recommended NVIDIA driver is already installed."
+			status.Progress = 100
+			status.CheckedAt = time.Now().UTC().Format(time.RFC3339)
+			return nvidiaupdate.Write(status)
+		}
+		status.State = "installing"
+		status.Progress = 35
+		status.Message = fmt.Sprintf("Downloading %s from Ubuntu…", status.RecommendedPackage)
+		_ = nvidiaupdate.Write(status)
+		if _, err := runEnv(ctx, []string{"DEBIAN_FRONTEND=noninteractive", "NEEDRESTART_MODE=a"}, "apt-get", "install", "-y", status.RecommendedPackage); err != nil {
+			return failNVIDIAStatus(status, "NVIDIA driver installation failed", err)
+		}
+		status.Progress = 90
+		status.Message = "Finishing the driver installation…"
+		_ = nvidiaupdate.Write(status)
+		status.State = "reboot_required"
+		status.UpdateAvailable = false
+		status.RebootRequired = true
+		status.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+		status.CheckedAt = status.UpdatedAt
+		status.Progress = 100
+		status.Message = "Driver installed. Restart CloudlessOS to activate it."
+		status.Error = ""
+		return nvidiaupdate.Write(status)
+	})
+}
+
+func currentNVIDIAStatus(state, message string) nvidiaupdate.Status {
+	status, err := nvidiaupdate.Read()
+	if err != nil {
+		status = nvidiaupdate.DefaultStatus()
+	}
+	status.State = state
+	status.Message = message
+	status.Error = ""
+	status.Progress = 0
+	return status
+}
+
+func inspectNVIDIA(ctx context.Context, status nvidiaupdate.Status) (nvidiaupdate.Status, error) {
+	status.HardwareDetected = true
+	status.CurrentDriver = nvidiaDriverVersion(ctx)
+	status.SecureBoot = secureBootState(ctx)
+	recommended, err := recommendedNVIDIAPackage(ctx)
+	if err != nil {
+		return status, err
+	}
+	status.RecommendedPackage = recommended
+	status.CandidateVersion, err = candidateVersion(ctx, recommended)
+	if err != nil {
+		return status, err
+	}
+	status.InstalledPackage, status.InstalledVersion = installedNVIDIAPackage(ctx, recommended)
+	status.UpdateAvailable = status.InstalledPackage != recommended || status.InstalledVersion == ""
+	if !status.UpdateAvailable && status.CandidateVersion != "" {
+		status.UpdateAvailable = exec.CommandContext(ctx, "dpkg", "--compare-versions", status.CandidateVersion, "gt", status.InstalledVersion).Run() == nil
+	}
+	return status, nil
+}
+
+func nvidiaHardwareDetected(ctx context.Context) bool {
+	if out, err := run(ctx, "lspci", "-nn"); err == nil && strings.Contains(strings.ToLower(out), "nvidia") {
+		return true
+	}
+	return exec.CommandContext(ctx, "nvidia-smi", "-L").Run() == nil
+}
+
+func recommendedNVIDIAPackage(ctx context.Context) (string, error) {
+	out, err := run(ctx, "ubuntu-drivers", "devices")
+	if err != nil {
+		return "", err
+	}
+	return parseRecommendedNVIDIAPackage(out)
+}
+
+func parseRecommendedNVIDIAPackage(out string) (string, error) {
+	for _, line := range strings.Split(out, "\n") {
+		if !strings.Contains(line, "recommended") || !strings.Contains(line, "driver") {
+			continue
+		}
+		fields := strings.Fields(line)
+		for i, field := range fields {
+			if field == ":" && i > 0 && fields[i-1] == "driver" && i+1 < len(fields) {
+				return fields[i+1], nil
+			}
+		}
+	}
+	return "", errors.New("Ubuntu did not report a recommended NVIDIA driver for this GPU")
+}
+
+func installedNVIDIAPackage(ctx context.Context, recommended string) (string, string) {
+	if version, err := installedVersion(ctx, recommended); err == nil && version != "" {
+		return recommended, version
+	}
+	out, err := run(ctx, "dpkg-query", "-W", "-f=${db:Status-Abbrev}\t${binary:Package}\t${Version}\n", "nvidia-driver-*")
+	if err != nil {
+		return "", ""
+	}
+	for _, line := range strings.Split(out, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) >= 3 && fields[0] == "ii" {
+			return strings.TrimSuffix(fields[1], ":amd64"), fields[2]
+		}
+	}
+	return "", ""
+}
+
+func nvidiaDriverVersion(ctx context.Context) string {
+	out, err := run(ctx, "nvidia-smi", "--query-gpu=driver_version", "--format=csv,noheader")
+	if err != nil {
+		return ""
+	}
+	if line, _, ok := strings.Cut(strings.TrimSpace(out), "\n"); ok {
+		return strings.TrimSpace(line)
+	}
+	return strings.TrimSpace(out)
+}
+
+func secureBootState(ctx context.Context) string {
+	out, err := run(ctx, "mokutil", "--sb-state")
+	if err != nil {
+		return "unknown"
+	}
+	lower := strings.ToLower(out)
+	if strings.Contains(lower, "enabled") {
+		return "enabled"
+	}
+	if strings.Contains(lower, "disabled") {
+		return "disabled"
+	}
+	return "unknown"
+}
+
+func failNVIDIAStatus(status nvidiaupdate.Status, message string, err error) error {
+	status.State = "failed"
+	status.Message = message
+	status.Error = err.Error()
+	_ = nvidiaupdate.Write(status)
+	return fmt.Errorf("%s: %w", message, err)
 }
 
 func fatalf(format string, args ...any) {

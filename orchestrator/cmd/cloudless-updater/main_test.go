@@ -9,6 +9,27 @@ import (
 	"github.com/cloudless/orchestrator/internal/osupdate"
 )
 
+func TestParseRecommendedNVIDIAPackage(t *testing.T) {
+	output := `vendor   : NVIDIA Corporation
+model    : AD102 [GeForce RTX 5090]
+driver   : nvidia-driver-570 - distro non-free
+driver   : nvidia-driver-580-open - distro non-free recommended
+driver   : xserver-xorg-video-nouveau - distro free builtin`
+	got, err := parseRecommendedNVIDIAPackage(output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "nvidia-driver-580-open" {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestParseRecommendedNVIDIAPackageRequiresRecommendation(t *testing.T) {
+	if _, err := parseRecommendedNVIDIAPackage("driver : nvidia-driver-580 - distro non-free"); err == nil {
+		t.Fatal("expected an error")
+	}
+}
+
 func TestWriteProgressClampsPercentage(t *testing.T) {
 	t.Setenv("CLOUDLESS_UPDATE_STATUS", filepath.Join(t.TempDir(), "status.json"))
 	status := osupdate.DefaultStatus()

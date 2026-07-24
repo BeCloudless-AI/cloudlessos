@@ -89,12 +89,15 @@ install -Dm0755 "$DISTRO/packages/cloudless-firstboot/postinst" "$PKG/DEBIAN/pos
 finish_package "$PKG" cloudless-firstboot
 
 PKG="$WORK/cloudless-updater"
-make_control "$PKG" cloudless-updater "CloudlessOS signed system updater" "apt, ca-certificates, gpgv"
+make_control "$PKG" cloudless-updater "CloudlessOS signed system and NVIDIA driver updater" "apt, ca-certificates, gpgv, ubuntu-drivers-common, pciutils"
 install -Dm0755 "$WORK/cloudless-updater-bin" "$PKG/usr/lib/cloudless/cloudless-updater"
 install -Dm0644 "$DISTRO/packages/cloudless-updater/cloudless.sources" "$PKG/etc/apt/sources.list.d/cloudless.sources"
 install -Dm0644 "$DISTRO/packages/cloudless-updater/cloudless-update-check.service" "$PKG/lib/systemd/system/cloudless-update-check.service"
 install -Dm0644 "$DISTRO/packages/cloudless-updater/cloudless-update-check.timer" "$PKG/lib/systemd/system/cloudless-update-check.timer"
 install -Dm0644 "$DISTRO/packages/cloudless-updater/cloudless-update-apply.service" "$PKG/lib/systemd/system/cloudless-update-apply.service"
+install -Dm0644 "$DISTRO/packages/cloudless-updater/cloudless-nvidia-check.service" "$PKG/lib/systemd/system/cloudless-nvidia-check.service"
+install -Dm0644 "$DISTRO/packages/cloudless-updater/cloudless-nvidia-check.timer" "$PKG/lib/systemd/system/cloudless-nvidia-check.timer"
+install -Dm0644 "$DISTRO/packages/cloudless-updater/cloudless-nvidia-apply.service" "$PKG/lib/systemd/system/cloudless-nvidia-apply.service"
 install -Dm0755 "$DISTRO/packages/cloudless-updater/postinst" "$PKG/DEBIAN/postinst"
 install -Dm0755 "$DISTRO/packages/cloudless-updater/prerm" "$PKG/DEBIAN/prerm"
 if [ -s "$DISTRO/release/keys/cloudless-archive-keyring.pgp" ]; then

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cloudless/orchestrator/internal/nvidiaupdate"
 	"github.com/cloudless/orchestrator/internal/osupdate"
 )
 
@@ -30,6 +31,30 @@ func TestSystemUpdateGet(t *testing.T) {
 func TestSystemUpdateApplyRequiresConfirmation(t *testing.T) {
 	rec := httptest.NewRecorder()
 	(&Server{}).systemUpdateApply(rec, httptest.NewRequest(http.MethodPost, "/api/system/update/apply", nil))
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestNVIDIADriverGet(t *testing.T) {
+	t.Setenv("CLOUDLESS_NVIDIA_STATUS", filepath.Join(t.TempDir(), "nvidia.json"))
+	status := nvidiaupdate.DefaultStatus()
+	status.State = "available"
+	status.HardwareDetected = true
+	status.RecommendedPackage = "nvidia-driver-580"
+	if err := nvidiaupdate.Write(status); err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	(&Server{}).nvidiaDriverGet(rec, httptest.NewRequest(http.MethodGet, "/api/system/nvidia-driver", nil))
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"recommendedPackage":"nvidia-driver-580"`) {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestNVIDIADriverApplyRequiresConfirmation(t *testing.T) {
+	rec := httptest.NewRecorder()
+	(&Server{}).nvidiaDriverApply(rec, httptest.NewRequest(http.MethodPost, "/api/system/nvidia-driver/apply", nil))
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}

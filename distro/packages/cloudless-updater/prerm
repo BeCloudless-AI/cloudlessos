@@ -2,4 +2,5 @@
 set -e
 if [ "${1:-}" = remove ]; then
     systemctl disable --now cloudless-update-check.timer >/dev/null 2>&1 || true
+    systemctl disable --now cloudless-nvidia-check.timer >/dev/null 2>&1 || true
 fi

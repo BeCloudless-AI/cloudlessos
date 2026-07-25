@@ -1766,8 +1766,7 @@
   }
   /* DGX Spark shares graphics and inference bandwidth. Repainting five oversized
      gradients at display refresh rate wastes roughly a third of the GPU while
-     idle. Keep the wallpaper responsive to pointer movement without a permanent
-     animation loop; stop even that cosmetic work during inference. */
+     idle, so motion is off by default and can be explicitly enabled per display. */
   html.render-eco .wall::before {
     animation: none;
     /* Never animate background-position in eco mode: it invalidates and
@@ -1801,6 +1800,24 @@
   html.render-eco .meta .dot:not(.wait),
   html.render-eco .li-dot,
   html.render-eco .asst-spark { animation: none; }
+  html[data-cloudless-platform="dgx-spark"].render-inference-active .menubar .led,
+  html[data-cloudless-platform="dgx-spark"].render-inference-active .tun-dot,
+  html[data-cloudless-platform="dgx-spark"].render-inference-active .hw-link-dot,
+  html[data-cloudless-platform="dgx-spark"].render-inference-active .inf-live,
+  html[data-cloudless-platform="dgx-spark"].render-inference-active .hero-time .accent-dot,
+  html[data-cloudless-platform="dgx-spark"].render-inference-active .ask,
+  html[data-cloudless-platform="dgx-spark"].render-inference-active .ask-spark,
+  html[data-cloudless-platform="dgx-spark"].render-inference-active .card-live i,
+  html[data-cloudless-platform="dgx-spark"].render-inference-active .meta .dot,
+  html[data-cloudless-platform="dgx-spark"].render-inference-active .li-dot,
+  html[data-cloudless-platform="dgx-spark"].render-inference-active .asst-spark { animation: none; }
+  html.motion-disabled *,
+  html.motion-disabled *::before,
+  html.motion-disabled *::after {
+    animation: none !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
   html.wall-motion-paused .wall::before,
   html.wall-motion-paused .wall::after,
   html.tour-active .wall::before,
@@ -2397,6 +2414,14 @@
   }
   .theme-option.on .theme-check { border-color: var(--blue); background: var(--blue); color: #fff; }
   .appearance-note { margin-top: 14px; }
+  .motion-control { margin-top: 14px; padding: 16px; border: 1px solid var(--line-2); border-radius: 14px; background: var(--panel-2); }
+  .motion-control-head { display: flex; align-items: center; gap: 12px; }
+  .motion-control-icon { width: 38px; height: 38px; flex: none; display: grid; place-items: center; border-radius: 11px; color: var(--blue); background: var(--blue-soft); }
+  .motion-control-copy { min-width: 0; flex: 1; }
+  .motion-control-title { display: block; color: var(--ink); font-size: 13px; font-weight: 760; }
+  .motion-control-sub { display: block; margin-top: 2px; color: var(--muted); font-size: 10.5px; line-height: 1.45; }
+  .motion-warning { display: flex; align-items: flex-start; gap: 9px; margin-top: 13px; padding: 11px 12px; border-radius: 10px; color: var(--ink-2); background: color-mix(in srgb, var(--warn) 10%, var(--control)); border: 1px solid color-mix(in srgb, var(--warn) 24%, var(--line-2)); font-size: 10.5px; line-height: 1.5; }
+  .motion-warning .ui-icon { width: 15px; height: 15px; margin-top: 1px; flex: none; color: var(--warn); }
 
   @media (max-width: 980px) {
     main { padding-right: 26px; padding-left: 98px; }
@@ -2796,7 +2821,7 @@ function applyCapabilitySnapshot(snapshot) {
   capabilityCache = snapshot;
   const root = document.documentElement;
   root.dataset.cloudlessPlatform = snapshot.facts?.platform || 'generic';
-  root.classList.toggle('render-eco', root.dataset.cloudlessPlatform === 'dgx-spark');
+  applySparkMotionPreference();
   root.dataset.cloudlessVersion = snapshot.facts?.cloudlessVersion || 'development';
   Object.entries(snapshot.features || {}).forEach(([id, status]) => {
     root.setAttribute('data-cap-' + id.replace(/[^a-z0-9-]/gi, '-').toLowerCase(), status?.available ? '1' : '0');
@@ -2843,6 +2868,7 @@ function tickClock() {
 
 // Appearance can follow the sky or stay on a palette selected by the user.
 const THEME_KEY = 'cloudless.theme';
+const SPARK_MOTION_KEY = 'cloudless.sparkAnimations';
 const THEME_OPTIONS = [
   { id: 'auto', name: 'Automatic', desc: 'Changes with the time of day.' },
   { id: 'cloudless', name: 'Cloudless', desc: 'Bright, cool, and quietly atmospheric.' },
@@ -2877,6 +2903,27 @@ function setThemePreference(id) {
   try { localStorage.setItem(THEME_KEY, id); } catch {}
   currentTheme = '';
   applyTheme(new Date().getHours(), true);
+}
+function sparkAnimationsEnabled() {
+  try { return localStorage.getItem(SPARK_MOTION_KEY) === 'enabled'; }
+  catch { return false; }
+}
+function applySparkMotionPreference() {
+  const root = document.documentElement;
+  const spark = root.dataset.cloudlessPlatform === 'dgx-spark';
+  const disabled = spark && !sparkAnimationsEnabled();
+  root.classList.toggle('motion-disabled', disabled);
+  root.classList.toggle('render-eco', disabled);
+  if (disabled) {
+    clearTimeout(renderGovernorTimer);
+    setInferenceRenderState(false);
+  } else if (spark) {
+    scheduleRenderGovernor(0);
+  }
+}
+function setSparkAnimationsEnabled(enabled) {
+  try { localStorage.setItem(SPARK_MOTION_KEY, enabled ? 'enabled' : 'disabled'); } catch {}
+  applySparkMotionPreference();
 }
 
 // UI size follows the available screen by default. Manual choices are local to
@@ -3411,7 +3458,7 @@ function showStartupIntro(next, bootID = '', force = false) {
   const intro = document.getElementById('boot-intro');
   const frame = document.getElementById('boot-intro-frame');
   const skip = document.getElementById('boot-intro-skip');
-  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches || document.documentElement.classList.contains('motion-disabled');
   let playedThisBoot = false;
   try { playedThisBoot = !!bootID && localStorage.getItem(LAST_BOOT_INTRO_KEY) === bootID; } catch {}
   if (!intro || !frame || reduce || (playedThisBoot && !force)) { next(); return; }
@@ -5272,15 +5319,33 @@ function renderAppearancePage(c) {
         <span class="theme-check" aria-hidden="true">✓</span>
       </span>
     </button>`).join('');
+  const spark = hasCapability('dgx-appliance');
+  const motionEnabled = sparkAnimationsEnabled();
+  const motion = spark ? `<div class="set-block"><h3>motion</h3>
+    <div class="motion-control">
+      <div class="motion-control-head">
+        <span class="motion-control-icon">${uiIcon('appearance')}</span>
+        <span class="motion-control-copy"><span class="motion-control-title">Interface animations</span><span class="motion-control-sub">Off by default on DGX Spark · saved for this display</span></span>
+        <label class="switch" title="Enable interface animations"><input type="checkbox" id="spark-motion-toggle" ${motionEnabled ? 'checked' : ''}><span class="track2"></span></label>
+      </div>
+      <div class="motion-warning">${uiIcon('alert')}<span><b>Uses shared GPU resources.</b> Enabling animations can reduce inference throughput and responsiveness under concurrent load. Cloudless suspends them while the model is actively processing requests.</span></div>
+    </div>
+  </div>` : '';
   c.innerHTML = `
     <div class="set-block"><h3>theme</h3>
       <div class="theme-grid">${cards}</div>
       <div class="fld-help appearance-note">This preference is saved only in this browser. Automatic follows dawn, daytime, dusk, and night on the machine's clock.</div>
-    </div>`;
+    </div>${motion}`;
   c.querySelectorAll('[data-theme-id]').forEach(b => b.onclick = () => {
     setThemePreference(b.dataset.themeId);
     renderAppearancePage(c);
   });
+  const motionToggle = document.getElementById('spark-motion-toggle');
+  if (motionToggle) motionToggle.onchange = () => {
+    setSparkAnimationsEnabled(motionToggle.checked);
+    renderAppearancePage(c);
+    toast(motionToggle.checked ? 'Animations enabled for this display' : 'Animations disabled');
+  };
 }
 
 async function renderGeneralPage(c) {
@@ -6556,7 +6621,7 @@ function initBackground() {
     if (!raf) raf = requestAnimationFrame(paint);
   };
   const onPointerMove = e => {
-    if (reduceMotion.matches || document.hidden || e.pointerType === 'touch' || root.classList.contains('render-inference-active')) return;
+    if (reduceMotion.matches || document.hidden || e.pointerType === 'touch' || root.classList.contains('motion-disabled') || root.classList.contains('render-inference-active')) return;
     aim(((e.clientX / innerWidth) - .5) * 12, ((e.clientY / innerHeight) - .5) * 9);
   };
   const resetDepth = () => aim(0, 0);
@@ -6603,6 +6668,10 @@ function scheduleRenderGovernor(delay) {
 async function sampleRenderGovernor() {
   const root = document.documentElement;
   if (root.dataset.cloudlessPlatform !== 'dgx-spark') {
+    setInferenceRenderState(false);
+    return;
+  }
+  if (root.classList.contains('motion-disabled')) {
     setInferenceRenderState(false);
     return;
   }

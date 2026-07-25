@@ -32,8 +32,13 @@ func TestEmbeddedWebUsesSparkAdaptiveRenderingWithoutReducingEngineMemory(t *tes
 	}
 	page := string(content)
 	for _, want := range []string{
-		"root.classList.toggle('render-eco', root.dataset.cloudlessPlatform === 'dgx-spark')",
+		"const SPARK_MOTION_KEY = 'cloudless.sparkAnimations'",
+		"localStorage.getItem(SPARK_MOTION_KEY) === 'enabled'",
+		"root.classList.toggle('motion-disabled', disabled)",
 		"html.render-eco .wall::before",
+		"html.motion-disabled *::after",
+		"Interface animations",
+		"Uses shared GPU resources.",
 		"html.render-inference-active .wall::before",
 		"function sampleRenderGovernor()",
 		"(Number(m.running) || 0) > 0",

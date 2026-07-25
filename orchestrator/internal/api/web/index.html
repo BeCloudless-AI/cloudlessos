@@ -1113,6 +1113,42 @@
   }
   .tile.running .ic:hover .stopx, .stopx:hover { display: grid; }
 
+  /* model downloads — shared visual language on Home and in Model Manager */
+  .model-downloads-home { margin: -8px 0 24px; display: grid; gap: 9px; }
+  .model-downloads-home.hidden { display: none; }
+  .model-download-home {
+    min-width: 0; padding: 13px 15px; display: grid;
+    grid-template-columns: 38px minmax(0, 1fr) auto; align-items: center; gap: 12px;
+    border: 1px solid color-mix(in srgb, var(--blue) 28%, var(--hair)); border-radius: 14px;
+    background: linear-gradient(120deg, color-mix(in srgb, var(--blue) 10%, var(--card)), var(--card));
+    box-shadow: 0 14px 30px -26px color-mix(in srgb, var(--blue) 70%, transparent);
+  }
+  .model-download-icon {
+    width: 38px; height: 38px; display: grid; place-items: center; border-radius: 11px;
+    color: var(--blue); background: var(--blue-soft);
+  }
+  .model-download-icon .ui-icon { width: 18px; height: 18px; animation: mdl-download-pulse 1.2s ease-in-out infinite; }
+  @keyframes mdl-download-pulse { 50% { transform: translateY(2px); opacity: .65; } }
+  .model-download-copy { min-width: 0; display: grid; gap: 5px; }
+  .model-download-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; font-weight: 760; }
+  .model-download-meta { color: var(--muted); font-size: 10.5px; font-variant-numeric: tabular-nums; }
+  .model-download-percent { min-width: 42px; color: var(--blue); font-size: 12px; font-weight: 800; text-align: right; font-variant-numeric: tabular-nums; }
+  .model-download-track, .mdl-download-track {
+    height: 5px; overflow: hidden; border-radius: 99px; background: var(--panel-2);
+  }
+  .model-download-track > i, .mdl-download-track > i {
+    display: block; height: 100%; width: var(--progress, 0%); border-radius: inherit;
+    background: linear-gradient(90deg, var(--blue), color-mix(in srgb, var(--blue) 55%, var(--accent)));
+    transition: width .35s ease;
+  }
+  .model-download-track.indeterminate > i, .mdl-download-track.indeterminate > i {
+    width: 36%; animation: model-download-indeterminate 1.1s ease-in-out infinite;
+  }
+  @keyframes model-download-indeterminate { from { transform: translateX(-105%); } to { transform: translateX(285%); } }
+  .mdl-download-state { margin-top: 2px; display: grid; gap: 6px; }
+  .mdl-download-line { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--blue); font-size: 10px; font-weight: 700; }
+  .mdl.downloading { border-color: color-mix(in srgb, var(--blue) 48%, var(--hair)); box-shadow: inset 3px 0 0 var(--blue); }
+
   /* toast */
   #toast { position: fixed; left: 50%; bottom: 30px; transform: translateX(-50%) translateY(16px);
     background: var(--ink); color: #fff; padding: 11px 18px; border-radius: 10px;
@@ -2318,6 +2354,8 @@
     <span class="eb-spin"></span>
     <div class="eb-txt"><b id="eb-title">Cloudless AI is starting up…</b><span id="eb-sub">Your model is loading — chat and AI apps will be ready in a moment.</span></div>
   </div>
+
+  <section class="model-downloads-home hidden" id="model-downloads-home" aria-live="polite"></section>
 
   <section class="apps-sec">
     <div class="sec-row">
@@ -3668,6 +3706,75 @@ async function renderEnginePage(c) {
   c.querySelectorAll('.ec [data-eng]').forEach(b => b.onclick = () => { switchEngine(b.dataset.eng); toast('Switching engine…'); });
 }
 
+const modelDownloads = new Map();
+function modelDownloadName(id) {
+  return (mmCache['lm:' + id] && mmCache['lm:' + id].name) || String(id || '').split('/').pop() || 'Model';
+}
+function modelDownloadPercent(d) {
+  if (!d || !d.bytesTotal) return null;
+  return Math.max(0, Math.min(99, Math.round((d.bytesDone || 0) / d.bytesTotal * 100)));
+}
+function modelDownloadSize(bytes) {
+  if (!bytes) return 'Preparing download';
+  const gib = bytes / (1024 ** 3);
+  return gib >= .1 ? `${gib.toFixed(1)} GB` : `${Math.max(1, Math.round(bytes / (1024 ** 2)))} MB`;
+}
+function modelDownloadMeta(d) {
+  const pct = modelDownloadPercent(d);
+  if (d.error) return d.error;
+  if (d.bytesTotal) return `${modelDownloadSize(d.bytesDone)} of ${modelDownloadSize(d.bytesTotal)}`;
+  return d.message || 'Preparing download';
+}
+function modelDownloadProgressHTML(d, compact = false) {
+  const pct = modelDownloadPercent(d);
+  if (!compact) return `<span class="model-download-track ${pct == null ? 'indeterminate' : ''}" style="--progress:${pct == null ? 0 : pct}%"><i></i></span>`;
+  return `<div class="mdl-download-state">
+    <div class="mdl-download-line"><span>Downloading now</span><span>${pct == null ? modelDownloadSize(d.bytesDone) : pct + '%'}</span></div>
+    <span class="mdl-download-track ${pct == null ? 'indeterminate' : ''}" style="--progress:${pct == null ? 0 : pct}%"><i></i></span>
+    <span class="mdl-meta">${escapeHtml(modelDownloadMeta(d))}</span>
+  </div>`;
+}
+function renderHomeModelDownloads() {
+  const c = document.getElementById('model-downloads-home'); if (!c) return;
+  const active = [...modelDownloads.values()].filter(d => !d.done && !d.error);
+  c.classList.toggle('hidden', active.length === 0);
+  c.innerHTML = active.map(d => {
+    const pct = modelDownloadPercent(d);
+    return `<article class="model-download-home">
+      <span class="model-download-icon">${uiIcon('download')}</span>
+      <div class="model-download-copy">
+        <span class="model-download-title">Downloading ${escapeHtml(modelDownloadName(d.modelId))}</span>
+        <span class="model-download-meta">${escapeHtml(modelDownloadMeta(d))}</span>
+        ${modelDownloadProgressHTML(d)}
+      </div>
+      <span class="model-download-percent">${pct == null ? 'Active' : pct + '%'}</span>
+    </article>`;
+  }).join('');
+}
+function applyModelDownloads(downloads, repaintManager = true) {
+  const next = new Map((downloads || []).filter(d => !d.done).map(d => [d.modelId, d]));
+  const completed = [...modelDownloads.keys()].some(id => !next.has(id));
+  const before = JSON.stringify([...modelDownloads.entries()]);
+  const after = JSON.stringify([...next.entries()]);
+  modelDownloads.clear(); next.forEach((v, k) => modelDownloads.set(k, v));
+  renderHomeModelDownloads();
+  if (repaintManager && before !== after && modelsOpen()) {
+    if (completed) {
+      mmLM = null;
+      renderModelManager();
+      return;
+    }
+    if (mmDetail) renderModelDetail(document.getElementById('mm-body'));
+    else if (mmTab === 'language' && mmLM) paintLanguageModels(document.getElementById('mm-tab-body'), mmLM);
+  }
+}
+async function refreshModelDownloads() {
+  try {
+    const data = await api('/api/models/downloads');
+    applyModelDownloads(data.downloads || []);
+  } catch {}
+}
+
 const FIT_LABEL = { fits: 'Comfortable', tight: 'Close fit', over: 'Too large', unknown: 'Unknown fit' };
 function memoryLabel(type) { return type === 'unified' ? 'unified memory' : 'VRAM'; }
 function fitExplain(fit, type) {
@@ -3709,13 +3816,14 @@ function applyModel(id) { // advanced custom-id apply (explicit; no warning)
     .then(r => { if (r.jobId) trackJobToast(r.jobId, 'Model'); }).catch(() => toast('Failed', true));
 }
 function modelCard(m) {
+  const downloading = modelDownloads.get(m.id);
   const caps = (m.recommended ? '<span class="mdl-cap rec">Recommended</span>' : '')
     + (m.vision ? '<span class="mdl-cap vis">Vision</span>' : '') + (m.toolCalling ? '<span class="mdl-cap">Tools</span>' : '')
     + (m.gated ? '<span class="mdl-cap gated">Gated</span>' : '');
   const tags = (m.tags || []).filter(t => !['vision', 'tools'].includes(String(t).toLowerCase())).slice(0, 2)
     .map(t => `<span class="mdl-t">${escapeHtml(t)}</span>`).join('');
-  const status = m.active ? '<span class="mdl-status active"><i></i>Loaded</span>' : (m.downloaded ? '<span class="mdl-status">Downloaded</span>' : '');
-  return `<button class="mdl ${m.active ? 'on' : ''}${m.recommended ? ' rec' : ''} fit-${m.fit}" data-mid="${escapeAttr(m.id)}">
+  const status = downloading ? '<span class="mdl-status active"><i></i>Downloading</span>' : (m.active ? '<span class="mdl-status active"><i></i>Loaded</span>' : (m.downloaded ? '<span class="mdl-status">Installed</span>' : ''));
+  return `<button class="mdl ${m.active ? 'on' : ''}${m.recommended ? ' rec' : ''}${downloading ? ' downloading' : ''} fit-${m.fit}" data-mid="${escapeAttr(m.id)}">
       <div class="mdl-top">
         <span class="mdl-icon">${uiIcon('models')}</span>
         <span class="mdl-title"><span class="mdl-name">${escapeHtml(m.name)}</span><span class="mdl-meta">${escapeHtml(m.params || '')}${m.quant ? ' · ' + escapeHtml(m.quant) : ''}${m.contextK ? ' · ' + m.contextK + 'K ctx' : ''}</span></span>
@@ -3723,6 +3831,7 @@ function modelCard(m) {
       </div>
       <div class="mdl-notes">${escapeHtml(m.description || '')}</div>
       <div class="mdl-tags">${caps}${tags}</div>
+      ${downloading ? modelDownloadProgressHTML(downloading, true) : ''}
       ${modelCompatibility(m, (mmLM || {}).gpuVRAMGB || 0)}
       <div class="mdl-foot"><span class="mdl-meta">${escapeHtml(m.use || 'general')}</span><span class="mdl-use">View details ${uiIcon('arrow-right')}</span></div>
     </button>`;
@@ -3757,9 +3866,51 @@ function activeModelCard(m, gpu, memoryType) {
   </button>`;
 }
 function downloadModel(m) {
-  toast('Downloading ' + m.name + '… (runs in background)');
+  if (modelDownloads.has(m.id)) return;
+  modelDownloads.set(m.id, { modelId: m.id, phase: 'pending', message: 'Preparing download', bytesDone: 0, bytesTotal: 0 });
+  repaintModelDownloadSurfaces();
+  toast('Downloading ' + m.name + '…');
   api('/api/models/download', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: m.id }) })
-    .then(r => { if (r.jobId) trackJobToast(r.jobId, m.name); }).catch(() => toast('Failed', true));
+    .then(r => {
+      if (r.jobId) trackModelDownload(r.jobId, m);
+      else throw new Error('No download job');
+    }).catch(() => {
+      modelDownloads.delete(m.id);
+      repaintModelDownloadSurfaces();
+      toast('Download failed', true);
+    });
+}
+function repaintModelDownloadSurfaces() {
+  renderHomeModelDownloads();
+  if (!modelsOpen()) return;
+  if (mmDetail) renderModelDetail(document.getElementById('mm-body'));
+  else if (mmTab === 'language' && mmLM) paintLanguageModels(document.getElementById('mm-tab-body'), mmLM);
+}
+function trackModelDownload(jobId, m) {
+  const es = new EventSource(`/api/jobs/${jobId}/events`);
+  let ended = false;
+  const finish = async ok => {
+    if (ended) return;
+    ended = true;
+    es.close();
+    modelDownloads.delete(m.id);
+    renderHomeModelDownloads();
+    toast(m.name + (ok ? ' downloaded to Models' : ' download failed'), !ok);
+    mmLM = null;
+    if (modelsOpen()) renderModelManager();
+    refreshActiveModel();
+  };
+  es.onmessage = e => {
+    const u = JSON.parse(e.data);
+    modelDownloads.set(m.id, { ...u, jobId, modelId: m.id });
+    repaintModelDownloadSurfaces();
+    if (u.phase === 'error') return finish(false);
+    if (u.done) finish(true);
+  };
+  es.onerror = () => {
+    refreshModelDownloads();
+    if (!ended) finish(false);
+  };
 }
 function downloadDiffusion(m) {
   toast('Downloading ' + m.name + '… (large file, runs in background)');
@@ -3871,6 +4022,7 @@ async function renderLanguageModels(c) {
   let mdl;
   try { mdl = await api('/api/models'); } catch { return; }
   mmLM = mdl;
+  applyModelDownloads(mdl.downloads || [], false);
   (mdl.yours || []).concat(mdl.highlights || []).forEach(m => { mmCache['lm:' + m.id] = m; });
   if (!mmDetail && document.body.contains(c)) paintLanguageModels(c, mdl);
 }
@@ -3939,7 +4091,7 @@ function paintModelList(c, data, kind) {
       if (cf) cf.onclick = () => { mmFilter = { q: '', fits: false, vision: false, tools: false, downloaded: false }; paintModelList(c, data, kind); };
       return;
     }
-    let sections = modelSection(lm ? 'Downloaded models' : 'Downloaded image models', fy, cardFn);
+    let sections = modelSection(lm ? 'Installed on this machine' : 'Installed image models', fy, cardFn);
     const rec = fh.filter(m => m.recommended);
     if (lm && rec.length) {
       const rg = data.region || {};
@@ -3980,6 +4132,7 @@ function renderModelDetail(c) {
   const m = mmCache[type + ':' + id];
   if (!m) { mmDetail = null; renderModelManager(); return; }
   const lm = type === 'lm';
+  const downloading = lm ? modelDownloads.get(m.id) : null;
   const modelData = (lm ? mmLM : mmDiff) || {};
   const gpu = modelData.gpuVRAMGB || 0, memoryType = modelData.memoryType || 'dedicated';
   const caps = (m.recommended ? '<span class="mdl-cap rec">Recommended</span>' : '')
@@ -3995,7 +4148,8 @@ function renderModelDetail(c) {
     : spec('Base model', m.base) + spec('File type', m.type || 'Checkpoint') + spec('Download size', m.sizeGB ? m.sizeGB + ' GB' : '') + spec('License', m.license);
   let state = '', actions = '';
   if (lm) {
-    if (m.active) { state = `<span class="md-state-line active"><i></i>Loaded in ${escapeHtml(activeEngineName)}</span>`; actions = '<button class="btn" data-redl>Re-download</button>'; }
+    if (downloading) { state = modelDownloadProgressHTML(downloading, true); }
+    else if (m.active) { state = `<span class="md-state-line active"><i></i>Loaded in ${escapeHtml(activeEngineName)}</span>`; actions = '<button class="btn" data-redl>Re-download</button>'; }
     else if (m.downloaded) { state = '<span class="md-state-line ready"><i></i>Downloaded and ready</span>'; actions = `<button class="btn primary" data-launch>${uiIcon('rocket')}<span>Launch model</span></button>`; }
     else { state = '<span class="md-state-line remote"><i></i>Available to download</span>'; actions = `<button class="btn primary" data-dl>${uiIcon('download')}<span>Download model</span></button>`; }
   } else {
@@ -5560,7 +5714,7 @@ initBackground();
 tickClock(); setInterval(tickClock, 1000);
 async function bootCloudless() {
   await refreshCapabilities();
-  refreshStatus(); renderGPUs(); renderSystem(); renderPlaces(); renderApps(); renderEngine(); refreshNetStatus(); refreshActiveModel(); refreshProfileBadge();
+  refreshStatus(); renderGPUs(); renderSystem(); renderPlaces(); renderApps(); renderEngine(); refreshNetStatus(); refreshActiveModel(); refreshProfileBadge(); refreshModelDownloads();
   api('/api/onboarding').then(o => {
     if (!o || !o.completed) renderApps().then(() => showFirstLaunchIntro(showOnboarding));
   }).catch(() => {});
@@ -5568,6 +5722,7 @@ async function bootCloudless() {
 bootCloudless();
 setInterval(() => { refreshStatus(); renderGPUs(); renderSystem(); if (!engineSwitching) renderEngine(); }, 4000);
 setInterval(() => { if (installing === 0) renderApps(); }, 8000);
+setInterval(refreshModelDownloads, 3000);
 setInterval(refreshNetStatus, 20000);
 </script>
 </body>

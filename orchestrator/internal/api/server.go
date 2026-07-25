@@ -48,6 +48,10 @@ type Server struct {
 	shutdownMu     sync.Mutex
 	shutdownQueued bool
 	shutdownDelay  time.Duration
+
+	modelsMu     sync.Mutex
+	modelsHave   map[string]bool
+	modelsHaveAt time.Time
 }
 
 // NewServer constructs a Server backed by the given engine, state store and manifests.
@@ -109,6 +113,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/settings", s.settingsGet)
 	mux.HandleFunc("POST /api/settings/model", s.settingsModel)
 	mux.HandleFunc("GET /api/models", s.modelsList)
+	mux.HandleFunc("GET /api/models/downloads", s.modelDownloads)
 	mux.HandleFunc("POST /api/models/download", s.modelDownload)
 	mux.HandleFunc("GET /api/diffusion", s.diffusionList)
 	mux.HandleFunc("POST /api/diffusion/{id}/download", s.diffusionDownload)

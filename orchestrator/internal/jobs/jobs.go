@@ -4,6 +4,8 @@ package jobs
 
 import (
 	"fmt"
+	"sort"
+	"strings"
 	"sync"
 )
 
@@ -13,9 +15,18 @@ type Update struct {
 	Message     string `json:"message"`
 	LayersDone  int    `json:"layersDone"`
 	LayersTotal int    `json:"layersTotal"`
+	BytesDone   int64  `json:"bytesDone,omitempty"`
+	BytesTotal  int64  `json:"bytesTotal,omitempty"`
 	ContainerID string `json:"containerId,omitempty"`
 	Error       string `json:"error,omitempty"`
 	Done        bool   `json:"done"`
+}
+
+// Snapshot identifies a job together with its latest progress update.
+type Snapshot struct {
+	ID    string `json:"id"`
+	AppID string `json:"appId"`
+	Update
 }
 
 // Job is a single install operation and its subscribers.
@@ -61,6 +72,21 @@ func (m *Manager) Get(id string) (*Job, bool) {
 	defer m.mu.Unlock()
 	j, ok := m.jobs[id]
 	return j, ok
+}
+
+// List returns snapshots whose application id starts with prefix.
+func (m *Manager) List(prefix string) []Snapshot {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make([]Snapshot, 0, len(m.jobs))
+	for _, j := range m.jobs {
+		if prefix != "" && !strings.HasPrefix(j.AppID, prefix) {
+			continue
+		}
+		out = append(out, Snapshot{ID: j.ID, AppID: j.AppID, Update: j.Snapshot()})
+	}
+	sort.Slice(out, func(i, k int) bool { return out[i].ID < out[k].ID })
+	return out
 }
 
 // Snapshot returns the current state.
@@ -114,6 +140,16 @@ func (j *Job) Progress(phase, msg string, done, total int) {
 		if total >= 0 {
 			u.LayersTotal = total
 		}
+	})
+}
+
+// ProgressBytes reports byte-level progress for downloads.
+func (j *Job) ProgressBytes(phase, msg string, done, total int64) {
+	j.apply(func(u *Update) {
+		u.Phase = phase
+		u.Message = msg
+		u.BytesDone = done
+		u.BytesTotal = total
 	})
 }
 

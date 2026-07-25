@@ -153,7 +153,7 @@ func (s *Server) assistantContext(ctx context.Context) assistant.Context {
 	modelList := s.mfModels.Highlights(modelCtx)
 	cancel()
 	modelList = modelcatalog.Merge(modelList)
-	gpuGB := totalVRAMGB(ctx)
+	gpuGB, memoryType := acceleratorMemory(ctx)
 	modelOptions := make([]assistant.ModelOption, 0, len(modelList))
 	currentListed := false
 	for _, m := range modelList {
@@ -173,15 +173,16 @@ func (s *Server) assistantContext(ctx context.Context) assistant.Context {
 		modelOptions = append(modelOptions, assistant.ModelOption{ID: model, Name: name, Fit: "unknown"})
 	}
 	return assistant.Context{
-		Engine:      active,
-		EngineReady: active != "" && engineReady(ctx),
-		Model:       model,
-		FirstRun:    s.state.FirstRun(),
-		Onboarded:   st.Onboarded,
-		Running:     running,
-		GPU:         gpuSummary(ctx),
-		GPUVRAMGB:   gpuGB,
-		Models:      modelOptions,
+		Engine:        active,
+		EngineReady:   active != "" && engineReady(ctx),
+		Model:         model,
+		FirstRun:      s.state.FirstRun(),
+		Onboarded:     st.Onboarded,
+		Running:       running,
+		GPU:           gpuSummary(ctx),
+		GPUVRAMGB:     gpuGB,
+		GPUMemoryType: memoryType,
+		Models:        modelOptions,
 	}
 }
 
@@ -196,6 +197,9 @@ func gpuSummary(ctx context.Context) string {
 	name := strings.TrimPrefix(gpus[0].Name, "NVIDIA GeForce ")
 	gb := gpus[0].MemTotalMB / 1024
 	if len(gpus) == 1 {
+		if gpus[0].MemoryType == "unified" {
+			return fmt.Sprintf("%s (%d GB unified memory)", name, gb)
+		}
 		return fmt.Sprintf("%s (%d GB)", name, gb)
 	}
 	return fmt.Sprintf("%d× %s (%d GB each)", len(gpus), name, gb)

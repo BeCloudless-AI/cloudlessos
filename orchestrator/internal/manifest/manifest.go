@@ -20,7 +20,7 @@ import (
 )
 
 // DefaultURL is the apps manifest location (override with CLOUDLESS_MANIFEST_URL).
-const DefaultURL = "https://samuelcardillo.com/cloudless/cloudless-apps-manifest.json"
+const DefaultURL = "https://updates.becloudless.ai/manifests/cloudless-apps-manifest.json"
 
 // DefaultModelsURL is the "Cloudless highlights" LLM manifest (override with CLOUDLESS_MODELS_URL).
 const DefaultModelsURL = "https://samuelcardillo.com/cloudless/cloudless-models.json"
@@ -31,6 +31,7 @@ const DefaultDiffusionURL = "https://samuelcardillo.com/cloudless/cloudless-diff
 // Pin is a validated image pin (apps + infra).
 type Pin struct {
 	Image         string            `json:"image"`
+	Images        map[string]string `json:"images,omitempty"`
 	Tag           string            `json:"tag"`
 	Digest        string            `json:"digest"`
 	Digests       map[string]string `json:"digests,omitempty"`
@@ -48,6 +49,15 @@ func (p Pin) Ref() string {
 // CurrentDigest returns the digest selected for the running architecture.
 func (p Pin) CurrentDigest() string {
 	return p.DigestFor(runtime.GOARCH)
+}
+
+// ImageFor selects an architecture-specific repository when a platform uses a
+// different vendor image (for example NVIDIA's vLLM image on DGX Spark).
+func (p Pin) ImageFor(arch string) string {
+	if image := p.Images[arch]; image != "" {
+		return image
+	}
+	return p.Image
 }
 
 // DigestFor returns only a digest explicitly valid for arch.
@@ -71,14 +81,15 @@ func (p Pin) DigestFor(arch string) string {
 // predate ARM64 support, so their single digest remains valid for AMD64 only.
 // A shared multi-platform index digest can opt in through Architectures.
 func (p Pin) RefFor(arch string) string {
-	if p.Image == "" {
+	image := p.ImageFor(arch)
+	if image == "" {
 		return ""
 	}
 	digest := p.DigestFor(arch)
 	if digest == "" {
 		return ""
 	}
-	return p.Image + "@" + digest
+	return image + "@" + digest
 }
 
 // Model is a validated Hugging Face model pin.
@@ -191,7 +202,7 @@ func (s *Store) Pin(ctx context.Context, id string) (Pin, bool) {
 // back to the catalog image until the hosted manifest catches up.
 func (s *Store) PinFor(ctx context.Context, id, expectedImage string) (Pin, bool) {
 	p, ok := s.Pin(ctx, id)
-	if !ok || imageRepository(p.Image) != imageRepository(expectedImage) {
+	if !ok || imageRepository(p.ImageFor(runtime.GOARCH)) != imageRepository(expectedImage) {
 		return Pin{}, false
 	}
 	return p, true

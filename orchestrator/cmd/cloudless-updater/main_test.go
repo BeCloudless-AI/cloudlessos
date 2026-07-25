@@ -57,6 +57,44 @@ func TestWriteProgressClampsPercentage(t *testing.T) {
 	}
 }
 
+func TestDGXSparkDriverStatusPreservesVendorOwnership(t *testing.T) {
+	t.Setenv("CLOUDLESS_NVIDIA_STATUS", filepath.Join(t.TempDir(), "nvidia.json"))
+	status := managedDGXNVIDIAStatus()
+	if status.State != "managed" || !status.HardwareDetected || status.UpdateAvailable {
+		t.Fatalf("unexpected DGX-managed status: %#v", status)
+	}
+	if status.RecommendedPackage != "" || status.RebootRequired {
+		t.Fatalf("DGX status must not recommend a generic driver: %#v", status)
+	}
+}
+
+func TestProtectedDGXPackageChanges(t *testing.T) {
+	output := `Reading package lists...
+Inst cloudless-orchestrator [0.1.5] (0.2.0 Cloudless:stable [arm64])
+Inst libnvidia-container1 [1.19.0] (1.20.0 NVIDIA [arm64])
+Remv linux-modules-nvidia-580-6.17.0-1026-nvidia [6.17.0-1026.26]
+Inst cuda-toolkit-13-1 (13.1 NVIDIA [arm64])
+Inst dgx-release [25.07] (25.08 NVIDIA [arm64])`
+	got := protectedDGXPackageChanges(output)
+	want := []string{
+		"libnvidia-container1",
+		"linux-modules-nvidia-580-6.17.0-1026-nvidia",
+		"cuda-toolkit-13-1",
+		"dgx-release",
+	}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("protectedDGXPackageChanges() = %v, want %v", got, want)
+	}
+}
+
+func TestProtectedDGXPackageChangesAllowsCloudlessOnlyPlan(t *testing.T) {
+	output := `Inst cloudless-orchestrator [0.1.5] (0.2.0 Cloudless:stable [arm64])
+Inst cloudless-hardware [0.1.1] (0.2.0 Cloudless:stable [arm64])`
+	if got := protectedDGXPackageChanges(output); len(got) != 0 {
+		t.Fatalf("unexpected protected packages: %v", got)
+	}
+}
+
 func TestValidateReleaseManifest(t *testing.T) {
 	manifest := []byte(`{"version":"0.1.4","title":"What is new","summary":"A safer update.","changes":["Shows verified release notes."]}`)
 	hash := sha256.Sum256(manifest)

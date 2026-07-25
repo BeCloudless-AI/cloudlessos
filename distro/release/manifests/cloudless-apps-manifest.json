@@ -1,0 +1,142 @@
+{
+  "manifestVersion": 2,
+  "channel": "stable",
+  "updated": "2026-07-25",
+  "description": "Version-controlled Cloudless container pins. Architecture-specific repositories and digests keep AMD64 and DGX Spark ARM64 on their validated CUDA images.",
+  "apps": {
+    "vllm": {
+      "image": "vllm/vllm-openai",
+      "images": {
+        "arm64": "nvcr.io/nvidia/vllm"
+      },
+      "tag": "latest / 26.05.post1-py3 (arm64)",
+      "digests": {
+        "amd64": "sha256:6d8429e38e3747723ca07ee1b17972e09bb9c51c4032b266f24fb1cc3b22ed8f",
+        "arm64": "sha256:9204569b17ee4c0eff75194b8e6e458479c8aee18953b5ab9cf359fcdac659e2"
+      },
+      "verified": true,
+      "notes": "AMD64 Blackwell and NVIDIA Grace Blackwell ARM64 inference images.",
+      "rollback": ""
+    },
+    "sglang": {
+      "image": "lmsysorg/sglang",
+      "tag": "latest / latest-cu130 (arm64)",
+      "digests": {
+        "amd64": "sha256:1c64fde976bdf0d56474a30bccbcfc19667e5b3ab34c826a534c9d6aaca41212",
+        "arm64": "sha256:d4a984cdeb9846ef0d433d80e8fff55d527fa84f91c0eec2c62d9dea7ab26426"
+      },
+      "verified": false,
+      "notes": "ARM64 uses the CUDA 13.0 image recommended for DGX Spark.",
+      "rollback": ""
+    },
+    "llamacpp": {
+      "image": "ghcr.io/ggml-org/llama.cpp",
+      "tag": "server-cuda",
+      "digests": {
+        "amd64": "sha256:f941166ac0aedf2bfaae52e4b2da0d70ff8e049c9bbd08ebf4224df56fe5ea8a",
+        "arm64": "sha256:a2823d0f32bca5b4daaa4aa43f5d54d0caf0d5055638d9d7d45df79a428dd715"
+      },
+      "verified": false,
+      "notes": "Multi-architecture CUDA server.",
+      "rollback": ""
+    },
+    "open-webui": {
+      "image": "ghcr.io/open-webui/open-webui",
+      "tag": "main",
+      "digests": {
+        "amd64": "sha256:a673af6e7fab29822a0d32d71184d3f0277347a693633c86372643590c921915",
+        "arm64": "sha256:2e274414818107010d58b1c091a17ef37da236c27bcc2c324e427d1ddb6a033e"
+      },
+      "verified": true,
+      "notes": "Multi-architecture local chat interface.",
+      "rollback": ""
+    },
+    "comfyui": {
+      "image": "mmartial/comfyui-nvidia-docker",
+      "tag": "latest / ubuntu24_cuda13.2-dgx-latest (arm64)",
+      "digests": {
+        "amd64": "sha256:144dd59ffc29a7c384020eededde1dbfb66d81c6e072c912d51e58becfd3cd00",
+        "arm64": "sha256:f654cb138bbdea86befb0f010a536087ef105081cde96b219141d2d86fbd2fdb"
+      },
+      "verified": false,
+      "notes": "ARM64 uses the upstream Ubuntu 24 / CUDA 13.2 DGX build.",
+      "rollback": ""
+    },
+    "ai-toolkit": {
+      "image": "ostris/aitoolkit",
+      "tag": "latest",
+      "digests": {
+        "amd64": "sha256:323bfd0150a1c6a2a1c52630fb9660f31cf67fdca9193b609c6616c413e4b48f"
+      },
+      "architectures": ["amd64"],
+      "verified": false,
+      "notes": "Hidden on ARM64 until an upstream-compatible image is qualified.",
+      "rollback": ""
+    },
+    "unsloth": {
+      "image": "unsloth/unsloth",
+      "tag": "latest",
+      "digests": {
+        "amd64": "sha256:f21629b9ae4ed11231768edfaed0f40d41d85d6ea9a71e8096a3d96ea0311772"
+      },
+      "architectures": ["amd64"],
+      "verified": false,
+      "notes": "Hidden on ARM64 until a production recipe is qualified.",
+      "rollback": ""
+    },
+    "openclaw": {
+      "image": "samuelcardillo/cloudless-openclaw",
+      "tag": "v1",
+      "digests": {
+        "amd64": "sha256:ff309212f63110172eb759ac2d6e146d04ba9b82d7a653c3b7451a890013516f"
+      },
+      "architectures": ["amd64"],
+      "verified": true,
+      "notes": "Hidden on ARM64 until the Cloudless image is published multi-architecture.",
+      "rollback": ""
+    },
+    "hermes": {
+      "image": "nousresearch/hermes-agent",
+      "tag": "v2026.7.20",
+      "digests": {
+        "amd64": "sha256:a6ce64e2038867885c2c90f6602425e6e70293d5e6d952a0e603a99265e01c40",
+        "arm64": "sha256:ef58f7f6906a19ca4d7d77bb35711f3a9740c83c8eac692b9c038e13f27e09d5"
+      },
+      "verified": false,
+      "notes": "Official multi-architecture Hermes Agent image.",
+      "rollback": ""
+    }
+  },
+  "infra": {
+    "cloudflared": {
+      "image": "cloudflare/cloudflared",
+      "tag": "latest",
+      "digests": {
+        "amd64": "sha256:b392761b711c0e5649d9b64e1fc9a10ba0563fa3e712ed7c26bde5cc1fbe9059",
+        "arm64": "sha256:00f96f93af72339696087594e9cc78a93518ce90e72248781e69d8c72235a7ae"
+      },
+      "verified": true,
+      "notes": "Multi-architecture Cloudflare tunnel client.",
+      "rollback": ""
+    },
+    "socat": {
+      "image": "alpine/socat",
+      "tag": "latest",
+      "digests": {
+        "amd64": "sha256:695eb51ce74b4a6eeeb5da17f02df9f9536f1a0fd1483426c9c76fb18d029eb6",
+        "arm64": "sha256:f64c4233efa22c3fd0b472a7cabf33c0f28ef090948fc99692234f77ce3a5ce9"
+      },
+      "verified": true,
+      "notes": "Multi-architecture TCP forwarder.",
+      "rollback": ""
+    }
+  },
+  "models": {
+    "default": {
+      "repo": "Qwen/Qwen2.5-1.5B-Instruct",
+      "revision": "989aa7980e4cf806f80c7fef2b1adb7bc71aa306",
+      "verified": true,
+      "notes": "Small first-boot model; users can select a Spark-sized model after validation."
+    }
+  }
+}

@@ -32,8 +32,9 @@ complete ISO from the same container.
 Cloudless Debian packages and the signed update repository support both AMD64 and ARM64.
 Run `bash distro/scripts/test-architectures.sh` to cross-build and inspect both package
 families. The current generic Ubuntu installer ISO intentionally remains AMD64; DGX Spark
-installation media is built separately from NVIDIA DGX OS BaseOS in the Spark platform
-track.
+uses a signed, reversible layer over NVIDIA's qualified DGX OS rather than a generic
+Ubuntu ISO. See [`DGX-SPARK.md`](./DGX-SPARK.md) for installation, recovery, update,
+application-compatibility, and diagnostic instructions.
 
 To qualify a physical DGX Spark without collecting user data or unique device identifiers,
 run `bash distro/scripts/collect-dgx-spark-info.sh`. It creates a single inspectable

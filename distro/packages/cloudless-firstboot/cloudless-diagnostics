@@ -1,0 +1,36 @@
+#!/bin/sh
+set -u
+
+output="${1:-cloudless-diagnostics-$(date -u +%Y%m%dT%H%M%SZ).txt}"
+umask 077
+exec 3>&1
+exec > "$output" 2>&1
+
+section() { printf '\n===== %s =====\n' "$1"; }
+run() { echo "\$ $*"; "$@" 2>&1 || true; }
+
+echo "CloudlessOS diagnostics (no application configuration or credentials)"
+echo "Generated: $(date -u +%FT%TZ)"
+section "Platform"
+run uname -a
+run dpkg --print-architecture
+run sh -c 'test -r /etc/dgx-release && cat /etc/dgx-release || true'
+run sh -c 'test -r /sys/devices/virtual/dmi/id/product_name && cat /sys/devices/virtual/dmi/id/product_name || true'
+run mokutil --sb-state
+section "GPU and containers"
+run nvidia-smi
+run nvidia-ctk --version
+run nvidia-ctk cdi list
+run docker info
+run docker ps --format '{{.Names}}\t{{.Image}}\t{{.Status}}'
+section "Cloudless services"
+run systemctl --no-pager --full status cloudlessd cloudless-hardware cloudless-firstboot lightdm
+run journalctl -b --no-pager -u cloudlessd -u cloudless-hardware -u cloudless-firstboot -n 300
+section "Cloudless API"
+run curl --silent --show-error --max-time 10 http://127.0.0.1:8765/api/health
+run curl --silent --show-error --max-time 10 http://127.0.0.1:8765/api/system
+run curl --silent --show-error --max-time 10 http://127.0.0.1:8765/api/gpu
+section "Storage"
+run df -hT
+
+printf 'Diagnostics written to %s\n' "$output" >&3

@@ -6,6 +6,8 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+
+	hostplatform "github.com/cloudless/orchestrator/internal/platform"
 )
 
 // System is a best-effort snapshot of the host machine (Linux). Fields that can't
@@ -19,11 +21,19 @@ type System struct {
 	Cores      int    `json:"cores"`      // logical CPUs
 	MemTotalMB int    `json:"memTotalMB"` // total RAM
 	UptimeSec  int64  `json:"uptimeSec"`  // host uptime
+	Platform   string `json:"platform"`   // generic | dgx-spark
+	Product    string `json:"product,omitempty"`
+	DGXVersion string `json:"dgxVersion,omitempty"`
+	UnifiedGPU bool   `json:"unifiedGpuMemory"`
 }
 
 // Sys gathers host facts from /etc/os-release, /proc, and the Go runtime.
 func Sys() System {
-	s := System{Arch: runtime.GOARCH, Cores: runtime.NumCPU()}
+	platformName := hostplatform.Detect()
+	s := System{
+		Arch: runtime.GOARCH, Cores: runtime.NumCPU(), Platform: platformName,
+		UnifiedGPU: platformName == hostplatform.DGXSpark,
+	}
 	if h, err := os.Hostname(); err == nil {
 		s.Hostname = h
 	}
@@ -32,12 +42,21 @@ func Sys() System {
 	s.CPU, s.Cores = cpuInfo(s.Cores)
 	s.MemTotalMB = memTotalMB()
 	s.UptimeSec = uptimeSec()
+	s.Product = firstLine("/sys/devices/virtual/dmi/id/product_name")
+	s.DGXVersion = keyValueFileField("/etc/dgx-release", "DGX_OTA_VERSION")
+	if s.DGXVersion == "" {
+		s.DGXVersion = keyValueFileField("/etc/dgx-release", "DGX_SWBUILD_VERSION")
+	}
 	return s
 }
 
 // osReleaseField reads KEY="value" (or KEY=value) from /etc/os-release.
 func osReleaseField(key string) string {
-	b, err := os.ReadFile("/etc/os-release")
+	return keyValueFileField("/etc/os-release", key)
+}
+
+func keyValueFileField(path, key string) string {
+	b, err := os.ReadFile(path)
 	if err != nil {
 		return ""
 	}
@@ -86,23 +105,37 @@ func cpuInfo(fallbackCores int) (model string, cores int) {
 }
 
 func memTotalMB() int {
+	total, _ := memInfoMB()
+	return total
+}
+
+func memInfoMB() (total, available int) {
 	f, err := os.Open("/proc/meminfo")
 	if err != nil {
-		return 0
+		return 0, 0
 	}
 	defer f.Close()
 	sc := bufio.NewScanner(f)
 	for sc.Scan() {
-		if v, ok := strings.CutPrefix(sc.Text(), "MemTotal:"); ok {
-			fields := strings.Fields(v) // "<kB> kB"
-			if len(fields) >= 1 {
-				if kb, err := strconv.Atoi(fields[0]); err == nil {
-					return kb / 1024
+		line := sc.Text()
+		for _, field := range []struct {
+			prefix string
+			target *int
+		}{
+			{"MemTotal:", &total},
+			{"MemAvailable:", &available},
+		} {
+			if v, ok := strings.CutPrefix(line, field.prefix); ok {
+				parts := strings.Fields(v)
+				if len(parts) > 0 {
+					if kb, err := strconv.Atoi(parts[0]); err == nil {
+						*field.target = kb / 1024
+					}
 				}
 			}
 		}
 	}
-	return 0
+	return total, available
 }
 
 func uptimeSec() int64 {

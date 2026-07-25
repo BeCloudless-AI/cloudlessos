@@ -118,6 +118,17 @@ func TestModelGuidanceLeavesOrdinaryChatToHermes(t *testing.T) {
 	}
 }
 
+func TestModelGuidanceDescribesDGXUnifiedMemory(t *testing.T) {
+	c := modelTestContext()
+	c.GPU = "GB10 (121 GB unified memory)"
+	c.GPUVRAMGB = 121
+	c.GPUMemoryType = "unified"
+	advice, handled := ModelGuidance("Would Qwen2.5 72B (4-bit) fit?", c)
+	if !handled || !strings.Contains(advice.Reply, "unified memory") || strings.Contains(advice.Reply, "of VRAM") {
+		t.Fatalf("DGX memory guidance = %q", advice.Reply)
+	}
+}
+
 func TestSystemPromptMakesModelManagerAuthoritative(t *testing.T) {
 	prompt := SystemPrompt(modelTestContext())
 	for _, want := range []string{"Model Manager is the only authority", "Never create or invoke a Hermes skill", "[[do:models]]"} {

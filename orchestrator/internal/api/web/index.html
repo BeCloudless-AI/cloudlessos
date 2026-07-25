@@ -2620,7 +2620,7 @@ async function renderGPUs() {
       const c = calc(g);
       return `<div class="gpu">
         <div class="gpu-name">${g.name}<span class="idx">#${g.index}</span></div>
-        <div class="stat"><div class="stat-row"><span>Memory</span><b data-k="mem">${c.mem}</b></div>
+        <div class="stat"><div class="stat-row"><span>${g.memoryType === 'unified' ? 'Unified memory' : 'Memory'}</span><b data-k="mem">${c.mem}</b></div>
           <div class="track"><i data-k="vram" style="width:0%"></i></div></div>
         <div class="stat"><div class="stat-row"><span>Utilization</span><b data-k="util">${g.utilPct}%</b></div>
           <div class="track"><i data-k="utilbar" style="width:0%"></i></div></div>
@@ -3633,12 +3633,16 @@ async function renderEnginePage(c) {
 }
 
 const FIT_LABEL = { fits: 'Comfortable', tight: 'Close fit', over: 'Too large', unknown: 'Unknown fit' };
-const FIT_EXPLAIN = {
-  fits: 'Plenty of VRAM headroom for normal use.',
-  tight: 'Should run, but long contexts and concurrent requests may be limited.',
-  over: 'Needs more VRAM than this machine currently reports.',
-  unknown: 'CloudlessOS cannot estimate compatibility for this model yet.'
-};
+function memoryLabel(type) { return type === 'unified' ? 'unified memory' : 'VRAM'; }
+function fitExplain(fit, type) {
+  const memory = memoryLabel(type);
+  return ({
+    fits: `Plenty of ${memory} headroom for normal use.`,
+    tight: 'Should run, but long contexts and concurrent requests may be limited.',
+    over: `Needs more ${memory} than this machine currently reports.`,
+    unknown: 'CloudlessOS cannot estimate compatibility for this model yet.'
+  })[fit] || 'CloudlessOS cannot estimate compatibility for this model yet.';
+}
 function modelMeter(m, gpu) {
   if (!gpu || !m.minVramGB) return 0;
   return Math.max(4, Math.min(100, Math.round((m.minVramGB / gpu) * 100)));
@@ -3707,9 +3711,9 @@ function modelSection(title, list, cardFn) {
   if (!list || !list.length) return '';
   return `<div class="mdl-sec"><span>${escapeHtml(title)}</span><span class="mdl-count">${list.length}</span></div><div class="mdl-grid">${list.map(cardFn).join('')}</div>`;
 }
-function activeModelCard(m, gpu) {
+function activeModelCard(m, gpu, memoryType) {
   if (!m) return '';
-  const meta = [m.params, m.quant, m.contextK ? `${m.contextK}K context` : '', m.minVramGB ? `~${m.minVramGB} GB VRAM` : ''].filter(Boolean).join(' · ');
+  const meta = [m.params, m.quant, m.contextK ? `${m.contextK}K context` : '', m.minVramGB ? `~${m.minVramGB} GB ${memoryLabel(memoryType)}` : ''].filter(Boolean).join(' · ');
   return `<button class="mm-active-card" data-active-model="${escapeAttr(m.id)}">
     <span class="mm-active-icon">${uiIcon('models')}</span>
     <span class="mm-active-copy"><span class="mm-active-kicker">Loaded now</span><span class="mm-active-name">${escapeHtml(m.name)}</span><span class="mm-active-meta">${escapeHtml(meta || m.id)}</span></span>
@@ -3729,6 +3733,7 @@ function launchModel(m) {
   const curId = (mmLM && mmLM.current) || '';
   const curName = (mmCache['lm:' + curId] && mmCache['lm:' + curId].name) || (curId.split('/').pop()) || 'the current model';
   const gpu = (mmLM && mmLM.gpuVRAMGB) || 0;
+  const memoryType = (mmLM && mmLM.memoryType) || 'dedicated';
   keyDialogBusy = false;
   keyDialogReturnFocus = document.activeElement;
   const layer = document.getElementById('key-dialog-layer');
@@ -3743,7 +3748,7 @@ function launchModel(m) {
         <div class="model-confirm-fact"><small>Loaded now</small><b>${escapeHtml(curName)}</b></div>
         <div class="model-confirm-fact"><small>Compatibility</small><b>${escapeHtml(FIT_LABEL[m.fit] || FIT_LABEL.unknown)}${m.minVramGB ? ` · ~${m.minVramGB} GB` : ''}</b></div>
       </div>
-      ${m.fit === 'over' ? `<div class="model-confirm-warning">This model needs about ${m.minVramGB} GB of VRAM, but this machine reports ${gpu || 'less available'} GB. Launching may fail.</div>` : ''}
+      ${m.fit === 'over' ? `<div class="model-confirm-warning">This model needs about ${m.minVramGB} GB of ${memoryLabel(memoryType)}, but this machine reports ${gpu || 'less available'} GB. Launching may fail.</div>` : ''}
       <div class="key-dialog-actions">
         <button class="btn" id="model-launch-cancel" type="button">Cancel</button>
         <button class="btn primary" id="model-launch-confirm" type="button">${uiIcon('rocket')}<span>Launch model</span></button>
@@ -3846,15 +3851,16 @@ function paintImageModels(c, d) { paintModelList(c, d, 'diff'); }
 // Shared list renderer for both tabs: summary + search + filter chips + filtered sections.
 function paintModelList(c, data, kind) {
   const lm = kind === 'lm', gpu = data.gpuVRAMGB || 0;
+  const memoryType = data.memoryType || 'dedicated', memory = memoryLabel(memoryType);
   const summary = gpu > 0
-    ? `${uiIcon('machine')}<span class="mm-machine-copy"><span class="mm-machine-label">Available graphics memory</span><span class="mm-machine-value">${gpu} GB VRAM</span><span class="mm-machine-note">Compatibility is estimated with runtime headroom</span></span>`
+    ? `${uiIcon('machine')}<span class="mm-machine-copy"><span class="mm-machine-label">Available accelerator memory</span><span class="mm-machine-value">${gpu} GB ${memory}</span><span class="mm-machine-note">Compatibility is estimated with runtime headroom</span></span>`
     : `${uiIcon('machine')}<span class="mm-machine-copy"><span class="mm-machine-label">Hardware</span><span class="mm-machine-value">No GPU detected</span><span class="mm-machine-note">Compatibility estimates are unavailable</span></span>`;
   const chip = (key, label) => `<button class="mm-chip ${mmFilter[key] ? 'on' : ''}" data-f="${key}" aria-pressed="${mmFilter[key]}">${label}</button>`;
   const chips = chip('fits', 'Runs on this GPU') + chip('downloaded', 'Downloaded') + (lm ? chip('vision', 'Vision') + chip('tools', 'Tool calling') : '');
   const sort = `<span class="mm-sort-wrap"><label for="mm-sort">Sort</label><select class="mm-sort" id="mm-sort">
     <option value="recommended" ${mmSort === 'recommended' ? 'selected' : ''}>Best match</option>
-    <option value="memory-low" ${mmSort === 'memory-low' ? 'selected' : ''}>Lowest VRAM</option>
-    <option value="memory-high" ${mmSort === 'memory-high' ? 'selected' : ''}>Highest VRAM</option>
+    <option value="memory-low" ${mmSort === 'memory-low' ? 'selected' : ''}>Lowest memory</option>
+    <option value="memory-high" ${mmSort === 'memory-high' ? 'selected' : ''}>Highest memory</option>
     <option value="name" ${mmSort === 'name' ? 'selected' : ''}>Name</option>
   </select></span>`;
   const advanced = lm ? `
@@ -3881,7 +3887,7 @@ function paintModelList(c, data, kind) {
   const active = lm ? (data.yours || []).find(m => m.active) : null;
   const activeSlot = document.getElementById('mm-active-slot');
   if (activeSlot && active) {
-    activeSlot.innerHTML = activeModelCard(active, gpu);
+    activeSlot.innerHTML = activeModelCard(active, gpu, data.memoryType);
     activeSlot.querySelector('[data-active-model]').onclick = () => openModelDetail('lm', active.id);
   }
   const fill = () => {
@@ -3938,7 +3944,8 @@ function renderModelDetail(c) {
   const m = mmCache[type + ':' + id];
   if (!m) { mmDetail = null; renderModelManager(); return; }
   const lm = type === 'lm';
-  const gpu = ((lm ? mmLM : mmDiff) || {}).gpuVRAMGB || 0;
+  const modelData = (lm ? mmLM : mmDiff) || {};
+  const gpu = modelData.gpuVRAMGB || 0, memoryType = modelData.memoryType || 'dedicated';
   const caps = (m.recommended ? '<span class="mdl-cap rec">Recommended</span>' : '')
     + (lm ? ((m.vision ? '<span class="mdl-cap vis">Vision</span>' : '') + (m.toolCalling ? '<span class="mdl-cap">Tool calling</span>' : '') + (m.gated ? '<span class="mdl-cap gated">Gated</span>' : ''))
     : (m.base ? `<span class="mdl-cap">${escapeHtml(m.base)}</span>` : ''));
@@ -3961,7 +3968,7 @@ function renderModelDetail(c) {
   }
   const fitClass = m.fit || 'unknown';
   const fit = `<div class="md-compat-panel fit-${fitClass}">
-      <div><div class="md-compat-title">${escapeHtml(FIT_LABEL[fitClass] || FIT_LABEL.unknown)} on this machine</div><div class="md-compat-copy">${escapeHtml(FIT_EXPLAIN[fitClass] || FIT_EXPLAIN.unknown)}</div></div>
+      <div><div class="md-compat-title">${escapeHtml(FIT_LABEL[fitClass] || FIT_LABEL.unknown)} on this machine</div><div class="md-compat-copy">${escapeHtml(fitExplain(fitClass, memoryType))}</div></div>
       <div class="md-compat-numbers">${m.minVramGB ? `~${m.minVramGB} GB needed` : 'No estimate'}${gpu ? ` · ${gpu} GB available` : ''}</div>
       ${gpu && m.minVramGB ? `<span class="mdl-meter" aria-hidden="true"><i style="--meter:${modelMeter(m, gpu)}%"></i></span>` : ''}
     </div>`;
@@ -4173,7 +4180,8 @@ async function renderHardwarePage(c) {
   const timezone = l.timezone ? l.timezone + (l.utcOffset ? ` · UTC ${l.utcOffset}` : '') : '';
   const systemFacts = [
     fact('Processor', cpu, cpu),
-    fact('Memory', s.memTotalMB ? `${(s.memTotalMB / 1024).toFixed(1)} GB RAM` : ''),
+    fact('Memory', s.memTotalMB ? `${(s.memTotalMB / 1024).toFixed(1)} GB ${s.unifiedGpuMemory ? 'unified CPU + GPU memory' : 'RAM'}` : ''),
+    fact('Platform', s.platform === 'dgx-spark' ? `NVIDIA DGX Spark${s.dgxVersion ? ` · DGX OS ${s.dgxVersion}` : ''}` : s.product),
     fact('Kernel', s.kernel, s.kernel),
     fact('Architecture', s.arch),
     fact('Uptime', Number.isFinite(Number(s.uptimeSec)) ? fmtUptime(Number(s.uptimeSec)) : ''),
@@ -4185,7 +4193,7 @@ async function renderHardwarePage(c) {
     const power = Number(g.powerW);
     return `<article class="machine-gpu">
       <div class="machine-gpu-head"><span class="machine-gpu-icon">${uiIcon('machine')}</span><span class="machine-gpu-name" title="${escapeAttr(String(g.name || 'Graphics processor'))}">${escapeHtml(String(g.name || 'Graphics processor'))}</span><span class="machine-gpu-index">#${escapeHtml(String(g.index ?? 0))}</span></div>
-      <div class="machine-vram"><div class="machine-vram-copy"><span>Graphics memory</span><strong>${gb(used)} / ${gb(total)} GB</strong></div><div class="machine-vram-track"><div class="machine-vram-fill" style="--machine-meter:${meter}%"></div></div></div>
+      <div class="machine-vram"><div class="machine-vram-copy"><span>${g.memoryType === 'unified' ? 'Unified CPU + GPU memory' : 'Graphics memory'}</span><strong>${gb(used)} / ${gb(total)} GB</strong></div><div class="machine-vram-track"><div class="machine-vram-fill" style="--machine-meter:${meter}%"></div></div></div>
       <div class="machine-gpu-metrics">
         <div class="machine-gpu-metric"><span>Utilization</span><b>${escapeHtml(String(g.utilPct ?? 0))}%</b></div>
         <div class="machine-gpu-metric"><span>Temperature</span><b>${escapeHtml(String(g.tempC ?? 0))}°C</b></div>

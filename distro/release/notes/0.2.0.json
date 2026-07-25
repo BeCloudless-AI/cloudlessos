@@ -1,0 +1,11 @@
+{
+  "title": "CloudlessOS for NVIDIA DGX Spark",
+  "summary": "A native ARM64 CloudlessOS appliance layer for the DGX Spark and its Grace Blackwell unified-memory platform.",
+  "changes": [
+    "Detect DGX Spark and report GB10 unified memory accurately across hardware, model compatibility, and the interface.",
+    "Launch GPU containers through the Spark's NVIDIA CDI device and select validated ARM64 CUDA images automatically.",
+    "Install CloudlessOS reversibly over DGX OS while preserving NVIDIA's kernel, firmware, drivers, CUDA, recovery path, and Secure Boot chain.",
+    "Publish and update signed ARM64 Cloudless packages alongside AMD64 without allowing Cloudless to replace the DGX OS compute stack.",
+    "Add first-boot validation, safe desktop switching, recovery metadata, and privacy-conscious diagnostics for physical Spark systems."
+  ]
+}

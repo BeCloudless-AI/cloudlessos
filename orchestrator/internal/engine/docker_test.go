@@ -89,3 +89,34 @@ func TestRunArgsDeterministic(t *testing.T) {
 		t.Fatalf("ports not sorted: %s", first)
 	}
 }
+
+func TestDGXSparkUsesCDIGPUDevice(t *testing.T) {
+	t.Setenv("CLOUDLESS_PLATFORM", "dgx-spark")
+	args := strings.Join(runArgs(RunSpec{Name: "x", Image: "img", GPUs: "all"}), " ")
+	if !strings.Contains(args, "--device nvidia.com/gpu=all") {
+		t.Fatalf("DGX Spark args do not use CDI: %s", args)
+	}
+	if strings.Contains(args, "--gpus") {
+		t.Fatalf("DGX Spark args leaked legacy GPU request: %s", args)
+	}
+}
+
+func TestInferenceRuntimeLimits(t *testing.T) {
+	args := strings.Join(runArgs(RunSpec{
+		Name: "x", Image: "img", IPC: "host",
+		Ulimits: []string{"memlock=-1", "stack=67108864"},
+	}), " ")
+	if !strings.Contains(args, "--ipc host") ||
+		!strings.Contains(args, "--ulimit memlock=-1") ||
+		!strings.Contains(args, "--ulimit stack=67108864") {
+		t.Fatalf("inference runtime flags missing: %s", args)
+	}
+}
+
+func TestGenericNVIDIAUsesDockerGPURequest(t *testing.T) {
+	t.Setenv("CLOUDLESS_PLATFORM", "generic")
+	args := strings.Join(runArgs(RunSpec{Name: "x", Image: "img", GPUs: "all"}), " ")
+	if !strings.Contains(args, "--gpus all") {
+		t.Fatalf("generic args do not use Docker GPU request: %s", args)
+	}
+}

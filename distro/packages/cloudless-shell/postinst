@@ -10,6 +10,19 @@ done
 install -d -o cloudless -g cloudless -m 0750 /home/cloudless /home/cloudless/.config /home/cloudless/.config/openbox
 install -d -o cloudless -g cloudless -m 0755 /home/cloudless/Cloudless /home/cloudless/Cloudless/Models /home/cloudless/Cloudless/Outputs /home/cloudless/Cloudless/Workspace /home/cloudless/Downloads
 install -o cloudless -g cloudless -m 0644 /usr/share/cloudless/openbox-autostart /home/cloudless/.config/openbox/autostart
+
+is_dgx_spark() {
+    [ -r /etc/dgx-release ] || \
+        { [ -r /sys/devices/virtual/dmi/id/product_name ] &&
+          grep -Eqi 'DGX[[:space:]_-]*Spark|GB10' /sys/devices/virtual/dmi/id/product_name; }
+}
+
+# A Spark may be installed side-by-side with NVIDIA's GNOME desktop. Only take
+# ownership of the display manager when the appliance installer explicitly
+# opted in. Generic CloudlessOS ISO installations keep their existing behavior.
+if is_dgx_spark && [ ! -e /etc/cloudless/dgx-appliance ]; then
+    exit 0
+fi
 # set-default may be ignored in the installer's chroot. Create the canonical
 # default-target link directly, then also ask systemctl for normal upgrades.
 ln -sfn /lib/systemd/system/graphical.target /etc/systemd/system/default.target

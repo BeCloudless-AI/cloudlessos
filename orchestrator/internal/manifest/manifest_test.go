@@ -44,13 +44,14 @@ func TestImageRepositoryHandlesRegistryPortsAndDigests(t *testing.T) {
 
 func TestPinRefForArchitecture(t *testing.T) {
 	pin := Pin{
-		Image: "example/cloudless",
+		Image:  "example/cloudless",
+		Images: map[string]string{"arm64": "vendor/cloudless-arm"},
 		Digests: map[string]string{
 			"amd64": "sha256:amd",
 			"arm64": "sha256:arm",
 		},
 	}
-	if got := pin.RefFor("arm64"); got != "example/cloudless@sha256:arm" {
+	if got := pin.RefFor("arm64"); got != "vendor/cloudless-arm@sha256:arm" {
 		t.Fatalf("arm64 ref = %q", got)
 	}
 	if got := pin.RefFor("amd64"); got != "example/cloudless@sha256:amd" {

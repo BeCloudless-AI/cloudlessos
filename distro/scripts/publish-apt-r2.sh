@@ -4,10 +4,12 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 REPO="${CLOUDLESS_APT_REPO_OUT:-$ROOT/distro/out/apt-repository}"
 CHANNEL="${1:-stable}"
 PUBLIC_BASE="${CLOUDLESS_APT_PUBLIC_URL:-https://updates.becloudless.ai/apt}"
+APP_MANIFEST="${CLOUDLESS_APP_MANIFEST:-$ROOT/distro/release/manifests/cloudless-apps-manifest.json}"
+APP_MANIFEST_PUBLIC="${CLOUDLESS_APP_MANIFEST_PUBLIC_URL:-https://updates.becloudless.ai/manifests/cloudless-apps-manifest.json}"
 : "${CLOUDLESS_R2_ENDPOINT:?Set CLOUDLESS_R2_ENDPOINT}"
 : "${CLOUDLESS_R2_BUCKET:?Set CLOUDLESS_R2_BUCKET}"
 case "$CHANNEL" in stable|beta) ;; *) echo "Channel must be stable or beta" >&2; exit 2 ;; esac
-for command in aws awk cmp curl gpgv sha256sum; do
+for command in aws awk cmp curl gpgv python3 sha256sum; do
     command -v "$command" >/dev/null || { echo "Missing required command: $command" >&2; exit 1; }
 done
 
@@ -18,6 +20,7 @@ test -s "$DIST/InRelease" -a -s "$DIST/Release" -a -s "$KEY" || {
     echo "No complete signed $CHANNEL repository found at $REPO" >&2
     exit 1
 }
+python3 -m json.tool "$APP_MANIFEST" >/dev/null
 
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
@@ -97,6 +100,8 @@ aws s3 cp "$REPO/releases/" "$DEST/releases/" --recursive --endpoint-url "$CLOUD
     --cache-control 'public,max-age=31536000,immutable' --only-show-errors
 aws s3 cp "$KEY" "$DEST/cloudless-archive-keyring.pgp" --endpoint-url "$CLOUDLESS_R2_ENDPOINT" \
     --cache-control 'public,max-age=31536000,immutable' --only-show-errors
+aws s3 cp "$APP_MANIFEST" "s3://$CLOUDLESS_R2_BUCKET/manifests/cloudless-apps-manifest.json" \
+    --endpoint-url "$CLOUDLESS_R2_ENDPOINT" --cache-control 'no-store,max-age=0,must-revalidate' --only-show-errors
 aws s3 cp "$DIST/main/" "$DEST/dists/$CHANNEL/main/" --recursive --endpoint-url "$CLOUDLESS_R2_ENDPOINT" \
     --exclude '*' --include '*/by-hash/*' --cache-control 'public,max-age=31536000,immutable' --only-show-errors
 aws s3 cp "$DIST/cloudless-release.json" "$DEST/dists/$CHANNEL/cloudless-release.json" --endpoint-url "$CLOUDLESS_R2_ENDPOINT" \
@@ -116,4 +121,9 @@ aws s3 cp "$DIST/main/" "$DEST/dists/$CHANNEL/main/" --recursive --endpoint-url 
     --exclude '*/by-hash/*' --cache-control 'no-store,max-age=0,must-revalidate' --only-show-errors
 
 verify_public
+curl -fsS "$APP_MANIFEST_PUBLIC?v=$(sha256sum "$APP_MANIFEST" | awk '{print $1}')" -o "$work/public-app-manifest"
+cmp -s "$APP_MANIFEST" "$work/public-app-manifest" || {
+    echo "Public app manifest does not match the published source" >&2
+    exit 1
+}
 echo "Published and publicly verified at $PUBLIC_BASE"

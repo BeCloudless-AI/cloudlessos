@@ -26,15 +26,16 @@ type Msg struct {
 
 // Context is the live OS state the assistant is grounded in.
 type Context struct {
-	Engine      string          // active engine id ("vllm"/"sglang"/""), "" = none yet
-	EngineReady bool            // engine is serving
-	Model       string          // served model (HF id)
-	FirstRun    bool            // no prior state file at startup
-	Onboarded   bool            // finished first-run tour
-	Running     map[string]bool // app id -> running
-	GPU         string          // human summary, e.g. "RTX 5090 (32 GB)"
-	GPUVRAMGB   int             // total VRAM used by Model Manager fit calculations
-	Models      []ModelOption   // curated choices and fit verdicts shown by Model Manager
+	Engine        string          // active engine id ("vllm"/"sglang"/""), "" = none yet
+	EngineReady   bool            // engine is serving
+	Model         string          // served model (HF id)
+	FirstRun      bool            // no prior state file at startup
+	Onboarded     bool            // finished first-run tour
+	Running       map[string]bool // app id -> running
+	GPU           string          // human summary, e.g. "RTX 5090 (32 GB)"
+	GPUVRAMGB     int             // total VRAM used by Model Manager fit calculations
+	GPUMemoryType string          // dedicated | unified | unknown
+	Models        []ModelOption   // curated choices and fit verdicts shown by Model Manager
 }
 
 // ModelOption is the authoritative subset of Model Manager data needed for
@@ -142,9 +143,9 @@ func SystemPrompt(c Context) string {
 		if m.Quant != "" {
 			quant = ", " + m.Quant
 		}
-		memory := "VRAM need unknown"
+		memory := "accelerator memory need unknown"
 		if m.MinVRAMGB > 0 {
-			memory = fmt.Sprintf("needs about %d GB VRAM", m.MinVRAMGB)
+			memory = fmt.Sprintf("needs about %d GB %s", m.MinVRAMGB, memoryLabel(c))
 		}
 		fmt.Fprintf(&b, "- %s (id: %s; %s%s; %s) — %s.\n", m.Name, m.ID, m.Params, quant, memory, m.Fit)
 	}
@@ -269,7 +270,7 @@ func modelGuidance(text string, c Context, forced bool) (ModelAdvice, bool) {
 		name := normalizeModelText(strings.ToLower(m.Name))
 		id := normalizeModelText(strings.ToLower(m.ID))
 		if (name != "" && strings.Contains(normalized, name)) || (id != "" && strings.Contains(normalized, id)) {
-			need := fmt.Sprintf("about %d GB of VRAM", m.MinVRAMGB)
+			need := fmt.Sprintf("about %d GB of %s", m.MinVRAMGB, memoryLabel(c))
 			if c.GPUVRAMGB <= 0 {
 				return ModelAdvice{Reply: fmt.Sprintf("%s is available in Model Manager and needs %s, but CloudlessOS currently reports %s. It cannot run this model with the local GPU engine as configured. You can review or download it now, then launch it after a supported GPU is available.", m.Name, need, c.GPU), ModelID: m.ID, Label: labelFor(m.Name)}, true
 			}
@@ -295,7 +296,7 @@ func modelGuidance(text string, c Context, forced bool) (ModelAdvice, bool) {
 	if estimated {
 		quant := fmt.Sprintf("%d-bit", bits)
 		if c.GPUVRAMGB <= 0 {
-			reply := fmt.Sprintf("Based on the name, I read this as roughly %.1fB parameters at %s, with a conservative requirement of about %d GB of VRAM including runtime overhead. CloudlessOS currently reports %s, so it cannot run this model with the local GPU engine as configured. This is an estimate—the exact architecture and context length can change it. You can still review the repository in Model Manager, but launching it requires a supported GPU with enough VRAM.", params, quant, estimate, c.GPU)
+			reply := fmt.Sprintf("Based on the name, I read this as roughly %.1fB parameters at %s, with a conservative requirement of about %d GB of %s including runtime overhead. CloudlessOS currently reports %s, so it cannot run this model with the local GPU engine as configured. This is an estimate—the exact architecture and context length can change it. You can still review the repository in Model Manager, but launching it requires a supported GPU with enough accelerator memory.", params, quant, estimate, memoryLabel(c), c.GPU)
 			return ModelAdvice{Reply: reply, ModelID: repo, Label: labelFor(modelName)}, true
 		}
 		fit := "should fit"
@@ -306,12 +307,19 @@ func modelGuidance(text string, c Context, forced bool) (ModelAdvice, bool) {
 		case float64(estimate) > float64(c.GPUVRAMGB)*0.85:
 			fit, detail = "would be a tight fit", "with little room left for KV cache or other GPU apps"
 		}
-		reply := fmt.Sprintf("Based on the name, I read this as roughly %.1fB parameters at %s. A conservative estimate is about %d GB of VRAM including runtime overhead, so it %s on %s, %s. This is an estimate—the exact architecture and context length can change it. Review the exact Hugging Face repository in Model Manager before downloading or launching.", params, quant, estimate, fit, c.GPU, detail)
+		reply := fmt.Sprintf("Based on the name, I read this as roughly %.1fB parameters at %s. A conservative estimate is about %d GB of %s including runtime overhead, so it %s on %s, %s. This is an estimate—the exact architecture and context length can change it. Review the exact Hugging Face repository in Model Manager before downloading or launching.", params, quant, estimate, memoryLabel(c), fit, c.GPU, detail)
 		return ModelAdvice{Reply: reply, ModelID: repo, Label: labelFor(modelName)}, true
 	}
 
 	reply := fmt.Sprintf("I don’t have enough detail to judge that exact model yet. %s is the hardware available, but I need the exact Hugging Face repository or at least its parameter size and quantization—for example, 32B AWQ or 8B BF16. Model Manager remains the final check and handles the actual download or launch.", c.GPU)
 	return ModelAdvice{Reply: reply, ModelID: repo, Label: labelFor(modelName)}, true
+}
+
+func memoryLabel(c Context) string {
+	if c.GPUMemoryType == "unified" {
+		return "unified memory"
+	}
+	return "VRAM"
 }
 
 var (

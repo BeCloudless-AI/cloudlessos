@@ -10,6 +10,8 @@ import (
 	"os/exec"
 	"sort"
 	"strings"
+
+	"github.com/cloudless/orchestrator/internal/platform"
 )
 
 // Docker implements Engine by shelling out to the docker CLI.
@@ -163,12 +165,29 @@ func (d *Docker) RemoveImage(ctx context.Context, image string) error {
 func runArgs(spec RunSpec) []string {
 	args := []string{"run", "-d", "--name", spec.Name, "--restart", "unless-stopped"}
 	if spec.GPUs != "" {
-		args = append(args, "--gpus", spec.GPUs)
+		if platform.GPUContainerMode() == platform.GPUCDI {
+			for _, gpu := range strings.Split(spec.GPUs, ",") {
+				gpu = strings.TrimSpace(gpu)
+				if gpu != "" {
+					args = append(args, "--device", "nvidia.com/gpu="+gpu)
+				}
+			}
+		} else {
+			args = append(args, "--gpus", spec.GPUs)
+		}
 	}
 	if spec.Network != "" {
 		args = append(args, "--network", spec.Network)
 		if spec.Network != "host" && spec.NetworkAlias != "" {
 			args = append(args, "--network-alias", spec.NetworkAlias)
+		}
+	}
+	if spec.IPC != "" {
+		args = append(args, "--ipc", spec.IPC)
+	}
+	for _, limit := range spec.Ulimits {
+		if strings.TrimSpace(limit) != "" {
+			args = append(args, "--ulimit", limit)
 		}
 	}
 	// Host networking binds host ports directly; -p is invalid there.

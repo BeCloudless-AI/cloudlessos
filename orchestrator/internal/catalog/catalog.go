@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"github.com/cloudless/orchestrator/internal/engine"
+	"github.com/cloudless/orchestrator/internal/platform"
 )
 
 // defaultLLM is the model vLLM serves as "Cloudless AI". Override with
@@ -53,40 +54,77 @@ type Field struct {
 
 // App is a curated, installable AI application backed by a container image.
 type App struct {
-	ID          string            `json:"id"`
-	Name        string            `json:"name"`
-	Description string            `json:"description"`
-	Category    string            `json:"category,omitempty"` // launcher grouping (user-facing apps)
-	Tagline     string            `json:"tagline,omitempty"`  // short "what it's for" line for the launcher
-	Long        string            `json:"long,omitempty"`     // full paragraph for the app's launcher page
-	Examples    []string          `json:"examples,omitempty"` // example "what you can do" bullets
-	Image       string            `json:"image"`              // empty = recipe not yet available
-	Ports       map[int]int       `json:"ports"`              // hostPort -> containerPort
-	Env         map[string]string `json:"env,omitempty"`
-	GPUs        string            `json:"gpus"`                // "all", "0", ... or "" for none
-	OpenPath    string            `json:"openPath"`            // URL path to open once running
-	MinVRAMGB   int               `json:"minVramGB"`           // rough VRAM floor for usefulness
-	Verified    bool              `json:"verified"`            // recipe validated on Cloudless dev hardware
-	Preinstall  bool              `json:"preinstall"`          // pulled AND run automatically on first boot
-	Prefetch    bool              `json:"-"`                   // image pulled on boot but not run (ready alternative)
-	Service     bool              `json:"service"`             // infrastructure (engine), hidden from the launcher
-	Hidden      bool              `json:"hidden,omitempty"`    // installed/usable but not shown as a launcher tile
-	LocalOnly   bool              `json:"localOnly,omitempty"` // never create LAN or public tunnel sidecars
-	Engine      bool              `json:"engine"`              // switchable inference engine (carries the stable alias)
-	NeedsEngine bool              `json:"needsEngine"`         // depends on the LLM engine (gated until the model is served)
-	Network     string            `json:"-"`                   // docker network to join (for inter-app DNS)
-	Command     []string          `json:"-"`                   // container command/args
-	Volumes     map[string]string `json:"-"`                   // host-or-named-volume -> containerPath
-	DataPath    string            `json:"-"`                   // mount the app's complete Cloudless-managed state directory here
-	DataUID     int               `json:"-"`                   // container UID that must own DataPath (0 = keep host ownership)
-	Build       string            `json:"-"`                   // embedded build-context name (build instead of pull)
-	Config      []ConfigFile      `json:"config,omitempty"`    // editable config files (mounted)
-	Settings    []Field           `json:"-"`                   // form fields (via /api/apps/{id}/settings)
-	Admin       *AdminInfo        `json:"-"`                   // how the app is administered beyond Cloudless settings
+	ID            string              `json:"id"`
+	Name          string              `json:"name"`
+	Description   string              `json:"description"`
+	Category      string              `json:"category,omitempty"` // launcher grouping (user-facing apps)
+	Tagline       string              `json:"tagline,omitempty"`  // short "what it's for" line for the launcher
+	Long          string              `json:"long,omitempty"`     // full paragraph for the app's launcher page
+	Examples      []string            `json:"examples,omitempty"` // example "what you can do" bullets
+	Image         string              `json:"image"`              // empty = recipe not yet available
+	ArchImages    map[string]string   `json:"-"`                  // architecture-specific image override
+	Architectures []string            `json:"-"`                  // empty = image is expected to be multi-arch
+	Ports         map[int]int         `json:"ports"`              // hostPort -> containerPort
+	Env           map[string]string   `json:"env,omitempty"`
+	GPUs          string              `json:"gpus"`                // "all", "0", ... or "" for none
+	OpenPath      string              `json:"openPath"`            // URL path to open once running
+	MinVRAMGB     int                 `json:"minVramGB"`           // rough VRAM floor for usefulness
+	Verified      bool                `json:"verified"`            // recipe validated on Cloudless dev hardware
+	Preinstall    bool                `json:"preinstall"`          // pulled AND run automatically on first boot
+	Prefetch      bool                `json:"-"`                   // image pulled on boot but not run (ready alternative)
+	Service       bool                `json:"service"`             // infrastructure (engine), hidden from the launcher
+	Hidden        bool                `json:"hidden,omitempty"`    // installed/usable but not shown as a launcher tile
+	LocalOnly     bool                `json:"localOnly,omitempty"` // never create LAN or public tunnel sidecars
+	Engine        bool                `json:"engine"`              // switchable inference engine (carries the stable alias)
+	NeedsEngine   bool                `json:"needsEngine"`         // depends on the LLM engine (gated until the model is served)
+	Network       string              `json:"-"`                   // docker network to join (for inter-app DNS)
+	IPC           string              `json:"-"`                   // container IPC namespace mode
+	Ulimits       []string            `json:"-"`                   // container resource limits
+	Command       []string            `json:"-"`                   // container command/args
+	ArchCommands  map[string][]string `json:"-"`                   // architecture-specific command override
+	Volumes       map[string]string   `json:"-"`                   // host-or-named-volume -> containerPath
+	DataPath      string              `json:"-"`                   // mount the app's complete Cloudless-managed state directory here
+	DataUID       int                 `json:"-"`                   // container UID that must own DataPath (0 = keep host ownership)
+	Build         string              `json:"-"`                   // embedded build-context name (build instead of pull)
+	Config        []ConfigFile        `json:"config,omitempty"`    // editable config files (mounted)
+	Settings      []Field             `json:"-"`                   // form fields (via /api/apps/{id}/settings)
+	Admin         *AdminInfo          `json:"-"`                   // how the app is administered beyond Cloudless settings
 }
 
 // ContainerName is the orchestrator-managed container name for this app.
 func (a App) ContainerName() string { return "cloudless-" + a.ID }
+
+// SupportsHost reports whether the curated recipe is available for this CPU
+// architecture. Apps with no restriction are expected to publish multi-arch
+// images.
+func (a App) SupportsHost() bool {
+	if len(a.Architectures) == 0 {
+		return true
+	}
+	arch := platform.Architecture()
+	for _, supported := range a.Architectures {
+		if supported == arch {
+			return true
+		}
+	}
+	return false
+}
+
+// HostImage selects the image validated for the current architecture.
+func (a App) HostImage() string {
+	if image := a.ArchImages[platform.Architecture()]; image != "" {
+		return image
+	}
+	return a.Image
+}
+
+func (a App) forHost() App {
+	a.Image = a.HostImage()
+	if command := a.ArchCommands[platform.Architecture()]; len(command) > 0 {
+		a.Command = append([]string(nil), command...)
+	}
+	return a
+}
 
 // PrimaryHostPort returns a host port to build the "open" URL from (0 if none).
 func (a App) PrimaryHostPort() int {
@@ -141,6 +179,8 @@ func (a App) Spec() engine.RunSpec {
 		Env:     a.Env,
 		GPUs:    a.GPUs,
 		Network: a.Network,
+		IPC:     a.IPC,
+		Ulimits: append([]string(nil), a.Ulimits...),
 		Args:    a.Command,
 		Volumes: a.Volumes,
 	}
@@ -154,7 +194,7 @@ func (a App) Spec() engine.RunSpec {
 // Engines returns the switchable inference engines.
 func Engines() []App {
 	var out []App
-	for _, a := range apps {
+	for _, a := range All() {
 		if a.Engine {
 			out = append(out, a)
 		}
@@ -196,12 +236,12 @@ func EngineSpecOverride(a App, model string, override []string) engine.RunSpec {
 
 // DefaultEngine returns the id of the default engine (the preinstalled one).
 func DefaultEngine() string {
-	for _, a := range apps {
+	for _, a := range All() {
 		if a.Engine && a.Preinstall {
 			return a.ID
 		}
 	}
-	for _, a := range apps {
+	for _, a := range All() {
 		if a.Engine {
 			return a.ID
 		}
@@ -213,7 +253,7 @@ func DefaultEngine() string {
 // are also started; Prefetch apps are pulled only (ready to start on demand).
 func Bundled() []App {
 	var out []App
-	for _, a := range apps {
+	for _, a := range All() {
 		if (a.Preinstall || a.Prefetch) && a.Image != "" {
 			out = append(out, a)
 		}
@@ -248,7 +288,10 @@ var apps = []App{
 		Name:        "vLLM Engine",
 		Description: "High-throughput inference engine powering Cloudless AI.",
 		Image:       "vllm/vllm-openai:latest",
-		Ports:       map[int]int{8000: 8000},
+		ArchImages: map[string]string{
+			"arm64": "nvcr.io/nvidia/vllm:26.05.post1-py3",
+		},
+		Ports: map[int]int{8000: 8000},
 		// Image entrypoint is `vllm serve`; the model is the positional arg.
 		// Tool calling enabled (agents like OpenClaw send tools); Qwen2.5 -> hermes parser.
 		Command: []string{
@@ -259,11 +302,25 @@ var apps = []App{
 			"--enable-auto-tool-choice",
 			"--tool-call-parser", "hermes",
 		},
+		// NVIDIA's Grace Blackwell image does not use the upstream image's
+		// `vllm serve` entrypoint, so include it explicitly on ARM64.
+		ArchCommands: map[string][]string{
+			"arm64": {
+				"vllm", "serve", defaultLLM,
+				"--served-model-name", "cloudless",
+				"--gpu-memory-utilization", "0.5",
+				"--max-model-len", "32768",
+				"--enable-auto-tool-choice",
+				"--tool-call-parser", "hermes",
+			},
+		},
 		Volumes:    map[string]string{"cloudless-hf": "/root/.cache/huggingface"}, // persist model cache
+		IPC:        "host",
+		Ulimits:    []string{"memlock=-1", "stack=67108864"},
 		GPUs:       "all",
 		OpenPath:   "/",
 		MinVRAMGB:  6,
-		Verified:   false, // pending Blackwell (RTX 50xx / sm_120) validation — see D12
+		Verified:   true, // validated on RTX Blackwell and DGX Spark GB10 (sm_121)
 		Preinstall: true,
 		Service:    true,
 		Engine:     true,
@@ -277,7 +334,10 @@ var apps = []App{
 		Name:        "SGLang Engine",
 		Description: "Alternative high-performance inference engine (OpenAI-compatible).",
 		Image:       "lmsysorg/sglang:latest",
-		Ports:       map[int]int{8000: 8000}, // same fixed port as vLLM (one engine runs at a time)
+		ArchImages: map[string]string{
+			"arm64": "lmsysorg/sglang:latest-cu130",
+		},
+		Ports: map[int]int{8000: 8000}, // same fixed port as vLLM (one engine runs at a time)
 		Command: []string{
 			"python3", "-m", "sglang.launch_server",
 			"--model-path", defaultLLM,
@@ -399,7 +459,11 @@ var apps = []App{
 		},
 		// Community image; NOT yet validated on Blackwell (RTX 50xx) — see DECISIONS D11.
 		Image: "mmartial/comfyui-nvidia-docker:latest",
-		Ports: map[int]int{8188: 8188},
+		ArchImages: map[string]string{
+			"arm64": "mmartial/comfyui-nvidia-docker:ubuntu24_cuda13.2-dgx-latest",
+		},
+		Architectures: []string{"amd64", "arm64"},
+		Ports:         map[int]int{8188: 8188},
 		// /comfy/mnt holds the ComfyUI install, models, outputs and custom nodes —
 		// persist it so installs survive updates (the image seeds it on first run).
 		Volumes:    map[string]string{"cloudless-comfyui": "/comfy/mnt"},
@@ -425,8 +489,9 @@ var apps = []App{
 			"Prepare datasets and run training jobs from a web UI",
 			"Export trained models to use in ComfyUI",
 		},
-		Image: "ostris/aitoolkit:latest",
-		Ports: map[int]int{8675: 8675},
+		Image:         "ostris/aitoolkit:latest",
+		Architectures: []string{"amd64"},
+		Ports:         map[int]int{8675: 8675},
 		Env: map[string]string{
 			"AI_TOOLKIT_AUTH": "cloudless", // UI login (change in the app); keeps LAN/online sharing gated
 			"NODE_ENV":        "production",
@@ -462,8 +527,9 @@ var apps = []App{
 			"Run ready-made fine-tuning notebooks",
 			"Export trained models to GGUF for local inference",
 		},
-		Image: "unsloth/unsloth:latest",
-		Ports: map[int]int{8888: 8888}, // Jupyter Lab (image's :8000/:22 left unpublished)
+		Image:         "unsloth/unsloth:latest",
+		Architectures: []string{"amd64"},
+		Ports:         map[int]int{8888: 8888}, // Jupyter Lab (image's :8000/:22 left unpublished)
 		Env: map[string]string{
 			"JUPYTER_PASSWORD": "cloudless", // notebook login (change in the app)
 		},
@@ -495,11 +561,12 @@ var apps = []App{
 		},
 		// Pulled from the Cloudless Docker Hub space (built from internal/apps/openclaw,
 		// which stays the source of truth for rebuilding + re-pushing). Manifest-pinnable.
-		Image:       "samuelcardillo/cloudless-openclaw:v1",
-		Ports:       map[int]int{18789: 18789}, // for the UI link; host networking binds it directly
-		NeedsEngine: true,                      // agent that drives the local model
-		Env:         map[string]string{"CUSTOM_API_KEY": "cloudless"},
-		Config:      []ConfigFile{{File: "openclaw.json", Path: "/root/.openclaw/openclaw.json", Lang: "json"}},
+		Image:         "samuelcardillo/cloudless-openclaw:v1",
+		Architectures: []string{"amd64"},
+		Ports:         map[int]int{18789: 18789}, // for the UI link; host networking binds it directly
+		NeedsEngine:   true,                      // agent that drives the local model
+		Env:           map[string]string{"CUSTOM_API_KEY": "cloudless"},
+		Config:        []ConfigFile{{File: "openclaw.json", Path: "/root/.openclaw/openclaw.json", Lang: "json"}},
 		Settings: []Field{
 			{Key: "baseUrl", Label: "AI endpoint", Help: "OpenAI-compatible URL OpenClaw sends requests to.",
 				Type: "text", Default: "http://127.0.0.1:8000/v1", File: "openclaw.json", Path: "models.providers.custom.baseUrl"},
@@ -571,14 +638,23 @@ var apps = []App{
 	},
 }
 
-// All returns the full catalog.
-func All() []App { return apps }
+// All returns recipes supported by this host. Unsupported architecture-specific
+// apps are omitted instead of presenting an Install action that can never work.
+func All() []App {
+	out := make([]App, 0, len(apps))
+	for _, a := range apps {
+		if a.SupportsHost() {
+			out = append(out, a.forHost())
+		}
+	}
+	return out
+}
 
 // Get returns the app with the given id.
 func Get(id string) (App, bool) {
 	for _, a := range apps {
-		if a.ID == id {
-			return a, true
+		if a.ID == id && a.SupportsHost() {
+			return a.forHost(), true
 		}
 	}
 	return App{}, false

@@ -46,3 +46,18 @@ func TestDetectOverride(t *testing.T) {
 		t.Fatalf("Detect() = %q, want %q", got, DGXSpark)
 	}
 }
+
+func TestDGXSparkUsesCDI(t *testing.T) {
+	t.Setenv("CLOUDLESS_PLATFORM", DGXSpark)
+	if got := GPUContainerMode(); got != GPUCDI {
+		t.Fatalf("GPUContainerMode() = %q, want %q", got, GPUCDI)
+	}
+}
+
+func TestGPUContainerModeOverride(t *testing.T) {
+	t.Setenv("CLOUDLESS_PLATFORM", DGXSpark)
+	t.Setenv("CLOUDLESS_GPU_MODE", GPUDocker)
+	if got := GPUContainerMode(); got != GPUDocker {
+		t.Fatalf("GPUContainerMode() = %q, want %q", got, GPUDocker)
+	}
+}

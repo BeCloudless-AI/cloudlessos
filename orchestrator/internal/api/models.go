@@ -14,16 +14,18 @@ import (
 	"github.com/cloudless/orchestrator/internal/models"
 )
 
-// totalVRAMGB sums detected GPU memory (vLLM can shard across GPUs with TP).
-func totalVRAMGB(ctx context.Context) int {
+// acceleratorMemory reports the capacity available to GPU workloads. On DGX
+// Spark this is system-wide unified memory rather than nvidia-smi VRAM.
+func acceleratorMemory(ctx context.Context) (int, string) {
 	c, cancel := context.WithTimeout(ctx, 4*time.Second)
 	defer cancel()
-	gpus, _ := hardware.GPUs(c)
-	total := 0
-	for _, g := range gpus {
-		total += g.MemTotalMB
-	}
-	return total / 1024
+	return hardware.AcceleratorMemoryGB(c)
+}
+
+// totalVRAMGB is retained internally while API clients migrate to memoryType.
+func totalVRAMGB(ctx context.Context) int {
+	total, _ := acceleratorMemory(ctx)
+	return total
 }
 
 // fitFor classifies a model's VRAM need against available GPU memory.
@@ -78,7 +80,7 @@ type modelView struct {
 // "Cloudless highlights" (from the hosted models manifest, else the built-in list).
 // Each carries a VRAM-fit verdict, active and downloaded flags.
 func (s *Server) modelsList(w http.ResponseWriter, r *http.Request) {
-	gpuGB := totalVRAMGB(r.Context())
+	gpuGB, memoryType := acceleratorMemory(r.Context())
 	current := s.state.Get().Model
 	if current == "" {
 		current = catalog.DefaultModel()
@@ -158,6 +160,7 @@ func (s *Server) modelsList(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"gpuVRAMGB":  gpuGB,
+		"memoryType": memoryType,
 		"current":    current,
 		"custom":     !inCatalog,
 		"yours":      yours,

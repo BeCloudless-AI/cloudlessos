@@ -43,7 +43,7 @@ finish_package() {
 }
 
 PKG="$WORK/cloudless-orchestrator"
-make_control "$PKG" cloudless-orchestrator "CloudlessOS local AI orchestrator" "docker.io, ca-certificates"
+make_control "$PKG" cloudless-orchestrator "CloudlessOS local AI orchestrator" "docker.io | docker-ce, ca-certificates"
 install -Dm0755 "$WORK/cloudlessd" "$PKG/usr/lib/cloudless/cloudlessd"
 install -Dm0644 "$DISTRO/packages/cloudless-orchestrator/cloudlessd.service" "$PKG/lib/systemd/system/cloudlessd.service"
 install -Dm0644 "$DISTRO/packages/cloudless-orchestrator/cloudless.env" "$PKG/etc/cloudless/cloudless.env"
@@ -54,6 +54,7 @@ finish_package "$PKG" cloudless-orchestrator
 PKG="$WORK/cloudless-shell"
 make_control "$PKG" cloudless-shell "CloudlessOS fullscreen web shell" "lightdm, lightdm-gtk-greeter, openbox, pcmanfm, xorg, curl, feh, unclutter, x11-xserver-utils"
 install -Dm0755 "$DISTRO/packages/cloudless-shell/cloudless-kiosk" "$PKG/usr/bin/cloudless-kiosk"
+install -Dm0755 "$DISTRO/packages/cloudless-shell/cloudless-dgx-desktop-mode" "$PKG/usr/sbin/cloudless-dgx-desktop-mode"
 install -Dm0644 "$DISTRO/packages/cloudless-shell/openbox-autostart" "$PKG/usr/share/cloudless/openbox-autostart"
 install -Dm0644 "$DISTRO/packages/cloudless-shell/lightdm.conf" "$PKG/etc/lightdm/lightdm.conf.d/60-cloudless.conf"
 mkdir -p "$PKG/usr/share/backgrounds/cloudless"
@@ -88,6 +89,7 @@ finish_package "$PKG" cloudless-hardware
 PKG="$WORK/cloudless-firstboot"
 make_control "$PKG" cloudless-firstboot "CloudlessOS first-boot validation" "curl"
 install -Dm0755 "$DISTRO/packages/cloudless-firstboot/cloudless-validate" "$PKG/usr/lib/cloudless/cloudless-validate"
+install -Dm0755 "$DISTRO/packages/cloudless-firstboot/cloudless-diagnostics" "$PKG/usr/bin/cloudless-diagnostics"
 install -Dm0644 "$DISTRO/packages/cloudless-firstboot/cloudless-firstboot.service" "$PKG/lib/systemd/system/cloudless-firstboot.service"
 install -Dm0755 "$DISTRO/packages/cloudless-firstboot/postinst" "$PKG/DEBIAN/postinst"
 finish_package "$PKG" cloudless-firstboot

@@ -40,6 +40,10 @@ grep -Fq 'cloudless-updater check' "$DISTRO/packages/cloudless-updater/cloudless
 grep -Fq 'cloudless-updater nvidia-check' "$DISTRO/packages/cloudless-updater/cloudless-nvidia-check.service"
 grep -Fq 'cloudless-updater nvidia-apply' "$DISTRO/packages/cloudless-updater/cloudless-nvidia-apply.service"
 grep -Fq 'DGX Spark detected; preserving' "$DISTRO/packages/cloudless-hardware/cloudless-hardware-install"
+grep -Fq '745BF7A97F64EB716DAF7677974145C2D867C99E' "$DISTRO/scripts/install-dgx-spark.sh"
+grep -Fq 'does not contain ARM64 yet' "$DISTRO/scripts/install-dgx-spark.sh"
+grep -Fq 'Refusing an install plan that changes' "$DISTRO/scripts/install-dgx-spark.sh"
+grep -Fq 'if ! is_dgx_spark' "$DISTRO/packages/cloudless-branding/postinst"
 if grep -q '^Architectures:' "$DISTRO/packages/cloudless-updater/cloudless.sources"; then
     echo "Cloudless APT sources must follow the machine's native architecture" >&2
     exit 1
@@ -50,5 +54,5 @@ if grep -Eq '^After=.*docker\.service' "$DISTRO/packages/cloudless-orchestrator/
     exit 1
 fi
 
-while IFS= read -r script; do bash -n "$script"; done < <(find "$DISTRO/scripts" "$DISTRO/packages" -type f \( -name '*.sh' -o -name postinst -o -name prerm -o -name cloudless-kiosk -o -name cloudless-hardware-install -o -name cloudless-validate \))
+while IFS= read -r script; do bash -n "$script"; done < <(find "$DISTRO/scripts" "$DISTRO/packages" -type f \( -name '*.sh' -o -name postinst -o -name prerm -o -name cloudless-kiosk -o -name cloudless-dgx-desktop-mode -o -name cloudless-diagnostics -o -name cloudless-hardware-install -o -name cloudless-validate \))
 echo "Package validation passed"

@@ -15,6 +15,8 @@ type RunSpec struct {
 	GPUs         string            // "all", "0", ... or "" for no GPU
 	Network      string            // docker network to join (container-name DNS), or ""
 	NetworkAlias string            // extra DNS alias on the network (e.g. "cloudless-ai")
+	IPC          string            // IPC namespace mode (for example "host" for large inference workers)
+	Ulimits      []string          // Docker ulimit assignments (for example "memlock=-1")
 	Args         []string          // extra args appended after the image (container command)
 }
 

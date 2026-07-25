@@ -5,12 +5,16 @@ package platform
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 )
 
 const (
 	Generic  = "generic"
 	DGXSpark = "dgx-spark"
+
+	GPUDocker = "docker"
+	GPUCDI    = "cdi"
 )
 
 var identityFiles = []string{
@@ -49,4 +53,29 @@ func DetectAt(root string) string {
 
 func IsDGXSpark() bool {
 	return Detect() == DGXSpark
+}
+
+// Architecture returns the container architecture for this host. The override
+// keeps cross-platform catalog and installer tests deterministic.
+func Architecture() string {
+	if value := strings.TrimSpace(os.Getenv("CLOUDLESS_ARCH")); value != "" {
+		return strings.ToLower(value)
+	}
+	return runtime.GOARCH
+}
+
+// GPUContainerMode reports how Docker should receive an NVIDIA device request.
+// DGX Spark's factory Docker 29 + NVIDIA Toolkit installation exposes CDI
+// devices and deliberately does not register the legacy "nvidia" runtime.
+func GPUContainerMode() string {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("CLOUDLESS_GPU_MODE"))) {
+	case GPUCDI:
+		return GPUCDI
+	case GPUDocker:
+		return GPUDocker
+	}
+	if IsDGXSpark() {
+		return GPUCDI
+	}
+	return GPUDocker
 }

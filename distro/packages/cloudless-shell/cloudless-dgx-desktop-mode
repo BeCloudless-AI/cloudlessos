@@ -1,0 +1,38 @@
+#!/bin/sh
+set -eu
+
+usage() {
+    echo "Usage: sudo cloudless-dgx-desktop-mode cloudless|dgx [--now]" >&2
+    exit 2
+}
+
+[ "$(id -u)" -eq 0 ] || { echo "Run this command with sudo." >&2; exit 1; }
+mode="${1:-}"
+now="${2:-}"
+case "$now" in ""|--now) ;; *) usage ;; esac
+
+case "$mode" in
+cloudless)
+    install -d -m 0755 /etc/cloudless
+    : > /etc/cloudless/dgx-appliance
+    systemctl set-default graphical.target
+    systemctl disable gdm3.service >/dev/null 2>&1 || true
+    printf '%s\n' /usr/sbin/lightdm > /etc/X11/default-display-manager
+    ln -sfn /lib/systemd/system/lightdm.service /etc/systemd/system/display-manager.service
+    systemctl daemon-reload
+    systemctl enable lightdm.service
+    if [ "$now" = --now ]; then systemctl restart lightdm.service; fi
+    echo "Cloudless appliance desktop selected. Reboot to enter it."
+    ;;
+dgx)
+    rm -f /etc/cloudless/dgx-appliance
+    systemctl set-default graphical.target
+    systemctl disable lightdm.service >/dev/null 2>&1 || true
+    printf '%s\n' /usr/sbin/gdm3 > /etc/X11/default-display-manager
+    ln -sfn /lib/systemd/system/gdm.service /etc/systemd/system/display-manager.service
+    systemctl daemon-reload
+    if [ "$now" = --now ]; then systemctl restart gdm3.service; fi
+    echo "NVIDIA DGX desktop selected. Reboot to enter it."
+    ;;
+*) usage ;;
+esac

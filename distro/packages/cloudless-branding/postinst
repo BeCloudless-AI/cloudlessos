@@ -1,10 +1,22 @@
 #!/bin/sh
 set -e
-if [ ! -e /usr/lib/os-release.ubuntu ]; then
-    dpkg-divert --package cloudless-branding --add --rename \
-        --divert /usr/lib/os-release.ubuntu /usr/lib/os-release
+
+is_dgx_spark() {
+    [ -r /etc/dgx-release ] || \
+        { [ -r /sys/devices/virtual/dmi/id/product_name ] &&
+          grep -Eqi 'DGX[[:space:]_-]*Spark|GB10' /sys/devices/virtual/dmi/id/product_name; }
+}
+
+# DGX OS tooling uses the vendor os-release identity to select compatible OTA,
+# kernel, CUDA and firmware packages. Keep it intact while still applying the
+# Cloudless Plymouth and GRUB artwork.
+if ! is_dgx_spark; then
+    if [ ! -e /usr/lib/os-release.ubuntu ]; then
+        dpkg-divert --package cloudless-branding --add --rename \
+            --divert /usr/lib/os-release.ubuntu /usr/lib/os-release
+    fi
+    install -m 0644 /usr/share/cloudless/os-release /usr/lib/os-release
 fi
-install -m 0644 /usr/share/cloudless/os-release /usr/lib/os-release
 update-alternatives --install \
     /usr/share/plymouth/themes/default.plymouth default.plymouth \
     /usr/share/plymouth/themes/cloudless/cloudless.plymouth 200

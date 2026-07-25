@@ -111,3 +111,12 @@ sudo systemctl start cloudless-update-check.service
 
 All later updates arrive through the signed repository; reinstalling the ISO is not
 required.
+
+## DGX Spark ownership boundary
+
+The same signed repository publishes ARM64 Cloudless packages. On DGX Spark,
+Cloudless updates only Cloudless-owned packages. NVIDIA's DGX OS updater remains
+the sole owner of the kernel, firmware, GPU driver, CUDA and container toolkit.
+The Cloudless updater recognizes the platform and never substitutes Ubuntu's
+generic driver path. Release signing and publication validate both `amd64` and
+`arm64` indexes before the signed `InRelease` file is promoted.

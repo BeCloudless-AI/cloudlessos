@@ -401,6 +401,16 @@ func apply() error {
 			return osupdate.Write(status)
 		}
 
+		args := []string{"install", "-y", "--only-upgrade"}
+		for _, pkg := range status.Packages {
+			args = append(args, pkg.Name)
+		}
+		if platform.IsDGXSpark() {
+			if err := validateDGXUpdatePlan(ctx, args); err != nil {
+				return failStatus(status, "Update refused to preserve the NVIDIA-managed DGX OS stack", err)
+			}
+		}
+
 		if err := writeProgress(&status, 24, "Creating a recovery snapshot…"); err != nil {
 			return err
 		}
@@ -410,10 +420,6 @@ func apply() error {
 		status.State = "installing"
 		if err := writeProgress(&status, 30, fmt.Sprintf("Downloading %d verified package update(s)…", len(status.Packages))); err != nil {
 			return err
-		}
-		args := []string{"install", "-y", "--only-upgrade"}
-		for _, pkg := range status.Packages {
-			args = append(args, pkg.Name)
 		}
 		downloadArgs := []string{"install", "-y", "--download-only", "--only-upgrade"}
 		for _, pkg := range status.Packages {
@@ -490,6 +496,42 @@ func apply() error {
 		status.Progress = 100
 		return osupdate.Write(status)
 	})
+}
+
+func validateDGXUpdatePlan(ctx context.Context, installArgs []string) error {
+	simulateArgs := append([]string{"-s"}, installArgs...)
+	output, err := run(ctx, "apt-get", simulateArgs...)
+	if err != nil {
+		return fmt.Errorf("could not simulate the update safely: %w", err)
+	}
+	protected := protectedDGXPackageChanges(output)
+	if len(protected) > 0 {
+		return fmt.Errorf("APT planned changes to vendor-owned packages: %s", strings.Join(protected, ", "))
+	}
+	return nil
+}
+
+func protectedDGXPackageChanges(output string) []string {
+	seen := make(map[string]bool)
+	var protected []string
+	for _, line := range strings.Split(output, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 2 || (fields[0] != "Inst" && fields[0] != "Remv" && fields[0] != "Purg") {
+			continue
+		}
+		name := binaryPackageName(strings.Trim(fields[1], "[]"))
+		lower := strings.ToLower(name)
+		if !strings.Contains(lower, "nvidia") &&
+			!strings.HasPrefix(lower, "cuda-") &&
+			!strings.HasPrefix(lower, "dgx-") {
+			continue
+		}
+		if !seen[name] {
+			seen[name] = true
+			protected = append(protected, name)
+		}
+	}
+	return protected
 }
 
 func currentStatus(state, message string) osupdate.Status {

@@ -77,6 +77,7 @@ else
     capture "CUDA compiler" /usr/local/cuda/bin/nvcc --version
 fi
 capture "NVIDIA container toolkit" nvidia-ctk --version
+capture "NVIDIA CDI devices" nvidia-ctk cdi list
 capture "Docker version" docker version
 capture "Docker runtimes" docker info --format "{{json .Runtimes}}"
 

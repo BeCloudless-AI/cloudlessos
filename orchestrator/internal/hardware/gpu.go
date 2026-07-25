@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	hostplatform "github.com/cloudless/orchestrator/internal/platform"
 )
 
 // GPU is a single GPU's live stats.
@@ -24,6 +26,7 @@ type GPU struct {
 	PowerW      float64 `json:"powerW"`
 	PowerLimitW float64 `json:"powerLimitW"`
 	Driver      string  `json:"driver"`
+	MemoryType  string  `json:"memoryType"` // dedicated | unified
 }
 
 // gpuTTL is how long a nvidia-smi snapshot is reused. GPU stats are read-only
@@ -81,9 +84,48 @@ func queryGPUs(ctx context.Context) ([]GPU, error) {
 			PowerW:      atof(f[6]),
 			PowerLimitW: atof(f[7]),
 			Driver:      f[8],
+			MemoryType:  "dedicated",
 		})
 	}
+	if hostplatform.IsDGXSpark() {
+		total, available := memInfoMB()
+		applyUnifiedMemory(gpus, total, available)
+	}
 	return gpus, nil
+}
+
+func applyUnifiedMemory(gpus []GPU, totalMB, availableMB int) {
+	if totalMB <= 0 {
+		return
+	}
+	used := totalMB - availableMB
+	if used < 0 {
+		used = 0
+	}
+	for i := range gpus {
+		gpus[i].MemTotalMB = totalMB
+		gpus[i].MemUsedMB = used
+		gpus[i].MemoryType = "unified"
+	}
+}
+
+// AcceleratorMemoryGB returns the capacity used for model-fit decisions and
+// whether that capacity is dedicated VRAM or CPU/GPU unified memory.
+func AcceleratorMemoryGB(ctx context.Context) (int, string) {
+	gpus, _ := GPUs(ctx)
+	if len(gpus) == 0 {
+		return 0, "unknown"
+	}
+	if gpus[0].MemoryType == "unified" {
+		return gpus[0].MemTotalMB / 1024, "unified"
+	}
+	total := 0
+	for _, gpu := range gpus {
+		if gpu.MemTotalMB > 0 {
+			total += gpu.MemTotalMB
+		}
+	}
+	return total / 1024, "dedicated"
 }
 
 // nvidiaSMIPath supports both a normal Linux installation and NVIDIA's WSL

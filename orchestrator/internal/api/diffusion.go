@@ -43,7 +43,7 @@ type diffusionView struct {
 // diffusionList returns "Your image models" (downloaded files) + "Cloudless highlights"
 // (curated picks not yet downloaded), each with a VRAM-fit verdict.
 func (s *Server) diffusionList(w http.ResponseWriter, r *http.Request) {
-	gpuGB := totalVRAMGB(r.Context())
+	gpuGB, memoryType := acceleratorMemory(r.Context())
 
 	highlights := s.mfDiff.Highlights(r.Context())
 	if len(highlights) == 0 {
@@ -78,7 +78,7 @@ func (s *Server) diffusionList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"gpuVRAMGB": gpuGB, "yours": yours, "highlights": picks,
+		"gpuVRAMGB": gpuGB, "memoryType": memoryType, "yours": yours, "highlights": picks,
 	})
 }
 

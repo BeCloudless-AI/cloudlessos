@@ -1,0 +1,14 @@
+{
+  "title": "Faster DGX Spark and expanded model management",
+  "summary": "CloudlessOS 0.2.1 makes the DGX Spark interface inference-friendly and adds a complete Hugging Face model workflow across supported systems.",
+  "changes": [
+    "Keep the DGX Spark interface at near-zero idle GPU usage by disabling animations by default, while offering an explicit per-display opt-in with a shared-GPU performance warning.",
+    "Suspend optional interface motion during active inference so model throughput and concurrent request handling remain the priority.",
+    "Use Qwen3.6-35B-A3B as the validated DGX Spark default model with Spark-specific vLLM and SGLang reasoning, tool-calling, and unified-memory settings.",
+    "Search Hugging Face from Model Manager, authenticate for gated or private repositories, inspect compatibility, download models, and track their installed files and progress inside CloudlessOS.",
+    "Manage display resolution and UI scaling from Settings, with Spark-aware hardware, storage, and DGX Dashboard presentation.",
+    "Improve the welcome tour at high resolutions with lower rendering cost, reliable click-through targets, and a clear blurred spotlight.",
+    "Make ComfyUI optional instead of preinstalled and improve model download visibility throughout the interface.",
+    "Preserve NVIDIA repository key access during DGX Spark installation so APT signature verification remains reliable."
+  ]
+}

@@ -15,6 +15,10 @@ SOURCE_COMMIT="${CLOUDLESS_SOURCE_COMMIT:-$(git -C "$ROOT" rev-parse HEAD 2>/dev
 PACKAGES=(cloudless-orchestrator cloudless-shell cloudless-branding cloudless-hardware cloudless-firstboot cloudless-updater)
 read -r -a ARCHES <<< "${CLOUDLESS_ARCHES:-amd64 arm64}"
 
+case "$REPO" in
+    ""|/) echo "Refusing unsafe APT repository output path: $REPO" >&2; exit 2 ;;
+esac
+
 if [ -z "$VERSION" ] || [[ "$VERSION" == *dev* ]]; then
     echo "Usage: $0 VERSION [stable|beta] (development versions cannot be published)" >&2
     exit 2
@@ -58,18 +62,6 @@ work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/baseline"
 
-find_local_package() {
-    local package="$1" arch="$2" best="" best_version="" candidate candidate_version
-    while IFS= read -r candidate; do
-        candidate_version="$(dpkg-deb -f "$candidate" Version)"
-        if [ -z "$best_version" ] || dpkg --compare-versions "$candidate_version" gt "$best_version"; then
-            best="$candidate"
-            best_version="$candidate_version"
-        fi
-    done < <(find "$REPO/pool" -type f -name "${package}_*_${arch}.deb" 2>/dev/null || true)
-    printf '%s' "$best"
-}
-
 fetch_remote_baseline() {
     local arch="$1" inrelease="$work/InRelease" verified="$work/InRelease.verified" index="$work/Packages-$1" index_hash index_size
     echo "==> Recovering current $CHANNEL/$arch package baseline from $BASE_URL"
@@ -106,7 +98,7 @@ fetch_remote_baseline() {
     done
 }
 
-declare -A REMOTE_BASELINE PREVIOUS_DEB PREVIOUS_VERSION PREVIOUS_REMOTE CHANGED
+declare -A REMOTE_BASELINE PREVIOUS_DEB PREVIOUS_VERSION CHANGED
 for arch in "${ARCHES[@]}"; do
     # The signed public repository is the release baseline. A local repository
     # can contain packages left behind by an interrupted or repeated signing
@@ -133,7 +125,6 @@ for arch in "${ARCHES[@]}"; do
         previous=""
         if ${REMOTE_BASELINE[$arch]}; then
             previous="$(find "$work/baseline/$arch" -type f -name "${package}_*_${arch}.deb" -print -quit 2>/dev/null || true)"
-            if [ -n "$previous" ]; then PREVIOUS_REMOTE[$key]=true; fi
         fi
         candidate="$DISTRO/out/packages/${package}_${VERSION}_${arch}.deb"
         test -s "$candidate" || { echo "Missing candidate package: $candidate" >&2; exit 1; }
@@ -165,6 +156,10 @@ if [ "${CLOUDLESS_RELEASE_DRY_RUN:-0}" = "1" ]; then
     exit 0
 fi
 
+# Rebuild from a clean repository on every signing attempt. Package versions
+# are immutable in APT, and an interrupted attempt may have left a different
+# build of this same version in the local reprepro database.
+rm -rf -- "$REPO"
 install -d "$REPO/conf" "$REPO/releases"
 cat > "$REPO/conf/distributions" <<EOF
 Origin: Cloudless
@@ -180,28 +175,14 @@ cat > "$REPO/conf/options" <<'EOF'
 verbose
 ask-passphrase
 EOF
-if [ ! -s "$REPO/db/packages.db" ]; then
-    for arch in "${ARCHES[@]}"; do
-        for package in "${PACKAGES[@]}"; do
-            key="$arch/$package"
-            if [ -n "${PREVIOUS_DEB[$key]:-}" ]; then
-                reprepro --basedir "$REPO" includedeb "$CHANNEL" "${PREVIOUS_DEB[$key]}"
-            fi
-        done
+for arch in "${ARCHES[@]}"; do
+    for package in "${PACKAGES[@]}"; do
+        key="$arch/$package"
+        if [ -n "${PREVIOUS_DEB[$key]:-}" ]; then
+            reprepro --basedir "$REPO" includedeb "$CHANNEL" "${PREVIOUS_DEB[$key]}"
+        fi
     done
-else
-    # A release can be built from an older local repository while the public
-    # baseline already contains another architecture. Seed those verified
-    # packages into the local database before applying this release's changes.
-    for arch in "${ARCHES[@]}"; do
-        for package in "${PACKAGES[@]}"; do
-            key="$arch/$package"
-            if ${PREVIOUS_REMOTE[$key]:-false}; then
-                reprepro --basedir "$REPO" includedeb "$CHANNEL" "${PREVIOUS_DEB[$key]}"
-            fi
-        done
-    done
-fi
+done
 for arch in "${ARCHES[@]}"; do
     for package in "${PACKAGES[@]}"; do
         key="$arch/$package"

@@ -70,6 +70,20 @@ docker image inspect cloudless-package-builder >/dev/null 2>&1 || \
         -f "$ROOT/distro/docker/package-builder/Dockerfile" "$ROOT"
 docker image inspect node:22-bookworm >/dev/null 2>&1 || docker pull node:22-bookworm
 
+run_publisher() {
+    docker run --rm \
+        -e AWS_ACCESS_KEY_ID \
+        -e AWS_SECRET_ACCESS_KEY \
+        -e CLOUDLESS_R2_ENDPOINT \
+        -e CLOUDLESS_R2_BUCKET \
+        -e CLOUDLESS_APT_PUBLIC_URL \
+        -e CLOUDLESS_PUBLIC_ROOT_URL \
+        -e CLOUDLESS_PUBLISH_VERIFY_ONLY="${CLOUDLESS_PUBLISH_VERIFY_ONLY:-0}" \
+        -v "$ROOT:/src" -w /src \
+        cloudless-release-builder \
+        bash distro/scripts/publish-apt-r2.sh "$CHANNEL"
+}
+
 echo "==> Go tests"
 docker run --rm -v "$ROOT:/src" -w /src/orchestrator \
     cloudless-release-builder go test ./...
@@ -98,8 +112,7 @@ raise SystemExit(0 if release.get("version") == version and
                  str(release.get("sourceCommit", "")).startswith(commit_prefix) else 1)
 PY
 then
-    if CLOUDLESS_PUBLISH_VERIFY_ONLY=1 \
-       bash "$ROOT/distro/scripts/publish-apt-r2.sh" "$CHANNEL"; then
+    if CLOUDLESS_PUBLISH_VERIFY_ONLY=1 run_publisher; then
         reuse_signed=true
         echo "==> Resuming the already-signed generation for this exact commit"
     fi
@@ -110,6 +123,6 @@ if ! $reuse_signed; then
 fi
 assert_source_unchanged
 echo "==> Atomic R2 publication and public verification"
-bash "$ROOT/distro/scripts/publish-apt-r2.sh" "$CHANNEL"
+run_publisher
 
 echo "CloudlessOS $VERSION ($CHANNEL) from commit $commit is publicly verified for amd64 and arm64."

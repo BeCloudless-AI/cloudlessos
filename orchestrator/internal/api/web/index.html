@@ -1764,6 +1764,43 @@
     48% { transform: translate3d(calc(4% + var(--wall-glow-x)), calc(2% + var(--wall-glow-y)), 0) rotate(2deg) scale(1.08); opacity: var(--wall-glow-opacity); }
     100% { transform: translate3d(calc(-1% + var(--wall-glow-x)), calc(5% + var(--wall-glow-y)), 0) rotate(-1deg) scale(1.04); opacity: var(--wall-glow-opacity); }
   }
+  /* DGX Spark shares graphics and inference bandwidth. Repainting five oversized
+     gradients at display refresh rate wastes roughly a third of the GPU while
+     idle. Keep the wallpaper responsive to pointer movement without a permanent
+     animation loop; stop even that cosmetic work during inference. */
+  html.render-eco .wall::before {
+    animation: none;
+    /* Never animate background-position in eco mode: it invalidates and
+       repaints the full gradient texture rather than compositing it. */
+    background-position: 10% 5%, 88% 16%, 36% 58%, 13% 86%, 88% 82%;
+    transform: translate3d(var(--wall-parallax-x), var(--wall-parallax-y), 0) scale(1.05);
+    transition: transform .7s cubic-bezier(.22, 1, .36, 1);
+  }
+  html.render-eco .wall::after {
+    animation: none;
+    transform: none;
+    will-change: auto;
+  }
+  html.render-inference-active .wall::before,
+  html.render-inference-active .wall::after { animation-play-state: paused; }
+  html.render-eco.render-inference-active .wall::before {
+    transition: none;
+    transform: scale(1.05);
+  }
+  /* A tiny pulsing child can keep Firefox repainting every frosted surface
+     behind it. These are ambient status decorations, not progress feedback;
+     functional job/download spinners remain animated. */
+  html.render-eco .menubar .led,
+  html.render-eco .tun-dot,
+  html.render-eco .hw-link-dot,
+  html.render-eco .inf-live,
+  html.render-eco .hero-time .accent-dot,
+  html.render-eco .ask,
+  html.render-eco .ask-spark,
+  html.render-eco .card-live i,
+  html.render-eco .meta .dot:not(.wait),
+  html.render-eco .li-dot,
+  html.render-eco .asst-spark { animation: none; }
   html.wall-motion-paused .wall::before,
   html.wall-motion-paused .wall::after,
   html.tour-active .wall::before,
@@ -2759,6 +2796,7 @@ function applyCapabilitySnapshot(snapshot) {
   capabilityCache = snapshot;
   const root = document.documentElement;
   root.dataset.cloudlessPlatform = snapshot.facts?.platform || 'generic';
+  root.classList.toggle('render-eco', root.dataset.cloudlessPlatform === 'dgx-spark');
   root.dataset.cloudlessVersion = snapshot.facts?.cloudlessVersion || 'development';
   Object.entries(snapshot.features || {}).forEach(([id, status]) => {
     root.setAttribute('data-cap-' + id.replace(/[^a-z0-9-]/gi, '-').toLowerCase(), status?.available ? '1' : '0');
@@ -6375,6 +6413,7 @@ async function asstSend(text) {
     renderChips(); asstRender(true); updateAsstComposer(); return;
   }
   asstBusy = true;
+  if (document.documentElement.classList.contains('render-eco')) setInferenceRenderState(true);
   const input = document.getElementById('asst-text'); input.value = '';
   asstMsgs.push({ role: 'user', content: text });
   const bot = { role: 'assistant', content: '', streaming: true, tools: [] };
@@ -6412,6 +6451,7 @@ async function asstSend(text) {
   } finally {
     clearTimeout(timeout); bot.streaming = false; asstBusy = false; asstController = null;
     updateAsstComposer(); finalizeAsstMessage(botIndex, bot); input.focus();
+    if (document.documentElement.classList.contains('render-eco')) scheduleRenderGovernor(0);
   }
 }
 function asstAction(a) {
@@ -6516,7 +6556,7 @@ function initBackground() {
     if (!raf) raf = requestAnimationFrame(paint);
   };
   const onPointerMove = e => {
-    if (reduceMotion.matches || document.hidden || e.pointerType === 'touch') return;
+    if (reduceMotion.matches || document.hidden || e.pointerType === 'touch' || root.classList.contains('render-inference-active')) return;
     aim(((e.clientX / innerWidth) - .5) * 12, ((e.clientY / innerHeight) - .5) * 9);
   };
   const resetDepth = () => aim(0, 0);
@@ -6545,8 +6585,47 @@ function initBackground() {
   syncMotion();
 }
 
+/* ---- adaptive rendering governor ----
+   Spark's display and model server use the same GPU. The eco wallpaper above
+   removes continuous full-screen repaints, and this lightweight sampler pauses
+   its remaining cosmetic motion whenever any local API workload is active.
+   It deliberately does not alter vLLM memory or engine settings. */
+let renderGovernorTimer = 0;
+let renderGovernorBusy = false;
+function setInferenceRenderState(busy) {
+  renderGovernorBusy = !!busy;
+  document.documentElement.classList.toggle('render-inference-active', renderGovernorBusy);
+}
+function scheduleRenderGovernor(delay) {
+  clearTimeout(renderGovernorTimer);
+  renderGovernorTimer = setTimeout(sampleRenderGovernor, delay);
+}
+async function sampleRenderGovernor() {
+  const root = document.documentElement;
+  if (root.dataset.cloudlessPlatform !== 'dgx-spark') {
+    setInferenceRenderState(false);
+    return;
+  }
+  if (document.hidden) {
+    scheduleRenderGovernor(5000);
+    return;
+  }
+  try {
+    const m = await api('/api/engine/metrics');
+    setInferenceRenderState((Number(m.running) || 0) > 0 || (Number(m.waiting) || 0) > 0);
+  } catch {
+    /* Preserve the last known state across a transient metrics failure. */
+  }
+  scheduleRenderGovernor(renderGovernorBusy ? 1500 : 5000);
+}
+function initRenderGovernor() {
+  addEventListener('cloudless:capabilities', () => scheduleRenderGovernor(0));
+  document.addEventListener('visibilitychange', () => scheduleRenderGovernor(0));
+}
+
 /* ---- boot ---- */
 initBackground();
+initRenderGovernor();
 tickClock(); setInterval(tickClock, 1000);
 async function bootCloudless() {
   await refreshCapabilities();

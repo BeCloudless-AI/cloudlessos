@@ -35,6 +35,10 @@ families. The current generic Ubuntu installer ISO intentionally remains AMD64; 
 installation media is built separately from NVIDIA DGX OS BaseOS in the Spark platform
 track.
 
+To qualify a physical DGX Spark without collecting user data or unique device identifiers,
+run `bash distro/scripts/collect-dgx-spark-info.sh`. It creates a single inspectable
+`cloudless-dgx-spark-report-*.tar.gz` archive in the current directory.
+
 For an emulated firmware smoke test, install QEMU, OVMF, Socat, and ImageMagick and run
 `distro/scripts/test-boot.sh`. It captures BIOS and UEFI framebuffers under
 `distro/out/boot-tests/`.

@@ -20,6 +20,20 @@ func TestDetectAtDGXSpark(t *testing.T) {
 	}
 }
 
+func TestDetectAtDGXSparkDMIName(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "sys", "devices", "virtual", "dmi", "id", "product_name")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("NVIDIA_DGX_Spark\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := DetectAt(root); got != DGXSpark {
+		t.Fatalf("DetectAt() = %q, want %q", got, DGXSpark)
+	}
+}
+
 func TestDetectAtGeneric(t *testing.T) {
 	if got := DetectAt(t.TempDir()); got != Generic {
 		t.Fatalf("DetectAt() = %q, want %q", got, Generic)

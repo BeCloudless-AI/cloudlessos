@@ -39,6 +39,7 @@ func DetectAt(root string) string {
 		identity := strings.ToLower(strings.ReplaceAll(string(content), "\x00", "\n"))
 		if strings.Contains(identity, "dgx spark") ||
 			strings.Contains(identity, "dgx-spark") ||
+			strings.Contains(identity, "dgx_spark") ||
 			strings.Contains(identity, "gb10") {
 			return DGXSpark
 		}

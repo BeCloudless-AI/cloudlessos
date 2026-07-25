@@ -11,7 +11,7 @@ is_dgx_spark() {
         /sys/firmware/devicetree/base/model \
         /sys/devices/virtual/dmi/id/product_name
     do
-        if [ -r "$source" ] && tr '\0' '\n' < "$source" 2>/dev/null | grep -Eqi 'DGX[[:space:]-]*Spark|GB10'; then
+        if [ -r "$source" ] && tr '\0' '\n' < "$source" 2>/dev/null | grep -Eqi 'DGX[[:space:]_-]*Spark|GB10'; then
             return 0
         fi
     done

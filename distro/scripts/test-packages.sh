@@ -49,6 +49,8 @@ grep -Fq 'DGX Spark detected; preserving' "$DISTRO/packages/cloudless-hardware/c
 grep -Fq '745BF7A97F64EB716DAF7677974145C2D867C99E' "$DISTRO/scripts/install-dgx-spark.sh"
 grep -Fq 'does not contain ARM64 yet' "$DISTRO/scripts/install-dgx-spark.sh"
 grep -Fq 'Refusing an install plan that changes' "$DISTRO/scripts/install-dgx-spark.sh"
+grep -Fq 'install -d -m 0755 /usr/share/keyrings' "$DISTRO/scripts/install-dgx-spark.sh"
+! grep -Eq 'install -d -m 0700 .*usr/share/keyrings' "$DISTRO/scripts/install-dgx-spark.sh"
 grep -Fq 'if ! is_dgx_spark' "$DISTRO/packages/cloudless-branding/postinst"
 if grep -q '^Architectures:' "$DISTRO/packages/cloudless-updater/cloudless.sources"; then
     echo "Cloudless APT sources must follow the machine's native architecture" >&2

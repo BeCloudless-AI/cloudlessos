@@ -89,7 +89,11 @@ if $CHECK_ONLY; then
 fi
 
 backup="/var/lib/cloudless/dgx-backup/$(date -u +%Y%m%dT%H%M%SZ)"
-install -d -m 0700 "$backup" /etc/cloudless /usr/share/keyrings
+install -d -m 0700 "$backup" /etc/cloudless
+# APT downloads repository metadata as the unprivileged _apt user. Keep the
+# shared keyring directory traversable so every configured Signed-By key,
+# including NVIDIA's DGX Spark key, remains readable.
+install -d -m 0755 /usr/share/keyrings
 cp -a /etc/dgx-release "$backup/" 2>/dev/null || true
 cp -a /etc/os-release "$backup/etc-os-release" 2>/dev/null || true
 cp -a /usr/lib/os-release "$backup/usr-lib-os-release" 2>/dev/null || true

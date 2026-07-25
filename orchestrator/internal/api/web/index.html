@@ -1127,21 +1127,16 @@
   .overlay.hidden { display: none; } .overlay.out { animation: fadeo 0.3s ease forwards; }
   @keyframes fade { from { opacity: 0 } } @keyframes fadeo { to { opacity: 0 } }
   @keyframes rise { from { transform: translateY(12px); opacity: 0 } }
-  /* Contextual welcome tour. Four frosted guards surround a transparent,
-     clickable spotlight so the user cannot leave the guided path. */
+  /* Contextual welcome tour. One static frosted veil blocks the page while
+     the active target is raised above it. Keeping the blur surface fixed is
+     important at 4K: animating eight filtered regions repaints the viewport. */
   .tour { position: fixed; inset: 0; z-index: 100; pointer-events: none; }
   .tour.hidden { display: none; }
   .tour.out { animation: fadeo .24s ease forwards; }
   .tour-guard { position: fixed; z-index: 99; pointer-events: auto; background: rgba(20, 16, 36, .30);
-    -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
-    transition: left .28s cubic-bezier(.22,1,.36,1), top .28s cubic-bezier(.22,1,.36,1), width .28s cubic-bezier(.22,1,.36,1), height .28s cubic-bezier(.22,1,.36,1); }
-  .tour-corner { position: fixed; z-index: 99; pointer-events: auto; background: rgba(20, 16, 36, .30);
-    -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
-    transition: left .28s cubic-bezier(.22,1,.36,1), top .28s cubic-bezier(.22,1,.36,1), width .28s cubic-bezier(.22,1,.36,1), height .28s cubic-bezier(.22,1,.36,1); }
-  .tour-corner[data-tour-corner="tl"] { -webkit-mask: radial-gradient(circle at 100% 100%, transparent 0 18px, #000 18.5px); mask: radial-gradient(circle at 100% 100%, transparent 0 18px, #000 18.5px); }
-  .tour-corner[data-tour-corner="tr"] { -webkit-mask: radial-gradient(circle at 0 100%, transparent 0 18px, #000 18.5px); mask: radial-gradient(circle at 0 100%, transparent 0 18px, #000 18.5px); }
-  .tour-corner[data-tour-corner="bl"] { -webkit-mask: radial-gradient(circle at 100% 0, transparent 0 18px, #000 18.5px); mask: radial-gradient(circle at 100% 0, transparent 0 18px, #000 18.5px); }
-  .tour-corner[data-tour-corner="br"] { -webkit-mask: radial-gradient(circle at 0 0, transparent 0 18px, #000 18.5px); mask: radial-gradient(circle at 0 0, transparent 0 18px, #000 18.5px); }
+    -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); contain: strict; }
+  .tour-guard[data-tour-guard="top"] { inset: 0 !important; width: auto !important; height: auto !important; }
+  .tour-guard:not([data-tour-guard="top"]), .tour-corner { display: none; }
   .tour-spot { position: fixed; z-index: 100; border-radius: 18px; pointer-events: none;
     border: 2px solid color-mix(in srgb, var(--blue) 72%, white);
     box-shadow: 0 0 0 7px color-mix(in srgb, var(--blue) 13%, transparent), 0 18px 52px -18px color-mix(in srgb, var(--blue) 80%, transparent);
@@ -1151,7 +1146,8 @@
     border: 1px solid var(--card-edge); border-radius: 20px; color: var(--ink); background: var(--card-strong);
     box-shadow: 0 30px 90px -34px rgba(2, 5, 18, .9); pointer-events: auto;
     -webkit-backdrop-filter: blur(24px) saturate(1.35); backdrop-filter: blur(24px) saturate(1.35);
-    animation: tour-card-in .26s cubic-bezier(.22,1,.36,1); transition: left .28s cubic-bezier(.22,1,.36,1), top .28s cubic-bezier(.22,1,.36,1); }
+    animation: tour-card-in .26s cubic-bezier(.22,1,.36,1); transition: left .28s cubic-bezier(.22,1,.36,1), top .28s cubic-bezier(.22,1,.36,1);
+    will-change: transform, opacity; }
   @keyframes tour-card-in { from { opacity: 0; transform: translateY(8px) scale(.98); } }
   .tour-card.center { left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(470px, calc(100vw - 28px)); padding: 28px; }
   .tour-card.center .tour-head { justify-content: center; }
@@ -1633,7 +1629,9 @@
     100% { transform: translate3d(calc(-1% + var(--wall-glow-x)), calc(5% + var(--wall-glow-y)), 0) rotate(-1deg) scale(1.04); opacity: var(--wall-glow-opacity); }
   }
   html.wall-motion-paused .wall::before,
-  html.wall-motion-paused .wall::after { animation-play-state: paused; }
+  html.wall-motion-paused .wall::after,
+  html.tour-active .wall::before,
+  html.tour-active .wall::after { animation-play-state: paused; }
   @media (prefers-reduced-motion: reduce) {
     .wall::before, .wall::after { animation: none; transform: none; }
   }
@@ -3143,33 +3141,15 @@ function clearTourTarget() {
   if (tourTarget) tourTarget.classList.remove('tour-target');
   tourTarget = null;
 }
-function positionTourGuards(hole) {
+function positionTourGuards() {
   const guards = Object.fromEntries([...document.querySelectorAll('[data-tour-guard]')].map(el => [el.dataset.tourGuard, el]));
-  const corners = Object.fromEntries([...document.querySelectorAll('[data-tour-corner]')].map(el => [el.dataset.tourCorner, el]));
-  const set = (el, left, top, width, height) => Object.assign(el.style, { left: `${left}px`, top: `${top}px`, width: `${Math.max(0, width)}px`, height: `${Math.max(0, height)}px` });
-  const hideCorners = () => Object.values(corners).forEach(el => set(el, 0, 0, 0, 0));
-  if (!hole) {
-    set(guards.top, 0, 0, innerWidth, innerHeight);
-    set(guards.left, 0, 0, 0, 0); set(guards.right, 0, 0, 0, 0); set(guards.bottom, 0, 0, 0, 0);
-    hideCorners();
-    return;
-  }
-  const { left, top, right, bottom } = hole, middleHeight = bottom - top;
-  set(guards.top, 0, 0, innerWidth, top);
-  set(guards.left, 0, top, left, middleHeight);
-  set(guards.right, right, top, innerWidth - right, middleHeight);
-  set(guards.bottom, 0, bottom, innerWidth, innerHeight - bottom);
-  const radius = 19;
-  set(corners.tl, left, top, radius, radius);
-  set(corners.tr, right - radius, top, radius, radius);
-  set(corners.bl, left, bottom - radius, radius, radius);
-  set(corners.br, right - radius, bottom - radius, radius, radius);
+  Object.assign(guards.top.style, { left: '0px', top: '0px', width: `${innerWidth}px`, height: `${innerHeight}px` });
 }
 function positionTour() {
   if (!tourActive) return;
   const step = TOUR_STEPS[tourIndex], spot = document.getElementById('tour-spot'), card = document.getElementById('tour-card');
   if (step.center || !tourTarget) {
-    positionTourGuards(null);
+    positionTourGuards();
     spot.className = 'tour-spot center';
     spot.removeAttribute('style');
     card.className = 'tour-card center';
@@ -3179,7 +3159,7 @@ function positionTour() {
   const r = tourTarget.getBoundingClientRect(), pad = 8, vw = innerWidth, vh = innerHeight;
   const left = Math.max(8, r.left - pad), top = Math.max(8, r.top - pad);
   const right = Math.min(vw - 8, r.right + pad), bottom = Math.min(vh - 8, r.bottom + pad);
-  positionTourGuards({ left, top, right, bottom });
+  positionTourGuards();
   spot.className = 'tour-spot';
   Object.assign(spot.style, { left: `${left}px`, top: `${top}px`, width: `${Math.max(0, right - left)}px`, height: `${Math.max(0, bottom - top)}px` });
   card.className = 'tour-card';
@@ -3208,7 +3188,7 @@ function renderTourStep(index) {
     tourTarget = document.querySelector(step.target);
     if (tourTarget) {
       tourTarget.classList.add('tour-target');
-      tourTarget.scrollIntoView({ block: 'center', inline: 'center', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+      tourTarget.scrollIntoView({ block: 'center', inline: 'center', behavior: 'auto' });
       if (step.action) {
         const actionIndex = tourIndex;
         tourActionTarget = tourTarget;
@@ -3238,6 +3218,7 @@ function renderTourStep(index) {
 function showOnboarding() {
   if (tourActive) return;
   tourActive = true;
+  document.documentElement.classList.add('tour-active');
   tourPreviousFocus = document.activeElement;
   closeTourSurfaces();
   scrollTo({ top: 0, behavior: 'auto' });
@@ -3256,6 +3237,7 @@ function finishOnboarding(skipped = false) {
   tour.classList.add('out');
   setTimeout(() => {
     tour.classList.add('hidden'); tour.classList.remove('out'); tour.setAttribute('aria-hidden', 'true');
+    document.documentElement.classList.remove('tour-active');
     if (tourPreviousFocus && tourPreviousFocus.isConnected) tourPreviousFocus.focus({ preventScroll: true });
   }, 260);
   if (skipped) toast('Tour skipped — replay it anytime in Settings');

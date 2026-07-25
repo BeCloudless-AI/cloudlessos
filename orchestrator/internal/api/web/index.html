@@ -1127,20 +1127,25 @@
   .overlay.hidden { display: none; } .overlay.out { animation: fadeo 0.3s ease forwards; }
   @keyframes fade { from { opacity: 0 } } @keyframes fadeo { to { opacity: 0 } }
   @keyframes rise { from { transform: translateY(12px); opacity: 0 } }
-  /* Contextual welcome tour. One static frosted veil blocks the page while
-     the active target is raised above it. Keeping the blur surface fixed is
-     important at 4K: animating eight filtered regions repaints the viewport. */
+  /* One fixed frosted layer with a four-part CSS mask leaves a genuine clear
+     aperture around the target. Invisible guards handle input separately, so
+     the mask never intercepts the highlighted control. */
   .tour { position: fixed; inset: 0; z-index: 100; pointer-events: none; }
   .tour.hidden { display: none; }
   .tour.out { animation: fadeo .24s ease forwards; }
-  .tour-guard { position: fixed; z-index: 100; pointer-events: auto; background: transparent; contain: strict; }
-  .tour-guard[data-tour-guard="top"] { inset: 0 !important; z-index: 99; width: auto !important; height: auto !important;
-    pointer-events: none; background: rgba(20, 16, 36, .30);
-    -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+  .tour-guard { position: fixed; z-index: 100; pointer-events: auto; contain: strict; background: transparent; }
+  .tour-guard[data-tour-guard="top"] { inset: 0 !important; z-index: 99; width: auto !important; height: auto !important; pointer-events: none;
+    background: rgba(20, 16, 36, .30);
+    -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+    -webkit-mask-image: linear-gradient(#000 0 0), linear-gradient(#000 0 0), linear-gradient(#000 0 0), linear-gradient(#000 0 0);
+    -webkit-mask-position: 0 0, 0 calc(var(--tour-hole-top) - 2px), calc(var(--tour-hole-right) - 2px) calc(var(--tour-hole-top) - 2px), 0 calc(var(--tour-hole-bottom) - 2px);
+    -webkit-mask-size: 100% calc(var(--tour-hole-top) + 2px), calc(var(--tour-hole-left) + 2px) calc(var(--tour-hole-height) + 4px), calc(100% - var(--tour-hole-right) + 2px) calc(var(--tour-hole-height) + 4px), 100% calc(100% - var(--tour-hole-bottom) + 2px);
+    -webkit-mask-repeat: no-repeat;
+    mask-image: linear-gradient(#000 0 0), linear-gradient(#000 0 0), linear-gradient(#000 0 0), linear-gradient(#000 0 0);
+    mask-position: 0 0, 0 calc(var(--tour-hole-top) - 2px), calc(var(--tour-hole-right) - 2px) calc(var(--tour-hole-top) - 2px), 0 calc(var(--tour-hole-bottom) - 2px);
+    mask-size: 100% calc(var(--tour-hole-top) + 2px), calc(var(--tour-hole-left) + 2px) calc(var(--tour-hole-height) + 4px), calc(100% - var(--tour-hole-right) + 2px) calc(var(--tour-hole-height) + 4px), 100% calc(100% - var(--tour-hole-bottom) + 2px);
+    mask-repeat: no-repeat; }
   .tour-corner { display: none; }
-  /* Reuse one otherwise-hidden corner as the fourth transparent click guard.
-     The blur veil remains pointer-transparent; only space outside the current
-     rectangular spotlight captures input. */
   .tour-corner[data-tour-corner="tl"] { display: block; position: fixed; z-index: 100; pointer-events: auto; background: transparent; }
   .tour-spot { position: fixed; z-index: 100; border-radius: 18px; pointer-events: none;
     border: 2px solid color-mix(in srgb, var(--blue) 72%, white);
@@ -3153,8 +3158,16 @@ function positionTourGuards(hole) {
     left: `${left}px`, top: `${top}px`,
     width: `${Math.max(0, width)}px`, height: `${Math.max(0, height)}px`
   });
-  Object.assign(guards.top.style, { left: '0px', top: '0px', width: `${innerWidth}px`, height: `${innerHeight}px` });
+  const setMask = (left, top, right, bottom) => {
+    const style = guards.top.style;
+    style.setProperty('--tour-hole-left', `${left}px`);
+    style.setProperty('--tour-hole-top', `${top}px`);
+    style.setProperty('--tour-hole-right', `${right}px`);
+    style.setProperty('--tour-hole-bottom', `${bottom}px`);
+    style.setProperty('--tour-hole-height', `${Math.max(0, bottom - top)}px`);
+  };
   if (!hole) {
+    setMask(0, 0, 0, 0);
     set(topBlocker, 0, 0, innerWidth, innerHeight);
     set(guards.left, 0, 0, 0, 0);
     set(guards.right, 0, 0, 0, 0);
@@ -3162,6 +3175,7 @@ function positionTourGuards(hole) {
     return;
   }
   const { left, top, right, bottom } = hole;
+  setMask(left, top, right, bottom);
   set(topBlocker, 0, 0, innerWidth, top);
   set(guards.left, 0, top, left, bottom - top);
   set(guards.right, right, top, innerWidth - right, bottom - top);

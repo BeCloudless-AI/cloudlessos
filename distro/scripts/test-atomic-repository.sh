@@ -29,11 +29,15 @@ gpgv --keyring "$work/test-keyring.pgp" "$repo/dists/stable/InRelease"
 grep -Fqx 'Acquire-By-Hash: yes' "$repo/dists/stable/Release"
 grep -Fq ' cloudless-release.json' "$repo/dists/stable/Release"
 cmp "$repo/releases/9.9.9.json" "$repo/dists/stable/cloudless-release.json"
-for index in \
-    "$repo/dists/stable/main/binary-amd64/Packages" \
-    "$repo/dists/stable/main/binary-amd64/Packages.gz"; do
-    hash="$(sha256sum "$index" | awk '{print $1}')"
-    cmp "$index" "$(dirname "$index")/by-hash/SHA256/$hash"
+grep -Fq '"architecture":"amd64"' "$repo/releases/9.9.9.json"
+grep -Fq '"architecture":"arm64"' "$repo/releases/9.9.9.json"
+for arch in amd64 arm64; do
+    for index in \
+        "$repo/dists/stable/main/binary-$arch/Packages" \
+        "$repo/dists/stable/main/binary-$arch/Packages.gz"; do
+        hash="$(sha256sum "$index" | awk '{print $1}')"
+        cmp "$index" "$(dirname "$index")/by-hash/SHA256/$hash"
+    done
 done
 
 mkdir -p "$work/bin" "$work/fake-r2"

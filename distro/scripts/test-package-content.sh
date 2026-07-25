@@ -3,6 +3,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
+ARCH="${CLOUDLESS_TEST_ARCH:-amd64}"
+case "$ARCH" in amd64|arm64) ;; *) echo "Unsupported test architecture: $ARCH" >&2; exit 2 ;; esac
 
 make_package() {
     local root="$1" version="$2" comment="$3"
@@ -10,7 +12,7 @@ make_package() {
     cat > "$root/DEBIAN/control" <<EOF
 Package: cloudless-test
 Version: $version
-Architecture: amd64
+Architecture: $ARCH
 Maintainer: Cloudless <hello@becloudless.ai>
 Description: Selective release comparison test
 EOF

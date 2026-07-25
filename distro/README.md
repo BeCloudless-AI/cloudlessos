@@ -6,7 +6,7 @@ container images, and models are obtained during installation or first boot.
 
 ## Build host
 
-Use Ubuntu 24.04 amd64 with at least 20 GB free. WSL2 can build the packages and ISO,
+Use Ubuntu 24.04 with at least 20 GB free. WSL2 can build the packages and standard AMD64 ISO,
 but it cannot provide a representative firmware, Plymouth, display-manager, or NVIDIA
 installation test.
 
@@ -28,6 +28,12 @@ docker run --rm -v "$PWD:/src" -w /src golang:1.26-bookworm bash distro/scripts/
 
 Replace the final script with `distro/scripts/container-build-iso.sh` to produce the
 complete ISO from the same container.
+
+Cloudless Debian packages and the signed update repository support both AMD64 and ARM64.
+Run `bash distro/scripts/test-architectures.sh` to cross-build and inspect both package
+families. The current generic Ubuntu installer ISO intentionally remains AMD64; DGX Spark
+installation media is built separately from NVIDIA DGX OS BaseOS in the Spark platform
+track.
 
 For an emulated firmware smoke test, install QEMU, OVMF, Socat, and ImageMagick and run
 `distro/scripts/test-boot.sh`. It captures BIOS and UEFI framebuffers under

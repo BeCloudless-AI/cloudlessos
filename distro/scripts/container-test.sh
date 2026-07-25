@@ -9,8 +9,9 @@ fi
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-apt-get install -y -qq imagemagick librsvg2-bin python3-yaml >/dev/null
+apt-get install -y -qq file imagemagick librsvg2-bin python3-yaml >/dev/null
 bash distro/scripts/test-packages.sh
+bash distro/scripts/test-architectures.sh
 python3 - <<'PY'
 from pathlib import Path
 import re

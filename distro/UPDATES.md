@@ -104,7 +104,8 @@ An installation made before `cloudless-updater` existed needs a one-time bootstr
 the updater package with the public archive key present, copy it to the computer, then run:
 
 ```bash
-sudo apt install ./cloudless-updater_VERSION_amd64.deb
+ARCH="$(dpkg --print-architecture)"
+sudo apt install "./cloudless-updater_VERSION_${ARCH}.deb"
 sudo systemctl start cloudless-update-check.service
 ```
 

@@ -39,6 +39,11 @@ grep -Fq 'cloudless-updater apply' "$DISTRO/packages/cloudless-updater/cloudless
 grep -Fq 'cloudless-updater check' "$DISTRO/packages/cloudless-updater/cloudless-update-check.service"
 grep -Fq 'cloudless-updater nvidia-check' "$DISTRO/packages/cloudless-updater/cloudless-nvidia-check.service"
 grep -Fq 'cloudless-updater nvidia-apply' "$DISTRO/packages/cloudless-updater/cloudless-nvidia-apply.service"
+grep -Fq 'DGX Spark detected; preserving' "$DISTRO/packages/cloudless-hardware/cloudless-hardware-install"
+if grep -q '^Architectures:' "$DISTRO/packages/cloudless-updater/cloudless.sources"; then
+    echo "Cloudless APT sources must follow the machine's native architecture" >&2
+    exit 1
+fi
 bash "$DISTRO/scripts/test-package-content.sh"
 if grep -Eq '^After=.*docker\.service' "$DISTRO/packages/cloudless-orchestrator/cloudlessd.service"; then
     echo "cloudlessd must not delay the local UI behind Docker" >&2

@@ -27,12 +27,12 @@ release_entries() {
 }
 
 verify_local() {
-    local extracted="$work/local-release" hash size path file by_hash filename checksum
+    local extracted="$work/local-release" hash size path file by_hash filename checksum arch
     gpgv --keyring "$KEY" --output "$extracted" "$DIST/InRelease" >/dev/null 2>&1
     cmp -s "$extracted" "$DIST/Release" || { echo "InRelease does not sign the current Release file" >&2; return 1; }
     grep -Fqx 'Acquire-By-Hash: yes' "$DIST/Release" || { echo "Release does not enable Acquire-By-Hash" >&2; return 1; }
     while read -r hash size path; do
-        case "$path" in main/binary-amd64/Packages|main/binary-amd64/Packages.gz|cloudless-release.json) ;; *) continue ;; esac
+        case "$path" in main/binary-*/Packages|main/binary-*/Packages.gz|cloudless-release.json) ;; *) continue ;; esac
         file="$DIST/$path"
         test "$(wc -c < "$file" | tr -d '[:space:]')" = "$size"
         printf '%s  %s\n' "$hash" "$file" | sha256sum --check --status
@@ -41,15 +41,18 @@ verify_local() {
             cmp -s "$file" "$by_hash" || { echo "Missing immutable index $by_hash" >&2; return 1; }
         fi
     done < <(release_entries "$DIST/Release")
-    while read -r checksum filename; do
-        test -s "$REPO/$filename" || { echo "Missing package $filename" >&2; return 1; }
-        printf '%s  %s\n' "$checksum" "$REPO/$filename" | sha256sum --check --status
-    done < <(awk 'BEGIN {RS=""} {filename=""; checksum=""; for (i=1; i<=NF; i++) {if ($i == "Filename:") filename=$(i+1); if ($i == "SHA256:") checksum=$(i+1)} if (filename != "" && checksum != "") print checksum, filename}' "$DIST/main/binary-amd64/Packages")
+    for arch in $(awk '/^Architectures:/ {for (i=2; i<=NF; i++) print $i}' "$DIST/Release"); do
+        test -s "$DIST/main/binary-$arch/Packages" || { echo "Missing $arch package index" >&2; return 1; }
+        while read -r checksum filename; do
+            test -s "$REPO/$filename" || { echo "Missing package $filename" >&2; return 1; }
+            printf '%s  %s\n' "$checksum" "$REPO/$filename" | sha256sum --check --status
+        done < <(awk 'BEGIN {RS=""} {filename=""; checksum=""; for (i=1; i<=NF; i++) {if ($i == "Filename:") filename=$(i+1); if ($i == "SHA256:") checksum=$(i+1)} if (filename != "" && checksum != "") print checksum, filename}' "$DIST/main/binary-$arch/Packages")
+    done
 }
 
 verify_public() {
     local cache_bust live_inrelease="$work/live-InRelease" live_release="$work/live-Release"
-    local hash size path target filename checksum attempt
+    local hash size path target filename checksum attempt arch
     cache_bust="$(sha256sum "$DIST/InRelease" | awk '{print $1}')"
     for attempt in {1..15}; do
         if curl -fsS "$PUBLIC_BASE/dists/$CHANNEL/InRelease?v=$cache_bust" -o "$live_inrelease" && \
@@ -64,7 +67,7 @@ verify_public() {
     done
     gpgv --keyring "$KEY" --output "$live_release" "$live_inrelease" >/dev/null 2>&1
     while read -r hash size path; do
-        case "$path" in main/binary-amd64/Packages|main/binary-amd64/Packages.gz|cloudless-release.json) ;; *) continue ;; esac
+        case "$path" in main/binary-*/Packages|main/binary-*/Packages.gz|cloudless-release.json) ;; *) continue ;; esac
         target="$work/$(basename "$path")-$hash"
         if [ "$path" = cloudless-release.json ]; then
             curl -fsS "$PUBLIC_BASE/dists/$CHANNEL/cloudless-release.json?v=$cache_bust" -o "$target"
@@ -74,12 +77,14 @@ verify_public() {
         test "$(wc -c < "$target" | tr -d '[:space:]')" = "$size"
         printf '%s  %s\n' "$hash" "$target" | sha256sum --check --status
     done < <(release_entries "$live_release")
-    curl -fsS "$PUBLIC_BASE/dists/$CHANNEL/main/binary-amd64/Packages?v=$cache_bust" -o "$work/Packages"
-    while read -r checksum filename; do
-        target="$work/$(basename "$filename")"
-        curl -fsS "$PUBLIC_BASE/$filename?v=$cache_bust" -o "$target"
-        printf '%s  %s\n' "$checksum" "$target" | sha256sum --check --status
-    done < <(awk 'BEGIN {RS=""} {filename=""; checksum=""; for (i=1; i<=NF; i++) {if ($i == "Filename:") filename=$(i+1); if ($i == "SHA256:") checksum=$(i+1)} if (filename != "" && checksum != "") print checksum, filename}' "$work/Packages")
+    for arch in $(awk '/^Architectures:/ {for (i=2; i<=NF; i++) print $i}' "$live_release"); do
+        curl -fsS "$PUBLIC_BASE/dists/$CHANNEL/main/binary-$arch/Packages?v=$cache_bust" -o "$work/Packages-$arch"
+        while read -r checksum filename; do
+            target="$work/$arch-$(basename "$filename")"
+            curl -fsS "$PUBLIC_BASE/$filename?v=$cache_bust" -o "$target"
+            printf '%s  %s\n' "$checksum" "$target" | sha256sum --check --status
+        done < <(awk 'BEGIN {RS=""} {filename=""; checksum=""; for (i=1; i<=NF; i++) {if ($i == "Filename:") filename=$(i+1); if ($i == "SHA256:") checksum=$(i+1)} if (filename != "" && checksum != "") print checksum, filename}' "$work/Packages-$arch")
+    done
 }
 
 verify_local

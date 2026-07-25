@@ -10,12 +10,16 @@ KEY="${CLOUDLESS_ARCHIVE_KEY:-$DISTRO/release/keys/cloudless-archive-keyring.pgp
 FINGERPRINT_FILE="${CLOUDLESS_ARCHIVE_FINGERPRINT_FILE:-$DISTRO/release/keys/cloudless-archive-fingerprint.txt}"
 NOTES="${CLOUDLESS_RELEASE_NOTES:-$DISTRO/release/notes/$VERSION.json}"
 PACKAGES=(cloudless-orchestrator cloudless-shell cloudless-branding cloudless-hardware cloudless-firstboot cloudless-updater)
+read -r -a ARCHES <<< "${CLOUDLESS_ARCHES:-amd64 arm64}"
 
 if [ -z "$VERSION" ] || [[ "$VERSION" == *dev* ]]; then
     echo "Usage: $0 VERSION [stable|beta] (development versions cannot be published)" >&2
     exit 2
 fi
 case "$CHANNEL" in stable|beta) ;; *) echo "Channel must be stable or beta" >&2; exit 2 ;; esac
+for arch in "${ARCHES[@]}"; do
+    case "$arch" in amd64|arm64) ;; *) echo "Unsupported release architecture: $arch" >&2; exit 2 ;; esac
+done
 for command in curl dpkg dpkg-deb gpg gpgv python3 reprepro sha256sum; do command -v "$command" >/dev/null || { echo "Missing command: $command" >&2; exit 1; }; done
 test -s "$KEY" || { echo "Initialize the archive signing key first." >&2; exit 1; }
 test -s "$FINGERPRINT_FILE" || { echo "Missing archive fingerprint file." >&2; exit 1; }
@@ -37,80 +41,97 @@ if [ "${CLOUDLESS_RELEASE_DRY_RUN:-0}" != "1" ]; then
     }
 fi
 
-CLOUDLESS_VERSION="$VERSION" "$DISTRO/scripts/build-packages.sh"
+for arch in "${ARCHES[@]}"; do
+    CLOUDLESS_VERSION="$VERSION" CLOUDLESS_ARCH="$arch" "$DISTRO/scripts/build-packages.sh"
+done
 
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/baseline"
 
 find_local_package() {
-    local package="$1" best="" best_version="" candidate candidate_version
+    local package="$1" arch="$2" best="" best_version="" candidate candidate_version
     while IFS= read -r candidate; do
         candidate_version="$(dpkg-deb -f "$candidate" Version)"
         if [ -z "$best_version" ] || dpkg --compare-versions "$candidate_version" gt "$best_version"; then
             best="$candidate"
             best_version="$candidate_version"
         fi
-    done < <(find "$REPO/pool" -type f -name "${package}_*_amd64.deb" 2>/dev/null || true)
+    done < <(find "$REPO/pool" -type f -name "${package}_*_${arch}.deb" 2>/dev/null || true)
     printf '%s' "$best"
 }
 
 fetch_remote_baseline() {
-    local inrelease="$work/InRelease" index="$work/Packages" index_hash index_size
-    echo "==> Recovering current $CHANNEL package baseline from $BASE_URL"
-    curl -fsS "$BASE_URL/dists/$CHANNEL/InRelease" -o "$inrelease" || return 1
-    gpgv --keyring "$KEY" "$inrelease" >/dev/null 2>&1 || return 1
-    curl -fsS "$BASE_URL/dists/$CHANNEL/main/binary-amd64/Packages" -o "$index" || return 1
+    local arch="$1" inrelease="$work/InRelease" verified="$work/InRelease.verified" index="$work/Packages-$1" index_hash index_size
+    echo "==> Recovering current $CHANNEL/$arch package baseline from $BASE_URL"
+    if [ ! -s "$verified" ]; then
+        rm -f "$inrelease" "$verified"
+        curl -fsS "$BASE_URL/dists/$CHANNEL/InRelease" -o "$inrelease" || return 1
+        if ! gpgv --keyring "$KEY" "$inrelease" >/dev/null 2>&1; then
+            rm -f "$inrelease"
+            return 1
+        fi
+        printf '%s\n' "$fingerprint" > "$verified"
+    fi
+    curl -fsS "$BASE_URL/dists/$CHANNEL/main/binary-$arch/Packages" -o "$index" || return 1
     index_hash="$(sha256sum "$index" | awk '{print $1}')"
     index_size="$(wc -c < "$index" | tr -d '[:space:]')"
-    grep -Eq "^ ${index_hash} +${index_size} +main/binary-amd64/Packages$" "$inrelease" || return 1
+    grep -Eq "^ ${index_hash} +${index_size} +main/binary-${arch}/Packages$" "$inrelease" || return 1
 
     local package paragraph filename checksum target
+    mkdir -p "$work/baseline/$arch"
     for package in "${PACKAGES[@]}"; do
         paragraph="$(awk -v package="$package" 'BEGIN {RS=""} $0 ~ "(^|\\n)Package: " package "(\\n|$)" {print; exit}' "$index")"
         [ -n "$paragraph" ] || continue
         filename="$(printf '%s\n' "$paragraph" | awk '/^Filename: / {print $2; exit}')"
         checksum="$(printf '%s\n' "$paragraph" | awk '/^SHA256: / {print $2; exit}')"
         [ -n "$filename" ] && [ -n "$checksum" ] || return 1
-        target="$work/baseline/$(basename "$filename")"
+        target="$work/baseline/$arch/$(basename "$filename")"
         curl -fsS "$BASE_URL/$filename" -o "$target" || return 1
         printf '%s  %s\n' "$checksum" "$target" | sha256sum --check --status || return 1
     done
 }
 
-need_remote=false
-for package in "${PACKAGES[@]}"; do
-    if [ -z "$(find_local_package "$package")" ]; then need_remote=true; break; fi
+for arch in "${ARCHES[@]}"; do
+    need_remote=false
+    for package in "${PACKAGES[@]}"; do
+        if [ -z "$(find_local_package "$package" "$arch")" ]; then need_remote=true; break; fi
+    done
+    if $need_remote && ! fetch_remote_baseline "$arch"; then
+        echo "==> No verified remote $arch baseline found; treating it as a first architecture release"
+        rm -rf "$work/baseline/$arch"
+    fi
 done
-if $need_remote && ! fetch_remote_baseline; then
-    echo "==> No verified remote baseline found; treating this as the first release"
-    rm -f "$work/baseline"/*.deb
-fi
 
-declare -A PREVIOUS_DEB PREVIOUS_VERSION CHANGED
+declare -A PREVIOUS_DEB PREVIOUS_VERSION PREVIOUS_REMOTE CHANGED
 changed_count=0
-for package in "${PACKAGES[@]}"; do
-    previous="$(find_local_package "$package")"
-    if [ -z "$previous" ]; then
-        previous="$(find "$work/baseline" -type f -name "${package}_*_amd64.deb" -print -quit)"
-    fi
-    candidate="$DISTRO/out/packages/${package}_${VERSION}_amd64.deb"
-    if [ -n "$previous" ]; then
-        PREVIOUS_DEB[$package]="$previous"
-        PREVIOUS_VERSION[$package]="$(dpkg-deb -f "$previous" Version)"
-        if bash "$DISTRO/scripts/package-content-equal.sh" "$previous" "$candidate"; then
-            echo "==> Unchanged: $package (${PREVIOUS_VERSION[$package]})"
-            CHANGED[$package]=false
-            continue
+for arch in "${ARCHES[@]}"; do
+    for package in "${PACKAGES[@]}"; do
+        key="$arch/$package"
+        previous="$(find_local_package "$package" "$arch")"
+        if [ -z "$previous" ]; then
+            previous="$(find "$work/baseline/$arch" -type f -name "${package}_*_${arch}.deb" -print -quit 2>/dev/null || true)"
+            if [ -n "$previous" ]; then PREVIOUS_REMOTE[$key]=true; fi
         fi
-        dpkg --compare-versions "$VERSION" gt "${PREVIOUS_VERSION[$package]}" || {
-            echo "$VERSION must be newer than ${PREVIOUS_VERSION[$package]} for $package" >&2
-            exit 1
-        }
-    fi
-    echo "==> Changed: $package -> $VERSION"
-    CHANGED[$package]=true
-    changed_count=$((changed_count + 1))
+        candidate="$DISTRO/out/packages/${package}_${VERSION}_${arch}.deb"
+        test -s "$candidate" || { echo "Missing candidate package: $candidate" >&2; exit 1; }
+        if [ -n "$previous" ]; then
+            PREVIOUS_DEB[$key]="$previous"
+            PREVIOUS_VERSION[$key]="$(dpkg-deb -f "$previous" Version)"
+            if bash "$DISTRO/scripts/package-content-equal.sh" "$previous" "$candidate"; then
+                echo "==> Unchanged: $package/$arch (${PREVIOUS_VERSION[$key]})"
+                CHANGED[$key]=false
+                continue
+            fi
+            dpkg --compare-versions "$VERSION" gt "${PREVIOUS_VERSION[$key]}" || {
+                echo "$VERSION must be newer than ${PREVIOUS_VERSION[$key]} for $package/$arch" >&2
+                exit 1
+            }
+        fi
+        echo "==> Changed: $package/$arch -> $VERSION"
+        CHANGED[$key]=true
+        changed_count=$((changed_count + 1))
+    done
 done
 
 if [ "$changed_count" -eq 0 ]; then
@@ -128,7 +149,7 @@ Origin: Cloudless
 Label: CloudlessOS
 Codename: $CHANNEL
 Suite: $CHANNEL
-Architectures: amd64
+Architectures: ${ARCHES[*]}
 Components: main
 Description: Signed CloudlessOS $CHANNEL updates
 SignWith: $fingerprint
@@ -138,23 +159,44 @@ verbose
 ask-passphrase
 EOF
 if [ ! -s "$REPO/db/packages.db" ]; then
-    for package in "${PACKAGES[@]}"; do
-        if [ -n "${PREVIOUS_DEB[$package]:-}" ]; then
-            reprepro --basedir "$REPO" includedeb "$CHANNEL" "${PREVIOUS_DEB[$package]}"
-        fi
+    for arch in "${ARCHES[@]}"; do
+        for package in "${PACKAGES[@]}"; do
+            key="$arch/$package"
+            if [ -n "${PREVIOUS_DEB[$key]:-}" ]; then
+                reprepro --basedir "$REPO" includedeb "$CHANNEL" "${PREVIOUS_DEB[$key]}"
+            fi
+        done
+    done
+else
+    # A release can be built from an older local repository while the public
+    # baseline already contains another architecture. Seed those verified
+    # packages into the local database before applying this release's changes.
+    for arch in "${ARCHES[@]}"; do
+        for package in "${PACKAGES[@]}"; do
+            key="$arch/$package"
+            if ${PREVIOUS_REMOTE[$key]:-false}; then
+                reprepro --basedir "$REPO" includedeb "$CHANNEL" "${PREVIOUS_DEB[$key]}"
+            fi
+        done
     done
 fi
-for package in "${PACKAGES[@]}"; do
-    if ${CHANGED[$package]}; then
-        reprepro --basedir "$REPO" includedeb "$CHANNEL" "$DISTRO/out/packages/${package}_${VERSION}_amd64.deb"
-    fi
+for arch in "${ARCHES[@]}"; do
+    for package in "${PACKAGES[@]}"; do
+        key="$arch/$package"
+        if ${CHANGED[$key]}; then
+            reprepro --basedir "$REPO" includedeb "$CHANNEL" "$DISTRO/out/packages/${package}_${VERSION}_${arch}.deb"
+        fi
+    done
 done
 
 changes_file="$work/changed-packages.tsv"
-for package in "${PACKAGES[@]}"; do
-    if ${CHANGED[$package]}; then
-        printf '%s\t%s\t%s\n' "$package" "${PREVIOUS_VERSION[$package]:-}" "$VERSION" >> "$changes_file"
-    fi
+for arch in "${ARCHES[@]}"; do
+    for package in "${PACKAGES[@]}"; do
+        key="$arch/$package"
+        if ${CHANGED[$key]}; then
+            printf '%s\t%s\t%s\t%s\n' "$package" "$arch" "${PREVIOUS_VERSION[$key]:-}" "$VERSION" >> "$changes_file"
+        fi
+    done
 done
 install -d "$REPO/releases"
 manifest="$REPO/releases/$VERSION.json"
@@ -166,8 +208,8 @@ with open(notes_path, encoding="utf-8") as handle:
 packages = []
 with open(changes_path, encoding="utf-8") as handle:
     for line in handle:
-        name, previous, current = line.rstrip("\n").split("\t")
-        packages.append({"name": name, "from": previous, "to": current})
+        name, architecture, previous, current = line.rstrip("\n").split("\t")
+        packages.append({"name": name, "architecture": architecture, "from": previous, "to": current})
 manifest = {
     "version": version,
     "channel": channel,

@@ -4080,6 +4080,8 @@ function nvidiaDriverCard(driver, gpus) {
     label = 'Restart required'; tone = 'warn'; actions = '<button class="btn primary" id="nvidia-reboot">Restart now</button>';
   } else if (state === 'failed') {
     label = 'Needs attention'; tone = 'warn'; actions = '<button class="btn" id="nvidia-check">Try again</button>';
+  } else if (state === 'managed') {
+    label = 'Managed by DGX OS'; tone = 'ready'; actions = '';
   } else if (driver.checkedAt) {
     label = 'Up to date'; tone = 'ready';
   }
@@ -4094,7 +4096,7 @@ function nvidiaDriverCard(driver, gpus) {
     </div>
     <div class="machine-driver-meta">
       <div class="machine-driver-fact"><span>Active driver</span><b title="${escapeAttr(String(current))}">${escapeHtml(String(current))}</b></div>
-      <div class="machine-driver-fact"><span>Ubuntu recommendation</span><b title="${escapeAttr(recommendation)}">${escapeHtml(recommendation)}</b></div>
+      <div class="machine-driver-fact"><span>${state === 'managed' ? 'Update source' : 'Ubuntu recommendation'}</span><b title="${escapeAttr(state === 'managed' ? 'NVIDIA DGX OS' : recommendation)}">${escapeHtml(state === 'managed' ? 'NVIDIA DGX OS' : recommendation)}</b></div>
     </div>
     ${busy ? `<div class="machine-driver-progress" role="progressbar" aria-label="NVIDIA driver update progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progress}"><span style="--driver-progress:${progress}%"></span></div>` : ''}
     ${secureBoot}

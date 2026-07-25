@@ -2,10 +2,38 @@
 set -euo pipefail
 MARKER=/var/lib/cloudless/hardware-configured
 REPORT=/var/lib/cloudless/hardware-report.txt
+
+is_dgx_spark() {
+    local source
+    for source in \
+        /etc/dgx-release \
+        /proc/device-tree/model \
+        /sys/firmware/devicetree/base/model \
+        /sys/devices/virtual/dmi/id/product_name
+    do
+        if [ -r "$source" ] && tr '\0' '\n' < "$source" 2>/dev/null | grep -Eqi 'DGX[[:space:]-]*Spark|GB10'; then
+            return 0
+        fi
+    done
+    return 1
+}
+
 install -d -m 0750 /var/lib/cloudless
 if [ -e "$MARKER" ] && [ "${1:-}" != "--force" ]; then exit 0; fi
 exec > >(tee -a "$REPORT") 2>&1
 echo "CloudlessOS hardware configuration: $(date -u +%FT%TZ)"
+
+# DGX OS owns the tightly coupled driver, CUDA, firmware, and container runtime
+# stack on DGX Spark. Replacing any part with Ubuntu's generic recommendation can
+# make the appliance unusable, so Cloudless only records and preserves it.
+if is_dgx_spark; then
+    echo "DGX Spark detected; preserving the NVIDIA-managed DGX OS compute stack"
+    systemctl enable docker.service 2>/dev/null || true
+    touch "$MARKER"
+    echo "Hardware configuration complete (managed by DGX OS)"
+    exit 0
+fi
+
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
 apt-get install -y docker.io ubuntu-drivers-common pciutils curl ca-certificates gnupg

@@ -41,3 +41,43 @@ func TestImageRepositoryHandlesRegistryPortsAndDigests(t *testing.T) {
 		t.Fatalf("repository = %q", got)
 	}
 }
+
+func TestPinRefForArchitecture(t *testing.T) {
+	pin := Pin{
+		Image: "example/cloudless",
+		Digests: map[string]string{
+			"amd64": "sha256:amd",
+			"arm64": "sha256:arm",
+		},
+	}
+	if got := pin.RefFor("arm64"); got != "example/cloudless@sha256:arm" {
+		t.Fatalf("arm64 ref = %q", got)
+	}
+	if got := pin.RefFor("amd64"); got != "example/cloudless@sha256:amd" {
+		t.Fatalf("amd64 ref = %q", got)
+	}
+	if got := pin.DigestFor("arm64"); got != "sha256:arm" {
+		t.Fatalf("arm64 digest = %q", got)
+	}
+}
+
+func TestLegacyPinDoesNotLeakAMD64DigestToARM64(t *testing.T) {
+	pin := Pin{Image: "example/cloudless", Digest: "sha256:legacy"}
+	if got := pin.RefFor("amd64"); got == "" {
+		t.Fatal("legacy AMD64 pin was rejected")
+	}
+	if got := pin.RefFor("arm64"); got != "" {
+		t.Fatalf("legacy digest was reused on ARM64: %q", got)
+	}
+}
+
+func TestSharedIndexDigestDeclaresArchitectures(t *testing.T) {
+	pin := Pin{
+		Image:         "example/cloudless",
+		Digest:        "sha256:index",
+		Architectures: []string{"amd64", "arm64"},
+	}
+	if got := pin.RefFor("arm64"); got != "example/cloudless@sha256:index" {
+		t.Fatalf("shared index ref = %q", got)
+	}
+}

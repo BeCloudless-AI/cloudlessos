@@ -30,6 +30,14 @@ func TestParseRecommendedNVIDIAPackageRequiresRecommendation(t *testing.T) {
 	}
 }
 
+func TestBinaryPackageNameIsArchitectureNeutral(t *testing.T) {
+	for _, input := range []string{"nvidia-driver-580:amd64", "nvidia-driver-580:arm64", "nvidia-driver-580"} {
+		if got := binaryPackageName(input); got != "nvidia-driver-580" {
+			t.Fatalf("binaryPackageName(%q) = %q", input, got)
+		}
+	}
+}
+
 func TestWriteProgressClampsPercentage(t *testing.T) {
 	t.Setenv("CLOUDLESS_UPDATE_STATUS", filepath.Join(t.TempDir(), "status.json"))
 	status := osupdate.DefaultStatus()

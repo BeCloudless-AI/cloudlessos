@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -29,20 +30,55 @@ const DefaultDiffusionURL = "https://samuelcardillo.com/cloudless/cloudless-diff
 
 // Pin is a validated image pin (apps + infra).
 type Pin struct {
-	Image    string `json:"image"`
-	Tag      string `json:"tag"`
-	Digest   string `json:"digest"`
-	Verified bool   `json:"verified"`
-	Notes    string `json:"notes"`
-	Rollback string `json:"rollback"`
+	Image         string            `json:"image"`
+	Tag           string            `json:"tag"`
+	Digest        string            `json:"digest"`
+	Digests       map[string]string `json:"digests,omitempty"`
+	Architectures []string          `json:"architectures,omitempty"`
+	Verified      bool              `json:"verified"`
+	Notes         string            `json:"notes"`
+	Rollback      string            `json:"rollback"`
 }
 
 // Ref returns the pullable "image@digest" reference, or "" if incomplete.
 func (p Pin) Ref() string {
-	if p.Image == "" || p.Digest == "" {
+	return p.RefFor(runtime.GOARCH)
+}
+
+// CurrentDigest returns the digest selected for the running architecture.
+func (p Pin) CurrentDigest() string {
+	return p.DigestFor(runtime.GOARCH)
+}
+
+// DigestFor returns only a digest explicitly valid for arch.
+func (p Pin) DigestFor(arch string) string {
+	digest := p.Digests[arch]
+	if digest != "" || p.Digest == "" {
+		return digest
+	}
+	if arch == "amd64" && len(p.Architectures) == 0 {
+		return p.Digest
+	}
+	for _, supported := range p.Architectures {
+		if supported == arch {
+			return p.Digest
+		}
+	}
+	return ""
+}
+
+// RefFor returns only a digest explicitly valid for arch. Legacy manifests
+// predate ARM64 support, so their single digest remains valid for AMD64 only.
+// A shared multi-platform index digest can opt in through Architectures.
+func (p Pin) RefFor(arch string) string {
+	if p.Image == "" {
 		return ""
 	}
-	return p.Image + "@" + p.Digest
+	digest := p.DigestFor(arch)
+	if digest == "" {
+		return ""
+	}
+	return p.Image + "@" + digest
 }
 
 // Model is a validated Hugging Face model pin.

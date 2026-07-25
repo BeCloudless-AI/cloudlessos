@@ -18,6 +18,7 @@ import (
 
 	"github.com/cloudless/orchestrator/internal/nvidiaupdate"
 	"github.com/cloudless/orchestrator/internal/osupdate"
+	"github.com/cloudless/orchestrator/internal/platform"
 )
 
 var managedPackages = []string{
@@ -77,6 +78,9 @@ func main() {
 
 func checkNVIDIA() error {
 	return withLock(func() error {
+		if platform.IsDGXSpark() {
+			return nvidiaupdate.Write(managedDGXNVIDIAStatus())
+		}
 		status := currentNVIDIAStatus("checking", "Checking Ubuntu's signed NVIDIA drivers…")
 		_ = nvidiaupdate.Write(status)
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
@@ -117,6 +121,9 @@ func checkNVIDIA() error {
 
 func applyNVIDIA() error {
 	return withLock(func() error {
+		if platform.IsDGXSpark() {
+			return nvidiaupdate.Write(managedDGXNVIDIAStatus())
+		}
 		status := currentNVIDIAStatus("installing", "Preparing the NVIDIA driver update…")
 		_ = nvidiaupdate.Write(status)
 		ctx, cancel := context.WithTimeout(context.Background(), 45*time.Minute)
@@ -166,6 +173,19 @@ func applyNVIDIA() error {
 		status.Error = ""
 		return nvidiaupdate.Write(status)
 	})
+}
+
+func managedDGXNVIDIAStatus() nvidiaupdate.Status {
+	status := currentNVIDIAStatus("managed", "NVIDIA drivers, CUDA, and firmware are managed by DGX OS.")
+	status.HardwareDetected = true
+	status.UpdateAvailable = false
+	status.Progress = 100
+	status.RebootRequired = false
+	status.RebootBootID = ""
+	status.RecommendedPackage = ""
+	status.CandidateVersion = ""
+	status.CheckedAt = time.Now().UTC().Format(time.RFC3339)
+	return status
 }
 
 func currentNVIDIAStatus(state, message string) nvidiaupdate.Status {
@@ -242,10 +262,14 @@ func installedNVIDIAPackage(ctx context.Context, recommended string) (string, st
 	for _, line := range strings.Split(out, "\n") {
 		fields := strings.Fields(line)
 		if len(fields) >= 3 && fields[0] == "ii" {
-			return strings.TrimSuffix(fields[1], ":amd64"), fields[2]
+			return binaryPackageName(fields[1]), fields[2]
 		}
 	}
 	return "", ""
+}
+
+func binaryPackageName(name string) string {
+	return strings.SplitN(name, ":", 2)[0]
 }
 
 func nvidiaDriverVersion(ctx context.Context) string {

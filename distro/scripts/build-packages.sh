@@ -5,18 +5,22 @@ DISTRO="$ROOT/distro"
 VERSION="${CLOUDLESS_VERSION:-$(tr -d '[:space:]' < "$DISTRO/VERSION")}"
 ARCH="${CLOUDLESS_ARCH:-amd64}"
 OUT="${CLOUDLESS_PACKAGE_OUT:-$DISTRO/out/packages}"
-WORK="${CLOUDLESS_BUILD_DIR:-${TMPDIR:-/tmp}/cloudlessos-build-${UID}/packages}"
+WORK="${CLOUDLESS_BUILD_DIR:-${TMPDIR:-/tmp}/cloudlessos-build-${UID}/packages-$ARCH}"
 export GOFLAGS="${GOFLAGS:--buildvcs=false -trimpath}"
+case "$ARCH" in
+    amd64|arm64) ;;
+    *) echo "Unsupported package architecture: $ARCH (expected amd64 or arm64)" >&2; exit 2 ;;
+esac
 for command in dpkg-deb go rsvg-convert convert; do
     command -v "$command" >/dev/null || { echo "Missing required command: $command" >&2; exit 1; }
 done
 rm -rf "$WORK"
 mkdir -p "$WORK" "$OUT"
-rm -f "$OUT"/cloudless-*.deb
+rm -f "$OUT"/cloudless-*_"$ARCH".deb
 
-echo "==> Building cloudlessd $VERSION"
-( cd "$ROOT/orchestrator"; CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o "$WORK/cloudlessd" ./cmd/cloudlessd )
-( cd "$ROOT/orchestrator"; CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o "$WORK/cloudless-updater-bin" ./cmd/cloudless-updater )
+echo "==> Building cloudlessd $VERSION for linux/$ARCH"
+( cd "$ROOT/orchestrator"; CGO_ENABLED=0 GOOS=linux GOARCH="$ARCH" go build -ldflags="-s -w" -o "$WORK/cloudlessd" ./cmd/cloudlessd )
+( cd "$ROOT/orchestrator"; CGO_ENABLED=0 GOOS=linux GOARCH="$ARCH" go build -ldflags="-s -w" -o "$WORK/cloudless-updater-bin" ./cmd/cloudless-updater )
 
 make_control() {
     local root="$1" package="$2" description="$3" depends="$4"

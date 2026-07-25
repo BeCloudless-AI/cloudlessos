@@ -1,0 +1,35 @@
+name: Multi-architecture validation
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: orchestrator
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: orchestrator/go.mod
+      - run: go test ./...
+      - run: go vet ./...
+      - run: GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build ./cmd/cloudlessd ./cmd/cloudless-updater
+      - run: GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build ./cmd/cloudlessd ./cmd/cloudless-updater
+
+  packages:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: orchestrator/go.mod
+      - run: sudo apt-get update
+      - run: sudo apt-get install -y file imagemagick librsvg2-bin
+      - run: bash distro/scripts/test-architectures.sh

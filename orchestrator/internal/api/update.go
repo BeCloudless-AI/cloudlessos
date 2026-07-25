@@ -51,11 +51,12 @@ func (s *Server) updateGet(w http.ResponseWriter, r *http.Request) {
 
 	// Prefer the Cloudless validated manifest's pinned digest; else compare to the live upstream tag.
 	if pin, ok := s.manifest.PinFor(ctx, app.ID, app.Image); ok {
+		digest := pin.CurrentDigest()
 		writeJSON(w, http.StatusOK, map[string]any{
 			"installed": true, "updatable": true, "source": "cloudless",
 			"channel": s.manifest.Channel(ctx), "verified": pin.Verified, "notes": pin.Notes,
-			"hasUpdate": installed != pin.Digest,
-			"current":   shortDigest(installed), "latest": shortDigest(pin.Digest),
+			"hasUpdate": installed != digest,
+			"current":   shortDigest(installed), "latest": shortDigest(digest),
 		})
 		return
 	}

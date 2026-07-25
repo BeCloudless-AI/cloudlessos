@@ -9,7 +9,12 @@
 set -euo pipefail
 
 GO_VERSION="${GO_VERSION:-go1.26.4}"
-TARBALL="${GO_VERSION}.linux-amd64.tar.gz"
+case "$(uname -m)" in
+  x86_64) GO_ARCH=amd64 ;;
+  aarch64|arm64) GO_ARCH=arm64 ;;
+  *) echo "Unsupported host architecture: $(uname -m)" >&2; exit 2 ;;
+esac
+TARBALL="${GO_VERSION}.linux-${GO_ARCH}.tar.gz"
 URL="https://go.dev/dl/${TARBALL}"
 
 echo "==> Downloading ${GO_VERSION} from ${URL}"

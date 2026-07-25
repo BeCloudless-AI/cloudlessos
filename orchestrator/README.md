@@ -40,6 +40,11 @@ binds `127.0.0.1:8766` (`CLOUDLESS_GATEWAY_ADDR`); manage keys in Settings → A
 app/infra image to a tested digest + the default model revision); unset/unreachable → catalog
 tags. `CLOUDLESS_NO_PROVISION=1` skips startup provisioning (for a side-by-side test daemon).
 
+Image pins are architecture-aware. New manifests should use a `digests` object with
+`amd64` and/or `arm64` keys. A shared OCI index digest may instead use `digest` together
+with an explicit `architectures` array. For safety, a legacy single `digest` without an
+architecture declaration is treated as AMD64-only.
+
 ## API
 
 | Method | Path                      | Purpose                                  |

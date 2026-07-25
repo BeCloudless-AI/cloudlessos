@@ -9,6 +9,9 @@ BASE_URL="${CLOUDLESS_APT_BASE_URL:-https://updates.becloudless.ai/apt}"
 KEY="${CLOUDLESS_ARCHIVE_KEY:-$DISTRO/release/keys/cloudless-archive-keyring.pgp}"
 FINGERPRINT_FILE="${CLOUDLESS_ARCHIVE_FINGERPRINT_FILE:-$DISTRO/release/keys/cloudless-archive-fingerprint.txt}"
 NOTES="${CLOUDLESS_RELEASE_NOTES:-$DISTRO/release/notes/$VERSION.json}"
+APP_MANIFEST="${CLOUDLESS_APP_MANIFEST:-$DISTRO/release/manifests/cloudless-apps-manifest.json}"
+DGX_INSTALLER="${CLOUDLESS_DGX_INSTALLER:-$DISTRO/scripts/install-dgx-spark.sh}"
+SOURCE_COMMIT="${CLOUDLESS_SOURCE_COMMIT:-$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || true)}"
 PACKAGES=(cloudless-orchestrator cloudless-shell cloudless-branding cloudless-hardware cloudless-firstboot cloudless-updater)
 read -r -a ARCHES <<< "${CLOUDLESS_ARCHES:-amd64 arm64}"
 
@@ -24,6 +27,12 @@ for command in curl dpkg dpkg-deb gpg gpgv python3 reprepro sha256sum; do comman
 test -s "$KEY" || { echo "Initialize the archive signing key first." >&2; exit 1; }
 test -s "$FINGERPRINT_FILE" || { echo "Missing archive fingerprint file." >&2; exit 1; }
 test -s "$NOTES" || { echo "Missing release notes: $NOTES" >&2; exit 1; }
+test -s "$APP_MANIFEST" || { echo "Missing application manifest: $APP_MANIFEST" >&2; exit 1; }
+test -s "$DGX_INSTALLER" || { echo "Missing DGX Spark installer: $DGX_INSTALLER" >&2; exit 1; }
+[[ "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]] || {
+    echo "A full Git source commit is required for a production release." >&2
+    exit 1
+}
 python3 - "$NOTES" <<'PY'
 import json, sys
 with open(sys.argv[1], encoding="utf-8") as handle:
@@ -199,10 +208,30 @@ for arch in "${ARCHES[@]}"; do
     done
 done
 install -d "$REPO/releases"
+artifacts_dir="$REPO/artifacts/$VERSION"
+rm -rf "$artifacts_dir"
+install -d "$artifacts_dir"
+install -m 0755 "$DGX_INSTALLER" "$artifacts_dir/install-dgx-spark.sh"
+install -m 0644 "$APP_MANIFEST" "$artifacts_dir/cloudless-apps-manifest.json"
+artifacts_file="$work/artifacts.tsv"
+for artifact in install-dgx-spark.sh cloudless-apps-manifest.json; do
+    file="$artifacts_dir/$artifact"
+    signature="$file.asc"
+    gpg --batch --yes --local-user "$fingerprint" --armor --detach-sign \
+        --output "$signature" "$file"
+    printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+        "$artifact" \
+        "artifacts/$VERSION/$artifact" \
+        "$(sha256sum "$file" | awk '{print $1}')" \
+        "$(wc -c < "$file" | tr -d '[:space:]')" \
+        "$(sha256sum "$signature" | awk '{print $1}')" \
+        "$(wc -c < "$signature" | tr -d '[:space:]')" \
+        >> "$artifacts_file"
+done
 manifest="$REPO/releases/$VERSION.json"
-python3 - "$NOTES" "$changes_file" "$manifest" "$VERSION" "$CHANNEL" "$(date -u +%FT%TZ)" <<'PY'
+python3 - "$NOTES" "$changes_file" "$artifacts_file" "$manifest" "$VERSION" "$CHANNEL" "$SOURCE_COMMIT" "$(date -u +%FT%TZ)" <<'PY'
 import json, sys
-notes_path, changes_path, output, version, channel, published_at = sys.argv[1:]
+notes_path, changes_path, artifacts_path, output, version, channel, source_commit, published_at = sys.argv[1:]
 with open(notes_path, encoding="utf-8") as handle:
     notes = json.load(handle)
 packages = []
@@ -210,14 +239,29 @@ with open(changes_path, encoding="utf-8") as handle:
     for line in handle:
         name, architecture, previous, current = line.rstrip("\n").split("\t")
         packages.append({"name": name, "architecture": architecture, "from": previous, "to": current})
+artifacts = []
+with open(artifacts_path, encoding="utf-8") as handle:
+    for line in handle:
+        name, path, sha256, size, signature_sha256, signature_size = line.rstrip("\n").split("\t")
+        artifacts.append({
+            "name": name,
+            "path": path,
+            "sha256": sha256,
+            "size": int(size),
+            "signature": path + ".asc",
+            "signatureSha256": signature_sha256,
+            "signatureSize": int(signature_size),
+        })
 manifest = {
     "version": version,
     "channel": channel,
+    "sourceCommit": source_commit,
     "publishedAt": published_at,
     "title": notes["title"].strip(),
     "summary": str(notes.get("summary", "")).strip(),
     "changes": [item.strip() for item in notes["changes"]],
     "packages": packages,
+    "artifacts": artifacts,
 }
 with open(output, "w", encoding="utf-8") as handle:
     json.dump(manifest, handle, ensure_ascii=False, separators=(",", ":"))

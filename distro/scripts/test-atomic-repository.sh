@@ -22,6 +22,7 @@ CLOUDLESS_APT_BASE_URL=https://invalid.invalid \
 CLOUDLESS_ARCHIVE_KEY="$work/test-keyring.pgp" \
 CLOUDLESS_ARCHIVE_FINGERPRINT_FILE="$work/test-fingerprint.txt" \
 CLOUDLESS_RELEASE_NOTES="$work/test-notes.json" \
+CLOUDLESS_SOURCE_COMMIT=0123456789abcdef0123456789abcdef01234567 \
     bash "$ROOT/distro/scripts/build-apt-repository.sh" 9.9.9 stable
 
 repo="$work/repository"
@@ -31,6 +32,25 @@ grep -Fq ' cloudless-release.json' "$repo/dists/stable/Release"
 cmp "$repo/releases/9.9.9.json" "$repo/dists/stable/cloudless-release.json"
 grep -Fq '"architecture":"amd64"' "$repo/releases/9.9.9.json"
 grep -Fq '"architecture":"arm64"' "$repo/releases/9.9.9.json"
+grep -Fq '"sourceCommit":"0123456789abcdef0123456789abcdef01234567"' "$repo/releases/9.9.9.json"
+grep -Fq '"install-dgx-spark.sh"' "$repo/releases/9.9.9.json"
+grep -Fq '"cloudless-apps-manifest.json"' "$repo/releases/9.9.9.json"
+for artifact in install-dgx-spark.sh cloudless-apps-manifest.json; do
+    gpgv --keyring "$work/test-keyring.pgp" \
+        "$repo/artifacts/9.9.9/$artifact.asc" \
+        "$repo/artifacts/9.9.9/$artifact"
+done
+tampered="$work/tampered-repository"
+cp -a "$repo" "$tampered"
+printf '\n# tampered\n' >> "$tampered/artifacts/9.9.9/install-dgx-spark.sh"
+if CLOUDLESS_APT_REPO_OUT="$tampered" \
+   CLOUDLESS_R2_ENDPOINT=https://invalid.invalid \
+   CLOUDLESS_R2_BUCKET=invalid \
+   CLOUDLESS_PUBLISH_VERIFY_ONLY=1 \
+   bash "$ROOT/distro/scripts/publish-apt-r2.sh" stable >/dev/null 2>&1; then
+    echo "Publisher accepted a tampered signed artifact" >&2
+    exit 1
+fi
 for arch in amd64 arm64; do
     for index in \
         "$repo/dists/stable/main/binary-$arch/Packages" \
@@ -99,11 +119,15 @@ CLOUDLESS_APT_PUBLIC_URL=https://fake.invalid/apt \
     bash "$ROOT/distro/scripts/publish-apt-r2.sh" stable
 
 pool_line="$(grep -n 's3 cp .*/pool/' "$FAKE_AWS_LOG" | head -1 | cut -d: -f1)"
+artifact_line="$(grep -n 's3 cp .*/artifacts/' "$FAKE_AWS_LOG" | head -1 | cut -d: -f1)"
 hash_line="$(grep -n -- '--include \*/by-hash/\*' "$FAKE_AWS_LOG" | head -1 | cut -d: -f1)"
 commit_line="$(grep -n 'InRelease' "$FAKE_AWS_LOG" | head -1 | cut -d: -f1)"
+alias_line="$(grep -n 'install-dgx-spark.sh s3://' "$FAKE_AWS_LOG" | head -1 | cut -d: -f1)"
 canonical_line="$(grep -n -- '--exclude \*/by-hash/\*' "$FAKE_AWS_LOG" | head -1 | cut -d: -f1)"
 [ "$pool_line" -lt "$hash_line" ]
+[ "$artifact_line" -lt "$commit_line" ]
 [ "$hash_line" -lt "$commit_line" ]
+[ "$commit_line" -lt "$alias_line" ]
 [ "$commit_line" -lt "$canonical_line" ]
 
 echo "Atomic APT repository and publication test passed."

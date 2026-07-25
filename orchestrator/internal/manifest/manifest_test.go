@@ -2,6 +2,7 @@ package manifest
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -19,7 +20,7 @@ func manifestServer(t *testing.T, image string) *httptest.Server {
 func TestPinForAcceptsMatchingRepository(t *testing.T) {
 	server := manifestServer(t, "nousresearch/hermes-agent")
 	defer server.Close()
-	store := New(server.URL)
+	store := New(server.URL + "/manifest.json")
 	pin, ok := store.PinFor(context.Background(), "hermes", "nousresearch/hermes-agent:v2026.7.20")
 	if !ok || pin.Image != "nousresearch/hermes-agent" {
 		t.Fatalf("matching pin rejected: %+v, %v", pin, ok)
@@ -29,7 +30,7 @@ func TestPinForAcceptsMatchingRepository(t *testing.T) {
 func TestPinForRejectsStaleRepositoryMigration(t *testing.T) {
 	server := manifestServer(t, "samuelcardillo/cloudless-hermes")
 	defer server.Close()
-	store := New(server.URL)
+	store := New(server.URL + "/manifest.json")
 	if pin, ok := store.PinFor(context.Background(), "hermes", "nousresearch/hermes-agent:v2026.7.20"); ok {
 		t.Fatalf("stale incompatible pin accepted: %+v", pin)
 	}
@@ -80,5 +81,43 @@ func TestSharedIndexDigestDeclaresArchitectures(t *testing.T) {
 	}
 	if got := pin.RefFor("arm64"); got != "example/cloudless@sha256:index" {
 		t.Fatalf("shared index ref = %q", got)
+	}
+}
+
+func TestSignedManifestIsAcceptedOnlyAfterVerification(t *testing.T) {
+	server := manifestServer(t, "nousresearch/hermes-agent")
+	defer server.Close()
+	t.Setenv("CLOUDLESS_MANIFEST_REQUIRE_SIGNATURE", "1")
+	original := verifyManifestSignature
+	t.Cleanup(func() { verifyManifestSignature = original })
+	called := false
+	verifyManifestSignature = func(document, signature []byte, keyring string) error {
+		called = true
+		if len(document) == 0 || len(signature) == 0 {
+			t.Fatal("verifier did not receive both artifacts")
+		}
+		return nil
+	}
+	store := New(server.URL + "/manifest.json")
+	if _, err := store.Get(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if !called {
+		t.Fatal("signed production manifest bypassed verification")
+	}
+}
+
+func TestInvalidManifestSignatureFailsClosed(t *testing.T) {
+	server := manifestServer(t, "nousresearch/hermes-agent")
+	defer server.Close()
+	t.Setenv("CLOUDLESS_MANIFEST_REQUIRE_SIGNATURE", "1")
+	original := verifyManifestSignature
+	t.Cleanup(func() { verifyManifestSignature = original })
+	verifyManifestSignature = func(document, signature []byte, keyring string) error {
+		return errors.New("bad signature")
+	}
+	store := New(server.URL + "/manifest.json")
+	if _, err := store.Get(context.Background()); err == nil {
+		t.Fatal("manifest with an invalid signature was accepted")
 	}
 }

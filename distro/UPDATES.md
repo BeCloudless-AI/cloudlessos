@@ -39,7 +39,7 @@ Commit only these generated public files:
 Keep the encrypted secret backup and its passphrase offline. Import the secret key only
 inside the protected release environment when signing.
 
-## Build a signed release
+## One-command production release
 
 Package versions must increase according to Debian version ordering. Development
 versions containing `dev` are intentionally rejected.
@@ -50,14 +50,29 @@ Every release also requires curated notes at
 notes are missing or invalid. The resulting manifest is hashed into the signed APT
 metadata so devices can verify it before displaying the changelog.
 
+Configure the bucket credentials and signing-key backup, commit the release,
+and push the current branch. Then run exactly one production command:
+
 ```bash
-sudo apt install reprepro
-gpg --import /secure/offline-backup/cloudless-archive-secret.asc
-bash distro/scripts/build-apt-repository.sh 0.1.1 stable
+export CLOUDLESS_ARCHIVE_SECRET=/secure/offline-backup/cloudless-archive-secret.asc
+export AWS_ACCESS_KEY_ID=...
+export AWS_SECRET_ACCESS_KEY=...
+export CLOUDLESS_R2_ENDPOINT=https://ACCOUNT_ID.r2.cloudflarestorage.com
+export CLOUDLESS_R2_BUCKET=cloudless-updates
+bash distro/scripts/release.sh 0.2.1 stable
 ```
 
-This builds candidate Cloudless packages, signs the repository metadata, and writes the
-static repository to `distro/out/apt-repository`.
+The command refuses dirty or unpushed tracked source. It runs the Go, browser
+JavaScript, AMD64, ARM64, package-content, signed-repository, and atomic
+publication tests; asks for explicit confirmation; imports the signing key only
+inside the disposable release container; signs the complete generation;
+publishes it; and downloads it from the public domain for final verification.
+Any failed platform or public artifact aborts the command.
+
+The signed release records the exact Git commit. If networking fails during
+publication, rerun the same `release.sh` command: it cryptographically verifies
+and resumes that generation only when the version, commit, source artifacts,
+and signatures still match.
 
 Release builds compare each candidate package with the currently published signed
 baseline. Only packages whose installed contents changed receive the new version and are
@@ -73,23 +88,11 @@ CLOUDLESS_RELEASE_DRY_RUN=1 \
   bash distro/scripts/build-apt-repository.sh 0.1.2 stable
 ```
 
-## Publish to Cloudflare R2
+## Signed standalone artifacts and atomic promotion
 
 Create an R2 bucket with the custom domain `updates.becloudless.ai`. Give the release
-environment credentials limited to that bucket, install the AWS CLI, and set:
-
-```bash
-export AWS_ACCESS_KEY_ID=...
-export AWS_SECRET_ACCESS_KEY=...
-export CLOUDLESS_R2_ENDPOINT=https://ACCOUNT_ID.r2.cloudflarestorage.com
-export CLOUDLESS_R2_BUCKET=cloudless-updates
-bash distro/scripts/publish-apt-r2.sh
-```
-
-Before promoting a release, verify
-`https://updates.becloudless.ai/apt/dists/stable/InRelease` and update a beta machine
-first. Keep at least one known-good package generation and the archive signing backup
-outside R2.
+environment credentials limited to that bucket. Keep at least one known-good
+package generation and the archive signing backup outside R2.
 
 The publisher promotes releases in dependency order and never deletes the previous
 generation. Package indexes are available through APT's immutable SHA-256 `by-hash`
@@ -97,6 +100,19 @@ paths; signed `InRelease` metadata is uploaded last as the commit point. Metadat
 published with `no-store`, while packages and hash-addressed indexes are immutable. The
 command succeeds only after downloading the public repository, validating its archive
 signature, and checking every published index and package against the signed hashes.
+
+Each release also contains immutable, versioned copies of
+`install-dgx-spark.sh` and `cloudless-apps-manifest.json`. Their SHA-256 hashes
+and detached-signature hashes are inside `cloudless-release.json`, which is
+itself covered by signed APT metadata. The immutable files are uploaded before
+`InRelease`; mutable convenience aliases are updated only after that commit.
+Cloudless devices verify the application manifest with the packaged archive
+key and retain the last verified copy if the network or signature is invalid.
+The DGX installation guide verifies the installer signature before execution.
+
+`sign-release-interactive.sh` and `publish-apt-r2.sh` remain available for
+diagnostics, but production releases should use `release.sh` so neither half of
+the pipeline can be accidentally skipped.
 
 ## Existing installations
 

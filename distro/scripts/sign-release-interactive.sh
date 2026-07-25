@@ -12,9 +12,11 @@ if [ -z "$VERSION" ]; then
 fi
 test -s "$SECRET_KEY" || { echo "Signing-key backup not found: $SECRET_KEY" >&2; exit 1; }
 command -v docker >/dev/null || { echo "Docker is required." >&2; exit 1; }
+command -v git >/dev/null || { echo "Git is required." >&2; exit 1; }
 
 secret_dir="$(dirname "$(realpath "$SECRET_KEY")")"
 secret_name="$(basename "$SECRET_KEY")"
+source_commit="$(git -C "$ROOT" rev-parse HEAD)"
 
 docker image inspect cloudless-release-builder >/dev/null 2>&1 || \
     docker build -t cloudless-release-builder \
@@ -22,6 +24,7 @@ docker image inspect cloudless-release-builder >/dev/null 2>&1 || \
 
 docker run --rm -it \
     -e CLOUDLESS_SECRET_NAME="$secret_name" \
+    -e CLOUDLESS_SOURCE_COMMIT="$source_commit" \
     -v "$ROOT:/src" \
     -v "$secret_dir:/secrets:ro" \
     -w /src \

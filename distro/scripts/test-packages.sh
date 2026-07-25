@@ -31,6 +31,11 @@ grep -Fq 'CLOUDLESS_HOME=/home/cloudless/Cloudless' \
     "$DISTRO/packages/cloudless-orchestrator/cloudless.env"
 grep -Fq 'CLOUDLESS_DESKTOP_HOME=/home/cloudless' \
     "$DISTRO/packages/cloudless-orchestrator/cloudless.env"
+orchestrator_deb="$(find "$DISTRO/out/packages" -maxdepth 1 -type f -name 'cloudless-orchestrator_*_amd64.deb' -print -quit)"
+test -n "$orchestrator_deb"
+dpkg-deb -f "$orchestrator_deb" Depends | grep -Eq '(^|, )gpgv(,|$)'
+dpkg-deb -c "$orchestrator_deb" |
+    grep -F './usr/share/cloudless/cloudless-archive-keyring.pgp' >/dev/null
 grep -Fq 'update-alternatives --set default.plymouth' \
     "$DISTRO/packages/cloudless-branding/postinst"
 grep -Fq 'Wants=docker.service' "$DISTRO/packages/cloudless-orchestrator/cloudlessd.service"

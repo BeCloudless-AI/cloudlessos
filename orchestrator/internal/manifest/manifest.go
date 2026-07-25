@@ -6,10 +6,15 @@
 package manifest
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -21,6 +26,11 @@ import (
 
 // DefaultURL is the apps manifest location (override with CLOUDLESS_MANIFEST_URL).
 const DefaultURL = "https://updates.becloudless.ai/manifests/cloudless-apps-manifest.json"
+
+// Production manifests must be signed by the same offline archive identity as
+// Cloudless APT releases. Custom development URLs can opt in with
+// CLOUDLESS_MANIFEST_REQUIRE_SIGNATURE=1.
+const DefaultKeyring = "/usr/share/cloudless/cloudless-archive-keyring.pgp"
 
 // DefaultModelsURL is the "Cloudless highlights" LLM manifest (override with CLOUDLESS_MODELS_URL).
 const DefaultModelsURL = "https://samuelcardillo.com/cloudless/cloudless-models.json"
@@ -160,7 +170,32 @@ func (s *Store) Get(ctx context.Context) (*Doc, error) {
 func (s *Store) fetch(ctx context.Context) (*Doc, error) {
 	cctx, cancel := context.WithTimeout(ctx, 8*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(cctx, http.MethodGet, s.url, nil)
+	body, err := fetchBytes(cctx, s.url)
+	if err != nil {
+		return nil, err
+	}
+	if manifestSignatureRequired(s.url) {
+		signature, err := fetchBytes(cctx, s.url+".asc")
+		if err != nil {
+			return nil, fmt.Errorf("manifest signature: %w", err)
+		}
+		keyring := strings.TrimSpace(os.Getenv("CLOUDLESS_MANIFEST_KEYRING"))
+		if keyring == "" {
+			keyring = DefaultKeyring
+		}
+		if err := verifyManifestSignature(body, signature, keyring); err != nil {
+			return nil, fmt.Errorf("manifest signature verification failed: %w", err)
+		}
+	}
+	var d Doc
+	if err := json.Unmarshal(body, &d); err != nil {
+		return nil, fmt.Errorf("manifest decode: %w", err)
+	}
+	return &d, nil
+}
+
+func fetchBytes(ctx context.Context, url string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -170,13 +205,41 @@ func (s *Store) fetch(ctx context.Context) (*Doc, error) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("manifest %s: HTTP %d", s.url, resp.StatusCode)
+		return nil, fmt.Errorf("manifest %s: HTTP %d", url, resp.StatusCode)
 	}
-	var d Doc
-	if err := json.NewDecoder(resp.Body).Decode(&d); err != nil {
-		return nil, fmt.Errorf("manifest decode: %w", err)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	if err != nil {
+		return nil, err
 	}
-	return &d, nil
+	return body, nil
+}
+
+func manifestSignatureRequired(url string) bool {
+	return strings.HasPrefix(url, "https://updates.becloudless.ai/") ||
+		os.Getenv("CLOUDLESS_MANIFEST_REQUIRE_SIGNATURE") == "1"
+}
+
+var verifyManifestSignature = verifyDetachedSignature
+
+func verifyDetachedSignature(document, signature []byte, keyring string) error {
+	tmp, err := os.MkdirTemp("", "cloudless-manifest-verify-")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(tmp)
+	documentPath := filepath.Join(tmp, "manifest.json")
+	signaturePath := filepath.Join(tmp, "manifest.json.asc")
+	if err := os.WriteFile(documentPath, document, 0o600); err != nil {
+		return err
+	}
+	if err := os.WriteFile(signaturePath, signature, 0o600); err != nil {
+		return err
+	}
+	cmd := exec.Command("gpgv", "--keyring", keyring, signaturePath, documentPath)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(bytes.TrimSpace(output))))
+	}
+	return nil
 }
 
 // Pin returns the validated pin for an id (checking apps then infra), ok only if

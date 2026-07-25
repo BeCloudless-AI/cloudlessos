@@ -84,6 +84,11 @@ Cloudless package generations independently of the web interface. Production sig
 release creation, Cloudflare R2 publication, and one-time bootstrap instructions are in
 [`UPDATES.md`](./UPDATES.md).
 
+Production updates for both AMD64 CloudlessOS and ARM64 DGX Spark are released
+together with `bash distro/scripts/release.sh VERSION stable`. The command runs
+both architecture gates and publishes only a complete, signed, publicly
+verified generation.
+
 ## Installation behavior
 
 The installer asks for networking, target Grstorage, and administrator identity. It has no

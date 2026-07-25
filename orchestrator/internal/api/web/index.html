@@ -1133,10 +1133,15 @@
   .tour { position: fixed; inset: 0; z-index: 100; pointer-events: none; }
   .tour.hidden { display: none; }
   .tour.out { animation: fadeo .24s ease forwards; }
-  .tour-guard { position: fixed; z-index: 99; pointer-events: auto; background: rgba(20, 16, 36, .30);
-    -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); contain: strict; }
-  .tour-guard[data-tour-guard="top"] { inset: 0 !important; width: auto !important; height: auto !important; }
-  .tour-guard:not([data-tour-guard="top"]), .tour-corner { display: none; }
+  .tour-guard { position: fixed; z-index: 100; pointer-events: auto; background: transparent; contain: strict; }
+  .tour-guard[data-tour-guard="top"] { inset: 0 !important; z-index: 99; width: auto !important; height: auto !important;
+    pointer-events: none; background: rgba(20, 16, 36, .30);
+    -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+  .tour-corner { display: none; }
+  /* Reuse one otherwise-hidden corner as the fourth transparent click guard.
+     The blur veil remains pointer-transparent; only space outside the current
+     rectangular spotlight captures input. */
+  .tour-corner[data-tour-corner="tl"] { display: block; position: fixed; z-index: 100; pointer-events: auto; background: transparent; }
   .tour-spot { position: fixed; z-index: 100; border-radius: 18px; pointer-events: none;
     border: 2px solid color-mix(in srgb, var(--blue) 72%, white);
     box-shadow: 0 0 0 7px color-mix(in srgb, var(--blue) 13%, transparent), 0 18px 52px -18px color-mix(in srgb, var(--blue) 80%, transparent);
@@ -3141,15 +3146,32 @@ function clearTourTarget() {
   if (tourTarget) tourTarget.classList.remove('tour-target');
   tourTarget = null;
 }
-function positionTourGuards() {
+function positionTourGuards(hole) {
   const guards = Object.fromEntries([...document.querySelectorAll('[data-tour-guard]')].map(el => [el.dataset.tourGuard, el]));
+  const topBlocker = document.querySelector('[data-tour-corner="tl"]');
+  const set = (el, left, top, width, height) => Object.assign(el.style, {
+    left: `${left}px`, top: `${top}px`,
+    width: `${Math.max(0, width)}px`, height: `${Math.max(0, height)}px`
+  });
   Object.assign(guards.top.style, { left: '0px', top: '0px', width: `${innerWidth}px`, height: `${innerHeight}px` });
+  if (!hole) {
+    set(topBlocker, 0, 0, innerWidth, innerHeight);
+    set(guards.left, 0, 0, 0, 0);
+    set(guards.right, 0, 0, 0, 0);
+    set(guards.bottom, 0, 0, 0, 0);
+    return;
+  }
+  const { left, top, right, bottom } = hole;
+  set(topBlocker, 0, 0, innerWidth, top);
+  set(guards.left, 0, top, left, bottom - top);
+  set(guards.right, right, top, innerWidth - right, bottom - top);
+  set(guards.bottom, 0, bottom, innerWidth, innerHeight - bottom);
 }
 function positionTour() {
   if (!tourActive) return;
   const step = TOUR_STEPS[tourIndex], spot = document.getElementById('tour-spot'), card = document.getElementById('tour-card');
   if (step.center || !tourTarget) {
-    positionTourGuards();
+    positionTourGuards(null);
     spot.className = 'tour-spot center';
     spot.removeAttribute('style');
     card.className = 'tour-card center';
@@ -3159,7 +3181,7 @@ function positionTour() {
   const r = tourTarget.getBoundingClientRect(), pad = 8, vw = innerWidth, vh = innerHeight;
   const left = Math.max(8, r.left - pad), top = Math.max(8, r.top - pad);
   const right = Math.min(vw - 8, r.right + pad), bottom = Math.min(vh - 8, r.bottom + pad);
-  positionTourGuards();
+  positionTourGuards({ left, top, right, bottom });
   spot.className = 'tour-spot';
   Object.assign(spot.style, { left: `${left}px`, top: `${top}px`, width: `${Math.max(0, right - left)}px`, height: `${Math.max(0, bottom - top)}px` });
   card.className = 'tour-card';

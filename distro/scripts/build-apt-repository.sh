@@ -82,6 +82,11 @@ fetch_remote_baseline() {
         fi
         printf '%s\n' "$fingerprint" > "$verified"
     fi
+    # A valid repository may not publish this architecture yet. Distinguish
+    # that first-architecture case from a network or signature failure.
+    if ! grep -Eq "^ [0-9a-f]+ +[0-9]+ +main/binary-${arch}/Packages$" "$inrelease"; then
+        return 2
+    fi
     curl -fsS "$BASE_URL/dists/$CHANNEL/main/binary-$arch/Packages" -o "$index" || return 1
     index_hash="$(sha256sum "$index" | awk '{print $1}')"
     index_size="$(wc -c < "$index" | tr -d '[:space:]')"
@@ -101,24 +106,32 @@ fetch_remote_baseline() {
     done
 }
 
+declare -A REMOTE_BASELINE PREVIOUS_DEB PREVIOUS_VERSION PREVIOUS_REMOTE CHANGED
 for arch in "${ARCHES[@]}"; do
-    need_remote=false
-    for package in "${PACKAGES[@]}"; do
-        if [ -z "$(find_local_package "$package" "$arch")" ]; then need_remote=true; break; fi
-    done
-    if $need_remote && ! fetch_remote_baseline "$arch"; then
-        echo "==> No verified remote $arch baseline found; treating it as a first architecture release"
+    # The signed public repository is the release baseline. A local repository
+    # can contain packages left behind by an interrupted or repeated signing
+    # attempt, so using it first can incorrectly hide a package from the
+    # release manifest.
+    if fetch_remote_baseline "$arch"; then
+        REMOTE_BASELINE[$arch]=true
+    else
+        status=$?
+        REMOTE_BASELINE[$arch]=false
+        if [ "$status" -ne 2 ] && [ -s "$REPO/db/packages.db" ]; then
+            echo "Unable to verify the public $CHANNEL/$arch baseline; refusing to use cached local packages." >&2
+            exit 1
+        fi
+        echo "==> No published $CHANNEL/$arch baseline found; treating it as a first architecture release"
         rm -rf "$work/baseline/$arch"
     fi
 done
 
-declare -A PREVIOUS_DEB PREVIOUS_VERSION PREVIOUS_REMOTE CHANGED
 changed_count=0
 for arch in "${ARCHES[@]}"; do
     for package in "${PACKAGES[@]}"; do
         key="$arch/$package"
-        previous="$(find_local_package "$package" "$arch")"
-        if [ -z "$previous" ]; then
+        previous=""
+        if ${REMOTE_BASELINE[$arch]}; then
             previous="$(find "$work/baseline/$arch" -type f -name "${package}_*_${arch}.deb" -print -quit 2>/dev/null || true)"
             if [ -n "$previous" ]; then PREVIOUS_REMOTE[$key]=true; fi
         fi

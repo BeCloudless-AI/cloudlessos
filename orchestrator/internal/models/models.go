@@ -8,22 +8,26 @@ package models
 
 // Model is a curated, servable LLM with display + capability metadata.
 type Model struct {
-	ID          string   `json:"id"`              // Hugging Face model id (what vLLM serves)
-	Name        string   `json:"name"`            // display name
-	Family      string   `json:"family"`          // "Qwen", "Phi", …
-	Params      string   `json:"params"`          // "7B"
-	Quant       string   `json:"quant,omitempty"` // "", "AWQ" (4-bit), …
-	ContextK    int      `json:"contextK"`        // context window in K tokens
-	MinVRAMGB   int      `json:"minVramGB"`       // rough total GPU VRAM to run it
-	Use         string   `json:"use"`             // primary: "general" | "coding" | "vision"
-	Tags        []string `json:"tags"`            // use-case tags for display
-	ToolCalling bool     `json:"toolCalling"`     // supports function/tool calling
-	Vision      bool     `json:"vision"`          // accepts image input
-	License     string   `json:"license"`
-	Description string   `json:"description"`
-	Default     bool     `json:"default,omitempty"`
-	Region      string   `json:"region,omitempty"` // ISO-3166 alpha-2 this model is recommended in (e.g. "FR"); "" = global
-	Gated       bool     `json:"gated,omitempty"`  // HF repo requires accepting terms / a token before download
+	ID            string   `json:"id"`              // Hugging Face model id (what vLLM serves)
+	Name          string   `json:"name"`            // display name
+	Family        string   `json:"family"`          // "Qwen", "Phi", …
+	Params        string   `json:"params"`          // "7B"
+	Quant         string   `json:"quant,omitempty"` // "", "AWQ" (4-bit), …
+	ContextK      int      `json:"contextK"`        // context window in K tokens
+	MinVRAMGB     int      `json:"minVramGB"`       // rough total GPU VRAM to run it
+	Use           string   `json:"use"`             // primary: "general" | "coding" | "vision"
+	Tags          []string `json:"tags"`            // use-case tags for display
+	ToolCalling   bool     `json:"toolCalling"`     // supports function/tool calling
+	Vision        bool     `json:"vision"`          // accepts image input
+	License       string   `json:"license"`
+	Description   string   `json:"description"`
+	Default       bool     `json:"default,omitempty"`
+	Region        string   `json:"region,omitempty"` // ISO-3166 alpha-2 this model is recommended in (e.g. "FR"); "" = global
+	Gated         bool     `json:"gated,omitempty"`  // HF repo requires accepting terms / a token before download
+	Source        string   `json:"source,omitempty"` // "huggingface" for user-imported Hub models
+	SourceURL     string   `json:"sourceUrl,omitempty"`
+	RuntimeStatus string   `json:"runtimeStatus,omitempty"` // likely | unverified (curated models leave this empty)
+	RuntimeNote   string   `json:"runtimeNote,omitempty"`
 }
 
 // RegionModels returns the curated models recommended for a given ISO country code.

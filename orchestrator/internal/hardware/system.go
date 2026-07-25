@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"syscall"
 
 	hostplatform "github.com/cloudless/orchestrator/internal/platform"
 )
@@ -25,6 +26,8 @@ type System struct {
 	Product    string `json:"product,omitempty"`
 	DGXVersion string `json:"dgxVersion,omitempty"`
 	UnifiedGPU bool   `json:"unifiedGpuMemory"`
+	StorageTotalBytes     uint64 `json:"storageTotalBytes"`
+	StorageAvailableBytes uint64 `json:"storageAvailableBytes"`
 }
 
 // Sys gathers host facts from /etc/os-release, /proc, and the Go runtime.
@@ -41,6 +44,7 @@ func Sys() System {
 	s.Kernel = firstLine("/proc/sys/kernel/osrelease")
 	s.CPU, s.Cores = cpuInfo(s.Cores)
 	s.MemTotalMB = memTotalMB()
+	s.StorageTotalBytes, s.StorageAvailableBytes = storageBytes(storagePath())
 	s.UptimeSec = uptimeSec()
 	s.Product = firstLine("/sys/devices/virtual/dmi/id/product_name")
 	s.DGXVersion = keyValueFileField("/etc/dgx-release", "DGX_OTA_VERSION")
@@ -48,6 +52,22 @@ func Sys() System {
 		s.DGXVersion = keyValueFileField("/etc/dgx-release", "DGX_SWBUILD_VERSION")
 	}
 	return s
+}
+
+func storagePath() string {
+	if path := strings.TrimSpace(os.Getenv("CLOUDLESS_STORAGE_PATH")); path != "" {
+		return path
+	}
+	return "/"
+}
+
+func storageBytes(path string) (total, available uint64) {
+	var stat syscall.Statfs_t
+	if err := syscall.Statfs(path, &stat); err != nil {
+		return 0, 0
+	}
+	blockSize := uint64(stat.Bsize)
+	return stat.Blocks * blockSize, stat.Bavail * blockSize
 }
 
 // osReleaseField reads KEY="value" (or KEY=value) from /etc/os-release.

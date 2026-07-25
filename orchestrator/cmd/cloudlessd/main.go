@@ -93,7 +93,7 @@ func main() {
 		}
 	}()
 
-	// Pre-install the bundled apps (vLLM engine, Open WebUI, ComfyUI) in the
+	// Pre-install the bundled engine and core Cloudless services in the
 	// background. The served model is set via CLOUDLESS_DEFAULT_MODEL (catalog).
 	// Set CLOUDLESS_NO_PROVISION=1 to skip this (e.g. a second daemon on another
 	// port for testing — it won't touch the primary daemon's containers).

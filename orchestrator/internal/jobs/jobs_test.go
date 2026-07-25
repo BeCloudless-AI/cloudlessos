@@ -19,3 +19,15 @@ func TestListIncludesIdentityAndByteProgress(t *testing.T) {
 		t.Fatalf("progress = %#v", got[0].Update)
 	}
 }
+
+func TestCancelIsTerminalWithoutError(t *testing.T) {
+	manager := NewManager()
+	job := manager.Create("model-dl:org/model")
+	job.ProgressBytes("downloading", "Downloading", 25, 100)
+	job.Cancel()
+
+	got := job.Snapshot()
+	if !got.Done || got.Phase != "canceled" || got.Message != "Canceled" || got.Error != "" {
+		t.Fatalf("canceled snapshot = %#v", got)
+	}
+}

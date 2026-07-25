@@ -1,5 +1,5 @@
 // Package provision auto-installs the apps that should ship "pre-installed" on a
-// Cloudless machine (the engine, Open WebUI, ComfyUI) on daemon startup, wires them
+// Cloudless machine (the engine and core Cloudless services) on daemon startup, wires them
 // onto a shared network, and optionally pulls a default chat model so
 // "Chat with your Cloudless AI" works out of the box.
 package provision
@@ -15,6 +15,7 @@ import (
 	"github.com/cloudless/orchestrator/internal/catalog"
 	"github.com/cloudless/orchestrator/internal/engine"
 	"github.com/cloudless/orchestrator/internal/manifest"
+	"github.com/cloudless/orchestrator/internal/platform"
 	"github.com/cloudless/orchestrator/internal/state"
 )
 
@@ -31,6 +32,13 @@ func pinnedImage(ctx context.Context, mf *manifest.Store, app catalog.App) strin
 		return p.Ref()
 	}
 	return app.Image
+}
+
+func defaultModelPinKey() string {
+	if platform.IsDGXSpark() {
+		return "dgx-spark"
+	}
+	return "default"
 }
 
 // Run provisions the bundled apps. Both engine images are pulled (so either is
@@ -102,7 +110,7 @@ func Run(ctx context.Context, eng engine.Engine, st *state.Store, mf *manifest.S
 			if override, ok := st.EngineCmd(e.ID, served); ok {
 				spec.Args = override // a user-saved launch command wins verbatim
 				logf(e.ID + ": using saved launch command")
-			} else if mp, ok := mf.ModelPin(ctx, "default"); ok && served == mp.Repo {
+			} else if mp, ok := mf.ModelPin(ctx, defaultModelPinKey()); ok && served == mp.Repo {
 				args := append([]string{}, spec.Args...) // copy: don't mutate the shared catalog slice
 				spec.Args = append(args, "--revision", mp.Revision)
 				logf(e.ID + ": pinning model revision " + mp.Revision[:12])
@@ -116,7 +124,7 @@ func Run(ctx context.Context, eng engine.Engine, st *state.Store, mf *manifest.S
 	}
 	EngineMu.Unlock()
 
-	// Non-engine bundled apps (Open WebUI, ComfyUI): pull and run.
+	// Non-engine bundled apps (Open WebUI and Hermes): pull and run.
 	for _, app := range catalog.Bundled() {
 		if app.Engine {
 			continue

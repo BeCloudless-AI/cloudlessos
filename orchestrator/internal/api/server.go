@@ -52,6 +52,9 @@ type Server struct {
 	modelsMu     sync.Mutex
 	modelsHave   map[string]bool
 	modelsHaveAt time.Time
+
+	modelJobsMu sync.Mutex
+	modelJobs   map[string]context.CancelFunc
 }
 
 // NewServer constructs a Server backed by the given engine, state store and manifests.
@@ -89,6 +92,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/capabilities", s.capabilities)
 	mux.HandleFunc("POST /api/system/shutdown", s.systemShutdown)
 	mux.HandleFunc("POST /api/system/reboot", s.systemReboot)
+	mux.HandleFunc("GET /api/system/display", s.displayGet)
+	mux.HandleFunc("POST /api/system/display", s.displaySet)
 	mux.HandleFunc("GET /api/system/update", s.systemUpdateGet)
 	mux.HandleFunc("POST /api/system/update/check", s.systemUpdateCheck)
 	mux.HandleFunc("POST /api/system/update/apply", s.systemUpdateApply)
@@ -113,10 +118,19 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/settings", s.settingsGet)
 	mux.HandleFunc("POST /api/settings/model", s.settingsModel)
 	mux.HandleFunc("GET /api/models", s.modelsList)
+	mux.HandleFunc("GET /api/models/huggingface/search", s.huggingFaceSearch)
+	mux.HandleFunc("POST /api/models/huggingface/import", s.huggingFaceImport)
+	mux.HandleFunc("GET /api/models/huggingface/account", s.huggingFaceAccount)
+	mux.HandleFunc("POST /api/models/huggingface/account", s.huggingFaceConnect)
+	mux.HandleFunc("DELETE /api/models/huggingface/account", s.huggingFaceDisconnect)
 	mux.HandleFunc("GET /api/models/downloads", s.modelDownloads)
 	mux.HandleFunc("POST /api/models/download", s.modelDownload)
+	mux.HandleFunc("POST /api/models/download/cancel", s.modelDownloadCancel)
+	mux.HandleFunc("POST /api/models/uninstall", s.modelUninstall)
 	mux.HandleFunc("GET /api/diffusion", s.diffusionList)
+	mux.HandleFunc("GET /api/diffusion/downloads", s.diffusionDownloads)
 	mux.HandleFunc("POST /api/diffusion/{id}/download", s.diffusionDownload)
+	mux.HandleFunc("POST /api/diffusion/{id}/uninstall", s.diffusionUninstall)
 	mux.HandleFunc("POST /api/onboarding/reset", s.onboardingReset)
 	mux.HandleFunc("GET /api/jobs/{id}", s.jobState)
 	mux.HandleFunc("GET /api/jobs/{id}/events", s.jobEvents)
@@ -375,6 +389,14 @@ func (s *Server) catalog(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, catalog.All())
 }
 
+func currentBootID() string {
+	data, err := os.ReadFile("/proc/sys/kernel/random/boot_id")
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(data))
+}
+
 // onboardingGet reports whether first-run onboarding has been completed for this
 // install/user. `firstLaunch` is true when the daemon found no prior state file.
 func (s *Server) onboardingGet(w http.ResponseWriter, r *http.Request) {
@@ -383,6 +405,7 @@ func (s *Server) onboardingGet(w http.ResponseWriter, r *http.Request) {
 		"completed":   st.Onboarded,
 		"firstLaunch": s.state.FirstRun(),
 		"firstSeen":   st.FirstSeen,
+		"bootID":      currentBootID(),
 	})
 }
 

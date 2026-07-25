@@ -12,9 +12,13 @@ import (
 	"github.com/cloudless/orchestrator/internal/platform"
 )
 
-// defaultLLM is the model vLLM serves as "Cloudless AI". Override with
-// CLOUDLESS_DEFAULT_MODEL (any Hugging Face model id vLLM supports).
-var defaultLLM = envOr("CLOUDLESS_DEFAULT_MODEL", "Qwen/Qwen2.5-1.5B-Instruct")
+// The generic model is also the substitution sentinel embedded in engine recipes.
+// DefaultModel resolves the actual first-boot model at runtime so one package can
+// safely serve both regular PCs and DGX Spark without architecture-specific forks.
+const (
+	defaultModelSentinel = "Qwen/Qwen2.5-1.5B-Instruct"
+	dgxSparkDefaultModel = "Qwen/Qwen3.6-35B-A3B"
+)
 
 func envOr(k, d string) string {
 	if v := os.Getenv(k); v != "" {
@@ -216,20 +220,28 @@ func Engines() []App {
 	return out
 }
 
-// DefaultModel returns the built-in default model (also the substitution sentinel).
-func DefaultModel() string { return defaultLLM }
+// DefaultModel returns the model used when the user has not selected one.
+// An explicit environment override remains authoritative on every platform.
+func DefaultModel() string {
+	return envOr("CLOUDLESS_DEFAULT_MODEL", func() string {
+		if platform.IsDGXSpark() {
+			return dgxSparkDefaultModel
+		}
+		return defaultModelSentinel
+	}())
+}
 
 // EngineSpec builds an engine's run spec, substituting the chosen model for the
 // default. model "" (or the default) leaves the catalog command unchanged.
 func EngineSpec(a App, model string) engine.RunSpec {
 	rs := a.Spec()
-	if model == "" || model == defaultLLM {
-		return rs
+	if model == "" {
+		model = DefaultModel()
 	}
 	args := make([]string, len(rs.Args)) // copy: don't mutate the shared catalog slice
 	copy(args, rs.Args)
 	for i := range args {
-		if args[i] == defaultLLM {
+		if args[i] == defaultModelSentinel {
 			args[i] = model
 		}
 	}
@@ -308,9 +320,10 @@ var apps = []App{
 		ArchPlatforms: map[string][]string{"arm64": {platform.DGXSpark}},
 		Ports:         map[int]int{8000: 8000},
 		// Image entrypoint is `vllm serve`; the model is the positional arg.
-		// Tool calling enabled (agents like OpenClaw send tools); Qwen2.5 -> hermes parser.
+		// Tool calling enabled (agents like Hermes send tools). The generic model
+		// uses the Hermes parser; the Spark command uses Qwen3.6's native parsers.
 		Command: []string{
-			defaultLLM,
+			defaultModelSentinel,
 			"--served-model-name", "cloudless",
 			"--gpu-memory-utilization", "0.5",
 			"--max-model-len", "32768", // Qwen2.5 native context; agents send big prompts
@@ -321,12 +334,13 @@ var apps = []App{
 		// `vllm serve` entrypoint, so include it explicitly on ARM64.
 		ArchCommands: map[string][]string{
 			"arm64": {
-				"vllm", "serve", defaultLLM,
+				"vllm", "serve", defaultModelSentinel,
 				"--served-model-name", "cloudless",
-				"--gpu-memory-utilization", "0.5",
+				"--gpu-memory-utilization", "0.75",
 				"--max-model-len", "32768",
+				"--reasoning-parser", "qwen3",
 				"--enable-auto-tool-choice",
-				"--tool-call-parser", "hermes",
+				"--tool-call-parser", "qwen3_coder",
 			},
 		},
 		Volumes:    map[string]string{"cloudless-hf": "/root/.cache/huggingface"}, // persist model cache
@@ -356,13 +370,26 @@ var apps = []App{
 		Ports:         map[int]int{8000: 8000}, // same fixed port as vLLM (one engine runs at a time)
 		Command: []string{
 			"python3", "-m", "sglang.launch_server",
-			"--model-path", defaultLLM,
+			"--model-path", defaultModelSentinel,
 			"--served-model-name", "cloudless",
 			"--host", "0.0.0.0", "--port", "8000",
 			"--mem-fraction-static", "0.5",
 			"--context-length", "32768", // match vLLM; agents send big prompts
 			"--tool-call-parser", "qwen25", // agents need tool calling
 			"--enable-metrics", // expose Prometheus /metrics for the inference dashboard (vLLM has it on by default)
+		},
+		ArchCommands: map[string][]string{
+			"arm64": {
+				"python3", "-m", "sglang.launch_server",
+				"--model-path", defaultModelSentinel,
+				"--served-model-name", "cloudless",
+				"--host", "0.0.0.0", "--port", "8000",
+				"--mem-fraction-static", "0.75",
+				"--context-length", "32768",
+				"--reasoning-parser", "qwen3",
+				"--tool-call-parser", "qwen3_coder",
+				"--enable-metrics",
+			},
 		},
 		Volumes:   map[string]string{"cloudless-hf": "/root/.cache/huggingface"},
 		GPUs:      "all",
@@ -488,7 +515,7 @@ var apps = []App{
 		OpenPath:   "/",
 		MinVRAMGB:  6,
 		Verified:   false,
-		Preinstall: true,
+		Preinstall: false,
 		Network:    cloudlessNet,
 	},
 	{

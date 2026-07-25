@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"path"
@@ -40,6 +41,26 @@ type diffusionView struct {
 	Downloaded bool   `json:"downloaded"`
 }
 
+func (s *Server) activeDiffusionDownloads() []modelDownloadView {
+	out := []modelDownloadView{}
+	for _, snapshot := range s.jobs.List("diffusion:") {
+		if snapshot.Done {
+			continue
+		}
+		out = append(out, modelDownloadView{
+			JobID: snapshot.ID, ModelID: strings.TrimPrefix(snapshot.AppID, "diffusion:"),
+			Phase: snapshot.Phase, Message: snapshot.Message,
+			BytesDone: snapshot.BytesDone, BytesTotal: snapshot.BytesTotal,
+			Done: snapshot.Done, Error: snapshot.Error,
+		})
+	}
+	return out
+}
+
+func (s *Server) diffusionDownloads(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{"downloads": s.activeDiffusionDownloads()})
+}
+
 // diffusionList returns "Your image models" (downloaded files) + "Cloudless highlights"
 // (curated picks not yet downloaded), each with a VRAM-fit verdict.
 func (s *Server) diffusionList(w http.ResponseWriter, r *http.Request) {
@@ -65,7 +86,7 @@ func (s *Server) diffusionList(w http.ResponseWriter, r *http.Request) {
 			yours = append(yours, view(m))
 		} else {
 			yours = append(yours, diffusionView{Model: diffusion.Model{ID: file, Name: file, Type: "checkpoint",
-				Description: "Custom model file."}, Fit: "unknown", Downloaded: true})
+				File: file, Description: "Custom model file."}, Fit: "unknown", Downloaded: true})
 		}
 	}
 	sort.Slice(yours, func(i, j int) bool { return yours[i].Name < yours[j].Name })
@@ -79,53 +100,125 @@ func (s *Server) diffusionList(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"gpuVRAMGB": gpuGB, "memoryType": memoryType, "yours": yours, "highlights": picks,
+		"downloads": s.activeDiffusionDownloads(),
 	})
+}
+
+func (s *Server) diffusionModel(ctx context.Context, id string) (diffusion.Model, bool) {
+	for _, h := range s.mfDiff.Highlights(ctx) {
+		if h.ID == id {
+			return h, true
+		}
+	}
+	return diffusion.Get(id)
+}
+
+func safeDiffusionFile(m diffusion.Model) bool {
+	if !safeDiffusionFilename(m.File) {
+		return false
+	}
+	cleanDir := path.Clean(m.Dir)
+	return cleanDir != "." && cleanDir != ".." && !strings.HasPrefix(cleanDir, "../") && !path.IsAbs(cleanDir)
+}
+
+func safeDiffusionFilename(file string) bool {
+	if file == "" || path.Base(file) != file || strings.ContainsAny(file, "\x00\r\n") {
+		return false
+	}
+	switch strings.ToLower(path.Ext(file)) {
+	case ".safetensors", ".ckpt", ".gguf":
+		return true
+	default:
+		return false
+	}
 }
 
 // diffusionDownload fetches a curated model file into the ComfyUI volume (async job).
 func (s *Server) diffusionDownload(w http.ResponseWriter, r *http.Request) {
 	// Prefer the hosted highlight (so the URL/file can be re-curated remotely), else the built-in.
 	id := r.PathValue("id")
-	var m diffusion.Model
-	found := false
-	for _, h := range s.mfDiff.Highlights(r.Context()) {
-		if h.ID == id {
-			m, found = h, true
-			break
-		}
-	}
-	if !found {
-		m, found = diffusion.Get(id)
-	}
-	if !found || m.URL == "" || m.File == "" {
+	m, found := s.diffusionModel(r.Context(), id)
+	if !found || m.URL == "" || !safeDiffusionFile(m) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "unknown model"})
 		return
 	}
+	for _, active := range s.activeDiffusionDownloads() {
+		if active.ModelID == m.ID {
+			writeJSON(w, http.StatusAccepted, map[string]string{"jobId": active.JobID})
+			return
+		}
+	}
 	job := s.jobs.Create("diffusion:" + m.ID)
-	go s.runDiffusionDownload(job, m)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Minute)
+	s.registerModelJob(job.ID, cancel)
+	go s.runDiffusionDownload(ctx, cancel, job, m)
 	writeJSON(w, http.StatusAccepted, map[string]string{"jobId": job.ID})
 }
 
 // runDiffusionDownload curls the model file into the ComfyUI volume's models dir. The
 // volume's root is ComfyUI's working dir, so models live under ComfyUI/models/<dir>.
-func (s *Server) runDiffusionDownload(job *jobs.Job, m diffusion.Model) {
-	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Minute)
+func (s *Server) runDiffusionDownload(ctx context.Context, cancel context.CancelFunc, job *jobs.Job, m diffusion.Model) {
 	defer cancel()
+	defer s.unregisterModelJob(job.ID)
 
 	dir := "/c/ComfyUI/models/" + m.Dir
+	final := dir + "/" + m.File
+	partial := final + ".cloudless-part"
 	size := "a large file"
 	if m.SizeGB > 0 {
 		size = fmt.Sprintf("~%.1f GB", m.SizeGB)
 	}
 	job.Progress("downloading", "Downloading "+m.Name+" ("+size+") — this can take a while…", -1, -1)
 
-	cmd := "mkdir -p '" + dir + "' && curl -fL --retry 3 -o '" + dir + "/" + m.File + "' '" + m.URL + "'"
+	cmd := `mkdir -p "$1" && curl -fL --retry 3 -o "$2" "$3" && mv "$2" "$4"`
+	containerName := "cloudless-diffusion-download-" + job.ID
 	// --user 0: the volume is root-owned (ComfyUI runs as root), and curlimages/curl
 	// defaults to a non-root user that can't write there. curl validates TLS.
-	if _, err := s.eng.Output(ctx, "run", "--rm", "--user", "0", "--entrypoint", "sh",
-		"-v", comfyVolume+":/c", "curlimages/curl:latest", "-c", cmd); err != nil {
+	_, err := s.eng.Output(ctx, "run", "--rm", "--name", containerName, "--user", "0", "--entrypoint", "sh",
+		"-v", comfyVolume+":/c", "curlimages/curl:latest", "-c", cmd,
+		"cloudless-download", dir, partial, m.URL, final)
+	if err != nil {
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cleanupCancel()
+		_ = s.eng.Remove(cleanupCtx, containerName)
+		_, _ = s.eng.Output(cleanupCtx, "run", "--rm", "--user", "0", "-v", comfyVolume+":/c", "busybox",
+			"sh", "-c", `rm -f "$1"`, "cloudless-cancel-diffusion", partial)
+		if errors.Is(ctx.Err(), context.Canceled) {
+			job.Cancel()
+			return
+		}
 		job.Fail(err)
 		return
 	}
 	job.Succeed("")
+}
+
+func (s *Server) diffusionUninstall(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimSpace(r.PathValue("id"))
+	m, found := s.diffusionModel(r.Context(), id)
+	if !found && safeDiffusionFilename(id) {
+		m, found = diffusion.Model{ID: id, Name: id, File: id}, true
+	}
+	if !found || !safeDiffusionFilename(m.File) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "unknown model"})
+		return
+	}
+	for _, active := range s.activeDiffusionDownloads() {
+		if active.ModelID == id {
+			writeJSON(w, http.StatusConflict, map[string]string{"error": "cancel this model download before uninstalling it"})
+			return
+		}
+	}
+	if !s.downloadedDiffusion(r.Context())[m.File] {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "model is not installed"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	if _, err := s.eng.Output(ctx, "run", "--rm", "--user", "0", "-v", comfyVolume+":/c", "busybox",
+		"sh", "-c", `find /c/ComfyUI/models -type f -name "$1" -delete`, "cloudless-remove-diffusion", m.File); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "could not uninstall model"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "uninstalled"})
 }

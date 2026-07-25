@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -255,6 +256,44 @@ func (s *Server) invalidateDownloadedModels() {
 	s.modelsMu.Unlock()
 }
 
+func modelCacheName(repo string) (string, bool) {
+	repo = strings.TrimSpace(repo)
+	if repo == "" || strings.Contains(repo, `\`) || strings.ContainsAny(repo, "\x00\r\n") {
+		return "", false
+	}
+	for _, part := range strings.Split(repo, "/") {
+		if part == "" || part == "." || part == ".." {
+			return "", false
+		}
+	}
+	return "models--" + strings.ReplaceAll(repo, "/", "--"), true
+}
+
+func (s *Server) registerModelJob(jobID string, cancel context.CancelFunc) {
+	s.modelJobsMu.Lock()
+	defer s.modelJobsMu.Unlock()
+	if s.modelJobs == nil {
+		s.modelJobs = make(map[string]context.CancelFunc)
+	}
+	s.modelJobs[jobID] = cancel
+}
+
+func (s *Server) unregisterModelJob(jobID string) {
+	s.modelJobsMu.Lock()
+	delete(s.modelJobs, jobID)
+	s.modelJobsMu.Unlock()
+}
+
+func (s *Server) cancelModelJob(jobID string) bool {
+	s.modelJobsMu.Lock()
+	cancel, ok := s.modelJobs[jobID]
+	s.modelJobsMu.Unlock()
+	if ok {
+		cancel()
+	}
+	return ok
+}
+
 type modelDownloadView struct {
 	JobID      string `json:"jobId"`
 	ModelID    string `json:"modelId"`
@@ -318,6 +357,15 @@ func (s *Server) modelsList(w http.ResponseWriter, r *http.Request) {
 		seen[m.ID] = true
 	}
 	for _, m := range models.RegionModels(country) {
+		if !seen[m.ID] {
+			highlights = append(highlights, m)
+			seen[m.ID] = true
+		}
+	}
+	// User-imported Hugging Face repositories remain in Model Manager across
+	// restarts and after uninstall, so they can be downloaded again without
+	// repeating the Hub lookup.
+	for _, m := range s.importedModels() {
 		if !seen[m.ID] {
 			highlights = append(highlights, m)
 			seen[m.ID] = true
@@ -397,29 +445,180 @@ func (s *Server) modelsList(w http.ResponseWriter, r *http.Request) {
 // so a later launch is instant. Async job.
 func (s *Server) modelDownload(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		ID string `json:"id"`
+		ID    string `json:"id"`
+		Token string `json:"token,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || strings.TrimSpace(body.ID) == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad request"})
 		return
 	}
 	body.ID = strings.TrimSpace(body.ID)
+	if _, ok := modelCacheName(body.ID); !ok {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid model id"})
+		return
+	}
 	for _, active := range s.activeModelDownloads() {
 		if active.ModelID == body.ID {
 			writeJSON(w, http.StatusAccepted, map[string]string{"jobId": active.JobID})
 			return
 		}
 	}
+	hadCompleteCache := s.downloadedModels(r.Context())[body.ID]
+	token := strings.TrimSpace(body.Token)
+	if token == "" {
+		token = s.huggingFaceToken()
+	}
 	job := s.jobs.Create("model-dl:" + body.ID)
-	go s.runModelDownload(job, body.ID)
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Minute)
+	s.registerModelJob(job.ID, cancel)
+	go s.runModelDownload(ctx, cancel, job, body.ID, hadCompleteCache, token)
 	writeJSON(w, http.StatusAccepted, map[string]string{"jobId": job.ID})
 }
 
-func huggingFaceModelBytes(ctx context.Context, repo string) int64 {
+func (s *Server) modelDownloadCancel(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		JobID string `json:"jobId"`
+	}
+	if json.NewDecoder(r.Body).Decode(&body) != nil || strings.TrimSpace(body.JobID) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "jobId is required"})
+		return
+	}
+	job, ok := s.jobs.Get(strings.TrimSpace(body.JobID))
+	if !ok || (!strings.HasPrefix(job.AppID, "model-dl:") && !strings.HasPrefix(job.AppID, "diffusion:")) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "model download not found"})
+		return
+	}
+	if job.Snapshot().Done || !s.cancelModelJob(job.ID) {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "model download is no longer active"})
+		return
+	}
+	writeJSON(w, http.StatusAccepted, map[string]string{"status": "canceling"})
+}
+
+func (s *Server) removeExposedModel(repo string) error {
+	p, ok := places.Get("models")
+	if !ok {
+		return nil
+	}
+	name := strings.ReplaceAll(repo, "/", "--")
+	for _, candidate := range []string{
+		filepath.Join(p.Path, name),
+		filepath.Join(p.Path, name+"-Cloudless"),
+		filepath.Join(p.Path, ".materializing-"+name),
+	} {
+		if _, err := os.Stat(filepath.Join(candidate, ".cloudless-revision")); err == nil {
+			if err := os.RemoveAll(candidate); err != nil {
+				return err
+			}
+		} else if strings.HasPrefix(filepath.Base(candidate), ".materializing-") {
+			_ = os.RemoveAll(candidate)
+		}
+	}
+	return nil
+}
+
+func (s *Server) removeModelCache(ctx context.Context, repo string) error {
+	cacheName, ok := modelCacheName(repo)
+	if !ok {
+		return fmt.Errorf("invalid model id")
+	}
+	root := s.modelVolumePath(ctx)
+	if root != "" {
+		if err := os.RemoveAll(filepath.Join(root, "hub", cacheName)); err != nil {
+			root = ""
+		}
+	}
+	if root == "" {
+		if _, err := s.eng.Output(ctx, "run", "--rm", "-v", "cloudless-hf:/c", "busybox",
+			"sh", "-c", `rm -rf "/c/hub/$1"`, "cloudless-remove-model", cacheName); err != nil {
+			return err
+		}
+	}
+	if err := s.removeExposedModel(repo); err != nil {
+		return err
+	}
+	s.invalidateDownloadedModels()
+	return nil
+}
+
+func (s *Server) cleanCanceledModelCache(ctx context.Context, repo string, hadCompleteCache bool) error {
+	if !hadCompleteCache {
+		return s.removeModelCache(ctx, repo)
+	}
+	cacheName, ok := modelCacheName(repo)
+	if !ok {
+		return fmt.Errorf("invalid model id")
+	}
+	root := s.modelVolumePath(ctx)
+	if root != "" {
+		var removeErr error
+		_ = filepath.WalkDir(filepath.Join(root, "hub", cacheName, "blobs"), func(path string, entry os.DirEntry, walkErr error) error {
+			if walkErr == nil && !entry.IsDir() && strings.HasSuffix(entry.Name(), ".incomplete") {
+				if err := os.Remove(path); err != nil && removeErr == nil {
+					removeErr = err
+				}
+			}
+			return nil
+		})
+		if removeErr == nil {
+			return nil
+		}
+	}
+	_, err := s.eng.Output(ctx, "run", "--rm", "-v", "cloudless-hf:/c", "busybox",
+		"sh", "-c", `find "/c/hub/$1/blobs" -type f -name '*.incomplete' -delete 2>/dev/null || true`,
+		"cloudless-clean-model", cacheName)
+	return err
+}
+
+func (s *Server) modelUninstall(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		ID string `json:"id"`
+	}
+	if json.NewDecoder(r.Body).Decode(&body) != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad request"})
+		return
+	}
+	body.ID = strings.TrimSpace(body.ID)
+	if _, ok := modelCacheName(body.ID); !ok {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid model id"})
+		return
+	}
+	current := s.state.Get().Model
+	if current == "" {
+		current = catalog.DefaultModel()
+	}
+	if body.ID == current {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "switch to another model before uninstalling the model currently in use"})
+		return
+	}
+	for _, active := range s.activeModelDownloads() {
+		if active.ModelID == body.ID {
+			writeJSON(w, http.StatusConflict, map[string]string{"error": "cancel this model download before uninstalling it"})
+			return
+		}
+	}
+	if !s.downloadedModels(r.Context())[body.ID] {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "model is not installed"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	if err := s.removeModelCache(ctx, body.ID); err != nil {
+		log.Printf("models: uninstall %s: %v", body.ID, err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "could not uninstall model"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "uninstalled"})
+}
+
+func huggingFaceModelBytes(ctx context.Context, repo, token string) int64 {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
 		"https://huggingface.co/api/models/"+repo+"?blobs=true", nil)
 	if err != nil {
 		return 0
+	}
+	if token = strings.TrimSpace(token); token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -491,30 +690,48 @@ func formatDownloadProgress(done, total int64) string {
 
 // runModelDownload fetches a repo into the shared cache while polling its
 // on-disk byte count for real progress.
-func (s *Server) runModelDownload(job *jobs.Job, repo string) {
-	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Minute)
+func (s *Server) runModelDownload(ctx context.Context, cancel context.CancelFunc, job *jobs.Job, repo string, hadCompleteCache bool, token string) {
 	defer cancel()
+	defer s.unregisterModelJob(job.ID)
 	vllm, _ := catalog.Get("vllm")
 	img := s.imageFor(ctx, vllm)
 	metadataCtx, metadataCancel := context.WithTimeout(ctx, 12*time.Second)
-	total := huggingFaceModelBytes(metadataCtx, repo)
+	total := huggingFaceModelBytes(metadataCtx, repo, token)
 	metadataCancel()
 	root := s.modelVolumePath(ctx)
 	job.ProgressBytes("downloading", "Preparing "+repo+"…", s.modelRepoBytes(ctx, repo, root), total)
 	py := "import os; from huggingface_hub import snapshot_download; snapshot_download(os.environ['CLOUDLESS_MODEL_ID'])"
+	containerName := "cloudless-model-download-" + job.ID
 	result := make(chan error, 1)
 	go func() {
-		_, err := s.eng.Output(ctx, "run", "--rm", "--entrypoint", "python3",
-			"-e", "CLOUDLESS_MODEL_ID="+repo,
-			"-v", "cloudless-hf:/root/.cache/huggingface", img, "-c", py)
+		args := []string{"run", "--rm", "--name", containerName, "--entrypoint", "python3",
+			"-e", "CLOUDLESS_MODEL_ID=" + repo}
+		if token != "" {
+			args = append(args, "-e", "HF_TOKEN="+token)
+		}
+		args = append(args, "-v", "cloudless-hf:/root/.cache/huggingface", img, "-c", py)
+		_, err := s.eng.Output(ctx, args...)
 		result <- err
 	}()
+	cleanupCanceled := func() {
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cleanupCancel()
+		_ = s.eng.Remove(cleanupCtx, containerName)
+		if err := s.cleanCanceledModelCache(cleanupCtx, repo, hadCompleteCache); err != nil {
+			log.Printf("models: clean canceled download %s: %v", repo, err)
+		}
+		job.Cancel()
+	}
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	for {
 		select {
 		case err := <-result:
 			if err != nil {
+				if errors.Is(ctx.Err(), context.Canceled) {
+					cleanupCanceled()
+					return
+				}
 				job.Fail(err)
 				return
 			}
@@ -537,6 +754,10 @@ func (s *Server) runModelDownload(job *jobs.Job, repo string) {
 			done := s.modelRepoBytes(ctx, repo, root)
 			job.ProgressBytes("downloading", "Downloading "+repo+" · "+formatDownloadProgress(done, total), done, total)
 		case <-ctx.Done():
+			if errors.Is(ctx.Err(), context.Canceled) {
+				cleanupCanceled()
+				return
+			}
 			job.Fail(ctx.Err())
 			return
 		}

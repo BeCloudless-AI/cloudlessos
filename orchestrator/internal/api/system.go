@@ -44,7 +44,7 @@ func (s *Server) system(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// sysload reports live CPU + RAM utilization for the dashboard.
+// sysload reports live host utilization and capacity for the dashboard.
 func (s *Server) sysload(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, hardware.Load())
 }

@@ -136,7 +136,13 @@
       "repo": "Qwen/Qwen2.5-1.5B-Instruct",
       "revision": "989aa7980e4cf806f80c7fef2b1adb7bc71aa306",
       "verified": true,
-      "notes": "Small first-boot model; users can select a Spark-sized model after validation."
+      "notes": "Small first-boot model for standard CloudlessOS systems."
+    },
+    "dgx-spark": {
+      "repo": "Qwen/Qwen3.6-35B-A3B",
+      "revision": "53c43178507d69762986fbfa314f6e8d4d859409",
+      "verified": true,
+      "notes": "DGX Spark first-boot default; selected at runtime without changing the standard-system default."
     }
   }
 }

@@ -1,9 +1,15 @@
 package api
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/cloudless/orchestrator/internal/jobs"
 )
 
 func TestScanModelHub(t *testing.T) {
@@ -38,6 +44,66 @@ func TestDirectoryBytesAndProgressMessage(t *testing.T) {
 	}
 	if got := formatDownloadProgress(512, 1024); got == "" {
 		t.Fatal("formatDownloadProgress returned an empty message")
+	}
+}
+
+func TestModelCacheNameRejectsUnsafeIDs(t *testing.T) {
+	if got, ok := modelCacheName("Qwen/Qwen-Test"); !ok || got != "models--Qwen--Qwen-Test" {
+		t.Fatalf("modelCacheName valid = %q, %v", got, ok)
+	}
+	for _, id := range []string{"", "../model", "org/../model", "org\\model", "org//model"} {
+		if got, ok := modelCacheName(id); ok {
+			t.Errorf("modelCacheName(%q) = %q, true; want rejected", id, got)
+		}
+	}
+}
+
+func TestRemoveExposedModelPreservesUserFolder(t *testing.T) {
+	cloudlessHome := filepath.Join(t.TempDir(), "Cloudless")
+	t.Setenv("CLOUDLESS_HOME", cloudlessHome)
+	modelsDir := filepath.Join(cloudlessHome, "Models")
+	managed := filepath.Join(modelsDir, "Qwen--Managed")
+	userOwned := filepath.Join(modelsDir, "Qwen--Personal")
+	for _, dir := range []string{managed, userOwned} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(managed, ".cloudless-revision"), []byte("abc\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	server := &Server{}
+	if err := server.removeExposedModel("Qwen/Managed"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(managed); !os.IsNotExist(err) {
+		t.Fatalf("managed model folder still exists: %v", err)
+	}
+	if err := server.removeExposedModel("Qwen/Personal"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(userOwned); err != nil {
+		t.Fatalf("user-owned model folder was removed: %v", err)
+	}
+}
+
+func TestModelDownloadCancelStopsRegisteredJob(t *testing.T) {
+	server := &Server{jobs: jobs.NewManager()}
+	job := server.jobs.Create("model-dl:Qwen/Test")
+	ctx, cancel := context.WithCancel(context.Background())
+	server.registerModelJob(job.ID, cancel)
+
+	request := httptest.NewRequest(http.MethodPost, "/api/models/download/cancel",
+		strings.NewReader(`{"jobId":"`+job.ID+`"}`))
+	recorder := httptest.NewRecorder()
+	server.modelDownloadCancel(recorder, request)
+	if recorder.Code != http.StatusAccepted {
+		t.Fatalf("cancel status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	select {
+	case <-ctx.Done():
+	default:
+		t.Fatal("registered download context was not canceled")
 	}
 }
 

@@ -19,6 +19,9 @@ func TestARM64CatalogSelectsDGXComfyImageAndHidesUnsupportedApps(t *testing.T) {
 	if comfy.Image != want {
 		t.Fatalf("ComfyUI ARM64 image = %q, want %q", comfy.Image, want)
 	}
+	if comfy.Preinstall {
+		t.Fatal("ComfyUI must remain an optional install on ARM64")
+	}
 	for _, id := range []string{"ai-toolkit", "unsloth", "openclaw"} {
 		if _, ok := Get(id); ok {
 			t.Fatalf("%s must be hidden until an ARM64 recipe is published", id)
@@ -53,6 +56,19 @@ func TestAMD64CatalogKeepsExistingRecipes(t *testing.T) {
 	comfy, _ := Get("comfyui")
 	if comfy.Image != "mmartial/comfyui-nvidia-docker:latest" {
 		t.Fatalf("unexpected AMD64 ComfyUI image: %q", comfy.Image)
+	}
+	if comfy.Preinstall {
+		t.Fatal("ComfyUI must remain an optional install on AMD64")
+	}
+}
+
+func TestBundledExcludesOptionalComfyUI(t *testing.T) {
+	t.Setenv("CLOUDLESS_ARCH", "amd64")
+	t.Setenv("CLOUDLESS_PLATFORM", platform.Generic)
+	for _, app := range Bundled() {
+		if app.ID == "comfyui" {
+			t.Fatal("ComfyUI must not be pulled or started during boot provisioning")
+		}
 	}
 }
 

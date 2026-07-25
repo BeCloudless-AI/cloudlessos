@@ -13,6 +13,24 @@
       const timed = h >= 5 && h < 8 ? 'dawn' : h >= 8 && h < 18 ? 'cloudless' : h >= 18 && h < 21 ? 'dusk' : 'night';
       document.documentElement.dataset.themePreference = pref;
       document.documentElement.dataset.theme = pref === 'auto' ? timed : pref;
+      const zoomPref = localStorage.getItem('cloudless.uiZoom') || 'auto';
+      const fit = Math.min(innerWidth / 1920, innerHeight / 1080);
+      const autoZoom = fit >= 1.75 ? 1.35 : fit >= 1.3 ? 1.18 : fit >= .92 ? 1 : fit >= .72 ? .9 : .8;
+      const savedZoom = Number(zoomPref);
+      const uiZoom = zoomPref === 'auto' || !Number.isFinite(savedZoom) ? autoZoom : Math.max(.75, Math.min(3, savedZoom));
+      document.documentElement.dataset.uiZoomPreference = zoomPref;
+      document.documentElement.dataset.uiScale = String(uiZoom);
+      document.documentElement.dataset.uiMagnified = uiZoom >= 2 ? '1' : '0';
+      document.documentElement.style.setProperty('--ui-vw', `${innerWidth / uiZoom}px`);
+      document.documentElement.style.setProperty('--ui-vh', `${innerHeight / uiZoom}px`);
+      document.documentElement.style.setProperty('--ui-inverse', String(1 / uiZoom));
+      document.documentElement.style.setProperty('--ui-vw-92', `${innerWidth / uiZoom * .92}px`);
+      document.documentElement.style.setProperty('--ui-vw-95', `${innerWidth / uiZoom * .95}px`);
+      document.documentElement.style.setProperty('--ui-vw-96', `${innerWidth / uiZoom * .96}px`);
+      document.documentElement.style.setProperty('--ui-vh-86', `${innerHeight / uiZoom * .86}px`);
+      document.documentElement.style.setProperty('--ui-vh-90', `${innerHeight / uiZoom * .9}px`);
+      document.documentElement.style.setProperty('--ui-vh-92', `${innerHeight / uiZoom * .92}px`);
+      document.documentElement.style.zoom = String(uiZoom);
     } catch {}
   })();
 </script>
@@ -134,7 +152,7 @@
   @media (prefers-reduced-motion: reduce) { .wall::before { animation: none; } }
 
   /* ---------- frosted-glass surfaces (UmbrelOS feel) ---------- */
-  .menubar, .card, .set, .mm, .asst, .net-pop, .tile .ic, .us-chartwrap, .us-tile,
+  .menubar, .card, .set, .mm, .asst, .net-pop, .power-pop, .tile .ic, .us-chartwrap, .us-tile,
   .inf-metric, .inf-hero, .ec, .ask, .adm-creds, .code-box, .eng-banner, .inf-engnote, .lp-card {
     -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.5);
     backdrop-filter: blur(var(--glass-blur)) saturate(1.5);
@@ -150,6 +168,14 @@
   /* shared brand sparkle — painted with the iridescent Cloudless gradient */
   .cl-mark { display: block; fill: url(#cl-star-grad); }
   .menubar .brand .mark { width: 12px; height: 18px; flex: none; }
+  .nvidia-brand {
+    display: none; align-items: center; gap: 5px; margin-left: 3px; padding-left: 11px;
+    border-left: 1px solid var(--line-2); color: #76b900; opacity: .78;
+  }
+  html[data-cap-dgx-appliance="1"] .nvidia-brand { display: inline-flex; }
+  .nvidia-brand-logo { width: 17px; height: 17px; display: block; flex: none; fill: currentColor; }
+  .nvidia-brand-name { color: var(--muted); font-size: 8.5px; font-weight: 800; letter-spacing: .75px; line-height: 1; }
+  .nvidia-brand:hover { opacity: 1; }
   .menubar .spacer { flex: 1; }
   .menubar .mi { display: flex; align-items: center; gap: 6px; color: var(--muted); }
   .menubar .led { width: 6px; height: 6px; border-radius: 50%; background: var(--faint); }
@@ -160,7 +186,7 @@
   .menubar .led.net-local { background: var(--accent); animation: breathe 2.6s ease-in-out infinite; }
   .menubar .led.net-off { background: var(--faint); }
   /* connectivity explanation popover */
-  .net-pop { position: fixed; top: 42px; right: 14px; z-index: 80; width: min(330px, 92vw);
+  .net-pop { position: fixed; top: 42px; right: 14px; z-index: 80; width: min(330px, var(--ui-vw-92, 92vw));
     background: var(--card); border: 1px solid var(--line-2); border-radius: 14px;
     box-shadow: 0 22px 54px -18px rgba(0, 0, 0, 0.45); padding: 16px 18px; animation: pop .2s cubic-bezier(.22, 1, .36, 1); }
   .net-pop.hidden { display: none; }
@@ -219,10 +245,19 @@
   @media (max-width: 560px) { .dock-item { width: 44px; height: 44px; font-size: 20px; } }
 
   /* settings sheet */
-  .set { width: min(1180px, 95vw); height: min(760px, 90vh); display: flex;
+  .set { width: min(1180px, calc(var(--ui-vw, 100vw) - 118px)); height: min(760px, calc(var(--ui-vh, 100vh) - 100px)); display: flex;
     background: var(--card-strong); border: 1px solid var(--card-edge); border-radius: 26px;
     box-shadow: var(--shadow); animation: rise 0.3s ease; overflow: hidden; }
   .set-sidebar { width: 200px; flex: none; background: var(--panel-2); border-right: 1px solid var(--line); padding: 14px 12px; overflow-x: hidden; overflow-y: auto; }
+  .set-sidebar, .set-content { scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
+  .set-sidebar::-webkit-scrollbar, .set-content::-webkit-scrollbar { width: 7px; }
+  .set-sidebar::-webkit-scrollbar-thumb, .set-content::-webkit-scrollbar-thumb { border-radius: 999px; background: var(--line-2); }
+  .set-sidebar::-webkit-scrollbar-track, .set-content::-webkit-scrollbar-track { background: transparent; }
+  html[data-ui-magnified="1"] .overlay { padding: 24px; }
+  html[data-ui-magnified="1"] .set { width: min(1180px, calc(var(--ui-vw, 100vw) - 48px)); height: min(760px, calc(var(--ui-vh, 100vh) - 48px)); }
+  html[data-ui-magnified="1"] .set-sidebar { width: 150px; }
+  html[data-ui-magnified="1"] .lp, html[data-ui-magnified="1"] .mm { max-width: calc(var(--ui-vw, 100vw) - 48px); }
+  html[data-ui-magnified="1"] .dock { transform: scale(var(--ui-inverse, .5)); transform-origin: top left; }
   .set-brand { font-weight: 700; font-size: 14px; padding: 6px 10px 8px; }
   .set-nav { display: flex; flex-direction: column; gap: 1px; }
   .nav-group { font-size: 10px; text-transform: lowercase; letter-spacing: 0.6px; color: var(--faint); padding: 14px 10px 5px; }
@@ -343,7 +378,7 @@
 
   /* ---------- model manager ---------- */
   #models { background: rgba(20, 16, 36, 0.30); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
-  .mm { width: min(1280px, 96vw); height: min(92vh, 1040px); display: flex; flex-direction: column;
+  .mm { width: min(1280px, var(--ui-vw-96, 96vw)); height: min(var(--ui-vh-92, 92vh), 1040px); display: flex; flex-direction: column;
     background: var(--card-strong); border: 1px solid var(--card-edge); border-radius: 26px; overflow: hidden;
     box-shadow: var(--shadow); animation: rise 0.32s ease; }
   .mm-body { flex: 1; overflow-y: auto; padding: 20px 32px 34px; }
@@ -841,10 +876,57 @@
   .machine-driver-note .ui-icon { width: 13px; height: 13px; margin-top: 1px; flex: none; }
   .machine-driver-actions { display: flex; justify-content: flex-end; gap: 7px; margin-top: 11px; }
   .machine-driver-actions .btn { min-height: 32px; }
+  .dgx-dashboard-actions { margin-top: 16px; }
+  .machine-driver-actions .btn.dgx-dashboard-launch {
+    min-width: 190px; min-height: 42px; padding: 10px 16px;
+    display: inline-flex; align-items: center; justify-content: center; gap: 9px;
+    border-radius: 11px; font-size: 12.5px; font-weight: 740; line-height: 1;
+    box-shadow: 0 8px 18px -12px color-mix(in srgb, var(--blue) 72%, transparent);
+  }
+  .machine-driver-actions .btn.dgx-dashboard-launch .ui-icon { width: 15px; height: 15px; flex: none; }
+  .machine-driver-actions .btn.dgx-dashboard-launch span { display: block; white-space: nowrap; }
+  .machine-driver-actions .btn.dgx-dashboard-launch:hover { transform: translateY(-1px); box-shadow: 0 11px 22px -12px color-mix(in srgb, var(--blue) 82%, transparent); }
+  .machine-driver-actions .btn.dgx-dashboard-launch:active { transform: translateY(0); }
+  .machine-driver-actions .btn.dgx-dashboard-launch:focus-visible { outline: 2px solid color-mix(in srgb, var(--blue) 68%, white); outline-offset: 2px; }
   .machine-empty { min-height: 194px; padding: 28px 18px; display: grid; place-items: center; text-align: center; border: 1px dashed var(--line-2); border-radius: 13px; color: var(--muted); background: var(--panel-2); }
   .machine-empty .ui-icon { width: 24px; height: 24px; margin-bottom: 9px; color: var(--faint); }
   .machine-empty strong { display: block; color: var(--ink); font-size: 12.5px; }
   .machine-empty span { display: block; margin-top: 4px; font-size: 10.5px; line-height: 1.45; }
+  /* Settings: Display */
+  .display-page { display: flex; flex-direction: column; gap: 14px; }
+  .display-current { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; align-items: center; }
+  .display-current-copy { min-width: 0; }
+  .display-current-title { color: var(--ink); font-size: 15px; font-weight: 780; letter-spacing: -.2px; }
+  .display-current-sub { margin-top: 3px; color: var(--muted); font-size: 10.5px; line-height: 1.45; }
+  .display-resolution-badge {
+    min-width: 118px; padding: 10px 13px; border: 1px solid var(--hair); border-radius: 11px;
+    background: var(--control); color: var(--ink); text-align: center; font-size: 13px; font-weight: 760;
+    font-variant-numeric: tabular-nums;
+  }
+  .display-resolution-badge small { display: block; margin-top: 2px; color: var(--muted); font-size: 8.5px; font-weight: 650; letter-spacing: .4px; text-transform: uppercase; }
+  .zoom-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+  .zoom-option {
+    min-height: 68px; padding: 9px; border: 1px solid var(--hair); border-radius: 11px;
+    background: var(--panel-2); color: var(--ink-2); text-align: center; transition: border-color .15s, background .15s, color .15s;
+  }
+  .zoom-option:hover { border-color: var(--line-2); background: var(--control); }
+  .zoom-option.on { border-color: color-mix(in srgb, var(--blue) 48%, var(--hair)); background: var(--blue-soft); color: var(--blue); }
+  .zoom-option b { display: block; font-size: 12px; font-weight: 760; }
+  .zoom-option small { display: block; margin-top: 4px; color: var(--muted); font-size: 9px; line-height: 1.3; }
+  .display-form { display: grid; grid-template-columns: minmax(0, .75fr) minmax(0, 1fr) auto; gap: 9px; align-items: end; margin-top: 12px; }
+  .display-field label { display: block; margin-bottom: 6px; color: var(--muted); font-size: 9.5px; font-weight: 700; letter-spacing: .35px; text-transform: uppercase; }
+  .display-field select {
+    width: 100%; min-height: 38px; padding: 7px 30px 7px 10px; border: 1px solid var(--line-2);
+    border-radius: 9px; outline: none; background: var(--control); color: var(--ink); font: inherit; font-size: 11.5px;
+  }
+  .display-field select:focus { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-soft); }
+  .display-apply { min-height: 38px; white-space: nowrap; }
+  .display-unavailable { margin-top: 11px; color: var(--muted); font-size: 10.5px; line-height: 1.5; }
+  @media (max-width: 720px) {
+    .zoom-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .display-form { grid-template-columns: 1fr; }
+    .display-apply { width: 100%; }
+  }
   .machine-places { grid-column: 1 / -1; }
   .machine-place-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
   button.machine-place { width: 100%; min-width: 0; padding: 11px; display: flex; align-items: center; gap: 11px; border: 1px solid var(--hair); border-radius: 12px;
@@ -1133,6 +1215,14 @@
   .model-download-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; font-weight: 760; }
   .model-download-meta { color: var(--muted); font-size: 10.5px; font-variant-numeric: tabular-nums; }
   .model-download-percent { min-width: 42px; color: var(--blue); font-size: 12px; font-weight: 800; text-align: right; font-variant-numeric: tabular-nums; }
+  .model-download-actions { display: flex; align-items: center; gap: 9px; }
+  .model-download-cancel {
+    width: 30px; height: 30px; padding: 0; display: grid; place-items: center; border-radius: 9px;
+    border: 1px solid var(--hair); color: var(--muted); background: color-mix(in srgb, var(--card) 82%, transparent);
+  }
+  .model-download-cancel:hover { color: var(--err); border-color: color-mix(in srgb, var(--err) 45%, var(--hair)); background: color-mix(in srgb, var(--err) 8%, var(--card)); }
+  .model-download-cancel:disabled { cursor: wait; opacity: .45; }
+  .model-download-cancel .ui-icon { width: 13px; height: 13px; }
   .model-download-track, .mdl-download-track {
     height: 5px; overflow: hidden; border-radius: 99px; background: var(--panel-2);
   }
@@ -1188,14 +1278,14 @@
     box-shadow: 0 0 0 7px color-mix(in srgb, var(--blue) 13%, transparent), 0 18px 52px -18px color-mix(in srgb, var(--blue) 80%, transparent);
     transition: left .28s cubic-bezier(.22,1,.36,1), top .28s cubic-bezier(.22,1,.36,1), width .28s cubic-bezier(.22,1,.36,1), height .28s cubic-bezier(.22,1,.36,1), opacity .18s; }
   .tour-spot.center { inset: 0; width: 0 !important; height: 0 !important; opacity: 0; border: 0; border-radius: 0; box-shadow: none; }
-  .tour-card { position: fixed; z-index: 101; width: min(390px, calc(100vw - 28px)); padding: 20px;
+  .tour-card { position: fixed; z-index: 101; width: min(390px, calc(var(--ui-vw, 100vw) - 28px)); padding: 20px;
     border: 1px solid var(--card-edge); border-radius: 20px; color: var(--ink); background: var(--card-strong);
     box-shadow: 0 30px 90px -34px rgba(2, 5, 18, .9); pointer-events: auto;
     -webkit-backdrop-filter: blur(24px) saturate(1.35); backdrop-filter: blur(24px) saturate(1.35);
     animation: tour-card-in .26s cubic-bezier(.22,1,.36,1); transition: left .28s cubic-bezier(.22,1,.36,1), top .28s cubic-bezier(.22,1,.36,1);
     will-change: transform, opacity; }
   @keyframes tour-card-in { from { opacity: 0; transform: translateY(8px) scale(.98); } }
-  .tour-card.center { left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(470px, calc(100vw - 28px)); padding: 28px; }
+  .tour-card.center { left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(470px, calc(var(--ui-vw, 100vw) - 28px)); padding: 28px; }
   .tour-card.center .tour-head { justify-content: center; }
   .tour-card.center .tour-copy { text-align: center; }
   .tour-card.center .tour-icon { margin: 0 auto 16px; width: 52px; height: 52px; }
@@ -1264,7 +1354,7 @@
 
   /* ---------- App Launcher (full-screen, two-pane master/detail) ---------- */
   #launcher { background: rgba(20, 16, 36, 0.30); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
-  .lp { width: min(1040px, 96vw); height: min(86vh, 820px); display: flex; flex-direction: column;
+  .lp { width: min(1040px, var(--ui-vw-96, 96vw)); height: min(var(--ui-vh-86, 86vh), 820px); display: flex; flex-direction: column;
     background: var(--card-glass, var(--card)); border: 1px solid var(--line-2); border-radius: 26px; overflow: hidden; animation: rise 0.32s ease;
     box-shadow: var(--shadow); -webkit-backdrop-filter: blur(var(--glass-blur)); backdrop-filter: blur(var(--glass-blur)); }
   .lp-head { display: flex; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--hair); flex: none; }
@@ -1344,7 +1434,7 @@
   .asst-spark { width: 16px; height: 16px; background: #fff; display: block;
     clip-path: polygon(50% 0, 61% 39%, 100% 50%, 61% 61%, 50% 100%, 39% 61%, 0 50%, 39% 39%); animation: spin 9s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
-  .asst { position: fixed; right: 24px; bottom: 24px; z-index: 71; width: min(430px, calc(100vw - 32px)); height: min(650px, calc(100vh - 92px));
+  .asst { position: fixed; right: 24px; bottom: 24px; z-index: 71; width: min(430px, calc(var(--ui-vw, 100vw) - 32px)); height: min(650px, calc(var(--ui-vh, 100vh) - 92px));
     display: flex; flex-direction: column; background: var(--card-strong); border: 1px solid var(--card-edge); border-radius: 22px;
     box-shadow: 0 32px 90px -34px rgba(4, 8, 24, .78); overflow: hidden; transform-origin: bottom right; animation: pop .28s cubic-bezier(.22,1,.36,1); }
   @keyframes pop { from { opacity: 0; transform: translateY(14px) scale(.96); } }
@@ -1354,7 +1444,7 @@
     -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); animation: fade .25s ease; }
   #asst-backdrop.hidden { display: none; }
   .asst.full { right: auto; bottom: auto; inset: 0; margin: auto; z-index: 72;
-    width: min(920px, calc(100vw - 112px)); height: min(88vh, 900px); transform-origin: center; }
+    width: min(920px, calc(var(--ui-vw, 100vw) - 112px)); height: min(var(--ui-vh-90, 90vh), 900px); transform-origin: center; }
   .asst-head { min-height: 66px; display: flex; align-items: center; gap: 12px; padding: 10px 14px 10px 16px; border-bottom: 1px solid var(--hair); flex: none; }
   .asst-brand-mark { width: 38px; height: 38px; flex: none; display: grid; place-items: center; border: 1px solid color-mix(in srgb, var(--blue) 24%, var(--hair)); border-radius: 12px; background: var(--blue-soft); }
   .asst-mark { width: 13px; height: 24px; flex: none; }
@@ -1444,8 +1534,8 @@
   .asst.full .msg { font-size: 13px; }
   .asst.full .asst-in { padding-left: clamp(28px, 7%, 74px); padding-right: clamp(28px, 7%, 74px); }
   @media (max-width: 700px) {
-    .asst { right: 12px; bottom: 12px; width: calc(100vw - 24px); height: min(680px, calc(100vh - 78px)); }
-    .asst.full { width: calc(100vw - 24px); height: calc(100vh - 80px); }
+    .asst { right: 12px; bottom: 12px; width: calc(var(--ui-vw, 100vw) - 24px); height: min(680px, calc(var(--ui-vh, 100vh) - 78px)); }
+    .asst.full { width: calc(var(--ui-vw, 100vw) - 24px); height: calc(var(--ui-vh, 100vh) - 80px); }
     .asst.full .asst-body, .asst.full .asst-in { padding-left: 14px; padding-right: 14px; }
     .asst-compose-meta span:first-child { display: none; }
   }
@@ -1712,9 +1802,37 @@
     border-radius: 9px; color: var(--muted); transition: color .15s, background .15s;
   }
   .gear:hover { color: var(--ink); background: var(--panel-2); transform: none; }
-  .gear.shutdown:hover { color: var(--err); background: color-mix(in srgb, var(--err) 10%, transparent); }
+  .gear.shutdown:hover, .gear.shutdown.open { color: var(--ink); background: var(--panel-2); }
   .gear.shutdown:disabled { opacity: .45; cursor: wait; }
   .net-pop { top: 58px; }
+  .power-pop {
+    position: fixed; top: 58px; right: 18px; z-index: 80; width: min(300px, calc(var(--ui-vw, 100vw) - 28px));
+    padding: 7px; overflow: hidden; border: 1px solid var(--line-2); border-radius: 15px;
+    background: var(--card-strong); box-shadow: 0 24px 60px -22px rgba(0, 0, 0, .58);
+    animation: pop .2s cubic-bezier(.22, 1, .36, 1);
+  }
+  .power-pop.hidden { display: none; }
+  .power-option {
+    width: 100%; min-height: 54px; display: flex; align-items: center; gap: 11px; padding: 8px 10px;
+    border: 0; border-radius: 11px; color: var(--ink); background: transparent; text-align: left;
+    transition: color .15s, background .15s;
+  }
+  .power-option:hover, .power-option:focus-visible { outline: none; background: var(--panel-2); }
+  .power-option + .power-option { margin-top: 2px; }
+  .power-option-icon {
+    width: 34px; height: 34px; flex: none; display: grid; place-items: center; border-radius: 10px;
+    color: var(--blue); background: var(--blue-soft);
+  }
+  .power-option-icon .ui-icon { width: 16px; height: 16px; }
+  .power-option-copy { min-width: 0; display: grid; gap: 2px; }
+  .power-option-copy b { font-size: 12.5px; font-weight: 760; }
+  .power-option-copy small { color: var(--muted); font-size: 10.5px; line-height: 1.35; }
+  .power-option.danger:hover, .power-option.danger:focus-visible {
+    color: var(--err); background: color-mix(in srgb, var(--err) 9%, transparent);
+  }
+  .power-option.danger .power-option-icon {
+    color: var(--err); background: color-mix(in srgb, var(--err) 10%, transparent);
+  }
 
   /* Persistent tool rail: it never covers dashboard content. */
   .dock {
@@ -1852,7 +1970,7 @@
     border-radius: 20px; border: 1px solid var(--card-edge); background: var(--card-strong);
     box-shadow: 0 32px 90px -38px rgba(4, 8, 24, .72);
   }
-  .lp, .mm { max-width: calc(100vw - 130px); }
+  .lp, .mm { max-width: calc(var(--ui-vw, 100vw) - 130px); }
   .set-main { max-width: none; margin: 0; padding: 0; }
   .lp-head, .set-topbar { min-height: 58px; padding: 0 20px; border-bottom-color: var(--hair); }
   .lp-ttl, .set-page-title { font-size: 14px; font-weight: 750; letter-spacing: -.15px; }
@@ -2032,6 +2150,80 @@
   .md-adv-tog > .ui-icon:first-child { width: 15px; height: 15px; }
   .md-adv-tog .md-adv-chev { width: 14px; height: 14px; }
   .md-adv-body { margin: 0; padding: 0 14px 14px; }
+
+  /* Hugging Face discovery is native to Model Manager: no browser prompt or
+     external window, and imported repositories use the normal model workflow. */
+  .mm-discovery { min-width: 0; display: flex; align-items: center; gap: 9px; }
+  .mm-discovery .mm-search { flex: 1; }
+  .mm-hf-button {
+    min-height: 40px; padding: 8px 12px; display: inline-flex; align-items: center; gap: 8px;
+    border: 1px solid color-mix(in srgb, #ffb000 36%, var(--hair)); border-radius: 10px;
+    background: color-mix(in srgb, #ffcf45 13%, var(--card-strong)); color: var(--ink);
+    font: inherit; font-size: 10.5px; font-weight: 720; white-space: nowrap; cursor: pointer;
+  }
+  .mm-hf-button:hover { border-color: #e4a000; background: color-mix(in srgb, #ffcf45 22%, var(--card-strong)); }
+  .hf-mark {
+    width: 22px; height: 22px; display: inline-grid; place-items: center; border-radius: 7px;
+    background: #ffd95a; color: #493500; font-size: 9px; font-weight: 850; letter-spacing: -.2px;
+  }
+  .hf-page { width: 100%; max-width: none; margin: 0; }
+  .hf-hero {
+    margin-bottom: 16px; padding: 20px; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 15px;
+    border: 1px solid color-mix(in srgb, #ffbd1a 28%, var(--hair)); border-radius: 16px;
+    background: linear-gradient(135deg, color-mix(in srgb, #ffd95a 11%, var(--card)), var(--card));
+  }
+  .hf-hero-mark { width: 48px; height: 48px; display: grid; place-items: center; border-radius: 14px; background: #ffd95a; color: #493500; font-size: 14px; font-weight: 850; }
+  .hf-hero h2 { margin: 1px 0 5px; color: var(--ink); font-size: 18px; letter-spacing: -.25px; }
+  .hf-hero p { margin: 0; max-width: 720px; color: var(--muted); font-size: 11.5px; line-height: 1.55; }
+  .hf-account {
+    margin: 0 0 12px; padding: 12px 13px; min-height: 58px; display: flex; align-items: center; gap: 11px;
+    border: 1px solid var(--hair); border-radius: 13px; background: color-mix(in srgb, var(--panel-2) 78%, transparent);
+  }
+  .hf-account-icon {
+    width: 34px; height: 34px; flex: none; display: grid; place-items: center; border-radius: 10px;
+    color: #493500; background: #ffd95a; font-size: 11px; font-weight: 850; text-transform: uppercase;
+  }
+  .hf-account-copy { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
+  .hf-account-title { color: var(--ink); font-size: 11.5px; font-weight: 750; }
+  .hf-account-sub { color: var(--muted); font-size: 10px; line-height: 1.35; }
+  .hf-account-actions { display: inline-flex; align-items: center; gap: 7px; }
+  .hf-account-actions .btn { min-height: 34px; padding: 7px 11px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border-radius: 9px; font-size: 10.5px; }
+  .hf-account-actions .btn .ui-icon { width: 13px; height: 13px; }
+  .hf-connected {
+    padding: 5px 8px; display: inline-flex; align-items: center; gap: 6px; border-radius: 999px;
+    color: #2faa5b; background: color-mix(in srgb, #2faa5b 10%, var(--card)); font-size: 9.5px; font-weight: 750;
+  }
+  .hf-connected::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .hf-form { margin-bottom: 10px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 9px; align-items: stretch; }
+  .hf-form .mm-search input { min-height: 44px; }
+  .hf-form .btn {
+    min-width: 108px; min-height: 44px; padding: 9px 15px; display: inline-flex; align-items: center;
+    justify-content: center; gap: 7px; border-radius: 10px; font-size: 11.5px; font-weight: 720; line-height: 1;
+  }
+  .hf-form .btn .ui-icon { width: 15px; height: 15px; flex: none; }
+  .hf-guidance { margin: 0 2px 18px; color: var(--muted); font-size: 10.5px; }
+  .hf-results { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .hf-result {
+    min-width: 0; min-height: 116px; padding: 14px; display: flex; flex-direction: column; gap: 9px;
+    border: 1px solid var(--hair); border-radius: 13px; background: var(--card); color: var(--ink);
+    font: inherit; text-align: left; cursor: pointer; transition: border-color .15s, transform .15s, background .15s;
+  }
+  .hf-result:hover { transform: translateY(-1px); border-color: color-mix(in srgb, #e4a000 48%, var(--line-2)); background: var(--card-strong); }
+  .hf-result-top { min-width: 0; display: flex; align-items: center; gap: 10px; }
+  .hf-result-copy { min-width: 0; flex: 1; }
+  .hf-result-name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; font-weight: 760; }
+  .hf-result-id { display: block; margin-top: 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); font-size: 10px; }
+  .hf-result-stats { margin-top: auto; display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 9.5px; }
+  .hf-result-action { margin-left: auto; color: var(--blue); font-weight: 700; }
+  .hf-empty { padding: 28px 18px; border: 1px dashed var(--line-2); border-radius: 13px; color: var(--muted); text-align: center; font-size: 11.5px; }
+  .hf-source-note { display: flex; align-items: flex-start; gap: 10px; }
+  .hf-source-note .hf-mark { flex: none; }
+  @media (max-width: 700px) {
+    .hf-account { align-items: flex-start; flex-wrap: wrap; }
+    .hf-account-actions { width: 100%; padding-left: 45px; }
+    .hf-form { grid-template-columns: 1fr; }
+    .hf-form .btn { width: 100%; }
+  }
 
   /* Model Manager v2: less chrome, faster scanning, clearer hardware fit. */
   body:has(#models:not(.hidden)) { overflow: hidden; }
@@ -2216,6 +2408,9 @@
     .mm-tabs { width: 100%; }
     .mm-tab { flex: 1; justify-content: center; }
     .mm-bar { grid-template-columns: 1fr; gap: 12px; padding: 12px; }
+    .mm-discovery { align-items: stretch; flex-direction: column; }
+    .mm-hf-button { justify-content: center; }
+    .hf-results { grid-template-columns: 1fr; }
     .mm-filter-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; }
     .mm-filter-label { display: none; }
     .mm-filters { grid-column: 1 / -1; grid-row: 2; }
@@ -2296,6 +2491,7 @@
     <symbol id="ui-restart" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.34 5.66"/><path d="M20 4v7h-7"/></symbol>
     <symbol id="ui-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></symbol>
     <symbol id="ui-machine" viewBox="0 0 24 24"><path d="M12 20v2m0-20v2m5 16v2m0-20v2M2 12h2m-2 5h2M2 7h2m16 5h2m-2 5h2m-2-10h2M7 20v2M7 2v2"/><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="8" y="8" width="8" height="8" rx="1"/></symbol>
+    <symbol id="ui-display" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8m-4-4v4"/></symbol>
     <symbol id="ui-appearance" viewBox="0 0 24 24"><path d="M12 22a1 1 0 0 1 0-20 10 9 0 0 1 10 9 5 5 0 0 1-5 5h-2.25a1.75 1.75 0 0 0-1.4 2.8l.3.4a1.75 1.75 0 0 1-1.4 2.8z"/><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/></symbol>
     <symbol id="ui-general" viewBox="0 0 24 24"><path d="M10 5H3m9 14H3M14 3v4m2 10v4m5-9h-9m9 7h-5m5-14h-7M8 10v4m0-2H3"/></symbol>
     <symbol id="ui-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></symbol>
@@ -2319,14 +2515,30 @@
 </svg>
 
 <div class="menubar">
-  <div class="brand"><svg class="mark cl-mark" aria-hidden="true"><use href="#cl-star"/></svg> cloudless</div>
+  <div class="brand"><svg class="mark cl-mark" aria-hidden="true"><use href="#cl-star"/></svg> cloudless
+    <span class="nvidia-brand" title="Powered by NVIDIA DGX Spark" aria-label="NVIDIA DGX Spark">
+      <!-- NVIDIA brand icon from Simple Icons (CC0-1.0); NVIDIA is a trademark of NVIDIA Corporation. -->
+      <svg class="nvidia-brand-logo" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.948 8.798v-1.43a6.7 6.7 0 0 1 .424-.018c3.922-.124 6.493 3.374 6.493 3.374s-2.774 3.851-5.75 3.851c-.398 0-.787-.062-1.158-.185v-4.346c1.528.185 1.837.857 2.747 2.385l2.04-1.714s-1.492-1.952-4-1.952a6.016 6.016 0 0 0-.796.035m0-4.735v2.138l.424-.027c5.45-.185 9.01 4.47 9.01 4.47s-4.08 4.964-8.33 4.964c-.37 0-.733-.035-1.095-.097v1.325c.3.035.61.062.91.062 3.957 0 6.82-2.023 9.593-4.408.459.371 2.34 1.263 2.73 1.652-2.633 2.208-8.772 3.984-12.253 3.984-.335 0-.653-.018-.971-.053v1.864H24V4.063zm0 10.326v1.131c-3.657-.654-4.673-4.46-4.673-4.46s1.758-1.944 4.673-2.262v1.237H8.94c-1.528-.186-2.73 1.245-2.73 1.245s.68 2.412 2.739 3.11M2.456 10.9s2.164-3.197 6.5-3.533V6.201C4.153 6.59 0 10.653 0 10.653s2.35 6.802 8.948 7.42v-1.237c-4.84-.6-6.492-5.936-6.492-5.936z"/></svg>
+      <span class="nvidia-brand-name">NVIDIA</span>
+    </span>
+  </div>
   <div class="spacer"></div>
   <div class="mi"><span class="led" id="led-sys"></span> <span id="mi-sys">System</span></div>
   <div class="mi mi-net" id="mi-net" title="Network status"><span class="led" id="led-net"></span> <span id="net-label">Network</span></div>
   <div id="clock">--:--</div>
-  <button class="gear shutdown" id="shutdown" title="Shut down CloudlessOS" aria-label="Shut down CloudlessOS"><svg class="ui-icon" aria-hidden="true"><use href="#ui-power"/></svg></button>
+  <button class="gear shutdown" id="shutdown" type="button" title="Power options" aria-label="Power options" aria-haspopup="menu" aria-expanded="false"><svg class="ui-icon" aria-hidden="true"><use href="#ui-power"/></svg></button>
 </div>
 <div id="net-pop" class="net-pop hidden"></div>
+<div id="power-pop" class="power-pop hidden" role="menu" aria-label="Power options">
+  <button class="power-option" type="button" role="menuitem" data-power-action="reboot">
+    <span class="power-option-icon"><svg class="ui-icon" aria-hidden="true"><use href="#ui-restart"/></svg></span>
+    <span class="power-option-copy"><b>Restart</b><small>Restart CloudlessOS and all running services</small></span>
+  </button>
+  <button class="power-option danger" type="button" role="menuitem" data-power-action="shutdown">
+    <span class="power-option-icon"><svg class="ui-icon" aria-hidden="true"><use href="#ui-power"/></svg></span>
+    <span class="power-option-copy"><b>Shut down</b><small>Stop all apps and safely power off this machine</small></span>
+  </button>
+</div>
 
 <main>
   <div class="hero">
@@ -2629,6 +2841,72 @@ function setThemePreference(id) {
   applyTheme(new Date().getHours(), true);
 }
 
+// UI size follows the available screen by default. Manual choices are local to
+// the display/browser so a wall-mounted 4K screen and a small service monitor
+// can use the same CloudlessOS installation comfortably.
+const UI_ZOOM_KEY = 'cloudless.uiZoom';
+const UI_ZOOM_OPTIONS = [
+  { id: 'auto', label: 'Automatic', detail: 'Fits this screen' },
+  { id: '.8', label: '80%', detail: 'Compact' },
+  { id: '.9', label: '90%', detail: 'Small' },
+  { id: '1', label: '100%', detail: 'Standard' },
+  { id: '1.1', label: '110%', detail: 'Comfortable' },
+  { id: '1.25', label: '125%', detail: 'Large' },
+  { id: '1.5', label: '150%', detail: 'Largest' },
+  { id: '1.75', label: '175%', detail: 'Extra large' },
+  { id: '2', label: '200%', detail: 'Accessibility' },
+  { id: '2.5', label: '250%', detail: 'High visibility' },
+  { id: '3', label: '300%', detail: 'Maximum' },
+];
+let uiZoomPreference = (() => {
+  try {
+    const saved = localStorage.getItem(UI_ZOOM_KEY) || 'auto';
+    return UI_ZOOM_OPTIONS.some(option => option.id === saved) ? saved : 'auto';
+  } catch { return 'auto'; }
+})();
+function automaticUIZoom() {
+  const fit = Math.min(innerWidth / 1920, innerHeight / 1080);
+  return fit >= 1.75 ? 1.35 : fit >= 1.3 ? 1.18 : fit >= .92 ? 1 : fit >= .72 ? .9 : .8;
+}
+function applyUIZoom() {
+  const scale = uiZoomPreference === 'auto' ? automaticUIZoom() : Number(uiZoomPreference);
+  document.documentElement.dataset.uiZoomPreference = uiZoomPreference;
+  document.documentElement.dataset.uiScale = String(scale);
+  document.documentElement.dataset.uiMagnified = scale >= 2 ? '1' : '0';
+  document.documentElement.style.setProperty('--ui-vw', `${innerWidth / scale}px`);
+  document.documentElement.style.setProperty('--ui-vh', `${innerHeight / scale}px`);
+  document.documentElement.style.setProperty('--ui-inverse', String(1 / scale));
+  document.documentElement.style.setProperty('--ui-vw-92', `${innerWidth / scale * .92}px`);
+  document.documentElement.style.setProperty('--ui-vw-95', `${innerWidth / scale * .95}px`);
+  document.documentElement.style.setProperty('--ui-vw-96', `${innerWidth / scale * .96}px`);
+  document.documentElement.style.setProperty('--ui-vh-86', `${innerHeight / scale * .86}px`);
+  document.documentElement.style.setProperty('--ui-vh-90', `${innerHeight / scale * .9}px`);
+  document.documentElement.style.setProperty('--ui-vh-92', `${innerHeight / scale * .92}px`);
+  document.documentElement.style.zoom = String(scale);
+  if (document.body) {
+    document.body.style.width = `${innerWidth / scale}px`;
+    document.body.style.minHeight = `${innerHeight / scale}px`;
+  }
+  return scale;
+}
+function setUIZoomPreference(id) {
+  if (!UI_ZOOM_OPTIONS.some(option => option.id === id)) return;
+  uiZoomPreference = id;
+  try { localStorage.setItem(UI_ZOOM_KEY, id); } catch {}
+  applyUIZoom();
+}
+let uiZoomResizeTimer = 0;
+applyUIZoom();
+addEventListener('resize', () => {
+  clearTimeout(uiZoomResizeTimer);
+  uiZoomResizeTimer = setTimeout(() => {
+    if (uiZoomPreference !== 'auto') return;
+    const before = document.documentElement.dataset.uiScale;
+    const after = String(applyUIZoom());
+    if (before !== after && settingsOpen() && setPage === 'display') renderDisplayPage(document.getElementById('set-content'));
+  }, 120);
+});
+
 /* ---- status + gpu ---- */
 async function refreshStatus() {
   try { const h = await api('/api/health');
@@ -2708,10 +2986,28 @@ function updateGPUValues(gpus, calc) {
     set('mem', c.mem); set('util', g.utilPct + '%'); set('temp', g.tempC + '°C'); set('pw', c.power);
   });
 }
-/* ---- CPU + RAM (live) ---- */
+/* ---- host capacity (live) ---- */
+function fmtCapacity(bytes) {
+  const value = Math.max(0, Number(bytes) || 0);
+  if (!value) return 'Unavailable';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const power = Math.min(units.length - 1, Math.floor(Math.log(value) / Math.log(1024)));
+  const scaled = value / Math.pow(1024, power);
+  return `${scaled.toFixed(power >= 3 && scaled < 100 ? 1 : 0)} ${units[power]}`;
+}
 async function renderSystem() {
   const body = document.getElementById('sys-body'); if (!body) return;
   let d; try { d = await api('/api/sysload'); } catch { return; }
+  if (d.platform === 'dgx-spark') {
+    const total = Math.max(0, Number(d.storageTotalBytes) || 0);
+    const available = Math.max(0, Number(d.storageAvailableBytes) || 0);
+    const availablePct = total ? Math.max(0, Math.min(100, Math.round(available / total * 100))) : 0;
+    body.innerHTML = `<div class="sys-sec">
+      <div class="gpu-name">System storage<span class="idx">${fmtCapacity(total)} total</span></div>
+      <div class="stat"><div class="stat-row"><span>available</span><b>${fmtCapacity(available)} free</b></div><div class="track"><i style="width:${availablePct}%"></i></div></div>
+    </div>`;
+    return;
+  }
   const ramPct = d.memTotalMB ? Math.round(d.memUsedMB / d.memTotalMB * 100) : 0;
   const cpu = (d.cpuModel || 'CPU').replace(/\((R|TM)\)/g, '').replace(/\bCPU\b|\bProcessor\b|\d+-Core/gi, '').replace(/\s+/g, ' ').trim() || 'CPU';
   body.innerHTML = `<div class="sys-sec">
@@ -3071,17 +3367,17 @@ function toast(msg, isErr) {
 }
 
 /* ---- onboarding ---- */
-const FIRST_LAUNCH_INTRO_KEY = 'cloudless.firstLaunchIntro.v1';
+const LAST_BOOT_INTRO_KEY = 'cloudless.lastBootIntro.v1';
 let firstLaunchIntroTimer = 0;
-function showFirstLaunchIntro(next, force = false) {
+function showStartupIntro(next, bootID = '', force = false) {
   const intro = document.getElementById('boot-intro');
   const frame = document.getElementById('boot-intro-frame');
   const skip = document.getElementById('boot-intro-skip');
   const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  let seen = false;
-  try { seen = localStorage.getItem(FIRST_LAUNCH_INTRO_KEY) === '1'; } catch {}
-  if (!intro || !frame || reduce || (seen && !force)) { next(); return; }
-  try { localStorage.setItem(FIRST_LAUNCH_INTRO_KEY, '1'); } catch {}
+  let playedThisBoot = false;
+  try { playedThisBoot = !!bootID && localStorage.getItem(LAST_BOOT_INTRO_KEY) === bootID; } catch {}
+  if (!intro || !frame || reduce || (playedThisBoot && !force)) { next(); return; }
+  if (bootID) try { localStorage.setItem(LAST_BOOT_INTRO_KEY, bootID); } catch {}
   let finished = false;
   const finish = () => {
     if (finished) return;
@@ -3139,7 +3435,7 @@ const TOUR_STEPS = [
     desc: 'Switch between live activity, historical usage, power, inference engines, and API access. API-key metrics help identify exactly which client is consuming the model.',
     tip: 'Engine selection and API access are also mirrored in Settings without duplicating their code.' },
   { target: '.cards .card:first-child', icon: 'machine', path: 'Home · Hardware', title: 'Know what this machine can handle',
-    desc: 'The Hardware card keeps GPU memory, utilization, temperature, power, CPU, and system memory visible. It also shows which model is currently active.',
+    desc: 'The Hardware card keeps GPU memory, utilization, temperature, power, and host capacity visible. On DGX Spark, unified memory is shown once with the GPU and the host section shows available storage.',
     tip: 'Open Machine in Settings for the complete system overview.' },
   { target: '.cards .card:last-child', icon: 'apps', path: 'Home · Places', title: 'Your files stay easy to find',
     desc: 'Models, generated outputs, projects, and downloads each have a dedicated folder. Open any Place directly without leaving the CloudlessOS experience.',
@@ -3341,37 +3637,67 @@ async function renderSettings() {
   const hermes = catalog.find(a => a.id === 'hermes');
   const apps = catalog.filter(a => a.id !== 'hermes' && !a.service && installed.has(a.id));
   const configurableApps = hermes ? [hermes, ...apps] : apps;
+  const dgxSpark = hasCapability('dgx-appliance');
   if (setPage.startsWith('app:') && !configurableApps.some(a => 'app:' + a.id === setPage)) setPage = 'hardware';
+  if (setPage === 'dgx-dashboard' && !dgxSpark) setPage = 'hardware';
 
   const groups = [
     { label: 'you', items: [{ id: 'profile', icon: 'user', label: 'Profile' }] },
     { label: 'cloudless', items: [
       { id: 'hardware', icon: 'machine', label: 'Machine' },
+      ...(dgxSpark ? [{ id: 'dgx-dashboard', icon: 'metrics', label: 'DGX Dashboard' }] : []),
       { id: 'engine', icon: 'rocket', label: 'Engine' },
       { id: 'api', icon: 'key', label: 'API access' },
       ...(hermes ? [{ id: 'app:hermes', glyph: glyph('hermes'), label: hermes.name }] : []),
     ] },
     { label: 'apps', items: apps.map(a => ({ id: 'app:' + a.id, glyph: glyph(a.id), label: a.name })) },
-    { label: 'system', items: [{ id: 'appearance', icon: 'appearance', label: 'Appearance' }, { id: 'general', icon: 'general', label: 'General' }] },
+    { label: 'system', items: [{ id: 'display', icon: 'display', label: 'Display' }, { id: 'appearance', icon: 'appearance', label: 'Appearance' }, { id: 'general', icon: 'general', label: 'General' }] },
   ];
   document.getElementById('set-nav').innerHTML = groups.filter(g => g.items.length).map(g =>
     `<div class="nav-group">${g.label}</div>` + g.items.map(it =>
       `<div class="nav-item ${it.id === setPage ? 'active' : ''}" data-page="${it.id}"><span class="nav-ic">${it.icon ? uiIcon(it.icon) : it.glyph}</span>${it.label}</div>`).join('')).join('');
   document.querySelectorAll('#set-nav .nav-item').forEach(n => n.onclick = () => { setPage = n.dataset.page; renderSettings(); });
 
-  let title = { profile: 'Profile', hardware: 'Machine', engine: 'Engine', api: 'API access', appearance: 'Appearance', general: 'General' }[setPage] || '';
+  let title = { profile: 'Profile', hardware: 'Machine', 'dgx-dashboard': 'DGX Dashboard', engine: 'Engine', api: 'API access', display: 'Display', appearance: 'Appearance', general: 'General' }[setPage] || '';
   if (setPage.startsWith('app:')) { const a = configurableApps.find(x => 'app:' + x.id === setPage); title = a ? a.name : ''; }
   document.getElementById('set-page-title').textContent = title;
 
   const c = document.getElementById('set-content');
   if (setPage === 'profile') renderProfilePage(c);
   else if (setPage === 'hardware') renderHardwarePage(c);
+  else if (setPage === 'dgx-dashboard') renderDGXDashboardPage(c);
   else if (setPage === 'engine') renderEnginePage(c);
   else if (setPage === 'api') renderApiPage(c);
+  else if (setPage === 'display') renderDisplayPage(c);
   else if (setPage === 'appearance') renderAppearancePage(c);
   else if (setPage === 'general') renderGeneralPage(c);
   else if (setPage.startsWith('app:')) renderAppPage(c, setPage.slice(4));
   else renderHardwarePage(c);
+}
+
+function renderDGXDashboardPage(c) {
+  c.innerHTML = `<div class="machine-page">
+    <div class="inf-page-hero">
+      <span class="inf-page-icon">${uiIcon('metrics')}</span>
+      <div class="inf-page-copy">
+        <div class="inf-page-eyebrow">NVIDIA DGX Spark</div>
+        <div class="inf-page-title">DGX Dashboard</div>
+        <div class="inf-page-desc">Monitor the appliance, install NVIDIA-validated system and firmware updates, change DGX settings, and open the integrated JupyterLab.</div>
+      </div>
+      <span class="inf-state-pill ready">Available</span>
+    </div>
+    <section class="machine-card">
+      <div class="machine-card-head"><div><div class="machine-card-title">Manage this DGX Spark</div><div class="machine-card-desc">CloudlessOS keeps NVIDIA’s vendor dashboard intact as the authoritative place for DGX OS, driver, and firmware maintenance.</div></div></div>
+      <div class="machine-facts">
+        <div class="machine-fact"><div class="machine-fact-label">Update authority</div><div class="machine-fact-value">NVIDIA DGX Dashboard</div></div>
+        <div class="machine-fact"><div class="machine-fact-label">Access</div><div class="machine-fact-value">Local to this DGX Spark</div></div>
+      </div>
+      <div class="machine-driver-note">${uiIcon('alert')}<span>Save active work before applying system or firmware updates. NVIDIA updates can restart services or require a full reboot.</span></div>
+      <div class="machine-driver-actions dgx-dashboard-actions"><button class="btn primary dgx-dashboard-launch" id="open-dgx-dashboard">${uiIcon('arrow-right')}<span>Open DGX Dashboard</span></button></div>
+    </section>
+  </div>`;
+  document.getElementById('open-dgx-dashboard').onclick = () =>
+    openAppSurface('DGX Dashboard', 'http://127.0.0.1:11000/', '◈');
 }
 // Country options for the profile region override (Auto-detect + a focused list).
 const REGION_OPTS = [['', 'Auto-detect'], ['FR', 'France'], ['BE', 'Belgium'], ['CH', 'Switzerland'], ['CA', 'Canada'],
@@ -3452,6 +3778,102 @@ function closeKeyDialog() {
   document.getElementById('key-dialog-content').innerHTML = '';
   if (keyDialogReturnFocus && document.contains(keyDialogReturnFocus)) keyDialogReturnFocus.focus();
   keyDialogReturnFocus = null;
+}
+function openPowerDialog(action) {
+  const restarting = action === 'reboot';
+  keyDialogBusy = false;
+  keyDialogReturnFocus = document.getElementById('shutdown');
+  const layer = document.getElementById('key-dialog-layer');
+  const content = document.getElementById('key-dialog-content');
+  const verb = restarting ? 'Restart' : 'Shut down';
+  const endpoint = restarting ? '/api/system/reboot' : '/api/system/shutdown';
+  const actionHeader = restarting ? 'reboot' : 'shutdown';
+  content.innerHTML = `<div class="key-dialog-head">
+      <span class="key-dialog-icon${restarting ? '' : ' danger'}">${uiIcon(restarting ? 'restart' : 'power')}</span>
+      <div class="key-dialog-heading"><div class="key-dialog-title" id="key-dialog-title">${verb} CloudlessOS?</div><div class="key-dialog-sub">${restarting ? 'The system will close this session and start again.' : 'The machine will safely power off.'}</div></div>
+      <button class="key-dialog-close" id="power-dialog-close" type="button" aria-label="Close power dialog">${uiIcon('close')}</button>
+    </div>
+    <div class="key-dialog-body">
+      <div class="uninstall-summary"><b>All running apps and models will stop.</b><br>${uiIcon('check')}${restarting ? 'CloudlessOS will be available again after the system starts.' : 'Your installed apps, models, and settings will be kept.'}</div>
+      <div class="key-dialog-error" id="power-dialog-error" role="alert"></div>
+      <div class="key-dialog-actions">
+        <button class="btn" id="power-dialog-cancel" type="button">Cancel</button>
+        <button class="btn ${restarting ? 'primary' : 'danger-solid'}" id="power-dialog-confirm" type="button">${uiIcon(restarting ? 'restart' : 'power')}<span>${verb}</span></button>
+      </div>
+    </div>`;
+  layer.classList.remove('hidden');
+  const close = document.getElementById('power-dialog-close');
+  const cancel = document.getElementById('power-dialog-cancel');
+  const confirmButton = document.getElementById('power-dialog-confirm');
+  const error = document.getElementById('power-dialog-error');
+  close.onclick = closeKeyDialog;
+  cancel.onclick = closeKeyDialog;
+  confirmButton.onclick = async () => {
+    keyDialogBusy = true;
+    close.disabled = true; cancel.disabled = true; confirmButton.disabled = true;
+    confirmButton.innerHTML = `<span class="key-dialog-spinner" aria-hidden="true"></span><span>${restarting ? 'Restarting…' : 'Shutting down…'}</span>`;
+    try {
+      await api(endpoint, { method: 'POST', headers: { 'X-Cloudless-Action': actionHeader } });
+      content.querySelector('.key-dialog-body').innerHTML = `<div class="key-dialog-help">CloudlessOS is ${restarting ? 'restarting' : 'shutting down'}. ${restarting ? 'This screen will reconnect when the system is ready.' : 'It is safe to turn off or disconnect the machine once it has powered down.'}</div>`;
+    } catch (err) {
+      keyDialogBusy = false;
+      close.disabled = false; cancel.disabled = false; confirmButton.disabled = false;
+      error.textContent = err.message || `Could not ${restarting ? 'restart' : 'shut down'} CloudlessOS.`;
+      confirmButton.innerHTML = `${uiIcon(restarting ? 'restart' : 'power')}<span>${verb}</span>`;
+    }
+  };
+  confirmButton.focus();
+}
+function openDisplayResolutionDialog(output, width, height) {
+  keyDialogBusy = false;
+  keyDialogReturnFocus = document.getElementById('display-apply');
+  const layer = document.getElementById('key-dialog-layer');
+  const content = document.getElementById('key-dialog-content');
+  content.innerHTML = `<div class="key-dialog-head">
+      <span class="key-dialog-icon">${uiIcon('display')}</span>
+      <div class="key-dialog-heading"><div class="key-dialog-title" id="key-dialog-title">Change screen resolution?</div><div class="key-dialog-sub">${escapeHtml(output)} will switch to ${width} × ${height}.</div></div>
+      <button class="key-dialog-close" id="display-dialog-close" type="button" aria-label="Close display dialog">${uiIcon('close')}</button>
+    </div>
+    <div class="key-dialog-body">
+      <div class="uninstall-summary"><b>The screen may go dark briefly while the display changes.</b><br>${uiIcon('check')}CloudlessOS will restore this resolution when its desktop starts.</div>
+      <div class="key-dialog-error" id="display-dialog-error" role="alert"></div>
+      <div class="key-dialog-actions">
+        <button class="btn" id="display-dialog-cancel" type="button">Cancel</button>
+        <button class="btn primary" id="display-dialog-confirm" type="button">${uiIcon('display')}<span>Apply ${width} × ${height}</span></button>
+      </div>
+    </div>`;
+  layer.classList.remove('hidden');
+  const close = document.getElementById('display-dialog-close');
+  const cancel = document.getElementById('display-dialog-cancel');
+  const confirmButton = document.getElementById('display-dialog-confirm');
+  const error = document.getElementById('display-dialog-error');
+  close.onclick = closeKeyDialog;
+  cancel.onclick = closeKeyDialog;
+  confirmButton.onclick = async () => {
+    keyDialogBusy = true;
+    close.disabled = true; cancel.disabled = true; confirmButton.disabled = true;
+    confirmButton.innerHTML = '<span class="key-dialog-spinner" aria-hidden="true"></span><span>Applying…</span>';
+    try {
+      await api('/api/system/display', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Cloudless-Action': 'display' },
+        body: JSON.stringify({ output, width, height }),
+      });
+      keyDialogBusy = false;
+      closeKeyDialog();
+      toast(`Resolution changed to ${width} × ${height}`);
+      setTimeout(() => {
+        applyUIZoom();
+        if (settingsOpen() && setPage === 'display') renderDisplayPage(document.getElementById('set-content'));
+      }, 500);
+    } catch (err) {
+      keyDialogBusy = false;
+      close.disabled = false; cancel.disabled = false; confirmButton.disabled = false;
+      error.textContent = err.message || 'CloudlessOS could not change the screen resolution.';
+      confirmButton.innerHTML = `${uiIcon('display')}<span>Try again</span>`;
+    }
+  };
+  confirmButton.focus();
 }
 function showCreatedAPIKey(result) {
   keyDialogBusy = false;
@@ -3707,8 +4129,11 @@ async function renderEnginePage(c) {
 }
 
 const modelDownloads = new Map();
+const diffusionDownloads = new Map();
 function modelDownloadName(id) {
-  return (mmCache['lm:' + id] && mmCache['lm:' + id].name) || String(id || '').split('/').pop() || 'Model';
+  return (mmCache['lm:' + id] && mmCache['lm:' + id].name)
+    || (mmCache['diff:' + id] && mmCache['diff:' + id].name)
+    || String(id || '').split('/').pop() || 'Model';
 }
 function modelDownloadPercent(d) {
   if (!d || !d.bytesTotal) return null;
@@ -3736,7 +4161,7 @@ function modelDownloadProgressHTML(d, compact = false) {
 }
 function renderHomeModelDownloads() {
   const c = document.getElementById('model-downloads-home'); if (!c) return;
-  const active = [...modelDownloads.values()].filter(d => !d.done && !d.error);
+  const active = [...modelDownloads.values(), ...diffusionDownloads.values()].filter(d => !d.done && !d.error);
   c.classList.toggle('hidden', active.length === 0);
   c.innerHTML = active.map(d => {
     const pct = modelDownloadPercent(d);
@@ -3747,12 +4172,18 @@ function renderHomeModelDownloads() {
         <span class="model-download-meta">${escapeHtml(modelDownloadMeta(d))}</span>
         ${modelDownloadProgressHTML(d)}
       </div>
-      <span class="model-download-percent">${pct == null ? 'Active' : pct + '%'}</span>
+      <span class="model-download-actions">
+        <span class="model-download-percent">${pct == null ? 'Active' : pct + '%'}</span>
+        <button class="model-download-cancel" type="button" data-cancel-model-download="${escapeAttr(d.jobId || '')}" data-model-id="${escapeAttr(d.modelId)}" data-model-type="${escapeAttr(d.modelType || 'lm')}" title="Cancel download" aria-label="Cancel ${escapeAttr(modelDownloadName(d.modelId))} download" ${d.jobId ? '' : 'disabled'}>${uiIcon('close')}</button>
+      </span>
     </article>`;
   }).join('');
+  c.querySelectorAll('[data-cancel-model-download]').forEach(button => {
+    button.onclick = () => cancelModelDownload(button.dataset.cancelModelDownload, button.dataset.modelId, button, button.dataset.modelType);
+  });
 }
 function applyModelDownloads(downloads, repaintManager = true) {
-  const next = new Map((downloads || []).filter(d => !d.done).map(d => [d.modelId, d]));
+  const next = new Map((downloads || []).filter(d => !d.done).map(d => [d.modelId, { ...d, modelType: 'lm' }]));
   const completed = [...modelDownloads.keys()].some(id => !next.has(id));
   const before = JSON.stringify([...modelDownloads.entries()]);
   const after = JSON.stringify([...next.entries()]);
@@ -3768,10 +4199,28 @@ function applyModelDownloads(downloads, repaintManager = true) {
     else if (mmTab === 'language' && mmLM) paintLanguageModels(document.getElementById('mm-tab-body'), mmLM);
   }
 }
+function applyDiffusionDownloads(downloads, repaintManager = true) {
+  const next = new Map((downloads || []).filter(d => !d.done).map(d => [d.modelId, { ...d, modelType: 'diff' }]));
+  const completed = [...diffusionDownloads.keys()].some(id => !next.has(id));
+  const before = JSON.stringify([...diffusionDownloads.entries()]);
+  const after = JSON.stringify([...next.entries()]);
+  diffusionDownloads.clear(); next.forEach((v, k) => diffusionDownloads.set(k, v));
+  renderHomeModelDownloads();
+  if (repaintManager && before !== after && modelsOpen()) {
+    if (completed) {
+      mmDiff = null;
+      renderModelManager();
+      return;
+    }
+    if (mmDetail) renderModelDetail(document.getElementById('mm-body'));
+    else if (mmTab === 'image' && mmDiff) paintImageModels(document.getElementById('mm-tab-body'), mmDiff);
+  }
+}
 async function refreshModelDownloads() {
   try {
-    const data = await api('/api/models/downloads');
-    applyModelDownloads(data.downloads || []);
+    const [language, image] = await Promise.all([api('/api/models/downloads'), api('/api/diffusion/downloads')]);
+    applyModelDownloads(language.downloads || []);
+    applyDiffusionDownloads(image.downloads || []);
   } catch {}
 }
 
@@ -3819,7 +4268,7 @@ function modelCard(m) {
   const downloading = modelDownloads.get(m.id);
   const caps = (m.recommended ? '<span class="mdl-cap rec">Recommended</span>' : '')
     + (m.vision ? '<span class="mdl-cap vis">Vision</span>' : '') + (m.toolCalling ? '<span class="mdl-cap">Tools</span>' : '')
-    + (m.gated ? '<span class="mdl-cap gated">Gated</span>' : '');
+    + (m.gated ? '<span class="mdl-cap gated">Gated</span>' : '') + (m.source === 'huggingface' ? '<span class="mdl-cap">Hugging Face</span>' : '');
   const tags = (m.tags || []).filter(t => !['vision', 'tools'].includes(String(t).toLowerCase())).slice(0, 2)
     .map(t => `<span class="mdl-t">${escapeHtml(t)}</span>`).join('');
   const status = downloading ? '<span class="mdl-status active"><i></i>Downloading</span>' : (m.active ? '<span class="mdl-status active"><i></i>Loaded</span>' : (m.downloaded ? '<span class="mdl-status">Installed</span>' : ''));
@@ -3837,10 +4286,11 @@ function modelCard(m) {
     </button>`;
 }
 function diffCard(m) {
+  const downloading = diffusionDownloads.get(m.id);
   const tags = (m.tags || []).slice(0, 2).map(t => `<span class="mdl-t">${escapeHtml(t)}</span>`).join('');
   const base = m.base ? `<span class="mdl-cap">${escapeHtml(m.base)}</span>` : '';
-  const status = m.downloaded ? '<span class="mdl-status active"><i></i>Downloaded</span>' : '';
-  return `<button class="mdl ${m.downloaded ? 'on' : ''} fit-${m.fit}" data-did="${escapeAttr(m.id)}">
+  const status = downloading ? '<span class="mdl-status active"><i></i>Downloading</span>' : (m.downloaded ? '<span class="mdl-status active"><i></i>Downloaded</span>' : '');
+  return `<button class="mdl ${m.downloaded ? 'on' : ''}${downloading ? ' downloading' : ''} fit-${m.fit}" data-did="${escapeAttr(m.id)}">
       <div class="mdl-top">
         <span class="mdl-icon image">${uiIcon('appearance')}</span>
         <span class="mdl-title"><span class="mdl-name">${escapeHtml(m.name)}</span><span class="mdl-meta">${escapeHtml(m.type || 'checkpoint')}${m.sizeGB ? ' · ' + m.sizeGB + ' GB' : ''}</span></span>
@@ -3848,6 +4298,7 @@ function diffCard(m) {
       </div>
       <div class="mdl-notes">${escapeHtml(m.description || '')}</div>
       <div class="mdl-tags">${base}${tags}</div>
+      ${downloading ? modelDownloadProgressHTML(downloading, true) : ''}
       ${modelCompatibility(m, (mmDiff || {}).gpuVRAMGB || 0)}
       <div class="mdl-foot"><span class="mdl-meta">${m.sizeGB ? `${m.sizeGB} GB download` : escapeHtml(m.type || 'checkpoint')}</span><span class="mdl-use">View details ${uiIcon('arrow-right')}</span></div>
     </button>`;
@@ -3865,14 +4316,45 @@ function activeModelCard(m, gpu, memoryType) {
     <span class="mm-active-action">Manage ${uiIcon('arrow-right')}</span>
   </button>`;
 }
-function downloadModel(m) {
+function openHFTokenDialog(m) {
+  keyDialogBusy = false;
+  keyDialogReturnFocus = document.activeElement;
+  const layer = document.getElementById('key-dialog-layer'), content = document.getElementById('key-dialog-content');
+  content.innerHTML = `<div class="key-dialog-head">
+      <span class="key-dialog-icon"><span class="hf-mark">HF</span></span>
+      <div class="key-dialog-heading"><div class="key-dialog-title" id="key-dialog-title">Hugging Face access required</div><div class="key-dialog-sub">${escapeHtml(m.name)} is a gated repository.</div></div>
+      <button class="key-dialog-close" id="hf-token-close" type="button" aria-label="Close Hugging Face token dialog">${uiIcon('close')}</button>
+    </div><div class="key-dialog-body">
+      <div class="fld"><label class="fld-label" for="hf-token-input">Hugging Face token</label><input class="fld-input" id="hf-token-input" type="password" placeholder="hf_..." autocomplete="off" spellcheck="false"></div>
+      <div class="key-dialog-help">First accept the model's terms on Hugging Face. This token is passed only to the temporary download container and is not saved by CloudlessOS.</div>
+      <div class="key-dialog-error" id="hf-token-error" role="alert"></div>
+      <div class="key-dialog-actions"><button class="btn" id="hf-token-cancel" type="button">Cancel</button><button class="btn primary" id="hf-token-confirm" type="button">${uiIcon('download')}<span>Download model</span></button></div>
+    </div>`;
+  layer.classList.remove('hidden');
+  document.getElementById('hf-token-close').onclick = closeKeyDialog;
+  document.getElementById('hf-token-cancel').onclick = closeKeyDialog;
+  const input = document.getElementById('hf-token-input'), confirm = document.getElementById('hf-token-confirm'), error = document.getElementById('hf-token-error');
+  const submit = () => {
+    const token = input.value.trim();
+    if (!/^hf_[A-Za-z0-9]+$/.test(token)) { error.textContent = 'Enter a valid Hugging Face token beginning with hf_.'; input.focus(); return; }
+    closeKeyDialog(); downloadModel(m, token);
+  };
+  confirm.onclick = submit; input.onkeydown = event => { if (event.key === 'Enter') submit(); };
+  requestAnimationFrame(() => input.focus());
+}
+function downloadModel(m, token = '') {
+  if (m.gated && !token && !(mmHFAccount && mmHFAccount.valid)) { openHFTokenDialog(m); return; }
   if (modelDownloads.has(m.id)) return;
-  modelDownloads.set(m.id, { modelId: m.id, phase: 'pending', message: 'Preparing download', bytesDone: 0, bytesTotal: 0 });
+  modelDownloads.set(m.id, { modelId: m.id, modelType: 'lm', phase: 'pending', message: 'Preparing download', bytesDone: 0, bytesTotal: 0 });
   repaintModelDownloadSurfaces();
   toast('Downloading ' + m.name + '…');
-  api('/api/models/download', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: m.id }) })
+  api('/api/models/download', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: m.id, token }) })
     .then(r => {
-      if (r.jobId) trackModelDownload(r.jobId, m);
+      if (r.jobId) {
+        modelDownloads.set(m.id, { ...(modelDownloads.get(m.id) || {}), jobId: r.jobId, modelId: m.id, modelType: 'lm' });
+        repaintModelDownloadSurfaces();
+        trackModelDownload(r.jobId, m);
+      }
       else throw new Error('No download job');
     }).catch(() => {
       modelDownloads.delete(m.id);
@@ -3880,41 +4362,102 @@ function downloadModel(m) {
       toast('Download failed', true);
     });
 }
-function repaintModelDownloadSurfaces() {
+async function cancelModelDownload(jobId, modelId, button, modelType = 'lm') {
+  if (!jobId) return;
+  if (button) button.disabled = true;
+  const downloads = modelType === 'diff' ? diffusionDownloads : modelDownloads;
+  const current = downloads.get(modelId);
+  if (current) {
+    downloads.set(modelId, { ...current, phase: 'canceling', message: 'Stopping download…' });
+    repaintModelDownloadSurfaces(modelType);
+  }
+  const result = await api('/api/models/download/cancel', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ jobId })
+  }).catch(() => null);
+  if (!result || result.error) {
+    if (button) button.disabled = false;
+    toast((result && result.error) || 'Could not cancel download', true);
+    refreshModelDownloads();
+    return;
+  }
+  toast('Canceling ' + modelDownloadName(modelId) + '…');
+}
+function repaintModelDownloadSurfaces(modelType = 'lm') {
   renderHomeModelDownloads();
   if (!modelsOpen()) return;
   if (mmDetail) renderModelDetail(document.getElementById('mm-body'));
   else if (mmTab === 'language' && mmLM) paintLanguageModels(document.getElementById('mm-tab-body'), mmLM);
+  else if (mmTab === 'image' && mmDiff) paintImageModels(document.getElementById('mm-tab-body'), mmDiff);
 }
 function trackModelDownload(jobId, m) {
   const es = new EventSource(`/api/jobs/${jobId}/events`);
   let ended = false;
-  const finish = async ok => {
+  const finish = async status => {
     if (ended) return;
     ended = true;
     es.close();
     modelDownloads.delete(m.id);
     renderHomeModelDownloads();
-    toast(m.name + (ok ? ' downloaded to Models' : ' download failed'), !ok);
+    if (status === 'canceled') toast(m.name + ' download canceled');
+    else toast(m.name + (status === 'done' ? ' downloaded to Models' : ' download failed'), status === 'failed');
     mmLM = null;
     if (modelsOpen()) renderModelManager();
     refreshActiveModel();
   };
   es.onmessage = e => {
     const u = JSON.parse(e.data);
-    modelDownloads.set(m.id, { ...u, jobId, modelId: m.id });
+    modelDownloads.set(m.id, { ...u, jobId, modelId: m.id, modelType: 'lm' });
     repaintModelDownloadSurfaces();
-    if (u.phase === 'error') return finish(false);
-    if (u.done) finish(true);
+    if (u.phase === 'canceled') return finish('canceled');
+    if (u.phase === 'error') return finish('failed');
+    if (u.done) finish('done');
   };
   es.onerror = () => {
     refreshModelDownloads();
-    if (!ended) finish(false);
+    if (!ended) finish('failed');
   };
 }
 function downloadDiffusion(m) {
-  toast('Downloading ' + m.name + '… (large file, runs in background)');
-  api(`/api/diffusion/${m.id}/download`, { method: 'POST' }).then(r => { if (r.jobId) trackJobToast(r.jobId, m.name); }).catch(() => toast('Failed', true));
+  if (diffusionDownloads.has(m.id)) return;
+  diffusionDownloads.set(m.id, { modelId: m.id, modelType: 'diff', phase: 'pending', message: 'Preparing download', bytesDone: 0, bytesTotal: 0 });
+  repaintModelDownloadSurfaces('diff');
+  toast('Downloading ' + m.name + '…');
+  api(`/api/diffusion/${encodeURIComponent(m.id)}/download`, { method: 'POST' }).then(r => {
+    if (!r.jobId) throw new Error('No download job');
+    diffusionDownloads.set(m.id, { ...(diffusionDownloads.get(m.id) || {}), jobId: r.jobId, modelId: m.id, modelType: 'diff' });
+    repaintModelDownloadSurfaces('diff');
+    trackDiffusionDownload(r.jobId, m);
+  }).catch(() => {
+    diffusionDownloads.delete(m.id);
+    repaintModelDownloadSurfaces('diff');
+    toast('Download failed', true);
+  });
+}
+function trackDiffusionDownload(jobId, m) {
+  const es = new EventSource(`/api/jobs/${jobId}/events`);
+  let ended = false;
+  const finish = status => {
+    if (ended) return;
+    ended = true;
+    es.close();
+    diffusionDownloads.delete(m.id);
+    renderHomeModelDownloads();
+    if (status === 'canceled') toast(m.name + ' download canceled');
+    else toast(m.name + (status === 'done' ? ' downloaded for ComfyUI' : ' download failed'), status === 'failed');
+    mmDiff = null;
+    if (modelsOpen()) renderModelManager();
+  };
+  es.onmessage = e => {
+    const u = JSON.parse(e.data);
+    diffusionDownloads.set(m.id, { ...u, jobId, modelId: m.id, modelType: 'diff' });
+    repaintModelDownloadSurfaces('diff');
+    if (u.phase === 'canceled') return finish('canceled');
+    if (u.phase === 'error') return finish('failed');
+    if (u.done) finish('done');
+  };
+  es.onerror = () => {
+    if (!ended) finish('failed');
+  };
 }
 function launchModel(m) {
   const curId = (mmLM && mmLM.current) || '';
@@ -3963,8 +4506,64 @@ function launchModel(m) {
   };
   requestAnimationFrame(() => confirmButton.focus());
 }
+function openModelUninstallDialog(m, modelType = 'lm') {
+  keyDialogBusy = false;
+  keyDialogReturnFocus = document.activeElement;
+  const layer = document.getElementById('key-dialog-layer');
+  const content = document.getElementById('key-dialog-content');
+  const removalLocation = modelType === 'diff'
+    ? 'CloudlessOS will remove this model file from ComfyUI.'
+    : 'CloudlessOS will remove this model from its shared cache and Models folder.';
+  content.innerHTML = `<div class="key-dialog-head">
+      <span class="key-dialog-icon danger">${uiIcon('trash')}</span>
+      <div class="key-dialog-heading"><div class="key-dialog-title" id="key-dialog-title">Uninstall ${escapeHtml(m.name)}?</div><div class="key-dialog-sub">The downloaded weights will be removed from this machine.</div></div>
+      <button class="key-dialog-close" id="model-uninstall-close" type="button" aria-label="Close uninstall dialog">${uiIcon('close')}</button>
+    </div>
+    <div class="key-dialog-body">
+      <div class="uninstall-summary"><b>${removalLocation}</b><br>${uiIcon('check')}You can download it again from Model Manager whenever you need it.</div>
+      <div class="key-dialog-error" id="model-uninstall-error" role="alert"></div>
+      <div class="key-dialog-actions">
+        <button class="btn" id="model-uninstall-cancel" type="button">Keep model</button>
+        <button class="btn danger-solid" id="model-uninstall-confirm" type="button">${uiIcon('trash')}<span>Uninstall model</span></button>
+      </div>
+    </div>`;
+  layer.classList.remove('hidden');
+  const close = document.getElementById('model-uninstall-close');
+  const cancel = document.getElementById('model-uninstall-cancel');
+  const confirm = document.getElementById('model-uninstall-confirm');
+  const error = document.getElementById('model-uninstall-error');
+  close.onclick = closeKeyDialog;
+  cancel.onclick = closeKeyDialog;
+  confirm.onclick = async () => {
+    keyDialogBusy = true;
+    close.disabled = true; cancel.disabled = true; confirm.disabled = true;
+    confirm.innerHTML = '<span class="key-dialog-spinner" aria-hidden="true"></span><span>Uninstalling…</span>';
+    const endpoint = modelType === 'diff' ? `/api/diffusion/${encodeURIComponent(m.id)}/uninstall` : '/api/models/uninstall';
+    const options = modelType === 'diff'
+      ? { method: 'POST' }
+      : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: m.id }) };
+    const result = await api(endpoint, options).catch(() => null);
+    if (!result || result.error) {
+      keyDialogBusy = false;
+      close.disabled = false; cancel.disabled = false; confirm.disabled = false;
+      confirm.innerHTML = `${uiIcon('trash')}<span>Try uninstall again</span>`;
+      error.textContent = (result && result.error) || `CloudlessOS could not uninstall ${m.name}.`;
+      confirm.focus();
+      return;
+    }
+    keyDialogBusy = false;
+    closeKeyDialog();
+    toast(m.name + ' uninstalled');
+    delete mmCache[(modelType === 'diff' ? 'diff:' : 'lm:') + m.id];
+    mmDetail = null;
+    if (modelType === 'diff') mmDiff = null; else mmLM = null;
+    renderModelManager();
+    refreshActiveModel();
+  };
+  cancel.focus();
+}
 /* ---- Model Manager (standalone, opened from the dashboard) ---- */
-let mmTab = 'language', mmDetail = null, mmLM = null, mmDiff = null, mmCustomPrefill = '', mmSort = 'recommended';
+let mmTab = 'language', mmDetail = null, mmLM = null, mmDiff = null, mmCustomPrefill = '', mmSort = 'recommended', mmHF = false, mmHFQuery = '', mmHFAccount = null;
 let mmFilter = { q: '', fits: false, vision: false, tools: false, downloaded: false };
 const mmCache = {};
 function modelsOpen() { return !document.getElementById('models').classList.contains('hidden'); }
@@ -3975,10 +4574,10 @@ function anyOverlayOpen() {
   return infOpen || modelsOpen() || settingsOpen() || launcherOpen()
     || document.getElementById('asst').classList.contains('full');
 }
-function openModelManager() { mmDetail = null; mmCustomPrefill = ''; document.getElementById('models').classList.remove('hidden'); renderModelManager(); }
+function openModelManager() { mmDetail = null; mmCustomPrefill = ''; mmHF = false; document.getElementById('models').classList.remove('hidden'); renderModelManager(); }
 async function openModelManagerFor(id) {
   closeAsst();
-  mmTab = 'language'; mmDetail = null; mmFilter = { q: '', fits: false, vision: false, tools: false, downloaded: false };
+  mmTab = 'language'; mmDetail = null; mmHF = false; mmFilter = { q: '', fits: false, vision: false, tools: false, downloaded: false };
   document.getElementById('models').classList.remove('hidden');
   if (!id) { mmCustomPrefill = ''; renderModelManager(); return; }
   let data = mmLM;
@@ -3988,10 +4587,10 @@ async function openModelManagerFor(id) {
     (data.yours || []).concat(data.highlights || []).forEach(m => { mmCache['lm:' + m.id] = m; });
   }
   if (mmCache['lm:' + id]) { mmCustomPrefill = ''; openModelDetail('lm', id); return; }
-  mmCustomPrefill = id;
+  mmCustomPrefill = ''; mmHF = true; mmHFQuery = id;
   renderModelManager();
 }
-function closeModelManager() { mmCustomPrefill = ''; document.getElementById('models').classList.add('hidden'); }
+function closeModelManager() { mmCustomPrefill = ''; mmHF = false; document.getElementById('models').classList.add('hidden'); }
 function openModelDetail(type, id) { mmDetail = { type, id }; renderModelManager(); }
 function modelMatches(m, lm) {
   const f = mmFilter;
@@ -4008,6 +4607,7 @@ function modelMatches(m, lm) {
 function renderModelManager() {
   const c = document.getElementById('mm-body'); if (!c) return;
   if (mmDetail) { renderModelDetail(c); return; }
+  if (mmHF) { renderHuggingFace(c); return; }
   c.innerHTML = `<div class="mm-tabs" role="tablist" aria-label="Model type">
       <button class="mm-tab ${mmTab === 'language' ? 'on' : ''}" data-tab="language" role="tab" aria-selected="${mmTab === 'language'}">${uiIcon('models')}<span>Language models</span></button>
       <button class="mm-tab ${mmTab === 'image' ? 'on' : ''}" data-tab="image" role="tab" aria-selected="${mmTab === 'image'}">${uiIcon('appearance')}<span>Image models</span></button>
@@ -4032,6 +4632,7 @@ async function renderImageModels(c) {
   else c.innerHTML = '<div class="set-hint">Loading…</div>';
   let d; try { d = await api('/api/diffusion'); } catch { if (!mmDiff) c.innerHTML = '<div class="set-hint">Could not load image models.</div>'; return; }
   mmDiff = d;
+  applyDiffusionDownloads(d.downloads || [], false);
   (d.yours || []).concat(d.highlights || []).forEach(m => { mmCache['diff:' + m.id] = m; });
   if (!mmDetail && document.body.contains(c)) paintImageModels(c, d);
 }
@@ -4051,16 +4652,11 @@ function paintModelList(c, data, kind) {
     <option value="memory-high" ${mmSort === 'memory-high' ? 'selected' : ''}>Highest memory</option>
     <option value="name" ${mmSort === 'name' ? 'selected' : ''}>Name</option>
   </select></span>`;
-  const advanced = lm ? `
-      <div class="mm-advanced"><button class="adv-toggle" data-mdladv>${uiIcon('settings')}<span>Use a custom Hugging Face model</span></button>
-      <div class="adv hidden" id="mdl-adv">
-        <div class="fld"><span class="fld-label">Model id</span><div class="model-edit"><input id="set-model" class="fld-input" value="${escapeAttr(data.current || '')}" placeholder="org/model-name" spellcheck="false"><button class="btn primary" id="set-model-apply">Launch</button></div></div>
-        <div class="fld-help">Any compatible Hugging Face id (vLLM / SGLang). Gated models need a token; launching restarts the engine and may download weights.</div>
-      </div></div>` : '';
   c.innerHTML = `
     <div class="mm-bar">
       <div class="mm-machine">${summary}</div>
-      <label class="mm-search">${uiIcon('search')}<input id="mm-q" aria-label="Search models" placeholder="Search ${lm ? 'language' : 'image'} models…" value="${escapeAttr(mmFilter.q)}" spellcheck="false"></label>
+      <div class="mm-discovery"><label class="mm-search">${uiIcon('search')}<input id="mm-q" aria-label="Search models" placeholder="Search ${lm ? 'language' : 'image'} models…" value="${escapeAttr(mmFilter.q)}" spellcheck="false"></label>
+      ${lm ? '<button class="mm-hf-button" id="mm-hf-open" type="button"><span class="hf-mark">HF</span><span>Browse Hugging Face</span></button>' : ''}</div>
     </div>
     <div id="mm-active-slot"></div>
     <div class="mm-filter-row">
@@ -4069,8 +4665,7 @@ function paintModelList(c, data, kind) {
       <span class="mm-result-count" id="mm-result-count"></span>
       ${sort}
     </div>
-    <div id="mm-list"></div>
-    ${advanced}`;
+    <div id="mm-list"></div>`;
   const cardFn = lm ? modelCard : diffCard;
   const active = lm ? (data.yours || []).find(m => m.active) : null;
   const activeSlot = document.getElementById('mm-active-slot');
@@ -4116,15 +4711,141 @@ function paintModelList(c, data, kind) {
   const sortSelect = document.getElementById('mm-sort');
   if (sortSelect) sortSelect.onchange = () => { mmSort = sortSelect.value; fill(); };
   if (lm) {
-    const adv = c.querySelector('[data-mdladv]'); if (adv) adv.onclick = () => document.getElementById('mdl-adv').classList.toggle('hidden');
-    const customInput = document.getElementById('set-model');
-    if (customInput && mmCustomPrefill) {
-      document.getElementById('mdl-adv').classList.remove('hidden');
-      customInput.value = mmCustomPrefill;
-      customInput.oninput = () => { mmCustomPrefill = customInput.value; };
-      requestAnimationFrame(() => { customInput.focus(); customInput.select(); });
+    const hf = document.getElementById('mm-hf-open'); if (hf) hf.onclick = () => { mmHF = true; mmHFQuery = mmCustomPrefill || ''; mmCustomPrefill = ''; renderModelManager(); };
+  }
+}
+function hfNumber(value) {
+  const n = Number(value) || 0;
+  if (n >= 1e9) return (n / 1e9).toFixed(1) + 'B';
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + 'M';
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + 'K';
+  return String(n);
+}
+function looksLikeHFRepo(value) {
+  const clean = String(value || '').trim().replace(/^https?:\/\/huggingface\.co\//i, '').split(/[?#]/)[0];
+  return clean.split('/').filter(Boolean).length >= 2;
+}
+function hfResultCard(model) {
+  const tags = (model.tags || []).slice(0, 3).map(tag => `<span class="mdl-t">${escapeHtml(tag)}</span>`).join('');
+  return `<button class="hf-result" type="button" data-hf-id="${escapeAttr(model.id)}">
+    <span class="hf-result-top"><span class="hf-mark">HF</span><span class="hf-result-copy"><span class="hf-result-name">${escapeHtml(model.name || model.id)}</span><span class="hf-result-id">${escapeHtml(model.id)}</span></span>${model.private ? '<span class="mdl-cap gated">Private</span>' : (model.gated ? '<span class="mdl-cap gated">Gated</span>' : '')}</span>
+    <span class="mdl-tags">${tags}</span>
+    <span class="hf-result-stats"><span>${hfNumber(model.downloads)} downloads</span><span>${hfNumber(model.likes)} likes</span><span class="hf-result-action">Inspect &amp; add →</span></span>
+  </button>`;
+}
+function hfAccountHTML(account) {
+  if (!account) return `<div class="hf-account"><span class="hf-account-icon">HF</span><span class="hf-account-copy"><span class="hf-account-title">Checking Hugging Face account...</span><span class="hf-account-sub">Your credential always stays on this machine.</span></span></div>`;
+  if (account.connected && account.valid) {
+    const name = account.fullName || account.name || 'Hugging Face account';
+    const handle = account.name ? `@${account.name}` : 'Connected account';
+    const initial = String(account.name || account.fullName || 'HF').slice(0, 2);
+    return `<div class="hf-account"><span class="hf-account-icon">${escapeHtml(initial)}</span><span class="hf-account-copy"><span class="hf-account-title">${escapeHtml(name)}</span><span class="hf-account-sub">${escapeHtml(handle)} - Gated and private repositories are available to CloudlessOS.</span></span><span class="hf-account-actions"><span class="hf-connected">Connected</span><button class="btn" id="hf-disconnect" type="button">Disconnect</button></span></div>`;
+  }
+  if (account.connected) {
+    return `<div class="hf-account"><span class="hf-account-icon">HF</span><span class="hf-account-copy"><span class="hf-account-title">Hugging Face connection needs attention</span><span class="hf-account-sub">The saved credential is invalid or Hugging Face could not verify it.</span></span><span class="hf-account-actions"><button class="btn" id="hf-disconnect" type="button">Remove</button><button class="btn primary" id="hf-connect" type="button">${uiIcon('key')}<span>Reconnect</span></button></span></div>`;
+  }
+  return `<div class="hf-account"><span class="hf-account-icon">HF</span><span class="hf-account-copy"><span class="hf-account-title">Connect your Hugging Face account</span><span class="hf-account-sub">Use gated models you have access to and discover private repositories.</span></span><span class="hf-account-actions"><button class="btn primary" id="hf-connect" type="button">${uiIcon('user')}<span>Connect account</span></button></span></div>`;
+}
+function wireHFAccount() {
+  const connect = document.getElementById('hf-connect'); if (connect) connect.onclick = openHFConnectDialog;
+  const disconnect = document.getElementById('hf-disconnect'); if (disconnect) disconnect.onclick = disconnectHFAccount;
+}
+async function refreshHFAccount() {
+  const host = document.getElementById('hf-account-host'); if (!host) return;
+  const account = await api('/api/models/huggingface/account').catch(() => ({ connected: false }));
+  mmHFAccount = account && !account.error ? account : { connected: false };
+  if (!document.body.contains(host)) return;
+  host.innerHTML = hfAccountHTML(mmHFAccount); wireHFAccount();
+}
+function openHFConnectDialog() {
+  keyDialogBusy = false;
+  keyDialogReturnFocus = document.activeElement;
+  const layer = document.getElementById('key-dialog-layer'), content = document.getElementById('key-dialog-content');
+  content.innerHTML = `<div class="key-dialog-head">
+      <span class="key-dialog-icon"><span class="hf-mark">HF</span></span>
+      <div class="key-dialog-heading"><div class="key-dialog-title" id="key-dialog-title">Connect Hugging Face</div><div class="key-dialog-sub">Add your account to this CloudlessOS machine.</div></div>
+      <button class="key-dialog-close" id="hf-connect-close" type="button" aria-label="Close Hugging Face connection dialog">${uiIcon('close')}</button>
+    </div><div class="key-dialog-body">
+      <div class="fld"><label class="fld-label" for="hf-connect-token">Hugging Face read token</label><input class="fld-input" id="hf-connect-token" type="password" placeholder="hf_..." autocomplete="off" spellcheck="false"></div>
+      <div class="key-dialog-help">Create a read token at <b>huggingface.co/settings/tokens</b>. CloudlessOS verifies it with Hugging Face and stores it in a separate owner-only file. It is never returned to this interface.</div>
+      <div class="key-dialog-error" id="hf-connect-error" role="alert"></div>
+      <div class="key-dialog-actions"><button class="btn" id="hf-connect-cancel" type="button">Cancel</button><button class="btn primary" id="hf-connect-confirm" type="button">${uiIcon('user')}<span>Connect account</span></button></div>
+    </div>`;
+  layer.classList.remove('hidden');
+  document.getElementById('hf-connect-close').onclick = closeKeyDialog;
+  document.getElementById('hf-connect-cancel').onclick = closeKeyDialog;
+  const input = document.getElementById('hf-connect-token'), confirm = document.getElementById('hf-connect-confirm'), error = document.getElementById('hf-connect-error');
+  const submit = async () => {
+    const token = input.value.trim();
+    if (token.length < 10) { error.textContent = 'Enter a valid Hugging Face access token.'; input.focus(); return; }
+    confirm.disabled = true; input.disabled = true; error.textContent = ''; confirm.innerHTML = '<span class="key-dialog-spinner"></span><span>Verifying...</span>';
+    const account = await api('/api/models/huggingface/account', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token }) }).catch(() => ({ error: 'Could not reach Hugging Face.' }));
+    input.value = '';
+    if (!account || account.error) {
+      confirm.disabled = false; input.disabled = false; confirm.innerHTML = `${uiIcon('user')}<span>Connect account</span>`; error.textContent = (account && account.error) || 'Could not connect this account.'; input.focus(); return;
     }
-    const ap = document.getElementById('set-model-apply'); if (ap) ap.onclick = () => { const v = document.getElementById('set-model').value.trim(); if (v) { mmCustomPrefill = ''; applyModel(v); } };
+    mmHFAccount = account; closeKeyDialog();
+    const host = document.getElementById('hf-account-host'); if (host) { host.innerHTML = hfAccountHTML(account); wireHFAccount(); }
+    toast('Connected to Hugging Face');
+  };
+  confirm.onclick = submit; input.onkeydown = event => { if (event.key === 'Enter') submit(); };
+  requestAnimationFrame(() => input.focus());
+}
+async function disconnectHFAccount() {
+  const button = document.getElementById('hf-disconnect'); if (button) button.disabled = true;
+  const result = await api('/api/models/huggingface/account', { method: 'DELETE' }).catch(() => ({ error: 'Could not disconnect the account.' }));
+  if (result && result.error) { if (button) button.disabled = false; toast(result.error, true); return; }
+  mmHFAccount = { connected: false };
+  const host = document.getElementById('hf-account-host'); if (host) { host.innerHTML = hfAccountHTML(mmHFAccount); wireHFAccount(); }
+  toast('Hugging Face disconnected');
+}
+function renderHuggingFace(c) {
+  c.innerHTML = `<div class="hf-page">
+    <button class="lp-back" id="hf-back">${uiIcon('arrow-right', 'ui-icon')}<span>Model Manager</span></button>
+    <div class="hf-hero"><span class="hf-hero-mark">HF</span><div><h2>Discover models on Hugging Face</h2><p>Search the public Hub or paste a repository URL. CloudlessOS inspects the model metadata, estimates accelerator-memory requirements, and adds it to the normal download and launch workflow.</p></div></div>
+    <div id="hf-account-host">${hfAccountHTML(mmHFAccount)}</div>
+    <form class="hf-form" id="hf-form"><label class="mm-search">${uiIcon('search')}<input id="hf-query" aria-label="Search Hugging Face" placeholder="Search models or paste huggingface.co/organization/model" value="${escapeAttr(mmHFQuery)}" spellcheck="false" autocomplete="off"></label><button class="btn primary" id="hf-search" type="submit">${uiIcon('search')}<span>Search</span></button></form>
+    <div class="hf-guidance">Public text-generation models are supported. A connected account also unlocks gated models you have accepted and private repositories you can access.</div>
+    <div id="hf-results"><div class="hf-empty">Search by model name, organization, or exact repository URL.</div></div>
+  </div>`;
+  document.getElementById('hf-back').onclick = () => { mmHF = false; renderModelManager(); };
+  wireHFAccount(); refreshHFAccount();
+  const form = document.getElementById('hf-form'), input = document.getElementById('hf-query'), out = document.getElementById('hf-results'), button = document.getElementById('hf-search');
+  const run = async () => {
+    const query = input.value.trim(); if (query.length < 2) { input.focus(); return; }
+    mmHFQuery = query; button.disabled = true; button.innerHTML = '<span class="key-dialog-spinner"></span><span>Checking…</span>';
+    out.innerHTML = '<div class="hf-empty">Checking Hugging Face…</div>';
+    try {
+      if (looksLikeHFRepo(query)) { await importHFModel(query, button); return; }
+      const data = await api('/api/models/huggingface/search?q=' + encodeURIComponent(query));
+      if (data.error) throw new Error(data.error);
+      const results = data.results || [];
+      out.innerHTML = results.length ? `<div class="hf-results">${results.map(hfResultCard).join('')}</div>` : '<div class="hf-empty">No public text-generation models matched this search.</div>';
+      out.querySelectorAll('[data-hf-id]').forEach(card => card.onclick = () => importHFModel(card.dataset.hfId, card));
+    } catch (error) {
+      out.innerHTML = `<div class="hf-empty">${escapeHtml(error && error.message ? error.message : 'Hugging Face could not be reached right now.')}</div>`;
+    } finally {
+      if (document.body.contains(button)) { button.disabled = false; button.innerHTML = `${uiIcon('search')}<span>Search</span>`; }
+    }
+  };
+  form.onsubmit = event => { event.preventDefault(); run(); };
+  if (mmHFQuery) requestAnimationFrame(run); else requestAnimationFrame(() => input.focus());
+}
+async function importHFModel(id, trigger) {
+  const original = trigger.innerHTML;
+  trigger.disabled = true;
+  if (trigger.classList.contains('hf-result')) trigger.innerHTML = '<span class="hf-result-top"><span class="key-dialog-spinner"></span><span class="hf-result-copy"><span class="hf-result-name">Inspecting repository…</span><span class="hf-result-id">Reading model metadata and compatibility</span></span></span>';
+  try {
+    const model = await api('/api/models/huggingface/import', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id }) });
+    if (model.error) throw new Error(model.error);
+    mmCache['lm:' + model.id] = model;
+    mmLM = await api('/api/models');
+    (mmLM.yours || []).concat(mmLM.highlights || []).forEach(item => { mmCache['lm:' + item.id] = item; });
+    mmHF = false; mmDetail = { type: 'lm', id: model.id }; renderModelManager();
+  } catch (error) {
+    const out = document.getElementById('hf-results');
+    if (out) out.innerHTML = `<div class="hf-empty">${escapeHtml(error && error.message ? error.message : 'Could not import this repository.')}</div>`;
+    trigger.disabled = false; trigger.innerHTML = original;
   }
 }
 function renderModelDetail(c) {
@@ -4132,12 +4853,13 @@ function renderModelDetail(c) {
   const m = mmCache[type + ':' + id];
   if (!m) { mmDetail = null; renderModelManager(); return; }
   const lm = type === 'lm';
-  const downloading = lm ? modelDownloads.get(m.id) : null;
+  const downloading = lm ? modelDownloads.get(m.id) : diffusionDownloads.get(m.id);
   const modelData = (lm ? mmLM : mmDiff) || {};
   const gpu = modelData.gpuVRAMGB || 0, memoryType = modelData.memoryType || 'dedicated';
   const caps = (m.recommended ? '<span class="mdl-cap rec">Recommended</span>' : '')
     + (lm ? ((m.vision ? '<span class="mdl-cap vis">Vision</span>' : '') + (m.toolCalling ? '<span class="mdl-cap">Tool calling</span>' : '') + (m.gated ? '<span class="mdl-cap gated">Gated</span>' : ''))
-    : (m.base ? `<span class="mdl-cap">${escapeHtml(m.base)}</span>` : ''));
+    : (m.base ? `<span class="mdl-cap">${escapeHtml(m.base)}</span>` : ''))
+    + (m.source === 'huggingface' ? '<span class="mdl-cap">Hugging Face</span>' : '');
   const tags = (m.tags || []).filter(t => {
     const key = String(t).toLowerCase();
     return !(lm && ((m.vision && key === 'vision') || (m.toolCalling && key === 'tools')));
@@ -4148,12 +4870,19 @@ function renderModelDetail(c) {
     : spec('Base model', m.base) + spec('File type', m.type || 'Checkpoint') + spec('Download size', m.sizeGB ? m.sizeGB + ' GB' : '') + spec('License', m.license);
   let state = '', actions = '';
   if (lm) {
-    if (downloading) { state = modelDownloadProgressHTML(downloading, true); }
+    if (downloading) {
+      state = modelDownloadProgressHTML(downloading, true);
+      actions = `<button class="btn danger" data-cancel-dl ${downloading.jobId ? '' : 'disabled'}>${uiIcon('close')}<span>Cancel download</span></button>`;
+    }
     else if (m.active) { state = `<span class="md-state-line active"><i></i>Loaded in ${escapeHtml(activeEngineName)}</span>`; actions = '<button class="btn" data-redl>Re-download</button>'; }
-    else if (m.downloaded) { state = '<span class="md-state-line ready"><i></i>Downloaded and ready</span>'; actions = `<button class="btn primary" data-launch>${uiIcon('rocket')}<span>Launch model</span></button>`; }
+    else if (m.downloaded) { state = '<span class="md-state-line ready"><i></i>Downloaded and ready</span>'; actions = `<button class="btn danger" data-uninstall>${uiIcon('trash')}<span>Uninstall</span></button><button class="btn primary" data-launch>${uiIcon('rocket')}<span>Launch model</span></button>`; }
     else { state = '<span class="md-state-line remote"><i></i>Available to download</span>'; actions = `<button class="btn primary" data-dl>${uiIcon('download')}<span>Download model</span></button>`; }
   } else {
-    if (m.downloaded) { state = '<span class="md-state-line ready"><i></i>Downloaded for ComfyUI</span>'; }
+    if (downloading) {
+      state = modelDownloadProgressHTML(downloading, true);
+      actions = `<button class="btn danger" data-cancel-dl ${downloading.jobId ? '' : 'disabled'}>${uiIcon('close')}<span>Cancel download</span></button>`;
+    }
+    else if (m.downloaded) { state = '<span class="md-state-line ready"><i></i>Downloaded for ComfyUI</span>'; actions = `<button class="btn danger" data-uninstall>${uiIcon('trash')}<span>Uninstall</span></button>`; }
     else { state = '<span class="md-state-line remote"><i></i>Available to download</span>'; actions = `<button class="btn primary" data-dl>${uiIcon('download')}<span>Download model</span></button>`; }
   }
   const fitClass = m.fit || 'unknown';
@@ -4164,6 +4893,7 @@ function renderModelDetail(c) {
     </div>`;
   const recNote = m.recommended ? `<div class="md-banner rec">${escapeHtml(m.recommendBy || 'Recommended for your region')}.</div>` : '';
   const gatedNote = (lm && m.gated && !m.downloaded) ? `<div class="md-banner note">This Hugging Face repository is gated. Accept its terms and provide your Hugging Face token before downloading.</div>` : '';
+  const sourceNote = (lm && m.source === 'huggingface') ? `<div class="md-banner note hf-source-note"><span class="hf-mark">HF</span><span><b>Imported from Hugging Face</b><br>${escapeHtml(m.runtimeNote || 'This community repository will be validated by the active engine when it launches.')}</span></div>` : '';
   c.innerHTML = `
     <button class="lp-back" id="mm-back">${uiIcon('arrow-right', 'ui-icon')}<span>All models</span></button>
     <div class="md-detail">
@@ -4180,6 +4910,7 @@ function renderModelDetail(c) {
       </div>
       ${recNote}
       ${gatedNote}
+      ${sourceNote}
       ${fit}
       ${m.description ? `<div class="md-section-title">About this model</div><p class="md-desc">${escapeHtml(m.description)}</p>` : ''}
       <div class="md-section-title">Specifications</div>
@@ -4193,6 +4924,8 @@ function renderModelDetail(c) {
   const lb = c.querySelector('[data-launch]'); if (lb) lb.onclick = () => launchModel(m);
   const db = c.querySelector('[data-dl]'); if (db) db.onclick = () => { (lm ? downloadModel : downloadDiffusion)(m); mmDetail = null; renderModelManager(); };
   const rb = c.querySelector('[data-redl]'); if (rb) rb.onclick = () => downloadModel(m);
+  const cb = c.querySelector('[data-cancel-dl]'); if (cb) cb.onclick = () => cancelModelDownload(downloading.jobId, m.id, cb, lm ? 'lm' : 'diff');
+  const ub = c.querySelector('[data-uninstall]'); if (ub) ub.onclick = () => openModelUninstallDialog(m, lm ? 'lm' : 'diff');
   const at = document.getElementById('md-adv-tog');
   if (at) at.onclick = () => {
     const b = document.getElementById('md-adv-body'); const open = b.classList.toggle('hidden') === false;
@@ -4370,9 +5103,15 @@ async function renderHardwarePage(c) {
   const fact = (label, value, title = '') => value ? `<div class="machine-fact"><div class="machine-fact-label">${escapeHtml(label)}</div><div class="machine-fact-value"${title ? ` title="${escapeAttr(title)}"` : ''}>${escapeHtml(String(value))}</div></div>` : '';
   const cpu = s.cpu ? s.cpu + (s.cores ? ` · ${s.cores} cores` : '') : '';
   const timezone = l.timezone ? l.timezone + (l.utcOffset ? ` · UTC ${l.utcOffset}` : '') : '';
-  const systemFacts = [
+  const spark = s.platform === 'dgx-spark';
+  const capacityFacts = spark ? [
+    fact('Available storage', s.storageAvailableBytes ? `${fmtCapacity(s.storageAvailableBytes)} free · ${fmtCapacity(s.storageTotalBytes)} total` : ''),
+  ] : [
     fact('Processor', cpu, cpu),
-    fact('Memory', s.memTotalMB ? `${(s.memTotalMB / 1024).toFixed(1)} GB ${s.unifiedGpuMemory ? 'unified CPU + GPU memory' : 'RAM'}` : ''),
+    fact('Memory', s.memTotalMB ? `${(s.memTotalMB / 1024).toFixed(1)} GB RAM` : ''),
+  ];
+  const systemFacts = [
+    ...capacityFacts,
     fact('Platform', s.platform === 'dgx-spark' ? `NVIDIA DGX Spark${s.dgxVersion ? ` · DGX OS ${s.dgxVersion}` : ''}` : s.product),
     fact('Kernel', s.kernel, s.kernel),
     fact('Architecture', s.arch),
@@ -4414,6 +5153,76 @@ async function renderHardwarePage(c) {
   const driverCheck = document.getElementById('nvidia-check'); if (driverCheck) driverCheck.onclick = startNVIDIACheck;
   const driverApply = document.getElementById('nvidia-apply'); if (driverApply) driverApply.onclick = () => openNVIDIADriverDialog(driver || {}, 'apply');
   const driverReboot = document.getElementById('nvidia-reboot'); if (driverReboot) driverReboot.onclick = () => openNVIDIADriverDialog(driver || {}, 'reboot');
+}
+
+async function renderDisplayPage(c) {
+  c.innerHTML = '<div class="set-hint">Detecting display…</div>';
+  let display;
+  try { display = await api('/api/system/display'); }
+  catch { display = { available: false, outputs: [], error: 'The display service is unavailable.' }; }
+  const effectiveScale = Math.round(Number(document.documentElement.dataset.uiScale || 1) * 100);
+  const zoomOptions = UI_ZOOM_OPTIONS.map(option => {
+    const detail = option.id === 'auto' ? `${Math.round(automaticUIZoom() * 100)}% on this screen` : option.detail;
+    return `<button class="zoom-option${uiZoomPreference === option.id ? ' on' : ''}" type="button" data-ui-zoom="${option.id}" aria-pressed="${uiZoomPreference === option.id}"><b>${option.label}</b><small>${detail}</small></button>`;
+  }).join('');
+  const browserWidth = Math.round(screen.width * (devicePixelRatio || 1));
+  const browserHeight = Math.round(screen.height * (devicePixelRatio || 1));
+  const currentWidth = Number(display.width) || browserWidth;
+  const currentHeight = Number(display.height) || browserHeight;
+  const outputs = Array.isArray(display.outputs) ? display.outputs : [];
+  const configuredOutput = display.configured && display.configured.output;
+  const selectedOutput = outputs.find(output => output.name === configuredOutput) || outputs.find(output => output.name === display.output) || outputs[0];
+  const outputOptions = outputs.map(output => `<option value="${escapeAttr(output.name)}"${selectedOutput && output.name === selectedOutput.name ? ' selected' : ''}>${escapeHtml(output.name)}${output.primary ? ' · Primary' : ''}</option>`).join('');
+  const resolutionOptions = selectedOutput ? selectedOutput.modes.map(mode =>
+    `<option value="${mode.width}x${mode.height}"${mode.width === selectedOutput.width && mode.height === selectedOutput.height ? ' selected' : ''}>${mode.width} × ${mode.height}${mode.preferred ? ' · Recommended' : ''}</option>`
+  ).join('') : '';
+  const resolutionControls = display.available && selectedOutput ? `
+    <div class="display-form">
+      <div class="display-field"><label for="display-output">Display</label><select id="display-output">${outputOptions}</select></div>
+      <div class="display-field"><label for="display-resolution">Resolution</label><select id="display-resolution">${resolutionOptions}</select></div>
+      <button class="btn primary display-apply" id="display-apply" type="button">Apply resolution</button>
+    </div>
+    <div class="display-unavailable">Only resolutions reported as supported by the connected display can be selected. The choice is restored when CloudlessOS starts.</div>` :
+    `<div class="display-unavailable">Resolution control becomes available in an installed CloudlessOS desktop session. The browser preview can still adjust interface size.</div>`;
+  c.innerHTML = `<div class="display-page">
+    <div class="inf-page-hero">
+      <span class="inf-page-icon">${uiIcon('display')}</span>
+      <div class="inf-page-copy"><div class="inf-page-eyebrow">CloudlessOS display</div><div class="inf-page-title">Scale to every screen</div><div class="inf-page-desc">CloudlessOS automatically adapts its controls and workspace to the available screen, with manual overrides when you need them.</div></div>
+      <span class="inf-state-pill ready">${effectiveScale}% UI</span>
+    </div>
+    <section class="machine-card">
+      <div class="display-current"><div class="display-current-copy"><div class="display-current-title">${escapeHtml(display.output || 'Current screen')}</div><div class="display-current-sub">${display.available ? 'Detected from the active CloudlessOS desktop session.' : 'Reported by this browser session.'}</div></div><div class="display-resolution-badge">${currentWidth} × ${currentHeight}<small>Current resolution</small></div></div>
+    </section>
+    <section class="machine-card">
+      <div class="machine-card-head"><div><div class="machine-card-title">Interface size</div><div class="machine-card-desc">Automatic uses the screen dimensions to keep text and controls comfortable. A manual size stays selected on this display.</div></div></div>
+      <div class="zoom-grid">${zoomOptions}</div>
+    </section>
+    <section class="machine-card">
+      <div class="machine-card-head"><div><div class="machine-card-title">Screen resolution</div><div class="machine-card-desc">Choose a mode supported by the connected monitor or television.</div></div></div>
+      ${resolutionControls}
+    </section>
+  </div>`;
+  c.querySelectorAll('[data-ui-zoom]').forEach(button => button.onclick = () => {
+    setUIZoomPreference(button.dataset.uiZoom);
+    renderDisplayPage(c);
+  });
+  const outputSelect = document.getElementById('display-output');
+  const resolutionSelect = document.getElementById('display-resolution');
+  const applyButton = document.getElementById('display-apply');
+  if (outputSelect && resolutionSelect && applyButton) {
+    const renderModes = () => {
+      const output = outputs.find(item => item.name === outputSelect.value);
+      if (!output) return;
+      resolutionSelect.innerHTML = output.modes.map(mode =>
+        `<option value="${mode.width}x${mode.height}"${mode.width === output.width && mode.height === output.height ? ' selected' : ''}>${mode.width} × ${mode.height}${mode.preferred ? ' · Recommended' : ''}</option>`
+      ).join('');
+    };
+    outputSelect.onchange = renderModes;
+    applyButton.onclick = () => {
+      const [width, height] = resolutionSelect.value.split('x').map(Number);
+      openDisplayResolutionDialog(outputSelect.value, width, height);
+    };
+  }
 }
 
 function renderAppearancePage(c) {
@@ -4492,7 +5301,7 @@ async function renderGeneralPage(c) {
   };
   document.getElementById('gen-replay').onclick = () => {
     closeSettings();
-    showFirstLaunchIntro(showOnboarding, true);
+    showStartupIntro(showOnboarding, '', true);
   };
   api('/api/engine').then(e => { const el = document.getElementById('gen-engine'); if (el) { const a = (e.engines || []).find(x => x.active); el.textContent = a ? a.name : 'none'; } }).catch(() => {});
 }
@@ -4755,26 +5564,46 @@ function trackJobToast(jobId, label) {
 
 document.getElementById('set-x').onclick = closeSettings;
 document.getElementById('settings').addEventListener('click', e => { if (e.target.id === 'settings') closeSettings(); });
-document.getElementById('shutdown').onclick = async () => {
-  if (!confirm('Shut down CloudlessOS? This will stop all apps and power off this machine.')) return;
-  const button = document.getElementById('shutdown');
-  button.disabled = true;
-  button.title = 'CloudlessOS is shutting down';
-  try {
-    await api('/api/system/shutdown', { method: 'POST', headers: { 'X-Cloudless-Action': 'shutdown' } });
-    toast('CloudlessOS is shutting down…');
-  } catch {
-    button.disabled = false;
-    button.title = 'Shut down CloudlessOS';
-    toast('Could not shut down CloudlessOS', true);
-  }
+document.getElementById('shutdown').onclick = e => {
+  e.stopPropagation();
+  const button = e.currentTarget;
+  const pop = document.getElementById('power-pop');
+  const opening = pop.classList.contains('hidden');
+  document.getElementById('net-pop').classList.add('hidden');
+  pop.classList.toggle('hidden', !opening);
+  button.classList.toggle('open', opening);
+  button.setAttribute('aria-expanded', String(opening));
+  if (opening) pop.querySelector('.power-option')?.focus();
 };
+document.querySelectorAll('[data-power-action]').forEach(option => {
+  option.onclick = () => {
+    const pop = document.getElementById('power-pop');
+    pop.classList.add('hidden');
+    const button = document.getElementById('shutdown');
+    button.classList.remove('open');
+    button.setAttribute('aria-expanded', 'false');
+    openPowerDialog(option.dataset.powerAction);
+  };
+});
 
 /* ---- connectivity popover wiring ---- */
-document.getElementById('mi-net').onclick = e => { e.stopPropagation(); toggleNetPop(); };
+document.getElementById('mi-net').onclick = e => {
+  e.stopPropagation();
+  const power = document.getElementById('power-pop');
+  power.classList.add('hidden');
+  document.getElementById('shutdown').classList.remove('open');
+  document.getElementById('shutdown').setAttribute('aria-expanded', 'false');
+  toggleNetPop();
+};
 document.addEventListener('click', e => {
   const p = document.getElementById('net-pop');
   if (!p.classList.contains('hidden') && !p.contains(e.target) && !e.target.closest('#mi-net')) p.classList.add('hidden');
+  const power = document.getElementById('power-pop');
+  if (!power.classList.contains('hidden') && !power.contains(e.target) && !e.target.closest('#shutdown')) {
+    power.classList.add('hidden');
+    document.getElementById('shutdown').classList.remove('open');
+    document.getElementById('shutdown').setAttribute('aria-expanded', 'false');
+  }
 });
 
 /* ---- App Launcher wiring ---- */
@@ -5648,8 +6477,15 @@ document.getElementById('hero-ask-input').addEventListener('keydown', e => {
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;
   const np = document.getElementById('net-pop');
+  const pp = document.getElementById('power-pop');
   if (!document.getElementById('key-dialog-layer').classList.contains('hidden')) closeKeyDialog();
   else if (appSurfaceOpen()) closeAppSurface();
+  else if (!pp.classList.contains('hidden')) {
+    pp.classList.add('hidden');
+    document.getElementById('shutdown').classList.remove('open');
+    document.getElementById('shutdown').setAttribute('aria-expanded', 'false');
+    document.getElementById('shutdown').focus();
+  }
   else if (!np.classList.contains('hidden')) np.classList.add('hidden');
   else if (modelsOpen()) closeModelManager();
   else if (launcherOpen()) closeLauncher();
@@ -5716,8 +6552,9 @@ async function bootCloudless() {
   await refreshCapabilities();
   refreshStatus(); renderGPUs(); renderSystem(); renderPlaces(); renderApps(); renderEngine(); refreshNetStatus(); refreshActiveModel(); refreshProfileBadge(); refreshModelDownloads();
   api('/api/onboarding').then(o => {
-    if (!o || !o.completed) renderApps().then(() => showFirstLaunchIntro(showOnboarding));
-  }).catch(() => {});
+    const afterIntro = () => { if (!o || !o.completed) renderApps().then(showOnboarding); };
+    showStartupIntro(afterIntro, (o && o.bootID) || '');
+  }).catch(() => showStartupIntro(() => {}));
 }
 bootCloudless();
 setInterval(() => { refreshStatus(); renderGPUs(); renderSystem(); if (!engineSwitching) renderEngine(); }, 4000);

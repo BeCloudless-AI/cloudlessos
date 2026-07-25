@@ -7,15 +7,20 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+
+	hostplatform "github.com/cloudless/orchestrator/internal/platform"
 )
 
-// LoadInfo is the host's live CPU + RAM utilization (Linux /proc).
+// LoadInfo is the host's live utilization plus filesystem capacity.
 type LoadInfo struct {
-	CPUModel   string  `json:"cpuModel"`
-	Cores      int     `json:"cores"`
-	CPUPct     float64 `json:"cpuPct"` // 0..100 since the previous Load() call
-	MemUsedMB  int     `json:"memUsedMB"`
-	MemTotalMB int     `json:"memTotalMB"`
+	CPUModel              string  `json:"cpuModel"`
+	Cores                 int     `json:"cores"`
+	CPUPct                float64 `json:"cpuPct"` // 0..100 since the previous Load() call
+	MemUsedMB             int     `json:"memUsedMB"`
+	MemTotalMB            int     `json:"memTotalMB"`
+	Platform              string  `json:"platform"`
+	StorageTotalBytes     uint64  `json:"storageTotalBytes"`
+	StorageAvailableBytes uint64  `json:"storageAvailableBytes"`
 }
 
 var (
@@ -51,7 +56,13 @@ func Load() LoadInfo {
 	if used < 0 {
 		used = 0
 	}
-	return LoadInfo{CPUModel: model, Cores: cores, CPUPct: pct, MemUsedMB: used / 1024, MemTotalMB: total2 / 1024}
+	storageTotal, storageAvailable := storageBytes(storagePath())
+	return LoadInfo{
+		CPUModel: model, Cores: cores, CPUPct: pct,
+		MemUsedMB: used / 1024, MemTotalMB: total2 / 1024,
+		Platform:          hostplatform.Detect(),
+		StorageTotalBytes: storageTotal, StorageAvailableBytes: storageAvailable,
+	}
 }
 
 // cpuJiffies returns total and busy (non-idle) jiffies from /proc/stat's "cpu" line.

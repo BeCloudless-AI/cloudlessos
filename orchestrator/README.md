@@ -105,8 +105,10 @@ runs in the background, streaming progress (per-layer pull counts, then start/ru
 On startup the daemon provisions the bundled apps onto a shared `cloudless` docker network:
 
 - **vLLM** (`cloudless-vllm`) — the default inference engine (D12), OpenAI-compatible on
-  `:8000`, serving the model named `cloudless`. Default `Qwen/Qwen2.5-1.5B-Instruct`;
-  override with `CLOUDLESS_DEFAULT_MODEL` (any Hugging Face id). Validated on Blackwell.
+  `:8000`, serving the model named `cloudless`. Standard systems default to
+  `Qwen/Qwen2.5-1.5B-Instruct`; DGX Spark defaults to
+  `Qwen/Qwen3.6-35B-A3B`. Override either with `CLOUDLESS_DEFAULT_MODEL`
+  (any Hugging Face id). Validated on Blackwell.
 - **Open WebUI** (`cloudless-open-webui`) — branded "Cloudless AI", no login wall, wired to
   vLLM via the OpenAI API (`http://cloudless-vllm:8000/v1`). The hero "Chat with your
   Cloudless AI" button opens it.

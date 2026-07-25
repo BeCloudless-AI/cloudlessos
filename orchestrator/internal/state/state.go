@@ -10,14 +10,25 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
+
+	"github.com/cloudless/orchestrator/internal/models"
 )
 
 // Profile is the user-controlled profile for this CloudlessOS install.
 type Profile struct {
 	Name   string `json:"name,omitempty"`   // display name (greeting / personalization)
 	Region string `json:"region,omitempty"` // ISO-3166 alpha-2 override, e.g. "FR"; "" = auto-detect
+}
+
+// DisplayPreference is the validated X11 output mode CloudlessOS should restore
+// when its kiosk session starts.
+type DisplayPreference struct {
+	Output string `json:"output,omitempty"`
+	Width  int    `json:"width,omitempty"`
+	Height int    `json:"height,omitempty"`
 }
 
 // APIKey is a user-generated credential for the Cloudless Proxy (the OpenAI-compatible
@@ -58,16 +69,18 @@ func NormalizeAPIKeyScope(scope string) string {
 
 // State is the persisted state.
 type State struct {
-	FirstSeen   string   `json:"firstSeen"`             // RFC3339; when the daemon first initialized this store
-	Onboarded   bool     `json:"onboarded"`             // user has completed first-run onboarding
-	Engine      string   `json:"engine,omitempty"`      // selected inference engine ("" = default)
-	Model       string   `json:"model,omitempty"`       // selected model ("" = catalog default)
-	Pinned      []string `json:"pinned,omitempty"`      // app ids pinned to the dashboard "fast launch"
-	PinnedSet   bool     `json:"pinnedSet,omitempty"`   // user has customized pins (else use catalog default)
-	LocalNet    bool     `json:"localNet"`              // serve apps on the local network (LAN)
-	LocalNetSet bool     `json:"localNetSet,omitempty"` // user has chosen (else default ON)
-	Profile     Profile  `json:"profile"`               // user-controlled profile
-	APIKeys     []APIKey `json:"apiKeys,omitempty"`     // Cloudless Proxy credentials
+	FirstSeen    string                  `json:"firstSeen"`              // RFC3339; when the daemon first initialized this store
+	Onboarded    bool                    `json:"onboarded"`              // user has completed first-run onboarding
+	Engine       string                  `json:"engine,omitempty"`       // selected inference engine ("" = default)
+	Model        string                  `json:"model,omitempty"`        // selected model ("" = catalog default)
+	Pinned       []string                `json:"pinned,omitempty"`       // app ids pinned to the dashboard "fast launch"
+	PinnedSet    bool                    `json:"pinnedSet,omitempty"`    // user has customized pins (else use catalog default)
+	LocalNet     bool                    `json:"localNet"`               // serve apps on the local network (LAN)
+	LocalNetSet  bool                    `json:"localNetSet,omitempty"`  // user has chosen (else default ON)
+	Profile      Profile                 `json:"profile"`                // user-controlled profile
+	APIKeys      []APIKey                `json:"apiKeys,omitempty"`      // Cloudless Proxy credentials
+	Display      DisplayPreference       `json:"display,omitempty"`      // preferred display output and mode
+	CustomModels map[string]models.Model `json:"customModels,omitempty"` // user-imported Hugging Face repositories
 
 	// EngineCmds holds user-edited launch commands, keyed "engineID\x00modelID".
 	// The value is the container command (args after the image) to use when that
@@ -166,6 +179,22 @@ func (s *Store) SetOnboarded(v bool) error {
 	return s.save()
 }
 
+// DisplayPreference returns the persisted display mode.
+func (s *Store) DisplayPreference() DisplayPreference {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.st.Display
+}
+
+// SetDisplayPreference persists a display mode already validated against
+// xrandr's connected-output mode list.
+func (s *Store) SetDisplayPreference(pref DisplayPreference) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.st.Display = pref
+	return s.save()
+}
+
 // SetEngine records the selected inference engine and persists.
 func (s *Store) SetEngine(id string) error {
 	s.mu.Lock()
@@ -179,6 +208,31 @@ func (s *Store) SetModel(model string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.st.Model = model
+	return s.save()
+}
+
+// CustomModels returns user-imported Hugging Face repositories. Model slices are
+// copied so callers cannot mutate the store without taking its lock.
+func (s *Store) CustomModels() map[string]models.Model {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make(map[string]models.Model, len(s.st.CustomModels))
+	for id, model := range s.st.CustomModels {
+		model.Tags = append([]string(nil), model.Tags...)
+		out[id] = model
+	}
+	return out
+}
+
+// UpsertCustomModel persists metadata for a repository imported from the Hub.
+func (s *Store) UpsertCustomModel(model models.Model) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.st.CustomModels == nil {
+		s.st.CustomModels = map[string]models.Model{}
+	}
+	model.Tags = append([]string(nil), model.Tags...)
+	s.st.CustomModels[model.ID] = model
 	return s.save()
 }
 
@@ -410,3 +464,54 @@ func (s *Store) Path() string { return s.path }
 
 // Dir returns the state directory (where per-app config also lives).
 func (s *Store) Dir() string { return filepath.Dir(s.path) }
+
+// HuggingFaceToken returns the locally connected Hugging Face credential. The
+// token deliberately lives outside state.json so ordinary state inspection and
+// diagnostics can never expose it.
+func (s *Store) HuggingFaceToken() (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	data, err := os.ReadFile(filepath.Join(s.Dir(), "huggingface-token"))
+	if os.IsNotExist(err) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(data)), nil
+}
+
+// SetHuggingFaceToken atomically stores a Hub credential with owner-only
+// permissions. It is never placed in the normal JSON state store.
+func (s *Store) SetHuggingFaceToken(token string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.persist {
+		return nil
+	}
+	path := filepath.Join(s.Dir(), "huggingface-token")
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, []byte(strings.TrimSpace(token)+"\n"), 0o600); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmp, 0o600); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return os.Chmod(path, 0o600)
+}
+
+// ClearHuggingFaceToken disconnects the local Hugging Face account.
+func (s *Store) ClearHuggingFaceToken() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	err := os.Remove(filepath.Join(s.Dir(), "huggingface-token"))
+	if os.IsNotExist(err) {
+		return nil
+	}
+	return err
+}

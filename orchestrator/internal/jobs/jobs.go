@@ -173,3 +173,13 @@ func (j *Job) Fail(err error) {
 		u.Done = true
 	})
 }
+
+// Cancel marks the job as deliberately stopped by the user.
+func (j *Job) Cancel() {
+	j.apply(func(u *Update) {
+		u.Phase = "canceled"
+		u.Message = "Canceled"
+		u.Error = ""
+		u.Done = true
+	})
+}

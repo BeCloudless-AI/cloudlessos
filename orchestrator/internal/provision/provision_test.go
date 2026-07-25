@@ -2,7 +2,20 @@ package provision
 
 import (
 	"testing"
+
+	"github.com/cloudless/orchestrator/internal/platform"
 )
+
+func TestDefaultModelPinKeyFollowsPlatform(t *testing.T) {
+	t.Setenv("CLOUDLESS_PLATFORM", platform.Generic)
+	if got := defaultModelPinKey(); got != "default" {
+		t.Fatalf("generic model pin = %q", got)
+	}
+	t.Setenv("CLOUDLESS_PLATFORM", platform.DGXSpark)
+	if got := defaultModelPinKey(); got != "dgx-spark" {
+		t.Fatalf("Spark model pin = %q", got)
+	}
+}
 
 func TestCredentialComparisonRequiresExactEnvironmentEntry(t *testing.T) {
 	const key = "cloudless-hermes-secret"

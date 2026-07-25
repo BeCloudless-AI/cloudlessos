@@ -1,9 +1,15 @@
 package catalog
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/cloudless/orchestrator/internal/capabilities"
+	"github.com/cloudless/orchestrator/internal/platform"
+)
 
 func TestARM64CatalogSelectsDGXComfyImageAndHidesUnsupportedApps(t *testing.T) {
 	t.Setenv("CLOUDLESS_ARCH", "arm64")
+	t.Setenv("CLOUDLESS_PLATFORM", platform.DGXSpark)
 
 	comfy, ok := Get("comfyui")
 	if !ok {
@@ -38,6 +44,7 @@ func TestARM64CatalogSelectsDGXComfyImageAndHidesUnsupportedApps(t *testing.T) {
 
 func TestAMD64CatalogKeepsExistingRecipes(t *testing.T) {
 	t.Setenv("CLOUDLESS_ARCH", "amd64")
+	t.Setenv("CLOUDLESS_PLATFORM", platform.Generic)
 	for _, id := range []string{"comfyui", "ai-toolkit", "unsloth", "openclaw"} {
 		if _, ok := Get(id); !ok {
 			t.Fatalf("%s should remain available on AMD64", id)
@@ -46,5 +53,58 @@ func TestAMD64CatalogKeepsExistingRecipes(t *testing.T) {
 	comfy, _ := Get("comfyui")
 	if comfy.Image != "mmartial/comfyui-nvidia-docker:latest" {
 		t.Fatalf("unexpected AMD64 ComfyUI image: %q", comfy.Image)
+	}
+}
+
+func TestGenericARM64DoesNotReceiveDGXContainerRecipes(t *testing.T) {
+	t.Setenv("CLOUDLESS_ARCH", "arm64")
+	t.Setenv("CLOUDLESS_PLATFORM", platform.Generic)
+	for _, id := range []string{"vllm", "sglang", "comfyui"} {
+		if _, ok := Get(id); ok {
+			t.Fatalf("%s exposed a DGX-qualified ARM64 recipe on generic ARM64", id)
+		}
+	}
+}
+
+func TestPlatformAndVersionLockedRecipeUsesCentralCapabilities(t *testing.T) {
+	app := App{
+		ID: "spark-only", Platforms: []string{platform.DGXSpark},
+		Architectures: []string{"arm64"}, MinCloudlessVersion: "0.3.0",
+		MinDGXOSVersion: "7.6.0", RequiredFeatures: []string{capabilities.NVIDIACDI},
+	}
+	t.Setenv("CLOUDLESS_PLATFORM", platform.DGXSpark)
+	t.Setenv("CLOUDLESS_ARCH", "arm64")
+	t.Setenv("CLOUDLESS_VERSION", "0.3.0")
+	t.Setenv("CLOUDLESS_DGX_OS_VERSION", "7.5.0")
+	if app.SupportsHost() {
+		t.Fatal("old DGX OS version unexpectedly satisfied recipe")
+	}
+
+	t.Setenv("CLOUDLESS_DGX_OS_VERSION", "7.6.0")
+	if !app.SupportsHost() {
+		t.Fatalf("compatible Spark recipe rejected: %#v", app.Availability())
+	}
+
+	t.Setenv("CLOUDLESS_PLATFORM", platform.Generic)
+	if app.SupportsHost() {
+		t.Fatal("generic host accepted DGX-only recipe")
+	}
+}
+
+func TestCatalogGetCannotBypassPlatformLock(t *testing.T) {
+	original := apps
+	t.Cleanup(func() { apps = original })
+	apps = append(apps, App{
+		ID: "test-dgx-only", Image: "example/test:latest",
+		Platforms: []string{platform.DGXSpark},
+	})
+
+	t.Setenv("CLOUDLESS_PLATFORM", platform.Generic)
+	if _, ok := Get("test-dgx-only"); ok {
+		t.Fatal("Catalog.Get exposed a DGX-only recipe on a generic host")
+	}
+	t.Setenv("CLOUDLESS_PLATFORM", platform.DGXSpark)
+	if _, ok := Get("test-dgx-only"); !ok {
+		t.Fatal("Catalog.Get rejected the DGX-only recipe on a Spark")
 	}
 }

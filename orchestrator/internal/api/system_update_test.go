@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cloudless/orchestrator/internal/capabilities"
 	"github.com/cloudless/orchestrator/internal/nvidiaupdate"
 	"github.com/cloudless/orchestrator/internal/osupdate"
 )
@@ -56,6 +57,18 @@ func TestNVIDIADriverApplyRequiresConfirmation(t *testing.T) {
 	rec := httptest.NewRecorder()
 	(&Server{}).nvidiaDriverApply(rec, httptest.NewRequest(http.MethodPost, "/api/system/nvidia-driver/apply", nil))
 	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestDGXSparkCannotBypassDriverOwnershipThroughAPI(t *testing.T) {
+	t.Setenv("CLOUDLESS_PLATFORM", "dgx-spark")
+	req := httptest.NewRequest(http.MethodPost, "/api/system/nvidia-driver/apply", nil)
+	req.Header.Set("X-Cloudless-Action", "nvidia-driver")
+	rec := httptest.NewRecorder()
+	(&Server{}).nvidiaDriverApply(rec, req)
+	if rec.Code != http.StatusConflict ||
+		!strings.Contains(rec.Body.String(), capabilities.GenericDriverUpdates) {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
 }

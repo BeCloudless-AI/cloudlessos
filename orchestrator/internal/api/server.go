@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cloudless/orchestrator/internal/apps"
+	"github.com/cloudless/orchestrator/internal/capabilities"
 	"github.com/cloudless/orchestrator/internal/catalog"
 	"github.com/cloudless/orchestrator/internal/engine"
 	"github.com/cloudless/orchestrator/internal/hardware"
@@ -81,6 +82,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/health", s.health)
 	mux.HandleFunc("GET /api/gpu", s.gpu)
 	mux.HandleFunc("GET /api/system", s.system)
+	mux.HandleFunc("GET /api/capabilities", s.capabilities)
 	mux.HandleFunc("POST /api/system/shutdown", s.systemShutdown)
 	mux.HandleFunc("POST /api/system/reboot", s.systemReboot)
 	mux.HandleFunc("GET /api/system/update", s.systemUpdateGet)
@@ -165,6 +167,29 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 		resp["dockerError"] = dockerErr.Error()
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+func (s *Server) capabilities(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, capabilities.Current())
+}
+
+// requireCapability is the server-side enforcement boundary for feature-gated
+// operations. Frontend visibility is convenience only; every privileged
+// feature endpoint must call this helper.
+func (s *Server) requireCapability(w http.ResponseWriter, id string) bool {
+	snapshot := capabilities.Current()
+	status, ok := snapshot.Features[id]
+	if ok && status.Available {
+		return true
+	}
+	reason := status.Reason
+	if reason == "" {
+		reason = "This feature is not available on this CloudlessOS platform"
+	}
+	writeJSON(w, http.StatusConflict, map[string]string{
+		"error": reason, "capability": id,
+	})
+	return false
 }
 
 func (s *Server) gpu(w http.ResponseWriter, r *http.Request) {

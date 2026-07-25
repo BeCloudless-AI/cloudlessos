@@ -36,6 +36,10 @@ uses a signed, reversible layer over NVIDIA's qualified DGX OS rather than a gen
 Ubuntu ISO. See [`DGX-SPARK.md`](./DGX-SPARK.md) for installation, recovery, update,
 application-compatibility, and diagnostic instructions.
 
+Platform- and version-locked product features use the shared backend capability
+contract described in [`CAPABILITIES.md`](./CAPABILITIES.md). Do not fork the
+GUI or rely on browser-only hiding for platform-specific behavior.
+
 To qualify a physical DGX Spark without collecting user data or unique device identifiers,
 run `bash distro/scripts/collect-dgx-spark-info.sh`. It creates a single inspectable
 `cloudless-dgx-spark-report-*.tar.gz` archive in the current directory.

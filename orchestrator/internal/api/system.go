@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cloudless/orchestrator/internal/capabilities"
 	"github.com/cloudless/orchestrator/internal/hardware"
 	"github.com/cloudless/orchestrator/internal/locale"
 	"github.com/cloudless/orchestrator/internal/state"
@@ -36,9 +37,10 @@ func (s *Server) system(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	gpus, _ := hardware.GPUs(ctx)
 	writeJSON(w, http.StatusOK, map[string]any{
-		"system":   hardware.Sys(),
-		"locale":   locale.Detect(),
-		"gpuCount": len(gpus),
+		"system":       hardware.Sys(),
+		"locale":       locale.Detect(),
+		"gpuCount":     len(gpus),
+		"capabilities": capabilities.Current(),
 	})
 }
 

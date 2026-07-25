@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os/exec"
 
+	"github.com/cloudless/orchestrator/internal/capabilities"
 	"github.com/cloudless/orchestrator/internal/nvidiaupdate"
 	"github.com/cloudless/orchestrator/internal/osupdate"
 )
@@ -56,6 +57,9 @@ func (s *Server) nvidiaDriverGet(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) nvidiaDriverCheck(w http.ResponseWriter, _ *http.Request) {
+	if !s.requireCapability(w, capabilities.GenericDriverUpdates) {
+		return
+	}
 	if err := startUpdateUnit("cloudless-nvidia-check.service"); err != nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
 		return
@@ -64,6 +68,9 @@ func (s *Server) nvidiaDriverCheck(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) nvidiaDriverApply(w http.ResponseWriter, r *http.Request) {
+	if !s.requireCapability(w, capabilities.GenericDriverUpdates) {
+		return
+	}
 	if r.Header.Get("X-Cloudless-Action") != "nvidia-driver" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "driver update confirmation required"})
 		return

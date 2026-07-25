@@ -31,6 +31,7 @@ grep -Fq 'CLOUDLESS_HOME=/home/cloudless/Cloudless' \
     "$DISTRO/packages/cloudless-orchestrator/cloudless.env"
 grep -Fq 'CLOUDLESS_DESKTOP_HOME=/home/cloudless' \
     "$DISTRO/packages/cloudless-orchestrator/cloudless.env"
+grep -Fq 'capabilities.BuildVersion=$VERSION' "$DISTRO/scripts/build-packages.sh"
 orchestrator_deb="$(find "$DISTRO/out/packages" -maxdepth 1 -type f -name 'cloudless-orchestrator_*_amd64.deb' -print -quit)"
 test -n "$orchestrator_deb"
 dpkg-deb -f "$orchestrator_deb" Depends | grep -Eq '(^|, )gpgv(,|$)'

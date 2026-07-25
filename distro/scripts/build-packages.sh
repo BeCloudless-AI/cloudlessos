@@ -19,7 +19,9 @@ mkdir -p "$WORK" "$OUT"
 rm -f "$OUT"/cloudless-*_"$ARCH".deb
 
 echo "==> Building cloudlessd $VERSION for linux/$ARCH"
-( cd "$ROOT/orchestrator"; CGO_ENABLED=0 GOOS=linux GOARCH="$ARCH" go build -ldflags="-s -w" -o "$WORK/cloudlessd" ./cmd/cloudlessd )
+( cd "$ROOT/orchestrator"; CGO_ENABLED=0 GOOS=linux GOARCH="$ARCH" go build \
+    -ldflags="-s -w -X github.com/cloudless/orchestrator/internal/capabilities.BuildVersion=$VERSION" \
+    -o "$WORK/cloudlessd" ./cmd/cloudlessd )
 ( cd "$ROOT/orchestrator"; CGO_ENABLED=0 GOOS=linux GOARCH="$ARCH" go build -ldflags="-s -w" -o "$WORK/cloudless-updater-bin" ./cmd/cloudless-updater )
 
 make_control() {

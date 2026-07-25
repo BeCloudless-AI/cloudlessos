@@ -2495,6 +2495,24 @@ let installing = 0, catalogCache = [], gpuBuilt = 0, appsEntered = false;
 let lastRunning = {}, engineReady = false, engineActive = '', engineSwitching = false, activeEngineName = 'the engine';
 let pinnedIds = [], lpQuery = '', lpView = '';
 let asstMsgs = [], asstBusy = false, asstController = null, asstStreamQueued = false, asstStreamIndex = -1;
+let capabilityCache = { facts: {}, features: {} };
+function applyCapabilitySnapshot(snapshot) {
+  if (!snapshot || typeof snapshot !== 'object') return;
+  capabilityCache = snapshot;
+  const root = document.documentElement;
+  root.dataset.cloudlessPlatform = snapshot.facts?.platform || 'generic';
+  root.dataset.cloudlessVersion = snapshot.facts?.cloudlessVersion || 'development';
+  Object.entries(snapshot.features || {}).forEach(([id, status]) => {
+    root.setAttribute('data-cap-' + id.replace(/[^a-z0-9-]/gi, '-').toLowerCase(), status?.available ? '1' : '0');
+  });
+  dispatchEvent(new CustomEvent('cloudless:capabilities', { detail: snapshot }));
+}
+function hasCapability(id) { return capabilityCache.features?.[id]?.available === true; }
+function capabilityReason(id) { return capabilityCache.features?.[id]?.reason || ''; }
+async function refreshCapabilities() {
+  try { applyCapabilitySnapshot(await api('/api/capabilities')); } catch {}
+  return capabilityCache;
+}
 
 /* ---- clock ---- */
 const DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
@@ -4067,7 +4085,8 @@ function fmtUptime(sec) {
 }
 function nvidiaDriverCard(driver, gpus) {
   driver = driver || {};
-  const state = driver.state || 'idle';
+  let state = driver.state || 'idle';
+  if (hasCapability('dgx-vendor-update-boundary')) state = 'managed';
   const busy = state === 'checking' || state === 'installing';
   const detected = !!driver.hardwareDetected || gpus.length > 0;
   if (!detected) return '';
@@ -4098,7 +4117,7 @@ function nvidiaDriverCard(driver, gpus) {
   return `<div class="machine-driver">
     <div class="machine-driver-top">
       <span class="machine-driver-icon">${uiIcon(busy ? 'restart' : 'download')}</span>
-      <div class="machine-driver-copy"><div class="machine-driver-title">NVIDIA driver updates</div><div class="machine-driver-sub">${escapeHtml(driver.message || 'CloudlessOS checks Ubuntu for the newest driver recommended for this exact GPU.')}${driver.error ? ` ${escapeHtml(driver.error)}` : ''}</div></div>
+      <div class="machine-driver-copy"><div class="machine-driver-title">NVIDIA driver updates</div><div class="machine-driver-sub">${escapeHtml(state === 'managed' ? 'NVIDIA drivers, CUDA, firmware, and the kernel remain managed by DGX OS.' : (driver.message || 'CloudlessOS checks Ubuntu for the newest driver recommended for this exact GPU.'))}${driver.error && state !== 'managed' ? ` ${escapeHtml(driver.error)}` : ''}</div></div>
       <span class="machine-driver-status ${tone}">${escapeHtml(label)}</span>
     </div>
     <div class="machine-driver-meta">
@@ -4173,6 +4192,7 @@ async function renderHardwarePage(c) {
   let gpu, folders, sys, driver;
   try { [gpu, folders, sys, driver] = await Promise.all([api('/api/gpu'), api('/api/folders'), api('/api/system').catch(() => null), api('/api/system/nvidia-driver').catch(() => null)]); } catch { return; }
   const gpus = gpu.gpus || [];
+  if (sys && sys.capabilities) applyCapabilitySnapshot(sys.capabilities);
   const s = sys && sys.system ? sys.system : {};
   const l = sys && sys.locale ? sys.locale : {};
   const fact = (label, value, title = '') => value ? `<div class="machine-fact"><div class="machine-fact-label">${escapeHtml(label)}</div><div class="machine-fact-value"${title ? ` title="${escapeAttr(title)}"` : ''}>${escapeHtml(String(value))}</div></div>` : '';
@@ -5520,13 +5540,17 @@ function initBackground() {
 /* ---- boot ---- */
 initBackground();
 tickClock(); setInterval(tickClock, 1000);
-refreshStatus(); renderGPUs(); renderSystem(); renderPlaces(); renderApps(); renderEngine(); refreshNetStatus(); refreshActiveModel(); refreshProfileBadge();
+async function bootCloudless() {
+  await refreshCapabilities();
+  refreshStatus(); renderGPUs(); renderSystem(); renderPlaces(); renderApps(); renderEngine(); refreshNetStatus(); refreshActiveModel(); refreshProfileBadge();
+  api('/api/onboarding').then(o => {
+    if (!o || !o.completed) renderApps().then(() => showFirstLaunchIntro(showOnboarding));
+  }).catch(() => {});
+}
+bootCloudless();
 setInterval(() => { refreshStatus(); renderGPUs(); renderSystem(); if (!engineSwitching) renderEngine(); }, 4000);
 setInterval(() => { if (installing === 0) renderApps(); }, 8000);
 setInterval(refreshNetStatus, 20000);
-api('/api/onboarding').then(o => {
-  if (!o || !o.completed) renderApps().then(() => showFirstLaunchIntro(showOnboarding));
-}).catch(() => {});
 </script>
 </body>
 </html>

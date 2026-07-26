@@ -21,6 +21,16 @@ func TestEmbeddedWebIncludesSparkClusterWizard(t *testing.T) {
 			t.Fatalf("embedded cluster UI missing safe local fallback progress %q", want)
 		}
 	}
+	for _, want := range []string{"clusterCheckFailureLabels", "The other Spark has a private network conflict", "will be reused"} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("embedded cluster UI missing stale-address guidance %q", want)
+		}
+	}
+	for _, want := range []string{"const createFailed = Boolean(p.ready && w.error && !w.busy)", "The Sparks were not connected", "Try connecting again"} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("embedded cluster UI missing connection failure state %q", want)
+		}
+	}
 	for _, want := range []string{"id=\"home-cluster\"", "function renderHomeCluster", "Two-Spark compute is ready", "computeReady ? 'Manage'", "host.querySelector('button').onclick = openSparkClusterSurface", "Runs across both Sparks", "Use both Sparks", "mode: selectedMode", "distributed compatibility shown separately", "Private · running across two Sparks", "Active across both Sparks", "Model requests are automatically served by your connected Spark pair", "Running across two Sparks", "executionMode === 'cluster'"} {
 		if !strings.Contains(html, want) {
 			t.Fatalf("embedded UI missing system-wide cluster experience %q", want)

@@ -83,6 +83,27 @@ func TestNetplanCreatesSeparateSubnets(t *testing.T) {
 	}
 }
 
+func TestReusableClusterAddressesAcceptsExactStaleCloudlessAddresses(t *testing.T) {
+	links := []string{"enP2p1s0f1np1", "enp1s0f1np1"}
+	raw := "10: enp1s0f1np1 inet 10.100.1.2/24 brd 10.100.1.255 scope global enp1s0f1np1\n" +
+		"12: enP2p1s0f1np1 inet 10.100.0.2/24 brd 10.100.0.255 scope global enP2p1s0f1np1\n"
+	if !reusableClusterAddresses(raw, links, 2) {
+		t.Fatal("exact stale Cloudless peer addresses should be reusable")
+	}
+}
+
+func TestReusableClusterAddressesRejectsRealConflicts(t *testing.T) {
+	links := []string{"enP2p1s0f1np1", "enp1s0f1np1"}
+	for _, raw := range []string{
+		"5: eth0 inet 10.100.0.2/24 scope global eth0\n",
+		"12: enP2p1s0f1np1 inet 10.100.0.99/24 scope global enP2p1s0f1np1\n",
+	} {
+		if reusableClusterAddresses(raw, links, 2) {
+			t.Fatalf("conflicting address inventory was accepted: %q", raw)
+		}
+	}
+}
+
 func TestValidateTargetRejectsShellInput(t *testing.T) {
 	for _, tc := range []struct{ host, user string }{{"spark.local;reboot", "nvidia"}, {"spark.local", "nvidia;id"}, {"$(reboot)", "nvidia"}} {
 		if err := validateTarget(tc.host, tc.user); err == nil {

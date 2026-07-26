@@ -354,6 +354,33 @@ func routeConflict(raw string) bool {
 	return strings.Contains(raw, "10.100.0.0/24") || strings.Contains(raw, "10.100.1.0/24")
 }
 
+// reusableClusterAddresses recognizes addresses left in the live kernel after
+// an earlier Cloudless disconnect. Netplan can leave addresses behind on the
+// unmanaged ConnectX ports even after its YAML is removed. They are safe to
+// reuse only when every remaining cluster address exactly matches the address
+// and dedicated interface Cloudless is about to configure.
+func reusableClusterAddresses(raw string, links []string, lastOctet int) bool {
+	if len(links) != 2 {
+		return false
+	}
+	expected := map[string]string{
+		links[0]: fmt.Sprintf("10.100.0.%d/24", lastOctet),
+		links[1]: fmt.Sprintf("10.100.1.%d/24", lastOctet),
+	}
+	found := false
+	for _, line := range strings.Split(raw, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 4 || fields[2] != "inet" || !isClusterAddress(fields[3]) {
+			continue
+		}
+		found = true
+		if expected[fields[1]] != fields[3] {
+			return false
+		}
+	}
+	return found
+}
+
 func PreflightCheck(ctx context.Context, request PreflightRequest) (Preflight, error) {
 	request.Host, request.Username = strings.TrimSpace(request.Host), strings.TrimSpace(request.Username)
 	result := Preflight{PeerHost: request.Host, Checks: []Check{}}
@@ -385,9 +412,18 @@ func PreflightCheck(ctx context.Context, request PreflightRequest) (Preflight, e
 	}
 	add("local-link", "High-speed connection on this Spark", localErr == nil, localLinkDetails)
 	_, localConfigErr := os.Stat(configPath)
-	add("local-config", "No previous Cloudless cluster configuration", errors.Is(localConfigErr, os.ErrNotExist), configPath)
+	localConfigMissing := errors.Is(localConfigErr, os.ErrNotExist)
+	add("local-config", "No previous Cloudless cluster configuration", localConfigMissing, configPath)
 	localRoutes, localRouteErr := run(ctx, nil, nil, "ip", "route", "show")
-	add("local-addresses", "Private cluster addresses are available", localRouteErr == nil && !routeConflict(localRoutes), "10.100.0.0/24 and 10.100.1.0/24")
+	localAddressesOK := localRouteErr == nil && !routeConflict(localRoutes)
+	localAddressDetails := "10.100.0.0/24 and 10.100.1.0/24"
+	if !localAddressesOK && localConfigMissing {
+		if localAddresses, addressErr := run(ctx, nil, nil, "ip", "-o", "-4", "addr", "show"); addressErr == nil && reusableClusterAddresses(localAddresses, local, 1) {
+			localAddressesOK = true
+			localAddressDetails = "Existing Cloudless addresses on the dedicated ports will be reused."
+		}
+	}
+	add("local-addresses", "Private cluster addresses are available", localAddressesOK, localAddressDetails)
 	peerName, arch, dgx, peerLinks, peerLinkDiagnostic, remoteErr := remoteFacts(ctx, request)
 	result.PeerName, result.PeerLinks = peerName, peerLinks
 	add("ssh", "Secure administrator connection", remoteErr == nil, peerName)
@@ -404,10 +440,19 @@ func PreflightCheck(ctx context.Context, request PreflightRequest) (Preflight, e
 			peerLinkDetails = fmt.Sprintf("The cable is not fully ready yet (%d of 2 links active). Check the plug or restart with the cable connected.", len(peerLinks))
 		}
 		add("peer-link", "High-speed connection on the other Spark", len(peerLinks) == 2, peerLinkDetails)
-		peerRoutes, peerRouteErr := remote(ctx, request.Host, request.Username, request.Password, "ip route show", nil)
-		add("peer-addresses", "Peer cluster addresses are available", peerRouteErr == nil && !routeConflict(peerRoutes), "10.100.0.0/24 and 10.100.1.0/24")
 		_, peerConfigErr := remote(ctx, request.Host, request.Username, request.Password, "test ! -e "+configPath, nil)
-		add("peer-config", "No previous Cloudless cluster configuration on peer", peerConfigErr == nil, configPath)
+		peerConfigMissing := peerConfigErr == nil
+		peerRoutes, peerRouteErr := remote(ctx, request.Host, request.Username, request.Password, "ip route show", nil)
+		peerAddressesOK := peerRouteErr == nil && !routeConflict(peerRoutes)
+		peerAddressDetails := "10.100.0.0/24 and 10.100.1.0/24"
+		if !peerAddressesOK && peerConfigMissing {
+			if peerAddresses, addressErr := remote(ctx, request.Host, request.Username, request.Password, "ip -o -4 addr show", nil); addressErr == nil && reusableClusterAddresses(peerAddresses, peerLinks, 2) {
+				peerAddressesOK = true
+				peerAddressDetails = "Existing Cloudless addresses on the dedicated ports will be reused."
+			}
+		}
+		add("peer-addresses", "Peer cluster addresses are available", peerAddressesOK, peerAddressDetails)
+		add("peer-config", "No previous Cloudless cluster configuration on peer", peerConfigMissing, configPath)
 		_, sudoErr := remote(ctx, request.Host, request.Username, request.Password, "sudo -S -p '' true", []byte(request.Password+"\n"))
 		add("sudo", "Peer administrator access", sudoErr == nil, "Required to apply the dedicated network configuration")
 	}

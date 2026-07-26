@@ -18,7 +18,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=read-only
 ProtectSystem=strict
-ReadWritePaths=/var/lib/cloudless /etc/netplan -/run/systemd/system -/run/systemd/network -/run/NetworkManager/conf.d -/run/NetworkManager/system-connections -/run/udev/rules.d -/run/docker.sock -/home/cloudless/Cloudless -/home/cloudless/Downloads
+ReadWritePaths=/var/lib/cloudless /etc/netplan -/run/systemd/system -/run/systemd/network -/run/NetworkManager/conf.d -/run/NetworkManager/system-connections /run/udev -/run/docker.sock -/home/cloudless/Cloudless -/home/cloudless/Downloads
 
 [Install]
 WantedBy=multi-user.target

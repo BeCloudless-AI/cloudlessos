@@ -69,6 +69,20 @@ func TestPreviewPartsSplitsCommandFromScaffold(t *testing.T) {
 	}
 }
 
+func TestRunArgsIncludesClusterHostGateway(t *testing.T) {
+	args := strings.Join(runArgs(RunSpec{Name: "proxy", Image: "alpine/socat", ExtraHosts: []string{"host.docker.internal:host-gateway"}}), " ")
+	if !strings.Contains(args, "--add-host host.docker.internal:host-gateway") {
+		t.Fatalf("cluster proxy args = %q", args)
+	}
+}
+
+func TestRunArgsSupportsEntrypointOverride(t *testing.T) {
+	args := strings.Join(runArgs(RunSpec{Name: "ray", Image: "vllm", EntryPoint: "/bin/bash", Args: []string{"-lc", "ray start"}}), " ")
+	if !strings.Contains(args, "--entrypoint /bin/bash vllm -lc ray start") {
+		t.Fatalf("entrypoint override missing or misplaced: %q", args)
+	}
+}
+
 func TestRunArgsDeterministic(t *testing.T) {
 	spec := RunSpec{
 		Name: "x", Image: "img",

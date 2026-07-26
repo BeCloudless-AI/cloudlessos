@@ -81,6 +81,28 @@ The Cloudless branding package preserves the DGX OS release identity required
 by NVIDIA's OTA tooling. It may apply Cloudless Plymouth/GRUB artwork, but it
 does not divert `/usr/lib/os-release` on a Spark.
 
+## Connect two DGX Sparks
+
+CloudlessOS includes a Spark-only guided setup under **Settings > Spark
+Cluster**. Connect the matching rear ConnectX-7 ports with one supported
+QSFP112 direct-attach copper cable, then follow the three screens:
+
+1. Find or enter the other Spark.
+2. Confirm the cable and run the readiness check.
+3. Verify the peer SSH fingerprint and create the cluster.
+
+Cloudless configures NVIDIA's two-interface/two-subnet direct topology using
+`10.100.0.0/24` and `10.100.1.0/24`. It leaves Wi-Fi and normal Ethernet
+untouched. The wizard refuses to overwrite existing routes or a previous
+Cloudless Netplan file, stores no administrator password, and removes its SSH
+key and network configuration when the cluster is disconnected.
+
+The status screen verifies the local Netplan configuration, both ConnectX-7
+interfaces, and both peer paths. This creates the high-speed network fabric; it
+does not transparently combine the two machines into one pool of memory. Apps
+that support distributed execution still need to be launched in distributed
+mode.
+
 ## Diagnostics
 
 Generate a shareable text report:

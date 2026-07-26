@@ -17,6 +17,8 @@ type RunSpec struct {
 	NetworkAlias string            // extra DNS alias on the network (e.g. "cloudless-ai")
 	IPC          string            // IPC namespace mode (for example "host" for large inference workers)
 	Ulimits      []string          // Docker ulimit assignments (for example "memlock=-1")
+	ExtraHosts   []string          // host mappings (for example host.docker.internal:host-gateway)
+	EntryPoint   string            // optional container entrypoint override
 	Args         []string          // extra args appended after the image (container command)
 }
 

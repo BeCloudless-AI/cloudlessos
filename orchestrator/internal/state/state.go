@@ -69,18 +69,20 @@ func NormalizeAPIKeyScope(scope string) string {
 
 // State is the persisted state.
 type State struct {
-	FirstSeen    string                  `json:"firstSeen"`              // RFC3339; when the daemon first initialized this store
-	Onboarded    bool                    `json:"onboarded"`              // user has completed first-run onboarding
-	Engine       string                  `json:"engine,omitempty"`       // selected inference engine ("" = default)
-	Model        string                  `json:"model,omitempty"`        // selected model ("" = catalog default)
-	Pinned       []string                `json:"pinned,omitempty"`       // app ids pinned to the dashboard "fast launch"
-	PinnedSet    bool                    `json:"pinnedSet,omitempty"`    // user has customized pins (else use catalog default)
-	LocalNet     bool                    `json:"localNet"`               // serve apps on the local network (LAN)
-	LocalNetSet  bool                    `json:"localNetSet,omitempty"`  // user has chosen (else default ON)
-	Profile      Profile                 `json:"profile"`                // user-controlled profile
-	APIKeys      []APIKey                `json:"apiKeys,omitempty"`      // Cloudless Proxy credentials
-	Display      DisplayPreference       `json:"display,omitempty"`      // preferred display output and mode
-	CustomModels map[string]models.Model `json:"customModels,omitempty"` // user-imported Hugging Face repositories
+	FirstSeen      string                  `json:"firstSeen"`                // RFC3339; when the daemon first initialized this store
+	Onboarded      bool                    `json:"onboarded"`                // user has completed first-run onboarding
+	Engine         string                  `json:"engine,omitempty"`         // selected inference engine ("" = default)
+	Model          string                  `json:"model,omitempty"`          // selected model ("" = catalog default)
+	EngineUnloaded bool                    `json:"engineUnloaded,omitempty"` // selected model stays cached but no inference engine holds accelerator memory
+	ExecutionMode  string                  `json:"executionMode,omitempty"`  // local | cluster; empty is local
+	Pinned         []string                `json:"pinned,omitempty"`         // app ids pinned to the dashboard "fast launch"
+	PinnedSet      bool                    `json:"pinnedSet,omitempty"`      // user has customized pins (else use catalog default)
+	LocalNet       bool                    `json:"localNet"`                 // serve apps on the local network (LAN)
+	LocalNetSet    bool                    `json:"localNetSet,omitempty"`    // user has chosen (else default ON)
+	Profile        Profile                 `json:"profile"`                  // user-controlled profile
+	APIKeys        []APIKey                `json:"apiKeys,omitempty"`        // Cloudless Proxy credentials
+	Display        DisplayPreference       `json:"display,omitempty"`        // preferred display output and mode
+	CustomModels   map[string]models.Model `json:"customModels,omitempty"`   // user-imported Hugging Face repositories
 
 	// EngineCmds holds user-edited launch commands, keyed "engineID\x00modelID".
 	// The value is the container command (args after the image) to use when that
@@ -203,11 +205,32 @@ func (s *Store) SetEngine(id string) error {
 	return s.save()
 }
 
+// SetEngineUnloaded persists whether the selected model should remain stopped.
+// The zero value is intentionally loaded for backward compatibility.
+func (s *Store) SetEngineUnloaded(unloaded bool) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.st.EngineUnloaded = unloaded
+	return s.save()
+}
+
 // SetModel records the selected model and persists.
 func (s *Store) SetModel(model string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.st.Model = model
+	return s.save()
+}
+
+// SetExecutionMode persists whether inference runs locally or across a healthy
+// two-Spark cluster. Unknown values safely fall back to local execution.
+func (s *Store) SetExecutionMode(mode string) error {
+	if mode != "cluster" {
+		mode = "local"
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.st.ExecutionMode = mode
 	return s.save()
 }
 

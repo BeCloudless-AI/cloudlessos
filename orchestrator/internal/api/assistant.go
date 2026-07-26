@@ -154,15 +154,20 @@ func (s *Server) assistantContext(ctx context.Context) assistant.Context {
 	cancel()
 	modelList = modelcatalog.Merge(modelList)
 	gpuGB, memoryType := acceleratorMemory(ctx)
+	cluster := clusterCompute(ctx, gpuGB)
 	modelOptions := make([]assistant.ModelOption, 0, len(modelList))
 	currentListed := false
 	for _, m := range modelList {
 		if m.ID == model {
 			currentListed = true
 		}
+		clusterFit := ""
+		if cluster.DistributedReady {
+			clusterFit = fitFor(m.MinVRAMGB, cluster.CombinedMemoryGB)
+		}
 		modelOptions = append(modelOptions, assistant.ModelOption{
 			ID: m.ID, Name: m.Name, Params: m.Params, Quant: m.Quant,
-			MinVRAMGB: m.MinVRAMGB, Fit: fitFor(m.MinVRAMGB, gpuGB),
+			MinVRAMGB: m.MinVRAMGB, Fit: fitFor(m.MinVRAMGB, gpuGB), ClusterFit: clusterFit,
 		})
 	}
 	if !currentListed && model != "" {
@@ -182,6 +187,9 @@ func (s *Server) assistantContext(ctx context.Context) assistant.Context {
 		GPU:           gpuSummary(ctx),
 		GPUVRAMGB:     gpuGB,
 		GPUMemoryType: memoryType,
+		ClusterReady:  cluster.DistributedReady,
+		ClusterPeer:   cluster.PeerName,
+		ClusterMemory: cluster.CombinedMemoryGB,
 		Models:        modelOptions,
 	}
 }

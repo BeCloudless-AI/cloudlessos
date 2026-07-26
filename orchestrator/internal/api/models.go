@@ -328,6 +328,7 @@ func (s *Server) modelDownloads(w http.ResponseWriter, _ *http.Request) {
 type modelView struct {
 	models.Model
 	Fit         string `json:"fit"`                   // fits | tight | over | unknown
+	ClusterFit  string `json:"clusterFit,omitempty"`  // fit when distributed across a healthy Spark pair
 	Active      bool   `json:"active"`                // currently the served model
 	Downloaded  bool   `json:"downloaded"`            // present in the HF cache
 	Recommended bool   `json:"recommended,omitempty"` // recommended for the machine's region
@@ -339,6 +340,8 @@ type modelView struct {
 // Each carries a VRAM-fit verdict, active and downloaded flags.
 func (s *Server) modelsList(w http.ResponseWriter, r *http.Request) {
 	gpuGB, memoryType := acceleratorMemory(r.Context())
+	cluster := clusterCompute(r.Context(), gpuGB)
+	engineUnloaded := s.state.Get().EngineUnloaded
 	current := s.state.Get().Model
 	if current == "" {
 		current = catalog.DefaultModel()
@@ -380,7 +383,10 @@ func (s *Server) modelsList(w http.ResponseWriter, r *http.Request) {
 	have[current] = true // the served model is, by definition, present
 
 	view := func(m models.Model) modelView {
-		mv := modelView{Model: m, Fit: fitFor(m.MinVRAMGB, gpuGB), Active: m.ID == current, Downloaded: have[m.ID]}
+		mv := modelView{Model: m, Fit: fitFor(m.MinVRAMGB, gpuGB), Active: !engineUnloaded && m.ID == current, Downloaded: have[m.ID]}
+		if cluster.DistributedReady {
+			mv.ClusterFit = fitFor(m.MinVRAMGB, cluster.CombinedMemoryGB)
+		}
 		if m.Region != "" && m.Region == country {
 			mv.Recommended = true
 			mv.RecommendBy = "Recommended in " + countryName
@@ -429,10 +435,18 @@ func (s *Server) modelsList(w http.ResponseWriter, r *http.Request) {
 		"gpuVRAMGB":  gpuGB,
 		"memoryType": memoryType,
 		"current":    current,
+		"unloaded":   engineUnloaded,
+		"executionMode": func() string {
+			if s.state.Get().ExecutionMode == "cluster" {
+				return "cluster"
+			}
+			return "local"
+		}(),
 		"custom":     !inCatalog,
 		"yours":      yours,
 		"highlights": picks,
 		"downloads":  s.activeModelDownloads(),
+		"cluster":    cluster,
 		"region": map[string]any{
 			"country":     country,
 			"countryName": countryName,

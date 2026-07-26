@@ -190,6 +190,11 @@ func runArgs(spec RunSpec) []string {
 			args = append(args, "--ulimit", limit)
 		}
 	}
+	for _, host := range spec.ExtraHosts {
+		if strings.TrimSpace(host) != "" {
+			args = append(args, "--add-host", host)
+		}
+	}
 	// Host networking binds host ports directly; -p is invalid there.
 	if spec.Network != "host" {
 		hosts := make([]int, 0, len(spec.Ports))
@@ -206,6 +211,9 @@ func runArgs(spec RunSpec) []string {
 	}
 	for _, h := range sortedKeys(spec.Volumes) {
 		args = append(args, "-v", fmt.Sprintf("%s:%s", h, spec.Volumes[h]))
+	}
+	if strings.TrimSpace(spec.EntryPoint) != "" {
+		args = append(args, "--entrypoint", spec.EntryPoint)
 	}
 	args = append(args, spec.Image)
 	args = append(args, spec.Args...)

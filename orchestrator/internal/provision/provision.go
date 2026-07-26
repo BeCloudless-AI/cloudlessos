@@ -16,6 +16,7 @@ import (
 	"github.com/cloudless/orchestrator/internal/engine"
 	"github.com/cloudless/orchestrator/internal/manifest"
 	"github.com/cloudless/orchestrator/internal/platform"
+	"github.com/cloudless/orchestrator/internal/sparkcluster"
 	"github.com/cloudless/orchestrator/internal/state"
 )
 
@@ -69,11 +70,17 @@ func Run(ctx context.Context, eng engine.Engine, st *state.Store, mf *manifest.S
 	// Start/stop under the lock and re-read the desired engine inside it, so a
 	// concurrent switch (which sets it + holds the same lock) isn't clobbered.
 	EngineMu.Lock()
-	desired := st.Get().Engine
+	currentState := st.Get()
+	desired := currentState.Engine
 	if desired == "" {
 		desired = catalog.DefaultEngine()
 	}
-	model := st.Get().Model
+	model := currentState.Model
+	clusterMode := currentState.ExecutionMode == "cluster" && desired == "vllm" && !currentState.EngineUnloaded
+	if !clusterMode {
+		_ = sparkcluster.StopWorker(ctx)
+		_ = eng.Remove(ctx, "cloudless-cluster-engine-proxy")
+	}
 	// Stop any non-selected engine first, so the shared port/alias is free.
 	for _, e := range catalog.Engines() {
 		if e.ID == desired {
@@ -86,39 +93,77 @@ func Run(ctx context.Context, eng engine.Engine, st *state.Store, mf *manifest.S
 			logf(e.ID + ": ready (inactive)")
 		}
 	}
-	// Ensure the selected engine is running with the stable alias.
-	for _, e := range catalog.Engines() {
-		if e.ID != desired {
-			continue
+	// Ensure the selected engine is running with the stable alias unless the user
+	// explicitly unloaded it to free accelerator memory.
+	if currentState.EngineUnloaded {
+		if selected, _ := eng.Find(ctx, "cloudless-"+desired); selected != nil {
+			_ = eng.Remove(ctx, selected.Name)
 		}
-		running, hasAlias := false, false
-		if c, _ := eng.Find(ctx, e.ContainerName()); c != nil && c.State == "running" {
-			running = true
-			hasAlias, _ = eng.HasAlias(ctx, e.ContainerName(), catalog.EngineAlias)
-		}
-		if running && hasAlias {
-			logf(e.ID + ": active engine running")
-		} else {
-			_ = eng.Remove(ctx, e.ContainerName())
-			spec := catalog.EngineSpec(e, model)
-			spec.Image = pinnedImage(ctx, mf, e)
-			// Pin the served model's revision when the default model is in use.
-			served := model
-			if served == "" {
-				served = catalog.DefaultModel()
+		logf("model remains unloaded; selected weights stay cached")
+	} else {
+		for _, e := range catalog.Engines() {
+			if e.ID != desired {
+				continue
 			}
-			if override, ok := st.EngineCmd(e.ID, served); ok {
-				spec.Args = override // a user-saved launch command wins verbatim
-				logf(e.ID + ": using saved launch command")
-			} else if mp, ok := mf.ModelPin(ctx, defaultModelPinKey()); ok && served == mp.Repo {
-				args := append([]string{}, spec.Args...) // copy: don't mutate the shared catalog slice
-				spec.Args = append(args, "--revision", mp.Revision)
-				logf(e.ID + ": pinning model revision " + mp.Revision[:12])
+			running, hasAlias := false, false
+			if c, _ := eng.Find(ctx, e.ContainerName()); c != nil && c.State == "running" {
+				running = true
+				if clusterMode {
+					if proxy, _ := eng.Find(ctx, "cloudless-cluster-engine-proxy"); proxy != nil && proxy.State == "running" {
+						hasAlias, _ = eng.HasAlias(ctx, proxy.Name, catalog.EngineAlias)
+					}
+				} else {
+					hasAlias, _ = eng.HasAlias(ctx, e.ContainerName(), catalog.EngineAlias)
+				}
 			}
-			if _, err := eng.Run(ctx, spec); err != nil {
-				logf(e.ID + ": start failed: " + err.Error())
+			if running && hasAlias {
+				logf(e.ID + ": active engine running")
 			} else {
-				logf(e.ID + ": started (active engine)")
+				_ = eng.Remove(ctx, e.ContainerName())
+				spec := catalog.EngineSpec(e, model)
+				spec.Image = pinnedImage(ctx, mf, e)
+				// Pin the served model's revision when the default model is in use.
+				served := model
+				if served == "" {
+					served = catalog.DefaultModel()
+				}
+				if clusterMode {
+					// Both ranks must receive the exact same vLLM topology and model
+					// arguments. Local-only saved commands and manifest revisions cannot
+					// safely be applied to only the coordinator.
+					logf(e.ID + ": using standard two-Spark distributed launch command")
+				} else if override, ok := st.EngineCmd(e.ID, served); ok {
+					spec.Args = override // a user-saved launch command wins verbatim
+					logf(e.ID + ": using saved launch command")
+				} else if mp, ok := mf.ModelPin(ctx, defaultModelPinKey()); ok && served == mp.Repo {
+					args := append([]string{}, spec.Args...) // copy: don't mutate the shared catalog slice
+					spec.Args = append(args, "--revision", mp.Revision)
+					logf(e.ID + ": pinning model revision " + mp.Revision[:12])
+				}
+				if clusterMode {
+					spec = sparkcluster.CoordinatorSpec(spec)
+					_ = eng.Remove(ctx, "cloudless-cluster-engine-proxy")
+					logf(e.ID + ": preparing connected Spark worker")
+					if err := sparkcluster.StartWorker(ctx, spec.Image, served); err != nil {
+						logf(e.ID + ": cluster worker start failed: " + err.Error())
+						continue
+					}
+				}
+				if _, err := eng.Run(ctx, spec); err != nil {
+					if clusterMode {
+						_ = sparkcluster.StopWorker(ctx)
+					}
+					logf(e.ID + ": start failed: " + err.Error())
+				} else if clusterMode {
+					_ = eng.Pull(ctx, "alpine/socat:latest")
+					if _, err := eng.Run(ctx, sparkcluster.ProxySpec()); err != nil {
+						logf(e.ID + ": cluster proxy start failed: " + err.Error())
+					} else {
+						logf(e.ID + ": started across two Sparks")
+					}
+				} else {
+					logf(e.ID + ": started (active engine)")
+				}
 			}
 		}
 	}

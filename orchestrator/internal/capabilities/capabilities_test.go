@@ -76,3 +76,15 @@ func TestDGXVersionPrefersOTAVersion(t *testing.T) {
 		t.Fatalf("dgxOSVersion() = %q", got)
 	}
 }
+
+func TestSparkClusterRequiresDGXSparkARM64(t *testing.T) {
+	registry := map[string]Requirement{SparkCluster: definitions[SparkCluster]}
+	ready := Evaluate(Facts{Platform: platform.DGXSpark, Architecture: "arm64"}, registry)
+	if !ready.Features[SparkCluster].Available {
+		t.Fatalf("Spark cluster unavailable: %#v", ready.Features[SparkCluster])
+	}
+	wrongArch := Evaluate(Facts{Platform: platform.DGXSpark, Architecture: "amd64"}, registry)
+	if wrongArch.Features[SparkCluster].Available {
+		t.Fatal("Spark cluster available on amd64")
+	}
+}

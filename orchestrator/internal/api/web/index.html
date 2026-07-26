@@ -413,6 +413,20 @@
   .hw-metrics-ic { display: inline-flex; align-items: flex-end; gap: 2px; width: 14px; height: 12px; }
   .hw-metrics-ic i { width: 3px; border-radius: 1.5px; background: currentColor; }
   .hw-metrics-ic i:nth-child(1) { height: 45%; } .hw-metrics-ic i:nth-child(2) { height: 100%; } .hw-metrics-ic i:nth-child(3) { height: 68%; }
+  .home-cluster { margin: 0 0 18px; padding: 16px 18px; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 15px; border: 1px solid color-mix(in srgb, #76b900 35%, var(--card-edge)); border-radius: 17px; background: linear-gradient(120deg, color-mix(in srgb, #76b900 10%, var(--card)), var(--card)); box-shadow: var(--shadow-sm); }
+  .home-cluster.hidden { display: none; }
+  .home-cluster-icon { position: relative; width: 44px; height: 44px; display: grid; place-items: center; border-radius: 14px; color: #76b900; background: color-mix(in srgb, #76b900 12%, var(--panel-2)); }
+  .home-cluster-icon .ui-icon { width: 22px; height: 22px; }
+  .home-cluster-icon::after { content: ''; position: absolute; right: -2px; bottom: -2px; width: 10px; height: 10px; border: 3px solid var(--card); border-radius: 50%; background: #2faa5b; }
+  .home-cluster-copy b, .home-cluster-copy span { display: block; }
+  .home-cluster-copy b { color: var(--ink); font-size: 13px; }
+  .home-cluster-copy span { margin-top: 3px; color: var(--muted); font-size: 10px; line-height: 1.4; }
+  .home-cluster-action { min-height: 36px; display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+  .home-cluster-action .ui-icon { width: 14px; height: 14px; }
+  .mdl-cap.cluster { color: #579000; background: color-mix(in srgb, #76b900 10%, transparent); border-color: color-mix(in srgb, #76b900 38%, transparent); }
+  .mdl-cluster-fit { margin-top: 7px; padding: 7px 9px; display: flex; align-items: center; justify-content: space-between; gap: 8px; border: 1px solid color-mix(in srgb, #76b900 25%, var(--hair)); border-radius: 8px; color: var(--muted); background: color-mix(in srgb, #76b900 5%, var(--panel-2)); font-size: 9.5px; }
+  .mdl-cluster-fit b { color: #579000; }
+  @media (max-width: 620px) { .home-cluster { grid-template-columns: auto minmax(0, 1fr); } .home-cluster-action { grid-column: 1 / -1; justify-content: center; } }
   .mdl-sec { font-size: 11px; font-weight: 500; letter-spacing: .5px; text-transform: lowercase; color: var(--muted); margin: 18px 0 11px; }
   .mdl-sec:first-of-type { margin-top: 2px; }
   .mdl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 11px; }
@@ -526,6 +540,16 @@
   .inf-hwhead { font-size: 11px; font-weight: 600; letter-spacing: .5px; text-transform: uppercase; color: var(--muted);
     margin: 2px 2px 12px; display: flex; align-items: baseline; gap: 9px; }
   .inf-hwhead span { font-size: 9.5px; font-weight: 500; color: var(--faint); letter-spacing: .6px; }
+  .inf-node-grid { margin-bottom: 13px; display: grid; grid-template-columns: repeat(auto-fit, minmax(245px, 1fr)); gap: 10px; }
+  .inf-node-gpu { padding: 13px 14px; border: 1px solid var(--hair); border-radius: 14px; background: var(--card); }
+  .inf-node-gpu.peer { border-color: color-mix(in srgb, #76b900 28%, var(--hair)); background: linear-gradient(145deg, color-mix(in srgb, #76b900 5%, var(--card)), var(--card)); }
+  .inf-node-head { display: flex; align-items: center; gap: 8px; }
+  .inf-node-head b { color: var(--ink); font-size: 11.5px; }
+  .inf-node-head span { margin-left: auto; color: var(--muted); font-size: 9px; }
+  .inf-node-stats { margin-top: 10px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+  .inf-node-stat small, .inf-node-stat strong { display: block; }
+  .inf-node-stat small { color: var(--muted); font-size: 8px; text-transform: uppercase; letter-spacing: .35px; }
+  .inf-node-stat strong { margin-top: 3px; color: var(--ink); font-size: 11px; white-space: nowrap; }
   .inf-metric .im-sub.im-c { text-align: center; }
   .inf-engnote { background: var(--card); border: 1px solid var(--hair); border-radius: 18px; padding: 30px 24px;
     text-align: center; color: var(--muted); font-size: 12.5px; line-height: 1.7; }
@@ -683,18 +707,44 @@
   .cards { display: grid; grid-template-columns: 1.4fr 1fr; gap: 14px; margin-bottom: 0; }
   .apps-sec { margin-bottom: 40px; }
   /* engine "starting up" banner + gated launch state */
-  .eng-banner { display: flex; align-items: center; gap: 13px; margin: 0 0 26px; padding: 13px 17px; border-radius: 13px;
+  .eng-banner { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 13px; margin: 0 0 26px; padding: 16px 18px; border-radius: 15px;
     background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent); }
   .eng-banner.hidden { display: none; }
   .eb-spin { width: 16px; height: 16px; flex: none; border-radius: 50%; border: 2px solid color-mix(in srgb, var(--accent) 30%, transparent);
     border-top-color: var(--accent); animation: spin 0.9s linear infinite; }
-  .eb-txt { display: flex; flex-direction: column; line-height: 1.4; }
-  .eb-txt b { font-size: 13.5px; color: var(--ink); } .eb-txt span { font-size: 12px; color: var(--muted); }
+  .eb-txt { grid-column: 2; grid-row: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.4; }
+  .eb-txt b { font-size: 13.5px; color: var(--ink); } .eb-txt span { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .eb-percent { grid-column: 3; grid-row: 1; min-width: 44px; color: var(--accent); font-size: 14px; font-weight: 800; text-align: right; font-variant-numeric: tabular-nums; }
+  .eb-track { grid-column: 2 / -1; height: 6px; overflow: hidden; border-radius: 999px; background: color-mix(in srgb, var(--accent) 14%, var(--control)); }
+  .eb-track i { display: block; width: var(--engine-progress, 6%); height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 68%, white)); transition: width .4s ease; }
+  .eb-action { grid-column: 4; grid-row: 1; }
+  .model-load-action {
+    min-width: 132px; min-height: 40px; padding: 10px 16px;
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    border-radius: 11px; line-height: 1; white-space: nowrap;
+    box-shadow: 0 9px 22px -12px color-mix(in srgb, var(--blue) 82%, transparent);
+  }
+  .model-load-action .ui-icon { width: 15px; height: 15px; flex: 0 0 15px; margin: 0; }
+  .model-load-action > span { display: block; flex: none; }
+  .model-load-action:hover { transform: translateY(-1px); }
+  .model-load-action:active { transform: translateY(0); }
+  .model-load-action.abort { color: #fff; border-color: var(--err); background: var(--err); box-shadow: 0 9px 22px -12px color-mix(in srgb, var(--err) 82%, transparent); }
+  .model-load-action.abort:hover { background: color-mix(in srgb, var(--err) 88%, #000); filter: none; }
+  .eng-banner.unloaded .eb-spin, .eng-banner.unloaded .eb-percent, .eng-banner.unloaded .eb-track { display: none; }
+  .eng-banner.unloaded .eb-txt { grid-column: 1 / 4; }
+  @media (max-width: 620px) {
+    .eng-banner { grid-template-columns: auto minmax(0, 1fr) auto; }
+    .eb-txt { grid-column: 2 / 4; }
+    .eb-percent { grid-column: 3; grid-row: 2; }
+    .eb-track { grid-column: 1 / 3; grid-row: 2; }
+    .eb-action { grid-column: 1 / -1; grid-row: 3; width: 100%; }
+    .eng-banner.unloaded .eb-txt { grid-column: 1 / -1; }
+    .eng-banner.unloaded .eb-action { grid-row: 2; }
+  }
   .tile.gated .ic { opacity: 0.5; cursor: default; }
   .tile.gated .meta { color: var(--accent); }
   .meta .dot.wait { background: var(--accent); animation: pulse 1.4s ease-in-out infinite; }
-  .ask.starting { opacity: 0.6; }
-  .ask.starting input, .ask.starting .ask-go { cursor: not-allowed; }
+  .ask.engine-hidden, .ghost-chat.engine-hidden, .apps-sec.engine-hidden { display: none; }
   @media (max-width: 820px) { .cards { grid-template-columns: 1fr; } }
 
   /* one-time entrance — content settles in, staggered, on first paint */
@@ -730,6 +780,8 @@
   .gpu-name { font-weight: 700; font-size: 15px; letter-spacing: -0.2px; display: flex; align-items: center; }
   .gpu-name .idx { color: var(--muted); font-weight: 600; margin-left: 8px; font-size: 10px; letter-spacing: .2px;
     background: var(--panel-2); border: 1px solid var(--hair); border-radius: 6px; padding: 2px 7px; }
+  .gpu-name .idx.peer { color: #579000; border-color: color-mix(in srgb, #76b900 34%, var(--hair)); background: color-mix(in srgb, #76b900 8%, var(--panel-2)); }
+  .gpu-peer-offline { margin-top: 16px; padding: 10px 12px; display: flex; align-items: center; gap: 8px; border: 1px solid color-mix(in srgb, var(--warn) 32%, var(--hair)); border-radius: 10px; color: var(--muted); background: color-mix(in srgb, var(--warn) 5%, var(--panel-2)); font-size: 10px; }
   .stat { margin-top: 14px; }
   .stat-row { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; color: var(--muted); margin-bottom: 7px; text-transform: none; }
   .stat-row b { color: var(--ink); font-weight: 700; font-size: 13px; font-variant-numeric: tabular-nums; }
@@ -892,6 +944,224 @@
   .machine-empty .ui-icon { width: 24px; height: 24px; margin-bottom: 9px; color: var(--faint); }
   .machine-empty strong { display: block; color: var(--ink); font-size: 12.5px; }
   .machine-empty span { display: block; margin-top: 4px; font-size: 10.5px; line-height: 1.45; }
+  /* Settings: DGX Spark cluster */
+  .cluster-page { display: flex; flex-direction: column; gap: 20px; }
+  .cluster-page > .machine-card { padding: 24px; }
+  .cluster-page .machine-card-head { margin-bottom: 0; }
+  .cluster-page .machine-card > * + * { margin-top: 18px; }
+  .cluster-page .machine-card > .cluster-actions { margin-top: 22px; }
+  .cluster-hero .inf-page-icon { color: #76b900; border-color: color-mix(in srgb, #76b900 32%, var(--hair)); background: color-mix(in srgb, #76b900 9%, var(--panel-2)); }
+  .cluster-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  .cluster-progress-head { display: flex; align-items: center; gap: 10px; }
+  .cluster-progress-head .cluster-steps { min-width: 0; flex: 1; }
+  .cluster-step { min-width: 0; padding: 10px 11px; display: flex; align-items: center; gap: 8px; border: 1px solid var(--hair); border-radius: 11px; color: var(--muted); background: var(--panel-2); font-size: 10px; font-weight: 720; }
+  .cluster-step i { width: 21px; height: 21px; flex: none; display: grid; place-items: center; border-radius: 50%; color: var(--muted); background: var(--control); font-style: normal; }
+  .cluster-step.active { color: var(--ink); border-color: color-mix(in srgb, var(--blue) 35%, var(--hair)); background: var(--blue-soft); }
+  .cluster-step.active i, .cluster-step.done i { color: #fff; background: var(--blue); }
+  .cluster-step.done { color: var(--ink-2); }
+  .cluster-step-copy { min-width: 0; }
+  .cluster-step-copy b, .cluster-step-copy span { display: block; }
+  .cluster-step-copy b { color: inherit; font-size: 10px; }
+  .cluster-step-copy span { margin-top: 1px; color: var(--muted); font-size: 8px; font-weight: 560; }
+  .cluster-time { margin-left: auto; color: var(--muted); font-size: 9px; white-space: nowrap; }
+  .cluster-form { display: grid; gap: 16px; }
+  .cluster-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, .72fr); gap: 9px; }
+  .cluster-field { min-width: 0; }
+  .cluster-field label { display: block; margin-bottom: 5px; color: var(--muted); font-size: 9px; font-weight: 740; letter-spacing: .38px; text-transform: uppercase; }
+  .cluster-field .fld-input { width: 100%; box-sizing: border-box; }
+  .cluster-peer-list { display: grid; gap: 10px; }
+  .cluster-peer-list.spaced { margin-top: 10px; }
+  .cluster-peer { width: 100%; padding: 11px 12px; display: flex; align-items: center; gap: 11px; border: 1px solid var(--hair); border-radius: 11px; color: var(--ink); background: var(--panel-2); text-align: left; cursor: pointer; }
+  .cluster-peer:hover { border-color: color-mix(in srgb, var(--blue) 38%, var(--hair)); background: var(--blue-soft); }
+  .cluster-peer .ui-icon { width: 17px; height: 17px; flex: none; color: #76b900; }
+  .cluster-peer-copy { min-width: 0; flex: 1; }
+  .cluster-peer-copy b, .cluster-peer-copy span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cluster-peer-copy b { font-size: 11.5px; }
+  .cluster-peer-copy span { margin-top: 2px; color: var(--muted); font: 9.5px ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .cluster-discovery { display: grid; grid-template-columns: minmax(220px, .82fr) minmax(260px, 1.18fr); gap: 16px; }
+  .cluster-discovery-stage { position: relative; min-height: 224px; padding: 16px; display: grid; place-items: center; border: 1px solid color-mix(in srgb, var(--blue) 19%, var(--hair)); border-radius: 16px; background: radial-gradient(circle at 50% 45%, color-mix(in srgb, var(--blue) 8%, transparent), transparent 58%), var(--panel-2); overflow: hidden; isolation: isolate; }
+  .cluster-discovery-stage::after { content: ''; position: absolute; inset: auto 18px 14px; height: 1px; background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--blue) 24%, var(--hair)), transparent); }
+  .cluster-radar { position: relative; width: 172px; height: 172px; display: grid; place-items: center; border: 1px solid color-mix(in srgb, var(--blue) 23%, var(--hair)); border-radius: 50%; background: radial-gradient(circle, transparent 0 28%, color-mix(in srgb, var(--blue) 14%, transparent) 28.5% 29%, transparent 29.5% 55%, color-mix(in srgb, var(--blue) 12%, transparent) 55.5% 56%, transparent 56.5%), linear-gradient(90deg, transparent 49.6%, color-mix(in srgb, var(--blue) 10%, transparent) 49.8% 50.2%, transparent 50.4%), linear-gradient(transparent 49.6%, color-mix(in srgb, var(--blue) 10%, transparent) 49.8% 50.2%, transparent 50.4%); box-shadow: inset 0 0 42px color-mix(in srgb, var(--blue) 4%, transparent); }
+  .cluster-radar-sweep { position: absolute; inset: 5px; border-radius: 50%; background: conic-gradient(from -28deg, transparent 0 310deg, color-mix(in srgb, var(--blue) 6%, transparent) 329deg, color-mix(in srgb, var(--blue) 32%, transparent) 358deg, transparent 360deg); opacity: 0; transform: rotate(-15deg); }
+  .cluster-discovery-stage.searching .cluster-radar-sweep { opacity: 1; animation: clusterRadarSweep 3.4s linear infinite; }
+  @keyframes clusterRadarSweep { to { transform: rotate(345deg); } }
+  .cluster-radar-core { position: relative; z-index: 2; width: 58px; height: 58px; display: grid; place-items: center; border: 1px solid color-mix(in srgb, var(--blue) 35%, var(--hair)); border-radius: 18px; color: var(--blue); background: color-mix(in srgb, var(--blue) 9%, var(--card-strong)); box-shadow: 0 16px 35px -25px color-mix(in srgb, var(--blue) 70%, transparent), inset 0 1px 0 color-mix(in srgb, white 18%, transparent); }
+  .cluster-radar-core .ui-icon { width: 25px; height: 25px; }
+  .cluster-radar-core::after { content: ''; position: absolute; inset: -7px; border: 1px solid color-mix(in srgb, var(--blue) 13%, transparent); border-radius: 23px; }
+  .cluster-radar-peer { position: absolute; z-index: 3; top: 24px; right: 14px; width: 38px; height: 38px; display: grid; place-items: center; border: 1px solid var(--line-2); border-radius: 12px; color: var(--muted); background: var(--card-strong); box-shadow: 0 12px 28px -22px rgba(0,0,0,.8); transition: border-color .25s, color .25s, background .25s, transform .25s; }
+  .cluster-radar-peer .ui-icon { width: 17px; height: 17px; }
+  .cluster-radar-peer::after { content: ''; position: absolute; right: -3px; bottom: -3px; width: 9px; height: 9px; border: 3px solid var(--panel-2); border-radius: 50%; background: var(--faint); }
+  .cluster-discovery-stage.searching .cluster-radar-peer { border-color: color-mix(in srgb, #76b900 54%, var(--line-2)); color: #76b900; background: color-mix(in srgb, #76b900 8%, var(--card-strong)); animation: clusterPeerBreathe 2.2s ease-in-out infinite; }
+  .cluster-discovery-stage.searching .cluster-radar-peer::after { background: #76b900; }
+  @keyframes clusterPeerBreathe { 0%, 100% { transform: scale(.96); } 50% { transform: scale(1.04); } }
+  .cluster-radar-status { position: absolute; z-index: 4; left: 50%; bottom: 15px; transform: translateX(-50%); padding: 5px 9px; display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--hair); border-radius: 999px; color: var(--muted); background: color-mix(in srgb, var(--panel-2) 90%, transparent); font-size: 8.5px; font-weight: 680; white-space: nowrap; backdrop-filter: blur(8px); }
+  .cluster-radar-status i { width: 6px; height: 6px; border-radius: 50%; background: var(--faint); }
+  .cluster-discovery-stage.searching .cluster-radar-status { color: var(--ink-2); }
+  .cluster-discovery-stage.searching .cluster-radar-status i { background: #76b900; box-shadow: 0 0 0 4px color-mix(in srgb, #76b900 12%, transparent); }
+  .cluster-discovery-copy { padding: 18px; display: flex; flex-direction: column; justify-content: center; border: 1px solid var(--hair); border-radius: 16px; background: var(--panel-2); }
+  .cluster-discovery-copy strong { color: var(--ink); font-size: 13px; letter-spacing: -.1px; }
+  .cluster-discovery-copy > span { margin-top: 6px; color: var(--muted); font-size: 9.5px; line-height: 1.55; }
+  .cluster-find-button { width: 100%; min-height: 56px; margin-top: 16px; padding: 8px 10px; display: grid; grid-template-columns: 36px minmax(0, 1fr) 24px; align-items: center; gap: 10px; border: 1px solid color-mix(in srgb, var(--blue) 75%, white 10%); border-radius: 13px; color: white; background: linear-gradient(135deg, color-mix(in srgb, var(--blue) 92%, white), var(--blue)); box-shadow: 0 13px 26px -18px color-mix(in srgb, var(--blue) 85%, transparent), inset 0 1px 0 rgba(255,255,255,.22); font: inherit; text-align: left; cursor: pointer; transition: transform .16s, box-shadow .16s, filter .16s; }
+  .cluster-find-button:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 17px 30px -18px color-mix(in srgb, var(--blue) 90%, transparent), inset 0 1px 0 rgba(255,255,255,.24); filter: saturate(1.05); }
+  .cluster-find-button:active:not(:disabled) { transform: translateY(0); }
+  .cluster-find-button:disabled { cursor: wait; opacity: .88; }
+  .cluster-find-icon { width: 36px; height: 36px; display: grid; place-items: center; border: 1px solid rgba(255,255,255,.16); border-radius: 10px; background: rgba(255,255,255,.12); }
+  .cluster-find-icon .ui-icon { width: 17px; height: 17px; }
+  .cluster-find-copy { min-width: 0; }
+  .cluster-find-copy b, .cluster-find-copy small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cluster-find-copy b { font-size: 10.5px; font-weight: 780; }
+  .cluster-find-copy small { margin-top: 2px; color: rgba(255,255,255,.72); font-size: 8.5px; font-weight: 580; }
+  .cluster-find-arrow { display: grid; place-items: center; transition: transform .16s; }
+  .cluster-find-arrow .ui-icon { width: 15px; height: 15px; }
+  .cluster-find-button:hover:not(:disabled) .cluster-find-arrow { transform: translateX(2px); }
+  .cluster-find-button.searching .cluster-find-icon .ui-icon { animation: clusterSpin 1.1s linear infinite; }
+  .cluster-manual { padding-top: 11px; border-top: 1px solid var(--hair); }
+  .cluster-manual summary { color: var(--muted); font-size: 9.5px; font-weight: 690; cursor: pointer; }
+  .cluster-manual .cluster-field { margin-top: 10px; }
+  .cluster-cable { padding: 12px; display: flex; align-items: flex-start; gap: 10px; border: 1px solid var(--hair); border-radius: 11px; background: var(--panel-2); }
+  .cluster-cable input { margin-top: 2px; accent-color: var(--blue); }
+  .cluster-cable b { display: block; color: var(--ink); font-size: 11px; }
+  .cluster-cable span { display: block; margin-top: 3px; color: var(--muted); font-size: 9.5px; line-height: 1.45; }
+  .cluster-cable-guide { padding: 16px; border: 1px solid color-mix(in srgb, #76b900 28%, var(--hair)); border-radius: 14px; background: color-mix(in srgb, #76b900 5%, var(--panel-2)); }
+  .cluster-cable-title { color: var(--ink); font-size: 12px; font-weight: 780; }
+  .cluster-cable-intro { margin-top: 3px; color: var(--muted); font-size: 10px; line-height: 1.5; }
+  .cluster-cable-visual { margin: 16px 0; display: grid; grid-template-columns: 112px minmax(90px, 1fr) 112px; align-items: center; gap: 12px; }
+  .cluster-spark-device { position: relative; min-height: 76px; padding: 11px; border: 1px solid var(--line-2); border-radius: 13px; background: var(--card-strong); box-shadow: 0 9px 24px -22px rgba(0,0,0,.75); }
+  .cluster-spark-device strong { display: block; color: var(--ink); font-size: 10px; text-align: center; }
+  .cluster-spark-back { height: 24px; margin-top: 10px; padding: 0 8px; display: flex; align-items: center; justify-content: center; gap: 7px; border-radius: 7px; background: var(--control); }
+  .cluster-spark-port { width: 20px; height: 11px; display: block; border: 2px solid var(--faint); border-radius: 3px; background: var(--panel-2); }
+  .cluster-spark-port.connected { border-color: #76b900; background: color-mix(in srgb, #76b900 25%, var(--panel-2)); box-shadow: 0 0 0 3px color-mix(in srgb, #76b900 10%, transparent); }
+  .cluster-cable-route { position: relative; height: 42px; display: flex; align-items: center; justify-content: center; }
+  .cluster-cable-route::before { content: ''; position: absolute; left: -20px; right: -20px; top: 20px; height: 4px; border-radius: 999px; background: color-mix(in srgb, #76b900 55%, var(--line-2)); }
+  .cluster-cable-route span { position: relative; z-index: 1; margin-top: -29px; padding: 3px 7px; border-radius: 999px; color: var(--ink-2); background: var(--panel-2); font-size: 8.5px; font-weight: 730; white-space: nowrap; }
+  .cluster-cable-flow { position: absolute; z-index: 1; left: calc(50% - 6px); top: 16px; width: 12px; height: 12px; border: 3px solid var(--panel-2); border-radius: 50%; background: #76b900; opacity: .45; }
+  .cluster-cable-guide:has(#cluster-cable:checked) .cluster-cable-flow { animation: clusterCableFlow 2.2s ease-in-out infinite; }
+  @keyframes clusterCableFlow { 0% { left: -13px; opacity: 0; } 15%, 85% { opacity: 1; } 100% { left: calc(100% + 1px); opacity: 0; } }
+  .motion-disabled .cluster-cable-flow, .render-inference-active .cluster-cable-flow { animation: none !important; left: calc(50% - 6px); opacity: 1; }
+  .cluster-cable-tips { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+  .cluster-cable-tip { padding: 9px; display: flex; align-items: flex-start; gap: 7px; border-radius: 9px; color: var(--muted); background: var(--panel-2); font-size: 9px; line-height: 1.4; }
+  .cluster-cable-tip i { width: 18px; height: 18px; flex: none; display: grid; place-items: center; border-radius: 50%; color: #fff; background: #76b900; font-style: normal; font-size: 9px; font-weight: 780; }
+  .cluster-cable-confirm { margin-top: 12px; padding: 12px; display: flex; align-items: center; gap: 11px; border: 1px solid var(--line-2); border-radius: 11px; background: var(--card-strong); cursor: pointer; }
+  .cluster-cable-confirm input { width: 18px; height: 18px; flex: none; accent-color: #76b900; }
+  .cluster-cable-confirm b { display: block; color: var(--ink); font-size: 11px; }
+  .cluster-cable-confirm span span { display: block; margin-top: 3px; color: var(--muted); font-size: 9.5px; line-height: 1.45; }
+  .cluster-cable-guide:has(#cluster-cable:checked) { border-color: color-mix(in srgb, #2faa5b 55%, var(--hair)); background: color-mix(in srgb, #2faa5b 7%, var(--panel-2)); }
+  .cluster-cable-guide:has(#cluster-cable:checked) .cluster-cable-confirm { border-color: color-mix(in srgb, #2faa5b 48%, var(--line-2)); }
+  .cluster-cable-guide:has(#cluster-cable:checked) .cluster-cable-confirm b::after { content: '  · Ready to check'; color: #2faa5b; }
+  .cluster-busy .ui-icon { animation: clusterSpin 1s linear infinite; }
+  @keyframes clusterSpin { to { transform: rotate(360deg); } }
+  .cluster-busy-panel { padding: 12px; display: flex; align-items: center; gap: 11px; border: 1px solid color-mix(in srgb, var(--blue) 28%, var(--hair)); border-radius: 11px; background: var(--blue-soft); }
+  .cluster-busy-panel > i { width: 23px; height: 23px; flex: none; display: grid; place-items: center; color: var(--blue); font-style: normal; }
+  .cluster-busy-panel > i .ui-icon { width: 18px; height: 18px; animation: clusterSpin 1s linear infinite; }
+  .cluster-busy-panel b, .cluster-busy-panel span { display: block; }
+  .cluster-busy-panel b { color: var(--ink); font-size: 10.5px; }
+  .cluster-busy-panel span { margin-top: 2px; color: var(--muted); font-size: 9px; line-height: 1.4; }
+  .cluster-connect-progress { min-height: 270px; padding: 34px 24px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; border: 1px solid color-mix(in srgb, #76b900 30%, var(--hair)); border-radius: 16px; background: radial-gradient(circle at 50% 35%, color-mix(in srgb, #76b900 9%, transparent), transparent 45%), var(--panel-2); }
+  .cluster-connect-visual { width: min(430px, 88%); display: grid; grid-template-columns: 64px minmax(100px, 1fr) 64px; align-items: center; gap: 14px; }
+  .cluster-connect-device { width: 64px; height: 64px; display: grid; place-items: center; border: 1px solid color-mix(in srgb, #76b900 35%, var(--hair)); border-radius: 18px; color: #76b900; background: var(--card-strong); box-shadow: 0 14px 30px -24px color-mix(in srgb, #76b900 75%, transparent); }
+  .cluster-connect-device .ui-icon { width: 27px; height: 27px; }
+  .cluster-connect-line { position: relative; height: 6px; overflow: hidden; border-radius: 999px; background: var(--control); }
+  .cluster-connect-line::after { content: ''; position: absolute; inset: 0; border-radius: inherit; background: linear-gradient(90deg, transparent, #76b900 35% 65%, transparent); transform: translateX(-100%); animation: clusterConnecting 1.6s ease-in-out infinite; }
+  @keyframes clusterConnecting { to { transform: translateX(100%); } }
+  .cluster-connect-progress h3 { margin: 24px 0 0; color: var(--ink); font-size: 16px; }
+  .cluster-connect-progress > p { max-width: 520px; margin: 7px 0 0; color: var(--muted); font-size: 10.5px; line-height: 1.55; }
+  .cluster-connect-stages { width: min(540px, 100%); margin-top: 24px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .cluster-connect-stage { padding: 9px 8px; display: flex; align-items: center; justify-content: center; gap: 6px; border: 1px solid var(--hair); border-radius: 10px; color: var(--muted); background: var(--card-strong); font-size: 9px; font-weight: 680; animation: clusterStageFocus 4.5s ease-in-out infinite; }
+  .cluster-connect-stage:nth-child(2) { animation-delay: 1.5s; }
+  .cluster-connect-stage:nth-child(3) { animation-delay: 3s; }
+  .cluster-connect-stage i { width: 7px; height: 7px; flex: none; border-radius: 50%; background: #76b900; box-shadow: 0 0 0 4px color-mix(in srgb, #76b900 12%, transparent); }
+  .cluster-disconnect-meter { width: min(540px, 100%); margin-top: 20px; }
+  .cluster-disconnect-meter-head { margin-bottom: 7px; display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 9.5px; font-weight: 650; }
+  .cluster-disconnect-meter-track { height: 7px; overflow: hidden; border-radius: 999px; background: color-mix(in srgb, var(--muted) 18%, transparent); }
+  .cluster-disconnect-meter-track i { display: block; width: var(--disconnect-progress, 4%); height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 55%, #76b900)); transition: width .45s ease; }
+  .cluster-disconnect-stages .cluster-connect-stage { animation: none; }
+  .cluster-disconnect-stages .cluster-connect-stage.active { color: var(--ink); border-color: color-mix(in srgb, var(--accent) 55%, var(--hair)); background: color-mix(in srgb, var(--accent) 9%, var(--card-strong)); }
+  .cluster-disconnect-stages .cluster-connect-stage.done { color: var(--ok); }
+  .cluster-disconnect-stages .cluster-connect-stage:not(.active):not(.done) i { background: var(--faint); box-shadow: none; }
+  @keyframes clusterStageFocus { 0%, 28%, 100% { color: var(--muted); border-color: var(--hair); background: var(--card-strong); } 8%, 20% { color: var(--ink); border-color: color-mix(in srgb, #76b900 46%, var(--hair)); background: color-mix(in srgb, #76b900 7%, var(--card-strong)); } }
+  .motion-disabled .cluster-radar-sweep, .render-inference-active .cluster-radar-sweep { animation: none; opacity: .18; transform: rotate(38deg); }
+  .motion-disabled .cluster-radar-peer, .render-inference-active .cluster-radar-peer, .motion-disabled .cluster-find-button .ui-icon, .render-inference-active .cluster-find-button .ui-icon, .motion-disabled .cluster-busy .ui-icon, .render-inference-active .cluster-busy .ui-icon, .motion-disabled .cluster-busy-panel .ui-icon, .render-inference-active .cluster-busy-panel .ui-icon, .motion-disabled .cluster-connect-line::after, .render-inference-active .cluster-connect-line::after { animation: none; transform: none; }
+  @media (prefers-reduced-motion: reduce) { .cluster-cable-flow, .cluster-radar-sweep, .cluster-radar-peer, .cluster-find-button .ui-icon, .cluster-busy .ui-icon, .cluster-busy-panel .ui-icon, .cluster-connect-line::after, .cluster-connect-stage { animation: none !important; } .cluster-connect-line::after { transform: none; } .cluster-discovery-stage.searching .cluster-radar-sweep { opacity: .18; transform: rotate(38deg); } }
+  .cluster-checks { display: grid; gap: 10px; }
+  .cluster-check { padding: 10px 11px; display: flex; align-items: flex-start; gap: 9px; border: 1px solid var(--hair); border-radius: 10px; background: var(--panel-2); }
+  .cluster-check-icon { width: 20px; height: 20px; flex: none; display: grid; place-items: center; border-radius: 50%; color: #fff; background: #2faa5b; }
+  .cluster-check-icon.fail { background: var(--warn); }
+  .cluster-check-icon .ui-icon { width: 12px; height: 12px; }
+  .cluster-check-copy { min-width: 0; }
+  .cluster-check-copy b { display: block; color: var(--ink); font-size: 10.5px; }
+  .cluster-check-copy span { display: block; margin-top: 2px; color: var(--muted); font-size: 9px; line-height: 1.4; overflow-wrap: anywhere; }
+  .cluster-check.fail { border-color: color-mix(in srgb, var(--warn) 35%, var(--hair)); background: color-mix(in srgb, var(--warn) 5%, var(--panel-2)); }
+  .cluster-readiness-summary { padding: 15px; display: flex; align-items: center; gap: 12px; border: 1px solid color-mix(in srgb, #2faa5b 36%, var(--hair)); border-radius: 13px; background: color-mix(in srgb, #2faa5b 6%, var(--panel-2)); }
+  .cluster-readiness-summary.attention { border-color: color-mix(in srgb, var(--warn) 38%, var(--hair)); background: color-mix(in srgb, var(--warn) 5%, var(--panel-2)); }
+  .cluster-readiness-symbol { width: 38px; height: 38px; flex: none; display: grid; place-items: center; border-radius: 50%; color: #fff; background: #2faa5b; }
+  .cluster-readiness-summary.attention .cluster-readiness-symbol { background: var(--warn); }
+  .cluster-readiness-symbol .ui-icon { width: 19px; height: 19px; }
+  .cluster-readiness-copy b, .cluster-readiness-copy span { display: block; }
+  .cluster-readiness-copy b { color: var(--ink); font-size: 12px; }
+  .cluster-readiness-copy span { margin-top: 3px; color: var(--muted); font-size: 9.5px; line-height: 1.45; }
+  .cluster-next { padding: 13px; border: 1px solid var(--hair); border-radius: 11px; background: var(--panel-2); }
+  .cluster-next-title { color: var(--ink); font-size: 10.5px; font-weight: 750; }
+  .cluster-next-list { margin: 9px 0 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; list-style: none; counter-reset: next; }
+  .cluster-next-list li { position: relative; padding-left: 27px; color: var(--muted); font-size: 9px; line-height: 1.4; counter-increment: next; }
+  .cluster-next-list li::before { content: counter(next); position: absolute; left: 0; top: -1px; width: 20px; height: 20px; display: grid; place-items: center; border-radius: 50%; color: var(--blue); background: var(--blue-soft); font-size: 8.5px; font-weight: 780; }
+  .cluster-fingerprint { padding: 10px 11px; border: 1px solid color-mix(in srgb, var(--blue) 25%, var(--hair)); border-radius: 10px; color: var(--muted); background: var(--blue-soft); font-size: 9.5px; line-height: 1.5; }
+  .cluster-fingerprint code { display: block; margin-top: 4px; color: var(--ink); font-size: 9px; overflow-wrap: anywhere; }
+  .cluster-actions { display: flex; justify-content: flex-end; align-items: center; gap: 8px; }
+  .cluster-actions .btn { min-height: 35px; display: inline-flex; align-items: center; gap: 7px; }
+  .cluster-actions .ui-icon { width: 14px; height: 14px; }
+  .cluster-nodes { display: grid; grid-template-columns: minmax(0, 1fr) 56px minmax(0, 1fr); gap: 12px; align-items: stretch; }
+  .cluster-node { padding: 14px; border: 1px solid var(--hair); border-radius: 13px; background: var(--panel-2); }
+  .cluster-node b { display: block; font-size: 12px; }
+  .cluster-node span { display: block; margin-top: 4px; color: var(--muted); font-size: 9.5px; }
+  .cluster-link { display: grid; place-items: center; color: #76b900; }
+  .cluster-link .ui-icon { width: 23px; height: 23px; }
+  .cluster-connected-hero { padding: 18px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; align-items: center; border: 1px solid color-mix(in srgb, #2faa5b 34%, var(--hair)); border-radius: 15px; background: linear-gradient(135deg, color-mix(in srgb, #2faa5b 10%, var(--panel-2)), var(--panel-2)); }
+  .cluster-connected-hero.attention { border-color: color-mix(in srgb, var(--warn) 38%, var(--hair)); background: color-mix(in srgb, var(--warn) 5%, var(--panel-2)); }
+  .cluster-connected-copy b, .cluster-connected-copy span { display: block; }
+  .cluster-connected-copy b { color: var(--ink); font-size: 15px; letter-spacing: -.2px; }
+  .cluster-connected-copy span { margin-top: 4px; color: var(--muted); font-size: 9.5px; line-height: 1.45; }
+  .cluster-health-orb { width: 48px; height: 48px; display: grid; place-items: center; border-radius: 50%; color: #fff; background: #2faa5b; box-shadow: 0 0 0 8px color-mix(in srgb, #2faa5b 11%, transparent); }
+  .cluster-connected-hero.attention .cluster-health-orb { background: var(--warn); box-shadow: 0 0 0 8px color-mix(in srgb, var(--warn) 11%, transparent); }
+  .cluster-health-orb .ui-icon { width: 23px; height: 23px; }
+  .cluster-node { position: relative; overflow: hidden; }
+  .cluster-node::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 3px; background: #76b900; }
+  .cluster-link { position: relative; }
+  .cluster-link::before { content: ''; position: absolute; left: 0; right: 0; top: 50%; height: 2px; background: color-mix(in srgb, #76b900 48%, var(--line-2)); }
+  .cluster-link .ui-icon { position: relative; z-index: 1; padding: 6px; border-radius: 50%; background: var(--w-base); }
+  .cluster-link-flow { position: absolute; z-index: 2; left: -2px; top: calc(50% - 4px); width: 8px; height: 8px; border: 2px solid var(--w-base); border-radius: 50%; background: #76b900; animation: clusterLinkFlow 2.6s ease-in-out infinite; }
+  @keyframes clusterLinkFlow { 0% { left: -2px; opacity: 0; } 15%, 85% { opacity: 1; } 100% { left: calc(100% - 6px); opacity: 0; } }
+  .motion-disabled .cluster-link-flow, .render-inference-active .cluster-link-flow { animation: none; left: calc(50% - 4px); opacity: 1; }
+  @media (prefers-reduced-motion: reduce) { .cluster-link-flow { animation: none; left: calc(50% - 4px); opacity: 1; } }
+  .cluster-advanced { border-top: 1px solid var(--hair); }
+  .cluster-advanced summary { padding-top: 12px; color: var(--muted); font-size: 9.5px; font-weight: 700; cursor: pointer; }
+  .cluster-advanced-body { margin-top: 10px; }
+  .cluster-danger { color: var(--warn) !important; }
+  .cluster-status-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+  .cluster-status-grid .machine-fact { min-height: 58px; }
+  @media (max-width: 720px) { .cluster-fields, .cluster-status-grid, .cluster-cable-tips, .cluster-discovery, .cluster-next-list, .cluster-connect-stages { grid-template-columns: 1fr; } .cluster-nodes { grid-template-columns: 1fr; } .cluster-link { min-height: 30px; transform: rotate(90deg); } .cluster-cable-visual { grid-template-columns: 86px minmax(64px, 1fr) 86px; gap: 7px; } .cluster-time { display: none; } }
+  @keyframes clusterCableFlowVertical { 0% { top: -8px; opacity: 0; } 15%, 85% { opacity: 1; } 100% { top: calc(100% - 3px); opacity: 0; } }
+  @media (max-width: 480px) {
+    .cluster-page { gap: 14px; }
+    .cluster-page > .machine-card { padding: 16px; }
+    .cluster-page .machine-card > * + * { margin-top: 14px; }
+    .cluster-step { padding: 8px; gap: 6px; }
+    .cluster-step-copy span { display: none; }
+    .cluster-step i { width: 19px; height: 19px; }
+    .cluster-discovery-stage { min-height: 208px; }
+    .cluster-radar { width: 156px; height: 156px; }
+    .cluster-find-button { min-height: 54px; }
+    .cluster-cable-visual { grid-template-columns: 1fr; gap: 3px; }
+    .cluster-spark-device { width: min(170px, 100%); margin: 0 auto; box-sizing: border-box; }
+    .cluster-cable-route { width: 100%; height: 58px; }
+    .cluster-cable-route::before { left: calc(50% - 2px); right: auto; top: -8px; bottom: -8px; width: 4px; height: auto; }
+    .cluster-cable-route span { margin-top: 0; }
+    .cluster-cable-flow { left: calc(50% - 6px); top: calc(50% - 6px); }
+    .cluster-cable-guide:has(#cluster-cable:checked) .cluster-cable-flow { animation-name: clusterCableFlowVertical; }
+    .cluster-actions { flex-wrap: wrap; }
+    .cluster-actions .btn { min-width: 118px; flex: 1; justify-content: center; }
+    .cluster-connected-hero { grid-template-columns: minmax(0, 1fr); }
+    .cluster-health-orb { order: -1; width: 40px; height: 40px; }
+  }
   /* Settings: Display */
   .display-page { display: flex; flex-direction: column; gap: 14px; }
   .display-current { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; align-items: center; }
@@ -962,6 +1232,8 @@
   .ec-traits li::before { content: "✓"; color: var(--blue); font-weight: 800; }
   .ec-foot { min-height: 34px; padding-top: 12px; display: flex; align-items: center; border-top: 1px solid var(--hair); }
   .ec-foot .btn { width: 100%; min-height: 34px; }
+  .ec-foot.has-actions { justify-content: space-between; gap: 10px; }
+  .ec-foot.has-actions .btn { width: auto; flex: none; }
   .ec-active { display: inline-flex; align-items: center; gap: 6px; font-size: 10px; text-transform: uppercase; letter-spacing: .45px; }
   .ec-active::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 
@@ -1024,6 +1296,12 @@
   }
   .uninstall-summary b { color: var(--ink); }
   .uninstall-summary .ui-icon { width: 14px; height: 14px; margin: 1px 6px 0 0; color: var(--ok); vertical-align: top; }
+  .power-dialog-body { min-width: 0; }
+  .power-dialog-summary { display: grid; gap: 10px; }
+  .power-dialog-summary-title { color: var(--ink); font-weight: 720; line-height: 1.4; }
+  .power-dialog-summary-detail { display: flex; align-items: flex-start; gap: 8px; min-width: 0; color: var(--ink-2); line-height: 1.5; }
+  .power-dialog-summary-detail > .ui-icon { width: 15px; height: 15px; flex: 0 0 15px; margin: 2px 0 0; color: var(--ok); }
+  .power-dialog-summary-detail > span { min-width: 0; flex: 1 1 auto; overflow-wrap: break-word; }
   .key-dialog-actions .btn.danger-solid {
     color: #fff; border-color: var(--err); background: var(--err);
     box-shadow: 0 8px 20px -10px color-mix(in srgb, var(--err) 70%, transparent);
@@ -1032,6 +1310,9 @@
   .key-dialog-actions .btn.danger-solid:disabled { opacity: .68; cursor: wait; }
   .key-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 17px; }
   .key-dialog-actions .btn { min-height: 38px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
+  .power-dialog-body .key-dialog-actions .btn { white-space: nowrap; }
+  .power-dialog-body .key-dialog-actions .btn .ui-icon { flex: none; }
+  .power-dialog-body .key-dialog-actions .btn > span { display: block; }
   .key-dialog-actions .ui-icon { width: 15px; height: 15px; }
   .key-dialog-spinner {
     width: 15px; height: 15px; flex: none; border: 2px solid rgba(255, 255, 255, .38);
@@ -1076,6 +1357,10 @@
   .app-surface-loading span { display: inline-flex; align-items: center; gap: 9px; }
   .app-surface-loading i { width: 16px; height: 16px; border: 2px solid var(--hair); border-top-color: var(--blue); border-radius: 50%; animation: spin .8s linear infinite; }
   .app-surface-frame { width: 100%; height: 100%; display: block; border: 0; background: #fff; }
+  .cluster-surface-content { min-height: 0; flex: 1; overflow: auto; padding: 30px; background: var(--w-base); }
+  .cluster-surface-content > .cluster-page { width: min(1180px, 100%); margin: 0 auto; }
+  @media (max-width: 720px) { .cluster-surface-content { padding: 18px; } }
+  @media (max-width: 480px) { .cluster-surface-content { padding: 12px; } }
   @media (max-width: 520px) {
     .app-surface-bar { padding: 0 8px; }
     .app-surface-back span { display: none; }
@@ -1241,10 +1526,11 @@
 
   /* toast */
   #toast { position: fixed; left: 50%; bottom: 30px; transform: translateX(-50%) translateY(16px);
-    background: var(--ink); color: #fff; padding: 11px 18px; border-radius: 10px;
+    background: var(--toast-bg); color: var(--toast-ink); padding: 11px 18px; border-radius: 10px;
+    border: 1px solid var(--toast-edge); box-shadow: 0 14px 34px -16px rgba(0, 0, 0, .72);
     font-size: 12.5px; opacity: 0; pointer-events: none; transition: opacity 0.25s, transform 0.25s; z-index: 60; }
   #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-  #toast.err { background: var(--err); }
+  #toast.err { background: var(--toast-error-bg); color: var(--toast-error-ink); border-color: var(--toast-error-edge); }
 
   /* overlays — a frosted sheet floating over the blurred wallpaper (UmbrelOS feel) */
   .overlay { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center;
@@ -1563,6 +1849,11 @@
     --shadow-sm: 0 12px 32px -22px rgba(19, 27, 56, .52);
     --glass-blur: 28px; --radius: 18px;
     --brand-mark: #315cf5;
+    /* Toasts deliberately use their own contrast pair. Theme text tokens flip
+       between dark and light, so using --ink as a surface causes white-on-white
+       notifications in dark themes such as Midnight. */
+    --toast-bg: #111528; --toast-ink: #ffffff; --toast-edge: rgba(255, 255, 255, .16);
+    --toast-error-bg: #a9262d; --toast-error-ink: #ffffff; --toast-error-edge: rgba(255, 255, 255, .22);
     --wall-motion: wall-mesh; --wall-speed: 34s; --wall-glow-speed: 24s; --wall-direction: alternate;
     --wall-parallax-x: 0px; --wall-parallax-y: 0px;
     --wall-glow-x: 0px; --wall-glow-y: 0px;
@@ -1817,6 +2108,12 @@
     animation: none !important;
     transition: none !important;
     scroll-behavior: auto !important;
+  }
+  /* Engine readiness is state, not decoration: keep this indicator moving even
+     when Spark's performance-friendly reduced-motion mode is active. */
+  html.motion-disabled .eb-spin { animation: spin .9s linear infinite !important; }
+  @media (prefers-reduced-motion: reduce) {
+    .eb-spin { animation: spin .9s linear infinite !important; }
   }
   html.wall-motion-paused .wall::before,
   html.wall-motion-paused .wall::after,
@@ -2371,6 +2668,20 @@
   .model-confirm-fact small { display: block; color: var(--faint); font-size: 9px; font-weight: 750; text-transform: uppercase; letter-spacing: .45px; }
   .model-confirm-fact b { display: block; margin-top: 3px; color: var(--ink); font-size: 12px; }
   .model-confirm-warning { margin-top: 10px; color: var(--warn); font-size: 11px; line-height: 1.5; }
+  .model-run-modes { margin-top: 12px; display: grid; gap: 8px; }
+  .model-run-mode { width: 100%; padding: 11px 12px; display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; align-items: center; gap: 10px; border: 1px solid var(--hair); border-radius: 11px; color: var(--ink); background: var(--panel-2); font: inherit; text-align: left; cursor: pointer; }
+  .model-run-mode:hover { border-color: color-mix(in srgb, var(--blue) 38%, var(--hair)); }
+  .model-run-mode.on { border-color: var(--blue); background: var(--blue-soft); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--blue) 22%, transparent); }
+  .model-run-mode.cluster.on { border-color: #76b900; background: color-mix(in srgb, #76b900 8%, var(--panel-2)); box-shadow: inset 0 0 0 1px color-mix(in srgb, #76b900 22%, transparent); }
+  .model-run-mode-icon { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 10px; color: var(--blue); background: var(--control); }
+  .model-run-mode.cluster .model-run-mode-icon { color: #76b900; }
+  .model-run-mode-icon .ui-icon { width: 17px; height: 17px; }
+  .model-run-mode-copy b, .model-run-mode-copy small { display: block; }
+  .model-run-mode-copy b { font-size: 11px; }
+  .model-run-mode-copy small { margin-top: 2px; color: var(--muted); font-size: 9px; line-height: 1.35; }
+  .model-run-mode-check { width: 15px; height: 15px; border: 1px solid var(--faint); border-radius: 50%; }
+  .model-run-mode.on .model-run-mode-check { border: 4px solid var(--blue); }
+  .model-run-mode.cluster.on .model-run-mode-check { border-color: #76b900; }
   .asst { right: 24px; bottom: 24px; border-radius: 20px; background: var(--card-strong); }
   .asst-head { min-height: 58px; }
   .msg.user { background: var(--blue); }
@@ -2518,6 +2829,52 @@
     .machine-facts, .machine-place-grid { grid-template-columns: 1fr; }
     .machine-gpu-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
+  /* Integrated mouse-driven keyboard for keyboardless CloudlessOS displays. */
+  .virtual-keyboard {
+    position: fixed; z-index: 10000; left: 50%; bottom: 12px;
+    width: min(980px, calc(var(--ui-vw, 100vw) - 24px)); padding: 10px;
+    border: 1px solid var(--line-2); border-radius: 20px; color: var(--ink);
+    background: color-mix(in srgb, var(--card-strong) 94%, transparent);
+    box-shadow: 0 28px 80px -24px rgba(2, 5, 18, .85), inset 0 1px 0 color-mix(in srgb, white 12%, transparent);
+    -webkit-backdrop-filter: blur(28px) saturate(1.2); backdrop-filter: blur(28px) saturate(1.2);
+    transform: translate(-50%, calc(100% + 28px)); opacity: 0; visibility: hidden; pointer-events: none;
+    transition: transform .22s cubic-bezier(.2,.8,.2,1), opacity .16s, visibility 0s linear .22s;
+  }
+  .virtual-keyboard.open { transform: translate(-50%, 0); opacity: 1; visibility: visible; pointer-events: auto; transition-delay: 0s; }
+  .vk-head { min-height: 28px; padding: 0 4px 7px; display: flex; align-items: center; gap: 8px; }
+  .vk-head-icon { width: 25px; height: 25px; display: grid; place-items: center; border-radius: 8px; color: var(--accent); background: var(--accent-soft); }
+  .vk-head-icon .ui-icon { width: 14px; height: 14px; }
+  .vk-head-copy { min-width: 0; }
+  .vk-head-copy b, .vk-head-copy span { display: block; }
+  .vk-head-copy b { font-size: 10.5px; }
+  .vk-head-copy span { margin-top: 1px; color: var(--muted); font-size: 8.5px; }
+  .vk-close { width: 28px; height: 28px; margin-left: auto; display: grid; place-items: center; border: 0; border-radius: 8px; color: var(--muted); background: transparent; }
+  .vk-close:hover { color: var(--ink); background: var(--control); }
+  .vk-close .ui-icon { width: 14px; height: 14px; }
+  .vk-rows { display: grid; gap: 6px; }
+  .vk-row { display: flex; justify-content: center; gap: 6px; }
+  .vk-key {
+    min-width: 0; height: clamp(34px, 5.4vh, 48px); flex: 1 1 0; padding: 0 5px;
+    display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--hair);
+    border-radius: 10px; color: var(--ink); background: var(--control); box-shadow: inset 0 1px 0 color-mix(in srgb, white 8%, transparent);
+    font: inherit; font-size: 12px; font-weight: 680; line-height: 1; user-select: none; -webkit-user-select: none;
+  }
+  .vk-key:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--hair)); background: var(--accent-soft); }
+  .vk-key:active { transform: translateY(1px); filter: brightness(.96); }
+  .vk-key.wide { flex-grow: 1.55; font-size: 9px; color: var(--ink-2); }
+  .vk-key.space { flex-grow: 5.5; }
+  .vk-key.enter { flex-grow: 1.8; color: #fff; border-color: var(--accent); background: var(--accent); }
+  .vk-key.on { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 52%, var(--hair)); background: var(--accent-soft); }
+  .vk-key .ui-icon { width: 14px; height: 14px; }
+  @media (max-width: 700px), (max-height: 620px) {
+    .virtual-keyboard { bottom: 6px; width: calc(var(--ui-vw, 100vw) - 12px); padding: 7px; border-radius: 15px; }
+    .vk-head { min-height: 22px; padding-bottom: 5px; }
+    .vk-head-copy span { display: none; }
+    .vk-rows, .vk-row { gap: 4px; }
+    .vk-key { height: clamp(30px, 5.2vh, 40px); border-radius: 8px; font-size: 10px; }
+    .vk-key.wide { font-size: 8px; }
+  }
+  @media (prefers-reduced-motion: reduce) { .virtual-keyboard { transition: none; } }
 </style>
 </head>
 <body>
@@ -2558,7 +2915,9 @@
     <symbol id="ui-general" viewBox="0 0 24 24"><path d="M10 5H3m9 14H3M14 3v4m2 10v4m5-9h-9m9 7h-5m5-14h-7M8 10v4m0-2H3"/></symbol>
     <symbol id="ui-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></symbol>
     <symbol id="ui-key" viewBox="0 0 24 24"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m11.5 11.5 9-9M15 8l3 3m-6-6 3 3"/></symbol>
+    <symbol id="ui-keyboard" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M6 9h.01M10 9h.01M14 9h.01M18 9h.01M6 13h.01M10 13h.01M14 13h.01M18 13h.01M7 16h10"/></symbol>
     <symbol id="ui-network" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="16" y="16" width="6" height="6" rx="1"/><path d="M5 16v-3h14v3M12 8v5"/></symbol>
+    <symbol id="ui-unlink" viewBox="0 0 24 24"><path d="m18.84 12.25 1.72-1.71a5 5 0 0 0-7.07-7.07l-1.72 1.71M5.17 11.75l-1.71 1.71a5 5 0 0 0 7.07 7.07l1.71-1.71M8 2v3M2 8h3m11 11v3m3-6h3"/><path d="m8 16 8-8"/></symbol>
     <symbol id="ui-terminal" viewBox="0 0 24 24"><path d="m4 17 6-5-6-5m8 10h8"/></symbol>
     <symbol id="ui-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></symbol>
     <symbol id="ui-rocket" viewBox="0 0 24 24"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09Z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.87 12.87 0 0 1 22 2c0 2.72-.78 7.5-6.05 11a22.35 22.35 0 0 1-3.95 2Z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0m1 7v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/><circle cx="16" cy="8" r="1"/></symbol>
@@ -2626,12 +2985,17 @@
 
   <div id="engine-banner" class="eng-banner hidden">
     <span class="eb-spin"></span>
+    <strong class="eb-percent" id="eb-percent">0%</strong>
+    <span class="eb-track" role="progressbar" aria-label="Cloudless AI startup" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i></i></span>
     <div class="eb-txt"><b id="eb-title">Cloudless AI is starting up…</b><span id="eb-sub">Your model is loading — chat and AI apps will be ready in a moment.</span></div>
+    <button class="btn primary eb-action model-load-action hidden" id="eb-load" type="button"><svg class="ui-icon" aria-hidden="true"><use href="#ui-rocket"/></svg><span>Load model</span></button>
   </div>
 
   <section class="model-downloads-home hidden" id="model-downloads-home" aria-live="polite"></section>
 
-  <section class="apps-sec">
+  <section class="home-cluster hidden" id="home-cluster" aria-live="polite"></section>
+
+  <section class="apps-sec" id="home-apps">
     <div class="sec-row">
       <h3 class="sec">Your apps</h3>
       <button class="sec-act" id="open-launcher" title="Browse all apps"><svg class="ui-icon sm" aria-hidden="true"><use href="#ui-apps"/></svg>All apps</button>
@@ -2736,6 +3100,16 @@
   </div>
 </section>
 
+<!-- Spark clustering opens as a first-class CloudlessOS window. -->
+<section class="app-surface hidden" id="cluster-surface" role="dialog" aria-modal="true" aria-labelledby="cluster-surface-title">
+  <header class="app-surface-bar">
+    <button class="app-surface-back" id="cluster-surface-back" type="button" title="Back to DGX Dashboard"><svg class="ui-icon" aria-hidden="true"><use href="#ui-arrow-left"/></svg><span>DGX Dashboard</span></button>
+    <div class="app-surface-identity"><span class="app-surface-glyph"><svg class="ui-icon" aria-hidden="true"><use href="#ui-network"/></svg></span><span class="app-surface-title" id="cluster-surface-title">Spark Cluster</span></div>
+    <button class="app-surface-action" id="cluster-surface-close" type="button" title="Close" aria-label="Close Spark Cluster"><svg class="ui-icon" aria-hidden="true"><use href="#ui-close"/></svg></button>
+  </header>
+  <div class="cluster-surface-content" id="cluster-surface-content" aria-live="polite"></div>
+</section>
+
 <!-- Cloudless Assistant -->
 <button id="asst-fab" title="Ask the Cloudless Assistant"><span class="asst-spark"></span></button>
 <div id="asst-backdrop" class="hidden"></div>
@@ -2789,6 +3163,15 @@
   <section class="tour-card center" id="tour-card" role="dialog" aria-labelledby="tour-title" aria-describedby="tour-desc"></section>
 </div>
 
+<section class="virtual-keyboard" id="virtual-keyboard" aria-label="Virtual keyboard" aria-hidden="true">
+  <div class="vk-head">
+    <span class="vk-head-icon"><svg class="ui-icon" aria-hidden="true"><use href="#ui-keyboard"/></svg></span>
+    <span class="vk-head-copy"><b>Virtual keyboard</b><span>No physical keyboard detected</span></span>
+    <button class="vk-close" type="button" tabindex="-1" data-vk-action="close" aria-label="Hide virtual keyboard"><svg class="ui-icon" aria-hidden="true"><use href="#ui-close"/></svg></button>
+  </div>
+  <div class="vk-rows" id="vk-rows"></div>
+</section>
+
 <script src="vendor/three.min.js"></script>
 <script>
 const api = (p, o) => fetch(p, o).then(r => r.json());
@@ -2812,8 +3195,9 @@ const uiIcon = (name, cls = 'ui-icon') => `<svg class="${cls}" aria-hidden="true
 const tileBg = id => TILE_BG[id] || 'linear-gradient(135deg,#cfd9e8,#aab8cc)';
 const gb = mb => (mb / 1024).toFixed(1);
 let installing = 0, catalogCache = [], gpuBuilt = 0, appsEntered = false;
-let lastRunning = {}, engineReady = false, engineActive = '', engineSwitching = false, activeEngineName = 'the engine';
+let lastRunning = {}, engineReady = false, engineUnloaded = false, engineActive = '', engineExecutionMode = 'local', engineOperation = 'idle', engineSwitching = false, engineAborting = false, engineLoadJobId = '', activeEngineName = 'the engine';
 let pinnedIds = [], lpQuery = '', lpView = '';
+let clusterWizard = { step: 1, peers: [], host: '', username: '', password: '', cable: false, preflight: null, busy: false, error: '' };
 let asstMsgs = [], asstBusy = false, asstController = null, asstStreamQueued = false, asstStreamIndex = -1;
 let capabilityCache = { facts: {}, features: {} };
 function applyCapabilitySnapshot(snapshot) {
@@ -3034,27 +3418,29 @@ async function renderGPUs() {
   const gpus = (data && data.gpus) || [];
   const body = document.getElementById('gpu-body');
   if (!gpus.length) { body.innerHTML = '<div class="empty">No NVIDIA GPU detected on this machine.</div>'; gpuBuilt = 0; return; }
+  const peerMissing = Boolean(data.peer && data.peer.connected && !data.peer.reachable);
+  const signature = gpus.map(g => `${g.remote ? 'peer' : 'local'}:${g.node || ''}:${g.index}`).join('|') + (peerMissing ? '|peer-offline' : '');
   const calc = g => ({
     vram: g.memTotalMB > 0 ? Math.round(g.memUsedMB / g.memTotalMB * 100) : 0,
     util: Math.max(0, g.utilPct),
     mem: `${gb(g.memUsedMB)} / ${gb(g.memTotalMB)} GB`,
-    power: g.powerW >= 0 ? `${Math.round(g.powerW)} / ${Math.round(g.powerLimitW)} W` : '—',
+    power: g.powerW >= 0 ? (g.powerLimitW > 0 ? `${Math.round(g.powerW)} / ${Math.round(g.powerLimitW)} W` : `${Math.round(g.powerW)} W`) : '—',
   });
   // Rebuild structure only when the GPU set changes; otherwise update values
   // in place so the bars *glide* to their new width (organic, not a jump-cut).
-  if (gpuBuilt !== gpus.length) {
+  if (gpuBuilt !== signature) {
     body.innerHTML = gpus.map(g => {
       const c = calc(g);
       return `<div class="gpu">
-        <div class="gpu-name">${g.name}<span class="idx">#${g.index}</span></div>
+        <div class="gpu-name">${escapeHtml(g.name)}<span class="idx ${g.remote ? 'peer' : ''}">${g.remote ? 'Connected Spark' : 'This Spark'} · ${escapeHtml(g.node || ('GPU #' + g.index))}</span></div>
         <div class="stat"><div class="stat-row"><span>${g.memoryType === 'unified' ? 'Unified memory' : 'Memory'}</span><b data-k="mem">${c.mem}</b></div>
           <div class="track"><i data-k="vram" style="width:0%"></i></div></div>
         <div class="stat"><div class="stat-row"><span>Utilization</span><b data-k="util">${g.utilPct}%</b></div>
           <div class="track"><i data-k="utilbar" style="width:0%"></i></div></div>
         <div class="chips"><span data-k="temp">${g.tempC}°C</span><span><b data-k="pw">${c.power}</b></span><span>Driver ${g.driver}</span></div>
       </div>`;
-    }).join('');
-    gpuBuilt = gpus.length;
+    }).join('') + (peerMissing ? `<div class="gpu-peer-offline">${uiIcon('alert')}<span>${escapeHtml((data.peer && data.peer.name) || 'The connected Spark')} telemetry is temporarily unavailable. Its private compute connection remains configured.</span></div>` : '');
+    gpuBuilt = signature;
     requestAnimationFrame(() => updateGPUValues(gpus, calc)); // fill from 0 → value
   } else {
     updateGPUValues(gpus, calc);
@@ -3100,6 +3486,21 @@ async function renderSystem() {
       <div class="stat"><div class="stat-row"><span>cpu</span><b>${Math.round(d.cpuPct)}%</b></div><div class="track"><i class="${meterClass(Math.min(100, d.cpuPct))}" style="width:${Math.min(100, d.cpuPct)}%"></i></div></div>
       <div class="stat"><div class="stat-row"><span>memory</span><b>${(d.memUsedMB / 1024).toFixed(1)} / ${(d.memTotalMB / 1024).toFixed(1)} GB</b></div><div class="track"><i class="${meterClass(ramPct)}" style="width:${ramPct}%"></i></div></div>
     </div>`;
+}
+
+/* ---- connected Spark compute (system-wide dashboard state) ---- */
+let connectedSpark = null;
+async function renderHomeCluster() {
+  const host = document.getElementById('home-cluster'); if (!host) return;
+  let status; try { status = await api('/api/system/spark-cluster'); } catch { status = null; }
+  connectedSpark = status && status.configured ? status : null;
+  if (!connectedSpark) { host.classList.add('hidden'); host.innerHTML = ''; return; }
+  const healthy = Boolean(connectedSpark.healthy);
+  const computeReady = healthy && Boolean(connectedSpark.workerReady);
+  const peer = connectedSpark.peerName || connectedSpark.peerHost || 'the other Spark';
+  host.classList.remove('hidden');
+  host.innerHTML = `<span class="home-cluster-icon">${uiIcon('network')}</span><span class="home-cluster-copy"><b>${computeReady ? `Two-Spark compute is ready` : (healthy ? 'Two Sparks are connected' : `The connection to ${escapeHtml(peer)} needs attention`)}</b><span>${computeReady ? `${escapeHtml(connectedSpark.localName || 'This Spark')} + ${escapeHtml(peer)} · two GB10 GPUs · distributed models available` : (healthy ? 'The private link is healthy. Reconnect it once to enable one-click distributed models from this update.' : 'Local AI remains available. Open the DGX cluster dashboard to inspect the private link.')}</span></span><button class="btn ${computeReady ? 'primary' : ''} home-cluster-action" type="button">${uiIcon(computeReady ? 'settings' : 'alert')}<span>${computeReady ? 'Manage' : 'Manage connection'}</span></button>`;
+  host.querySelector('button').onclick = openSparkClusterSurface;
 }
 
 /* ---- places ---- */
@@ -3150,6 +3551,25 @@ function closeAppSurface() {
   if (appSurfaceReturnFocus && document.contains(appSurfaceReturnFocus)) appSurfaceReturnFocus.focus();
   appSurfaceReturnFocus = null;
 }
+let clusterSurfaceReturnFocus = null;
+function clusterSurfaceOpen() { return !document.getElementById('cluster-surface').classList.contains('hidden'); }
+function openSparkClusterSurface() {
+  clusterSurfaceReturnFocus = document.activeElement;
+  const surface = document.getElementById('cluster-surface');
+  surface.classList.remove('hidden');
+  renderSparkClusterPage(document.getElementById('cluster-surface-content'));
+  document.getElementById('cluster-surface-back').focus();
+}
+function closeSparkClusterSurface() {
+  const surface = document.getElementById('cluster-surface');
+  if (surface.classList.contains('hidden')) return;
+  clearSparkClusterSecrets();
+  surface.classList.add('hidden');
+  document.getElementById('cluster-surface-content').innerHTML = '';
+  if (clusterSurfaceReturnFocus && document.contains(clusterSurfaceReturnFocus)) clusterSurfaceReturnFocus.focus();
+  clusterSurfaceReturnFocus = null;
+  refreshDGXClusterCard();
+}
 // An app that depends on the LLM engine can't be used until the model is served.
 function engineBlocked(app) {
   if (app && app.needsEngine && !engineReady) {
@@ -3167,7 +3587,7 @@ async function renderApps() {
   const [catalog, apps, pins, eng] = await Promise.all([
     api('/api/catalog'), api('/api/apps'), api('/api/pins').catch(() => ({ pinned: [] })), api('/api/engine').catch(() => null)]);
   catalogCache = catalog;
-  if (eng) { engineReady = !!eng.ready; engineActive = eng.active || ''; setActiveEngine(eng); }
+  if (eng) { engineActive = eng.active || ''; setActiveEngine(eng); }
   // Docker may be temporarily unavailable during boot or local development.
   // The API then returns an error object; treat it as an empty runtime list so
   // the shell stays usable and the next poll can recover without console spam.
@@ -3382,35 +3802,98 @@ function installById(id) {
 // renderEngine() runs on the 4s poll, so it ONLY updates state — it must never
 // rebuild Settings (that would flicker the panel and wipe form input every poll).
 // Settings is redrawn solely by user actions (open / nav click / switch / job done).
-let lastEngineReady = null;
+let lastEngineReady = null, lastEngineMode = null, lastEngineUnloaded = null, lastEngineOperation = null, engineStartup = null, lastEngineStartup = '';
+function engineLoadIsAbortable() { return engineOperation === 'loading' && !engineReady && !!engineLoadJobId; }
+function syncEngineState(d) {
+  engineReady = !!d.ready;
+  engineUnloaded = !!d.unloaded;
+  engineActive = d.active || '';
+  engineStartup = d.startup || null;
+  engineExecutionMode = d.executionMode === 'cluster' ? 'cluster' : 'local';
+  let operation = ['loading', 'unloading', 'aborting'].includes(d.operation) ? d.operation : 'idle';
+  // Readiness is authoritative even if a launch job has not yet emitted its
+  // final SSE update. A ready model must always expose Unload, never Abort.
+  if (engineReady && operation === 'loading') operation = 'idle';
+  if (engineUnloaded && operation === 'loading') operation = 'idle';
+  engineOperation = operation;
+  engineSwitching = operation !== 'idle';
+  engineAborting = operation === 'aborting';
+  engineLoadJobId = operation === 'loading' && d.canAbort !== false
+    ? (d.operationJobId || engineStartup?.id || engineLoadJobId)
+    : '';
+  setActiveEngine(d);
+}
 async function renderEngine() {
   let d; try { d = await api('/api/engine'); } catch { return; }
-  engineReady = !!d.ready; engineActive = d.active || '';
-  setActiveEngine(d);
+  syncEngineState(d);
   // When readiness flips (model finished loading / engine went down), re-gate the
   // launch surfaces and update the banner.
-  if (engineReady !== lastEngineReady) { lastEngineReady = engineReady; applyEngineUI(); renderApps(); }
+  const startupKey = engineStartup ? `${engineStartup.phase || ''}:${engineStartup.message || ''}:${engineStartup.layersDone || 0}:${engineStartup.layersTotal || 0}` : '';
+  const structuralChange = engineReady !== lastEngineReady || engineExecutionMode !== lastEngineMode || engineUnloaded !== lastEngineUnloaded || engineOperation !== lastEngineOperation;
+  if (structuralChange || startupKey !== lastEngineStartup) {
+    lastEngineReady = engineReady; lastEngineMode = engineExecutionMode; lastEngineUnloaded = engineUnloaded; lastEngineOperation = engineOperation; lastEngineStartup = startupKey;
+    applyEngineUI();
+    if (structuralChange) { renderApps(); refreshActiveModel(); engineUIRefresh(); if (modelsOpen() && mmDetail) renderModelManager(); }
+  }
 }
 // Reflect engine readiness across the dashboard: a "starting up" banner, and the
 // chat/ask entry disabled until the Cloudless model is served.
 function applyEngineUI() {
-  const starting = !engineReady;
+  const starting = !engineReady && !engineUnloaded;
+  const unavailable = starting || engineUnloaded;
   const banner = document.getElementById('engine-banner');
   if (banner) {
-    banner.classList.toggle('hidden', !starting);
+    banner.classList.toggle('hidden', !unavailable);
+    banner.classList.toggle('unloaded', engineUnloaded);
+    const title = document.getElementById('eb-title');
     const sub = document.getElementById('eb-sub');
-    if (sub && starting) sub.textContent = (activeEngineName !== 'the engine' ? activeEngineName + ' is loading your model' : 'Your model is loading') + ' — chat and AI apps will be ready in a moment.';
+    const load = document.getElementById('eb-load');
+    const abortable = starting && engineLoadIsAbortable();
+    banner.classList.toggle('abortable', abortable);
+    if (title) title.textContent = engineUnloaded
+      ? 'Cloudless AI is unloaded'
+      : engineOperation === 'aborting'
+      ? 'Stopping model loading…'
+      : engineOperation === 'unloading'
+      ? 'Unloading Cloudless AI…'
+      : 'Cloudless AI is starting up…';
+    if (load) {
+      load.classList.toggle('hidden', !(engineUnloaded || abortable || engineAborting));
+      load.classList.toggle('abort', abortable || engineAborting);
+      load.classList.toggle('primary', engineUnloaded && !engineAborting);
+      load.disabled = engineAborting;
+      load.innerHTML = engineAborting
+        ? `<span class="key-dialog-spinner" aria-hidden="true"></span><span>Aborting…</span>`
+        : abortable
+        ? `${uiIcon('stop')}<span>Abort</span>`
+        : `${uiIcon('rocket')}<span>Load model</span>`;
+    }
+    if (sub && engineUnloaded) sub.textContent = 'Accelerator memory has been released. Your selected model remains downloaded and ready to load again.';
+    if (sub && starting) sub.textContent = engineStartup?.message || ((activeEngineName !== 'the engine' ? activeEngineName + ' is loading your model' : 'Your model is loading') + ' — chat and AI apps will be ready in a moment.');
+    if (starting) {
+      const phase = engineStartup?.phase || 'loading';
+      const msg = (engineStartup?.message || '').toLowerCase();
+      let progress = phase === 'pending' ? 2 : phase === 'switching' ? 8 : phase === 'cluster' ? (msg.includes('preparing') ? 18 : msg.includes('waiting') ? 30 : msg.includes('joined') ? 36 : 34) : 42;
+      const done = +(engineStartup?.layersDone || 0), total = +(engineStartup?.layersTotal || 0);
+      if (phase === 'loading' && total > 0) progress = done >= total ? 92 : Math.round(40 + (done / total) * 50);
+      progress = Math.max(0, Math.min(99, progress));
+      const percent = document.getElementById('eb-percent');
+      if (percent) percent.textContent = `${progress}%`;
+      const track = banner.querySelector('.eb-track');
+      if (track) { track.style.setProperty('--engine-progress', `${Math.max(2, progress)}%`); track.setAttribute('aria-valuenow', String(progress)); }
+    }
   }
   const ask = document.getElementById('hero-ask'), inp = document.getElementById('hero-ask-input'), go = ask && ask.querySelector('.ask-go');
-  if (ask) ask.classList.toggle('starting', starting);
-  if (inp) { inp.disabled = starting; inp.placeholder = starting ? 'Cloudless AI is starting…' : 'Ask about your models, apps, or this machine…'; }
-  if (go) go.disabled = starting;
-  const ghost = document.getElementById('open-full-chat'); if (ghost) ghost.classList.toggle('off', starting);
+  if (ask) ask.classList.toggle('engine-hidden', unavailable);
+  if (inp) { inp.disabled = unavailable; inp.placeholder = engineUnloaded ? 'Load a model to use Cloudless AI' : (starting ? 'Cloudless AI is starting…' : 'Ask about your models, apps, or this machine…'); }
+  if (go) go.disabled = unavailable;
+  const ghost = document.getElementById('open-full-chat'); if (ghost) ghost.classList.toggle('engine-hidden', unavailable);
+  document.getElementById('home-apps')?.classList.toggle('engine-hidden', unavailable);
   const askStatus = document.getElementById('ask-status');
-  if (askStatus) askStatus.textContent = starting ? 'Local model is starting…' : 'Private · ready on this machine';
+  if (askStatus) askStatus.textContent = engineUnloaded ? 'No model loaded' : (starting ? (engineExecutionMode === 'cluster' ? 'Two-Spark model is starting…' : 'Local model is starting…') : (engineExecutionMode === 'cluster' ? 'Private · running across two Sparks' : 'Private · ready on this machine'));
   const agentStatus = document.getElementById('asst-status');
-  if (agentStatus) agentStatus.textContent = starting ? 'Waiting for the local model' : 'Private · powered by Hermes';
-  document.getElementById('asst-status-dot')?.classList.toggle('wait', starting);
+  if (agentStatus) agentStatus.textContent = engineUnloaded ? 'Load a model to start the agent' : (starting ? (engineExecutionMode === 'cluster' ? 'Waiting for both Sparks' : 'Waiting for the local model') : (engineExecutionMode === 'cluster' ? 'Private · Hermes across two Sparks' : 'Private · powered by Hermes'));
+  document.getElementById('asst-status-dot')?.classList.toggle('wait', unavailable);
   const di = document.getElementById('dock-inference'); if (di) di.classList.toggle('running', engineReady);
 }
 // The engine switch UI lives in the Inference hub (Engine tab); re-render it there.
@@ -3422,25 +3905,35 @@ function engineUIRefresh() {
 }
 function switchEngine(id) {
   if (engineSwitching) return;
-  engineSwitching = true; engineReady = false;
+  engineOperation = 'loading'; engineSwitching = true; engineReady = false;
   engineUIRefresh(); // reflect "switching…" immediately (user action)
   api(`/api/engine/${id}`, { method: 'POST' })
     .then(res => { if (res.jobId) trackEngineJob(res.jobId); else endSwitch(); })
     .catch(() => endSwitch());
 }
 function endSwitch() {
-  engineSwitching = false; renderEngine(); engineUIRefresh();
+  engineOperation = 'idle'; engineSwitching = false; engineAborting = false; engineLoadJobId = ''; renderEngine(); engineUIRefresh();
 }
 function trackEngineJob(jobId) {
+  engineLoadJobId = jobId;
+  engineOperation = 'loading'; engineSwitching = true;
+  applyEngineUI();
   const es = new EventSource(`/api/jobs/${jobId}/events`); let ended = false;
-  const fin = () => { if (ended) return; ended = true; es.close(); endSwitch(); };
+  const fin = () => { if (ended) return; ended = true; es.close(); if (engineLoadJobId === jobId) engineLoadJobId = ''; if (!engineAborting) endSwitch(); };
   es.onmessage = e => {
     const u = JSON.parse(e.data);
     const st = document.querySelector('#inf-panel .er-state');
     if (st && u.message) st.textContent = u.message;
     if (u.done) fin();
   };
-  es.onerror = () => fin();
+  es.onerror = async () => {
+    // EventSource reconnects automatically. A transient stream interruption must
+    // not turn the Abort action back into Load model while the job still runs.
+    try {
+      const snapshot = await api(`/api/jobs/${jobId}`);
+      if (snapshot.done || snapshot.phase === 'error') fin();
+    } catch {}
+  };
 }
 
 /* ---- toast ---- */
@@ -3708,7 +4201,13 @@ document.addEventListener('keydown', e => {
 
 /* ---- settings ---- */
 function openSettings() { document.getElementById('settings').classList.remove('hidden'); renderSettings(); }
-function closeSettings() { document.getElementById('settings').classList.add('hidden'); }
+function clearSparkClusterSecrets() {
+  clusterWizard.password = '';
+  clusterWizard.preflight = null;
+  clusterWizard.busy = false;
+  if (clusterWizard.step === 3) clusterWizard.step = 2;
+}
+function closeSettings() { clearSparkClusterSecrets(); document.getElementById('settings').classList.add('hidden'); }
 function settingsOpen() { return !document.getElementById('settings').classList.contains('hidden'); }
 
 let setPage = 'hardware';
@@ -3741,7 +4240,12 @@ async function renderSettings() {
   document.getElementById('set-nav').innerHTML = groups.filter(g => g.items.length).map(g =>
     `<div class="nav-group">${g.label}</div>` + g.items.map(it =>
       `<div class="nav-item ${it.id === setPage ? 'active' : ''}" data-page="${it.id}"><span class="nav-ic">${it.icon ? uiIcon(it.icon) : it.glyph}</span>${it.label}</div>`).join('')).join('');
-  document.querySelectorAll('#set-nav .nav-item').forEach(n => n.onclick = () => { setPage = n.dataset.page; renderSettings(); });
+  document.querySelectorAll('#set-nav .nav-item').forEach(n => n.onclick = () => {
+    const nextPage = n.dataset.page;
+    if (setPage === 'dgx-dashboard' && nextPage !== 'dgx-dashboard') clearSparkClusterSecrets();
+    setPage = nextPage;
+    renderSettings();
+  });
 
   let title = { profile: 'Profile', hardware: 'Machine', 'dgx-dashboard': 'DGX Dashboard', engine: 'Engine', api: 'API access', display: 'Display', appearance: 'Appearance', general: 'General' }[setPage] || '';
   if (setPage.startsWith('app:')) { const a = configurableApps.find(x => 'app:' + x.id === setPage); title = a ? a.name : ''; }
@@ -3780,9 +4284,177 @@ function renderDGXDashboardPage(c) {
       <div class="machine-driver-note">${uiIcon('alert')}<span>Save active work before applying system or firmware updates. NVIDIA updates can restart services or require a full reboot.</span></div>
       <div class="machine-driver-actions dgx-dashboard-actions"><button class="btn primary dgx-dashboard-launch" id="open-dgx-dashboard">${uiIcon('arrow-right')}<span>Open DGX Dashboard</span></button></div>
     </section>
+    ${hasCapability('spark-cluster') ? `<section class="machine-card" id="dgx-cluster-card">
+      <div class="machine-card-head"><div><div class="machine-card-title">Connect two Sparks</div><div class="machine-card-desc">Create and manage a dedicated 200 Gbps ConnectX-7 link for distributed workloads.</div></div><span class="inf-state-pill" id="dgx-cluster-state">CHECKING</span></div>
+      <div class="machine-facts"><div class="machine-fact"><div class="machine-fact-label">What it does</div><div class="machine-fact-value">Lets two Sparks work together</div></div><div class="machine-fact"><div class="machine-fact-label">What you need</div><div class="machine-fact-value">One high-speed Spark cable</div></div></div>
+      <div class="machine-driver-actions dgx-dashboard-actions"><button class="btn primary dgx-dashboard-launch" id="open-spark-cluster" disabled>${uiIcon('network')}<span>CHECKING</span></button></div>
+    </section>` : ''}
   </div>`;
   document.getElementById('open-dgx-dashboard').onclick = () =>
     openAppSurface('DGX Dashboard', 'http://127.0.0.1:11000/', '◈');
+  if (document.getElementById('dgx-cluster-card')) refreshDGXClusterCard();
+}
+async function refreshDGXClusterCard() {
+  const card = document.getElementById('dgx-cluster-card');
+  if (!card) return;
+  let status;
+  try { status = await api('/api/system/spark-cluster'); } catch { status = { error: 'Could not inspect Spark clustering.' }; }
+  if (!card.isConnected) return;
+  const state = card.querySelector('#dgx-cluster-state'), button = card.querySelector('#open-spark-cluster'), label = button.querySelector('span');
+  button.disabled = false;
+  if (status.error) { state.textContent = 'UNAVAILABLE'; label.textContent = 'TRY AGAIN'; button.onclick = refreshDGXClusterCard; return; }
+  state.textContent = status.configured ? 'CONFIGURED' : 'NOT CONFIGURED';
+  state.classList.toggle('ready', Boolean(status.configured && status.healthy));
+  label.textContent = status.configured ? 'MANAGE' : 'CONNECT NOW';
+  button.onclick = openSparkClusterSurface;
+}
+function clusterStepHeader(step) {
+  const item = (n, label, detail) => `<div class="cluster-step ${step === n ? 'active' : (step > n ? 'done' : '')}"><i>${step > n ? uiIcon('check') : n}</i><span class="cluster-step-copy"><b>${label}</b><span>${detail}</span></span></div>`;
+  return `<div class="cluster-progress-head"><div class="cluster-steps" aria-label="Cluster setup progress">${item(1, 'Choose Spark', 'Find the other computer')}${item(2, 'Connect cable', 'Plug in and test')}${item(3, 'Finish setup', 'Review and connect')}</div><span class="cluster-time">About 2 minutes</span></div>`;
+}
+const clusterCheckLabels = {
+  identity: ['We found the right Spark', 'The other computer answered securely.'],
+  'local-link': ['Cable works on this Spark', 'The high-speed port is awake and connected.'],
+  'local-config': ['This Spark is ready', 'No existing setup will be overwritten.'],
+  'local-addresses': ['Private network is available', 'The cluster addresses are free to use.'],
+  ssh: ['Login works', 'CloudlessOS can securely reach the other Spark.'],
+  'peer-hardware': ['The other computer is a DGX Spark', 'Compatible NVIDIA hardware was detected.'],
+  'peer-architecture': ['Both systems are compatible', 'The systems can run the same cluster software.'],
+  'peer-link': ['Cable works on the other Spark', 'Both ends of the high-speed connection are active.'],
+  'peer-addresses': ['Other Spark is ready', 'Its private cluster addresses are available.'],
+  'peer-config': ['No previous cluster conflicts', 'The other Spark is safe to configure.'],
+  sudo: ['Permission is ready', 'CloudlessOS can apply the network setup.'],
+  'local-links': ['Cable connection on this Spark', 'Both high-speed interfaces are online.']
+};
+const clusterCheckFailures = {
+  identity: 'The other Spark did not present a secure identity. Check its address and try again.',
+  'local-config': 'A Cloudless cluster is already configured on this Spark. Disconnect it before creating another one.',
+  'peer-config': 'A Cloudless cluster is already configured on the other Spark. Disconnect it there first.',
+  'local-addresses': 'The private cluster network is already being used on this Spark.',
+  'peer-addresses': 'The private cluster network is already being used on the other Spark.',
+  ssh: 'Check the Spark address, login name, and password, then try again.',
+  'peer-hardware': 'The selected computer was not recognized as compatible DGX Spark hardware.',
+  'peer-architecture': 'The other system is not running the compatible ARM64 software.',
+  sudo: 'The login works, but it cannot make the administrator changes required for setup.'
+};
+function clusterChecks(checks = []) {
+  const ordered = [...checks].sort((a, b) => Number(a.ok) - Number(b.ok));
+  return `<div class="cluster-checks" role="list">${ordered.map(check => { const isPing = String(check.id || '').startsWith('ping-'); const friendly = clusterCheckLabels[check.id] || (isPing ? ['Private path between the Sparks', 'The two Sparks can exchange data over the cable.'] : [check.label || 'Readiness check', '']); const detail = check.ok ? friendly[1] : (clusterCheckFailures[check.id] || check.details || friendly[1]); return `<div class="cluster-check ${check.ok ? '' : 'fail'}" role="listitem"><span class="cluster-check-icon ${check.ok ? '' : 'fail'}">${uiIcon(check.ok ? 'check' : 'close')}</span><span class="cluster-check-copy"><b>${escapeHtml(friendly[0])}</b>${detail ? `<span>${escapeHtml(detail)}</span>` : ''}</span></div>`; }).join('')}</div>`;
+}
+function clusterHero(stateText = 'Not configured', ready = false) {
+  return `<div class="inf-page-hero cluster-hero"><span class="inf-page-icon">${uiIcon('network')}</span><div class="inf-page-copy"><div class="inf-page-eyebrow">NVIDIA DGX Spark</div><div class="inf-page-title">Connect two Sparks</div><div class="inf-page-desc">A guided setup for the private high-speed link. Your normal Wi-Fi or Ethernet connection stays exactly as it is.</div></div><span class="inf-state-pill ${ready ? 'ready' : ''}">${escapeHtml(stateText)}</span></div>`;
+}
+async function renderSparkClusterPage(c) {
+  c.innerHTML = `<div class="cluster-page">${clusterHero('Checking')}<section class="machine-card" aria-busy="true"><div class="cluster-busy-panel" role="status"><i>${uiIcon('reload')}</i><span><b>Checking your Spark</b><span>Reading the high-speed connection and current cluster setup…</span></span></div></section></div>`;
+  let status; try { status = await api('/api/system/spark-cluster'); } catch { status = { error: 'CloudlessOS could not inspect Spark clustering.' }; }
+  if (status.error) { c.innerHTML = `<div class="cluster-page">${clusterHero('Unavailable')}<section class="machine-card"><div class="cluster-readiness-summary attention"><span class="cluster-readiness-symbol">${uiIcon('alert')}</span><span class="cluster-readiness-copy"><b>Cluster information is unavailable</b><span>${escapeHtml(status.error)}</span></span></div><div class="cluster-actions"><button class="btn primary" id="cluster-status-retry">${uiIcon('reload')}Try again</button></div></section></div>`; c.querySelector('#cluster-status-retry').onclick = () => renderSparkClusterPage(c); return; }
+  if (status.configured) { renderSparkClusterStatus(c, status); return; }
+  renderSparkClusterWizard(c);
+}
+function renderSparkClusterWizard(c) {
+  const w = clusterWizard; let body = '';
+  if (w.step === 1) {
+    const peers = w.peers.length ? `<div><div class="machine-card-title">Choose the Spark to connect</div><div class="machine-card-desc">${w.peers.length} compatible ${w.peers.length === 1 ? 'Spark was' : 'Sparks were'} found nearby.</div><div class="cluster-peer-list spaced">${w.peers.map((peer, index) => `<button class="cluster-peer" type="button" data-cluster-peer="${index}">${uiIcon('machine')}<span class="cluster-peer-copy"><b>${escapeHtml(peer.name || peer.host)}</b><span>${escapeHtml(peer.host)}${peer.ip ? ` · ${escapeHtml(peer.ip)}` : ''}</span></span>${uiIcon('arrow-right')}</button>`).join('')}</div></div>` : `<div class="cluster-discovery"><div class="cluster-discovery-stage ${w.busy ? 'searching' : ''}"><div class="cluster-radar" aria-hidden="true"><i class="cluster-radar-sweep"></i><span class="cluster-radar-core">${uiIcon('machine')}</span><span class="cluster-radar-peer">${uiIcon('machine')}</span></div><span class="cluster-radar-status" role="status"><i></i>${w.busy ? 'Searching your network…' : 'Ready to search nearby'}</span></div><div class="cluster-discovery-copy"><strong>${w.busy ? 'Looking for your other Spark' : 'Find the second Spark nearby'}</strong><span>Both Sparks only need to be turned on and connected to the same Wi-Fi or Ethernet network. The high-speed cable is handled in the next step.</span><button class="cluster-find-button ${w.busy ? 'searching' : ''}" id="cluster-discover" ${w.busy ? 'disabled' : ''}><span class="cluster-find-icon">${uiIcon(w.busy ? 'reload' : 'search')}</span><span class="cluster-find-copy"><b>${w.busy ? 'Searching nearby…' : 'Find my Spark'}</b><small>${w.busy ? 'Checking the local network' : 'Securely search this network'}</small></span><span class="cluster-find-arrow">${uiIcon('arrow-right')}</span></button></div></div>`;
+    body = `<section class="machine-card"><div class="machine-card-head"><div><div class="machine-card-title">Choose the other DGX Spark</div><div class="machine-card-desc">No technical setup is needed yet. Both Sparks only need to be visible on the same normal network.</div></div></div><div class="cluster-form">${peers}<details class="cluster-manual" ${w.host || w.error ? 'open' : ''}><summary>Can’t find it? Enter its address manually</summary><div class="cluster-field"><label for="cluster-host">Spark name or network address</label><input class="fld-input" id="cluster-host" value="${escapeAttr(w.host)}" placeholder="For example: spark-2.local" spellcheck="false" autocomplete="off"></div></details>${w.error ? `<div class="machine-driver-note">${uiIcon('alert')}<span>${escapeHtml(w.error)}</span></div>` : ''}<div class="cluster-actions">${w.peers.length ? `<button class="btn" id="cluster-discover" ${w.busy ? 'disabled' : ''}>${uiIcon('reload')}Search again</button>` : ''}<button class="btn primary" id="cluster-use-host" ${w.busy || !w.host ? 'disabled' : ''}>Use this address${uiIcon('arrow-right')}</button></div></div></section>`;
+  } else if (w.step === 2) {
+    body = `<section class="machine-card"><div class="machine-card-head"><div><div class="machine-card-title">Plug in the high-speed cable</div><div class="machine-card-desc">Connect the two matching rear ports, then let CloudlessOS test both ends.</div></div></div><div class="cluster-form">
+      <div class="cluster-cable-guide"><div class="cluster-cable-title">One cable. The same port on both Sparks.</div><div class="cluster-cable-intro">Use the wide NVIDIA high-speed cable included for Spark clustering (QSFP112 DAC).</div>
+        <div class="cluster-cable-visual" aria-label="Connect the same rear port on both DGX Sparks"><div class="cluster-spark-device"><strong>This Spark</strong><div class="cluster-spark-back" aria-label="Rear high-speed ports"><i class="cluster-spark-port connected"></i><i class="cluster-spark-port"></i></div></div><div class="cluster-cable-route"><span>Private 200 Gbps link</span><i class="cluster-cable-flow"></i></div><div class="cluster-spark-device"><strong>${escapeHtml(w.host || 'Other Spark')}</strong><div class="cluster-spark-back" aria-label="Rear high-speed ports"><i class="cluster-spark-port connected"></i><i class="cluster-spark-port"></i></div></div></div>
+        <div class="cluster-cable-tips"><div class="cluster-cable-tip"><i>1</i><span>Pick either rear high-speed port.</span></div><div class="cluster-cable-tip"><i>2</i><span>Use the matching port on the other Spark: left-to-left or right-to-right.</span></div><div class="cluster-cable-tip"><i>3</i><span>Keep the pull-tab facing up. If it resists, turn it over—do not force it.</span></div></div>
+        <label class="cluster-cable-confirm"><input type="checkbox" id="cluster-cable" ${w.cable ? 'checked' : ''}><span><b>Yes, the cable is plugged into both Sparks</b><span>Cloudless will automatically check the cable after you continue.</span></span></label>
+      </div>
+      <div class="cluster-fields"><div class="cluster-field"><label for="cluster-user">Login name on the other Spark</label><input class="fld-input" id="cluster-user" value="${escapeAttr(w.username)}" placeholder="For example: ledomaine" autocomplete="username" spellcheck="false"></div><div class="cluster-field"><label for="cluster-password">Password for the other Spark</label><input class="fld-input" id="cluster-password" type="password" value="${escapeAttr(w.password)}" autocomplete="current-password"></div></div><div class="fld-help">This lets CloudlessOS test and configure the other Spark. The password stays in memory only during setup and is never saved.</div>${w.busy ? `<div class="cluster-busy-panel" role="status"><i>${uiIcon('reload')}</i><span><b>Testing the connection</b><span>Checking the cable, secure login, and both high-speed ports…</span></span></div>` : ''}${w.error ? `<div class="machine-driver-note" role="alert">${uiIcon('alert')}<span>${escapeHtml(w.error)}</span></div>` : ''}<div class="cluster-actions"><button class="btn" id="cluster-back" ${w.busy ? 'disabled' : ''}>${uiIcon('arrow-left')}Back</button><button class="btn primary ${w.busy ? 'cluster-busy' : ''}" id="cluster-preflight" ${w.busy ? 'disabled' : ''}>${uiIcon(w.busy ? 'reload' : 'network')}<span>${w.busy ? 'Testing both Sparks…' : 'Check my connection'}</span></button></div></div></section>`;
+  } else {
+    const p = w.preflight || { checks: [] };
+    const failed = (p.checks || []).filter(check => !check.ok).length;
+    if (w.busy && p.ready) {
+      body = `<section class="machine-card" aria-busy="true"><div class="cluster-connect-progress" role="status" aria-live="polite"><div class="cluster-connect-visual" aria-hidden="true"><span class="cluster-connect-device">${uiIcon('machine')}</span><i class="cluster-connect-line"></i><span class="cluster-connect-device">${uiIcon('machine')}</span></div><h3>Connecting both Sparks…</h3><p>CloudlessOS is applying the private network, exchanging the secure login key, and waiting for both high-speed paths to come online. Keep this window open; this can take up to one minute.</p><div class="cluster-connect-stages"><span class="cluster-connect-stage"><i></i>Configure this Spark</span><span class="cluster-connect-stage"><i></i>Configure ${escapeHtml(p.peerName || 'the other Spark')}</span><span class="cluster-connect-stage"><i></i>Verify both paths</span></div></div></section>`;
+    } else {
+    body = `<section class="machine-card" aria-busy="${w.busy}"><div class="cluster-readiness-summary ${p.ready ? '' : 'attention'}"><span class="cluster-readiness-symbol">${uiIcon(p.ready ? 'check' : 'alert')}</span><span class="cluster-readiness-copy"><b>${p.ready ? 'Everything looks ready' : `${failed || 'A few'} ${failed === 1 ? 'item needs' : 'items need'} attention`}</b><span>${p.ready ? 'Both Sparks can see each other and the private high-speed link is ready to configure.' : 'Nothing has been changed yet. Follow the highlighted guidance, then check again.'}</span></span></div>${clusterChecks(p.checks)}${w.busy ? `<div class="cluster-busy-panel" role="status"><i>${uiIcon('reload')}</i><span><b>${p.ready ? 'Connecting both Sparks' : 'Checking again'}</b><span>${p.ready ? 'Applying the private network and verifying both ends…' : 'Repeating the cable and readiness checks…'}</span></span></div>` : ''}${!p.ready ? `<div class="cluster-actions"><button class="btn" id="cluster-back" ${w.busy ? 'disabled' : ''}>${uiIcon('arrow-left')}Check cable and login</button><button class="btn primary ${w.busy ? 'cluster-busy' : ''}" id="cluster-recheck" ${w.busy ? 'disabled' : ''}>${uiIcon('reload')}Check again</button></div>` : `<div class="cluster-next"><div class="cluster-next-title">What CloudlessOS will do</div><ol class="cluster-next-list"><li>Create a private connection between the two Sparks.</li><li>Add a secure Spark-to-Spark login key.</li><li>Test the link without changing normal Internet access.</li></ol></div><div class="cluster-fingerprint">Security code for <b>${escapeHtml(p.peerName || w.host)}</b><code>${escapeHtml(p.fingerprint || 'Unavailable')}</code></div><label class="cluster-cable"><input type="checkbox" id="cluster-fingerprint-confirm"><span><b>Yes, this is the Spark I want to connect</b><span>The security code prevents CloudlessOS from connecting to a different computer by mistake.</span></span></label>${w.error ? `<div class="machine-driver-note" role="alert">${uiIcon('alert')}<span>${escapeHtml(w.error)}</span></div>` : ''}<div class="cluster-actions"><button class="btn" id="cluster-back" ${w.busy ? 'disabled' : ''}>${uiIcon('arrow-left')}Back</button><button class="btn primary ${w.busy ? 'cluster-busy' : ''}" id="cluster-create" ${w.busy ? 'disabled' : ''}>${uiIcon(w.busy ? 'reload' : 'network')}<span>${w.busy ? 'Connecting both Sparks…' : 'Connect both Sparks'}</span></button></div>`}</section>`;
+    }
+  }
+  c.innerHTML = `<div class="cluster-page">${clusterHero()}${clusterStepHeader(w.step)}${body}</div>`; bindSparkClusterWizard(c);
+}
+function bindSparkClusterWizard(c) {
+  const w = clusterWizard;
+  const readHost = () => { const input = c.querySelector('#cluster-host'); if (input) w.host = input.value.trim(); };
+  const hostInput = c.querySelector('#cluster-host'); if (hostInput) hostInput.oninput = () => { w.host = hostInput.value.trim(); const button = c.querySelector('#cluster-use-host'); if (button) button.disabled = !w.host || w.busy; };
+  if (hostInput) hostInput.onkeydown = e => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); c.querySelector('#cluster-use-host')?.click(); } };
+  const cableInput = c.querySelector('#cluster-cable'); if (cableInput) cableInput.onchange = () => { w.cable = cableInput.checked; };
+  c.querySelectorAll('[data-cluster-peer]').forEach(button => button.onclick = () => { const peer = w.peers[Number(button.dataset.clusterPeer)]; w.host = peer.ip || peer.host; w.step = 2; w.error = ''; renderSparkClusterWizard(c); });
+  const discover = c.querySelector('#cluster-discover'); if (discover) discover.onclick = async () => { readHost(); w.busy = true; w.error = ''; renderSparkClusterWizard(c); let result; try { result = await api('/api/system/spark-cluster/discover', { method:'POST' }); } catch { result = { error:'CloudlessOS could not search the local network.' }; } w.busy = false; w.peers = result.peers || []; if (!result.error && w.peers.length === 1) { w.host = w.peers[0].ip || w.peers[0].host; w.step = 2; w.error = ''; } else { w.error = result.error || (w.peers.length ? '' : 'No other Spark appeared. Check that it is turned on and on the same Wi-Fi or Ethernet network, or enter its address below.'); } renderSparkClusterWizard(c); };
+  const useHost = c.querySelector('#cluster-use-host'); if (useHost) useHost.onclick = () => { readHost(); if (!w.host) { w.error = 'Enter or select the other Spark.'; renderSparkClusterWizard(c); return; } w.step = 2; w.error = ''; renderSparkClusterWizard(c); };
+  const back = c.querySelector('#cluster-back'); if (back) back.onclick = () => { w.step = Math.max(1, w.step - 1); w.error = ''; renderSparkClusterWizard(c); };
+  const runPreflight = async (fromForm = false) => { if (fromForm) { w.username = c.querySelector('#cluster-user').value.trim(); w.password = c.querySelector('#cluster-password').value; w.cable = c.querySelector('#cluster-cable').checked; } if (!w.username || !w.password || !w.cable) { w.error = 'Confirm the cable is plugged in, then enter the login name and password for the other Spark.'; renderSparkClusterWizard(c); return; } w.busy = true; w.error = ''; renderSparkClusterWizard(c); let result; try { result = await api('/api/system/spark-cluster/preflight', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({host:w.host, username:w.username, password:w.password}) }); } catch { result = {error:'CloudlessOS could not complete the connection check.'}; } w.busy = false; if (result.error) { w.error = result.error; w.step = 2; renderSparkClusterWizard(c); return; } w.preflight = result; w.step = 3; w.error = ''; renderSparkClusterWizard(c); };
+  const preflight = c.querySelector('#cluster-preflight'); if (preflight) preflight.onclick = () => runPreflight(true);
+  [c.querySelector('#cluster-user'), c.querySelector('#cluster-password')].filter(Boolean).forEach(input => input.onkeydown = e => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); preflight?.click(); } });
+  const recheck = c.querySelector('#cluster-recheck'); if (recheck) recheck.onclick = () => runPreflight(false);
+  const create = c.querySelector('#cluster-create'); if (create) create.onclick = async () => { if (!c.querySelector('#cluster-fingerprint-confirm').checked) { w.error = 'Confirm the peer identity before continuing.'; renderSparkClusterWizard(c); return; } w.busy = true; w.error = ''; renderSparkClusterWizard(c); let result; try { result = await api('/api/system/spark-cluster/create', {method:'POST', headers:{'Content-Type':'application/json','X-Cloudless-Action':'spark-cluster-create'}, body:JSON.stringify({host:w.host,username:w.username,password:w.password,fingerprint:w.preflight.fingerprint})}); } catch { result = {error:'The cluster could not be created.'}; } w.busy = false; if (result.error) { w.error = result.error; renderSparkClusterWizard(c); return; } clusterWizard = {step:1,peers:[],host:'',username:'',password:'',cable:false,preflight:null,busy:false,error:''}; renderSparkClusterStatus(c, result); toast('DGX Spark cluster is ready'); };
+}
+function renderSparkClusterStatus(c, status) {
+  const healthy = Boolean(status.healthy);
+  const localIps = (status.localIps || []).join(' · ') || 'Private addresses unavailable';
+  const peerIps = (status.peerIps || []).join(' · ') || 'Private addresses unavailable';
+  c.innerHTML = `<div class="cluster-page">${clusterHero(healthy ? 'Connected' : 'Needs attention', healthy)}<section class="machine-card"><div class="cluster-connected-hero ${healthy ? '' : 'attention'}"><span class="cluster-connected-copy"><b>${healthy ? 'Your two Sparks are connected' : 'The private connection needs attention'}</b><span>${healthy ? 'The high-speed link is online and ready for software that supports distributed workloads.' : 'Your normal network is unaffected. Run a connection check to see what needs fixing.'}</span></span><span class="cluster-health-orb">${uiIcon(healthy ? 'check' : 'alert')}</span></div><div class="cluster-nodes"><div class="cluster-node"><b>${escapeHtml(status.localName || 'This Spark')}</b><span>This Spark · ${escapeHtml(localIps)}</span></div><div class="cluster-link" aria-label="Private high-speed connection">${healthy ? '<i class="cluster-link-flow"></i>' : ''}${uiIcon('network')}</div><div class="cluster-node"><b>${escapeHtml(status.peerName || status.peerHost || 'Other Spark')}</b><span>Other Spark · ${escapeHtml(peerIps)}</span></div></div>${!healthy ? clusterChecks(status.checks) : ''}<div class="cluster-status-grid"><div class="machine-fact"><div class="machine-fact-label">Private link</div><div class="machine-fact-value">Up to 200 Gbps</div></div><div class="machine-fact"><div class="machine-fact-label">Normal network</div><div class="machine-fact-value">Still connected</div></div><div class="machine-fact"><div class="machine-fact-label">Set up</div><div class="machine-fact-value">${escapeHtml(status.createdAt ? new Date(status.createdAt).toLocaleDateString() : 'Configured')}</div></div></div><div class="machine-driver-note">${uiIcon('alert')}<span>The cable connects the machines, but it does not automatically combine their memory. Choose software or models that support distributed inference.</span></div>${healthy ? `<details class="cluster-advanced"><summary>Technical details and connection checks</summary><div class="cluster-advanced-body">${clusterChecks(status.checks)}</div></details>` : ''}<div class="cluster-actions"><button class="btn primary" id="cluster-refresh">${uiIcon('reload')}<span>${healthy ? 'Check connection' : 'Run health check'}</span></button><button class="btn cluster-danger" id="cluster-disconnect">${uiIcon('trash')}Disconnect</button></div></section></div>`;
+  document.getElementById('cluster-refresh').onclick = () => renderSparkClusterPage(c); document.getElementById('cluster-disconnect').onclick = () => openSparkClusterDisconnect(c, status);
+}
+function openSparkClusterDisconnect(c, status) {
+  const layer = document.getElementById('key-dialog-layer'), content = document.getElementById('key-dialog-content');
+  content.innerHTML = `<div class="key-dialog-head"><div class="key-dialog-heading"><div class="key-dialog-title" id="key-dialog-title">Disconnect Spark cluster?</div><div class="key-dialog-sub">CloudlessOS will safely return this Spark to independent operation.</div></div><button class="key-dialog-close" id="cluster-disconnect-close">${uiIcon('close')}</button></div><div class="key-dialog-body"><div class="machine-driver-note">${uiIcon('alert')}<span><b>The model running across both Sparks will stop.</b><br>Any response in progress will be interrupted. CloudlessOS will release the distributed model, remove the private connection on both machines, then start a compatible model on this Spark.</span></div><label class="cluster-field"><span class="fld-label">Peer administrator password</span><input class="fld-input" id="cluster-disconnect-password" type="password" autocomplete="current-password"></label><div class="key-dialog-help" id="cluster-disconnect-error">The password is used for this removal only and is never saved.</div><div class="key-dialog-actions"><button class="btn" id="cluster-disconnect-cancel">Cancel</button><button class="btn danger-solid" id="cluster-disconnect-confirm">${uiIcon('unlink')}<span>Disconnect and switch to local</span></button></div></div>`;
+  layer.classList.remove('hidden'); document.getElementById('cluster-disconnect-close').onclick = closeKeyDialog; document.getElementById('cluster-disconnect-cancel').onclick = closeKeyDialog;
+  document.getElementById('cluster-disconnect-confirm').onclick = async e => {
+    const password = document.getElementById('cluster-disconnect-password').value;
+    if (!password) { document.getElementById('cluster-disconnect-error').textContent = 'Enter the peer administrator password.'; return; }
+    const button = e.currentTarget, body = content.querySelector('.key-dialog-body'), started = Date.now();
+    button.disabled = true;
+    document.getElementById('cluster-disconnect-cancel').disabled = true;
+    document.getElementById('cluster-disconnect-close').disabled = true;
+    body.innerHTML = `<div class="cluster-connect-progress" role="status" aria-live="polite"><div class="cluster-connect-visual" aria-hidden="true"><span class="cluster-connect-device">${uiIcon('machine')}</span><i class="cluster-connect-line"></i><span class="cluster-connect-device">${uiIcon('machine')}</span></div><h3 id="cluster-disconnect-progress-title">Safely disconnecting both Sparks…</h3><p id="cluster-disconnect-progress-detail">Stopping the peer worker and removing the private high-speed network configuration.</p><div class="cluster-disconnect-meter"><div class="cluster-disconnect-meter-head"><span id="cluster-disconnect-percent">8%</span><span id="cluster-disconnect-eta">About 45 seconds remaining</span></div><div class="cluster-disconnect-meter-track" role="progressbar" aria-label="Disconnect progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="8"><i></i></div></div><div class="cluster-connect-stages cluster-disconnect-stages"><span class="cluster-connect-stage active" data-disconnect-stage="0"><i></i>Stop distributed AI</span><span class="cluster-connect-stage" data-disconnect-stage="1"><i></i>Remove private link</span><span class="cluster-connect-stage" data-disconnect-stage="2"><i></i>Start local AI</span></div></div>`;
+    const setProgress = (percent, title, detail, eta, stage) => {
+      percent = Math.max(1, Math.min(100, Math.round(percent)));
+      const track = body.querySelector('.cluster-disconnect-meter-track');
+      body.querySelector('#cluster-disconnect-progress-title').textContent = title;
+      body.querySelector('#cluster-disconnect-progress-detail').textContent = detail;
+      body.querySelector('#cluster-disconnect-percent').textContent = `${percent}%`;
+      body.querySelector('#cluster-disconnect-eta').textContent = eta;
+      track.style.setProperty('--disconnect-progress', `${percent}%`); track.setAttribute('aria-valuenow', String(percent));
+      body.querySelectorAll('[data-disconnect-stage]').forEach((item, index) => { item.classList.toggle('done', index < stage); item.classList.toggle('active', index === stage); });
+    };
+    let networkDone = false, localStarted = 0, lastUpdate = null;
+    const formatRemaining = seconds => { seconds = Math.max(1, Math.round(seconds)); return seconds < 60 ? `About ${seconds} seconds remaining` : `About ${Math.ceil(seconds / 60)} minutes remaining`; };
+    const timer = setInterval(() => {
+      if (!networkDone) {
+        const elapsed = (Date.now() - started) / 1000;
+        setProgress(Math.min(39, 8 + elapsed * .55), 'Safely disconnecting both Sparks…', elapsed < 12 ? 'Stopping the peer worker and releasing the distributed session.' : 'Removing the private high-speed network configuration from both Sparks.', formatRemaining(Math.max(8, 45 - elapsed)), elapsed < 12 ? 0 : 1);
+      } else if (lastUpdate && !lastUpdate.done) {
+        const elapsed = (Date.now() - localStarted) / 1000, done = +(lastUpdate.layersDone || 0), total = +(lastUpdate.layersTotal || 0);
+        const shardRatio = total > 0 ? Math.min(1, done / total) : 0;
+        const percent = total > 0 ? 58 + shardRatio * 34 : Math.min(68, 48 + elapsed / 18);
+        const seconds = done > 0 && total > done ? (elapsed / done) * (total - done) + 75 : Math.max(60, 360 - elapsed);
+        setProgress(percent, 'Starting local AI on this Spark…', lastUpdate.message || 'Preparing the local inference engine.', formatRemaining(seconds), 2);
+      }
+    }, 1000);
+    let result;
+    try { result = await api('/api/system/spark-cluster/disconnect', {method:'POST',headers:{'Content-Type':'application/json','X-Cloudless-Action':'spark-cluster-disconnect'},body:JSON.stringify({password})}); }
+    catch { result = {error:'The cluster could not be disconnected.'}; }
+    if (result.error) {
+      clearInterval(timer); body.innerHTML = `<div class="machine-driver-note" role="alert">${uiIcon('alert')}<span>${escapeHtml(result.error)}</span></div><div class="key-dialog-actions"><button class="btn primary" id="cluster-disconnect-done">Close</button></div>`;
+      document.getElementById('cluster-disconnect-done').onclick = closeKeyDialog; return;
+    }
+    networkDone = true; localStarted = Date.now();
+    engineExecutionMode = 'local'; engineReady = false; engineStartup = {phase:'switching', message:'Preparing local inference on this Spark…'}; applyEngineUI();
+    setProgress(46, 'Private link removed', 'Distributed mode is off. CloudlessOS is now releasing its memory and starting a compatible model locally.', 'About 6 minutes remaining', 2);
+    if (!result.jobId) { clearInterval(timer); closeKeyDialog(); clusterWizard.step=1; renderSparkClusterPage(c); toast('Spark cluster disconnected'); return; }
+    const es = new EventSource(`/api/jobs/${result.jobId}/events`); let ended = false;
+    const finish = (ok, message = '') => {
+      if (ended) return; ended = true; clearInterval(timer); es.close();
+      if (ok) { setProgress(100, 'Local AI is ready', 'This Spark is now operating independently.', 'Complete', 3); setTimeout(() => { closeKeyDialog(); clusterWizard.step=1; renderSparkClusterPage(c); renderEngine(); toast(result.modelChanged ? 'Cluster disconnected · compatible local model selected' : 'Cluster disconnected · local AI ready'); }, 650); }
+      else { body.querySelector('#cluster-disconnect-progress-title').textContent = 'Cluster disconnected'; body.querySelector('#cluster-disconnect-progress-detail').textContent = message || 'The private connection was removed, but the local model could not start. Open Model Manager to choose another model.'; body.querySelector('#cluster-disconnect-eta').textContent = 'Local AI needs attention'; body.insertAdjacentHTML('beforeend', `<div class="key-dialog-actions"><button class="btn primary" id="cluster-disconnect-done">Close</button></div>`); document.getElementById('cluster-disconnect-done').onclick = () => { closeKeyDialog(); clusterWizard.step=1; renderSparkClusterPage(c); }; }
+    };
+    es.onmessage = event => { const update = JSON.parse(event.data); lastUpdate = update; if (update.phase === 'error') finish(false, update.error); else if (update.done) finish(true); };
+    es.onerror = () => finish(false, 'CloudlessOS lost the progress connection. The cluster is disconnected; check Model Manager to confirm the local model.');
+  };
+  setTimeout(() => document.getElementById('cluster-disconnect-password')?.focus(), 0);
 }
 // Country options for the profile region override (Auto-detect + a focused list).
 const REGION_OPTS = [['', 'Auto-detect'], ['FR', 'France'], ['BE', 'Belgium'], ['CH', 'Switzerland'], ['CA', 'Canada'],
@@ -3836,7 +4508,16 @@ function apiKeyRow(k) {
 }
 function apiWireRevokes(container) {
   container.querySelectorAll('[data-revoke]').forEach(b => b.onclick = async () => {
-    if (!confirm('Revoke this key? Anything using it will stop working immediately.')) return;
+    const approved = await openCloudlessDecision({
+      title: 'Revoke this API key?',
+      message: 'Anything using it will stop working immediately.',
+      detail: 'This cannot be undone. You can generate a replacement key at any time.',
+      confirmLabel: 'Revoke key',
+      icon: 'key',
+      tone: 'danger',
+      returnFocus: b,
+    });
+    if (!approved) return;
     try { await api('/api/keys/' + b.dataset.revoke, { method: 'DELETE' }); toast('Key revoked'); apiRefreshKeys(); }
     catch { toast('Failed', true); }
   });
@@ -3854,15 +4535,68 @@ function apiTunRender(out, tunnel) {
     <div class="fld-help" style="margin-top:6px">Give the appropriate base URL and a scoped key to an approved client.</div>`;
 }
 let keyDialogReturnFocus = null;
+let keyDialogReturnFocusID = '';
 let keyDialogBusy = false;
+let keyDialogOnClose = null;
 function closeKeyDialog() {
   if (keyDialogBusy) return;
   const layer = document.getElementById('key-dialog-layer');
   if (layer.classList.contains('hidden')) return;
   layer.classList.add('hidden');
   document.getElementById('key-dialog-content').innerHTML = '';
-  if (keyDialogReturnFocus && document.contains(keyDialogReturnFocus)) keyDialogReturnFocus.focus();
+  let focusTarget = keyDialogReturnFocus;
+  if ((!focusTarget || !document.contains(focusTarget)) && keyDialogReturnFocusID) focusTarget = document.getElementById(keyDialogReturnFocusID);
+  if (focusTarget && document.contains(focusTarget)) focusTarget.focus();
   keyDialogReturnFocus = null;
+  keyDialogReturnFocusID = '';
+  const onClose = keyDialogOnClose;
+  keyDialogOnClose = null;
+  if (onClose) onClose();
+}
+function openCloudlessDecision(options = {}) {
+  const layer = document.getElementById('key-dialog-layer');
+  if (!layer.classList.contains('hidden')) closeKeyDialog();
+  const content = document.getElementById('key-dialog-content');
+  const tone = options.tone === 'danger' ? 'danger' : '';
+  const title = options.title || 'Continue?';
+  const message = options.message || 'CloudlessOS needs your confirmation.';
+  const detail = options.detail ? `<div class="uninstall-summary">${escapeHtml(options.detail).replace(/\n/g, '<br>')}</div>` : '';
+  const confirmLabel = options.confirmLabel || 'Continue';
+  const cancelLabel = options.cancelLabel || 'Cancel';
+  keyDialogBusy = false;
+  keyDialogReturnFocus = options.returnFocus || document.activeElement;
+  keyDialogReturnFocusID = keyDialogReturnFocus?.id || '';
+  content.innerHTML = `<div class="key-dialog-head">
+      <span class="key-dialog-icon ${tone}">${uiIcon(options.icon || 'alert')}</span>
+      <div class="key-dialog-heading"><div class="key-dialog-title" id="key-dialog-title">${escapeHtml(title)}</div><div class="key-dialog-sub">${escapeHtml(message)}</div></div>
+      <button class="key-dialog-close" id="decision-dialog-close" type="button" aria-label="Close confirmation">${uiIcon('close')}</button>
+    </div><div class="key-dialog-body">
+      ${detail}
+      <div class="key-dialog-actions">
+        <button class="btn" id="decision-dialog-cancel" type="button">${escapeHtml(cancelLabel)}</button>
+        <button class="btn ${tone ? 'danger-solid' : 'primary'}" id="decision-dialog-accept" type="button">${uiIcon(options.icon || 'check')}<span>${escapeHtml(confirmLabel)}</span></button>
+      </div>
+    </div>`;
+  layer.classList.remove('hidden');
+  return new Promise(resolve => {
+    let settled = false;
+    const finish = accepted => {
+      if (settled) return;
+      settled = true;
+      keyDialogOnClose = null;
+      closeKeyDialog();
+      resolve(accepted);
+    };
+    keyDialogOnClose = () => {
+      if (settled) return;
+      settled = true;
+      resolve(false);
+    };
+    document.getElementById('decision-dialog-close').onclick = closeKeyDialog;
+    document.getElementById('decision-dialog-cancel').onclick = closeKeyDialog;
+    document.getElementById('decision-dialog-accept').onclick = () => finish(true);
+    document.getElementById('decision-dialog-cancel').focus();
+  });
 }
 function openPowerDialog(action) {
   const restarting = action === 'reboot';
@@ -3878,8 +4612,8 @@ function openPowerDialog(action) {
       <div class="key-dialog-heading"><div class="key-dialog-title" id="key-dialog-title">${verb} CloudlessOS?</div><div class="key-dialog-sub">${restarting ? 'The system will close this session and start again.' : 'The machine will safely power off.'}</div></div>
       <button class="key-dialog-close" id="power-dialog-close" type="button" aria-label="Close power dialog">${uiIcon('close')}</button>
     </div>
-    <div class="key-dialog-body">
-      <div class="uninstall-summary"><b>All running apps and models will stop.</b><br>${uiIcon('check')}${restarting ? 'CloudlessOS will be available again after the system starts.' : 'Your installed apps, models, and settings will be kept.'}</div>
+    <div class="key-dialog-body power-dialog-body">
+      <div class="power-dialog-summary"><div class="power-dialog-summary-title">All running apps and models will stop.</div><div class="power-dialog-summary-detail">${uiIcon('check')}<span>${restarting ? 'CloudlessOS will be available again after the system starts.' : 'Your installed apps, models, and settings will be kept.'}</span></div></div>
       <div class="key-dialog-error" id="power-dialog-error" role="alert"></div>
       <div class="key-dialog-actions">
         <button class="btn" id="power-dialog-cancel" type="button">Cancel</button>
@@ -4105,6 +4839,8 @@ function openUninstallDialog(id, app) {
 async function renderApiPage(c) {
   c.innerHTML = '<div class="set-hint">Loading…</div>';
   let g; try { g = await api('/api/gateway'); } catch { c.innerHTML = '<div class="set-hint">Could not load API access.</div>'; return; }
+  let engine = {}; try { engine = await api('/api/engine'); setActiveEngine(engine); } catch {}
+  const distributed = engine.executionMode === 'cluster';
   const keys = g.keys || [];
   const curl = `curl ${g.localURL}/chat/completions \\\n  -H "Authorization: Bearer YOUR_KEY" \\\n  -H "Content-Type: application/json" \\\n  -d '{"model":"${g.servedName}","messages":[{"role":"user","content":"Hello!"}]}'`;
   const agentURL = g.agent && g.agent.localURL ? g.agent.localURL : `http://localhost:${g.port}/agent/v1`;
@@ -4113,8 +4849,8 @@ async function renderApiPage(c) {
     <div class="inf-page-hero">
       <span class="inf-page-icon">${uiIcon('key')}</span>
       <div class="inf-page-copy"><div class="inf-page-eyebrow">OpenAI compatible</div><div class="inf-page-title">API access</div>
-      <div class="inf-page-desc">Connect clients either to raw model inference or to the full Hermes agent. Requests stay on your hardware unless you enable network access.</div></div>
-      <span class="inf-state-pill ready">Local</span>
+      <div class="inf-page-desc">Connect clients either to raw model inference or to the full Hermes agent. ${distributed ? 'Model requests are automatically served by your connected Spark pair.' : 'Requests stay on this machine'} unless you enable network access.</div></div>
+      <span class="inf-state-pill ready">${distributed ? 'Two Sparks' : 'Local'}</span>
     </div>
     <section class="api-section">
       <div class="api-section-head"><div><div class="api-section-title">Connect a client</div><div class="api-section-desc">Both endpoints use the OpenAI format but have different capabilities and key permissions.</div></div></div>
@@ -4183,34 +4919,109 @@ const ENGINE_INFO = {
   sglang: { icon: 'network', best: 'Responsive serving for agents and tools', runs: 'GPU', traits: ['Low latency with RadixAttention', 'Strong structured output and tool calling', 'Efficient prompt and prefix reuse'] },
   llamacpp: { icon: 'machine', best: 'Flexible local inference on almost any machine', runs: 'CPU + GPU', traits: ['Offloads models between RAM and VRAM', 'Can run entirely on the CPU', 'Uses compact GGUF model files'] },
 };
+async function loadSelectedModel() {
+  if (engineSwitching) return;
+  engineOperation = 'loading'; engineSwitching = true; engineUnloaded = false; engineReady = false;
+  engineStartup = { phase: 'switching', message: 'Starting the selected model…' };
+  applyEngineUI(); engineUIRefresh();
+  try {
+    const result = await api('/api/engine/load', { method: 'POST' });
+    if (result.jobId) trackEngineJob(result.jobId); else endSwitch();
+  } catch (error) {
+    engineUnloaded = true; endSwitch(); toast(error && error.message ? error.message : 'Could not load the model', true);
+  }
+}
+async function abortModelLoad() {
+  if (engineAborting || !engineLoadJobId) return;
+  engineOperation = 'aborting'; engineAborting = true; engineSwitching = true;
+  applyEngineUI();
+  try {
+    const result = await api('/api/engine/abort', { method: 'POST', headers: { 'X-Cloudless-Action': 'model-abort' } });
+    if (!result.jobId) throw new Error('CloudlessOS did not start the abort operation.');
+    const es = new EventSource(`/api/jobs/${result.jobId}/events`); let ended = false;
+    const finish = async ok => {
+      if (ended) return; ended = true; es.close();
+      engineOperation = 'idle'; engineAborting = false; engineSwitching = false; engineLoadJobId = '';
+      if (ok) engineUnloaded = true;
+      await renderEngine();
+      if (modelsOpen()) renderModelManager();
+      if (settingsOpen() && setPage === 'engine') renderEnginePage(document.getElementById('set-content'));
+      toast(ok ? 'Model load aborted · accelerator memory released' : 'Could not abort model loading', !ok);
+    };
+    es.onmessage = event => { const update = JSON.parse(event.data); if (update.phase === 'error') finish(false); else if (update.done) finish(true); };
+    es.onerror = () => finish(false);
+  } catch (error) {
+    engineOperation = 'loading'; engineAborting = false; engineSwitching = true; applyEngineUI();
+    toast(error && error.message ? error.message : 'Could not abort model loading', true);
+  }
+}
+async function unloadCurrentModel(modelName = 'the active model') {
+  const accepted = await openCloudlessDecision({
+    title: `Unload ${modelName}?`,
+    message: 'CloudlessOS will stop inference and release accelerator memory.',
+    detail: 'The downloaded model files and your settings will stay on this machine. You can load the model again with one click.',
+    confirmLabel: 'Unload model', icon: 'stop'
+  });
+  if (!accepted) return;
+  if (modelsOpen()) closeModelManager();
+  engineOperation = 'unloading'; engineSwitching = true;
+  try {
+    const result = await api('/api/engine/unload', { method: 'POST', headers: { 'X-Cloudless-Action': 'model-unload' } });
+    if (!result.jobId) throw new Error('CloudlessOS did not start the unload operation.');
+    const es = new EventSource(`/api/jobs/${result.jobId}/events`); let ended = false;
+    const finish = async ok => {
+      if (ended) return; ended = true; es.close(); engineOperation = 'idle'; engineSwitching = false;
+      await renderEngine();
+      if (modelsOpen()) renderModelManager();
+      if (settingsOpen() && setPage === 'engine') renderEnginePage(document.getElementById('set-content'));
+      toast(ok ? 'Model unloaded · accelerator memory released' : 'Could not unload the model', !ok);
+    };
+    es.onmessage = event => { const update = JSON.parse(event.data); if (update.phase === 'error') finish(false); else if (update.done) finish(true); };
+    es.onerror = () => finish(false);
+  } catch (error) { engineOperation = 'idle'; engineSwitching = false; renderEngine(); toast(error && error.message ? error.message : 'Could not unload the model', true); }
+}
 async function renderEnginePage(c) {
   c.innerHTML = '<div class="set-hint">Loading…</div>';
   let engine; try { engine = await api('/api/engine'); } catch { return; }
-  const state = engineSwitching ? 'switching…' : (engine.ready ? 'ready' : 'starting…');
+  syncEngineState(engine);
+  const distributed = engine.executionMode === 'cluster';
+  const state = engineOperation === 'aborting' ? 'aborting…' : engineOperation === 'unloading' ? 'unloading…' : engineOperation === 'loading' ? 'loading…' : (engine.unloaded ? 'unloaded' : (engine.ready ? 'ready' : 'starting…'));
   const cards = (engine.engines || []).map(e => {
     const info = ENGINE_INFO[e.id] || { icon: 'machine', best: '', runs: '', traits: [] };
     const traits = info.traits.map(t => `<li>${escapeHtml(t)}</li>`).join('');
-    const foot = e.active
-      ? '<span class="ec-active">Active engine</span>'
-      : `<button class="btn" data-eng="${e.id}" ${engineSwitching ? 'disabled' : ''}>Use this engine</button>`;
-    return `<div class="ec ${e.active ? 'on' : ''}">
+    const selectedUnloaded = engine.unloaded && e.selected;
+    const foot = e.active && engineOperation === 'aborting'
+      ? `<span class="ec-active">Stopping model loading…</span>`
+      : e.active && engineOperation === 'unloading'
+      ? `<span class="ec-active">Releasing accelerator memory…</span>`
+      : e.active && engineLoadIsAbortable()
+      ? `<span class="ec-active">Loading model</span><button class="btn model-load-action abort" data-abort-engine type="button">${uiIcon('stop')}<span>Abort</span></button>`
+      : e.active
+      ? `<span class="ec-active">${distributed ? 'Active across both Sparks' : 'Active engine'}</span><button class="btn" data-unload-engine type="button">${uiIcon('stop')}<span>Unload model</span></button>`
+      : selectedUnloaded
+      ? `<span class="ec-active">Selected · unloaded</span><button class="btn primary model-load-action" data-load-engine type="button">${uiIcon('rocket')}<span>Load model</span></button>`
+      : `<button class="btn" data-eng="${e.id}" ${engineOperation !== 'idle' ? 'disabled' : ''}>Use this engine</button>`;
+    return `<div class="ec ${e.active || selectedUnloaded ? 'on' : ''}">
         <div class="ec-head"><span class="ec-ic">${uiIcon(info.icon)}</span><span class="ec-title"><span class="ec-name">${escapeHtml(e.name.replace(' Engine', ''))}</span>${info.runs ? `<span class="ec-runs">${escapeHtml(info.runs)}</span>` : ''}</span></div>
         <div class="ec-best">${escapeHtml(info.best)}</div>
         <ul class="ec-traits">${traits}</ul>
-        <div class="ec-foot">${foot}</div>
+        <div class="ec-foot ${e.active || selectedUnloaded ? 'has-actions' : ''}">${foot}</div>
       </div>`;
   }).join('');
   c.innerHTML = `<div class="inf-page">
     <div class="inf-page-hero">
-      <span class="inf-page-icon">${uiIcon('machine')}</span>
-      <div class="inf-page-copy"><div class="inf-page-eyebrow">Runtime</div><div class="inf-page-title">Inference engine</div>
-      <div class="inf-page-desc">Choose the runtime that powers chat, apps, and the API. Switching reloads the current model and usually takes under a minute.</div></div>
+      <span class="inf-page-icon">${uiIcon(distributed ? 'network' : 'machine')}</span>
+      <div class="inf-page-copy"><div class="inf-page-eyebrow">Runtime${distributed ? ' · Two-Spark compute' : ''}</div><div class="inf-page-title">Inference engine</div>
+      <div class="inf-page-desc">${engine.unloaded ? 'The selected model is downloaded but not using accelerator memory. Load it when you need local AI.' : (distributed ? 'The active model is split across both connected Sparks. Chat, apps, and API clients use the pair automatically.' : 'Choose the runtime that powers chat, apps, and the API.')} Switching reloads the current model and usually takes under a minute.</div></div>
       <span class="inf-state-pill ${engine.ready ? 'ready' : ''}">${state}</span>
     </div>
     <div class="ec-grid">${cards}</div>
     <div class="fld-help">The model itself is selected in Model Manager. Engine availability depends on your hardware and installation.</div>
   </div>`;
   c.querySelectorAll('.ec [data-eng]').forEach(b => b.onclick = () => { switchEngine(b.dataset.eng); toast('Switching engine…'); });
+  c.querySelectorAll('[data-unload-engine]').forEach(b => b.onclick = () => unloadCurrentModel());
+  c.querySelectorAll('[data-load-engine]').forEach(b => b.onclick = loadSelectedModel);
+  c.querySelectorAll('[data-abort-engine]').forEach(b => b.onclick = abortModelLoad);
 }
 
 const modelDownloads = new Map();
@@ -4353,7 +5164,8 @@ function modelCard(m) {
   const downloading = modelDownloads.get(m.id);
   const caps = (m.recommended ? '<span class="mdl-cap rec">Recommended</span>' : '')
     + (m.vision ? '<span class="mdl-cap vis">Vision</span>' : '') + (m.toolCalling ? '<span class="mdl-cap">Tools</span>' : '')
-    + (m.gated ? '<span class="mdl-cap gated">Gated</span>' : '') + (m.source === 'huggingface' ? '<span class="mdl-cap">Hugging Face</span>' : '');
+    + (m.gated ? '<span class="mdl-cap gated">Gated</span>' : '') + (m.source === 'huggingface' ? '<span class="mdl-cap">Hugging Face</span>' : '')
+    + (m.clusterFit && m.fit === 'over' && m.clusterFit !== 'over' ? '<span class="mdl-cap cluster">Two-Spark model</span>' : '');
   const tags = (m.tags || []).filter(t => !['vision', 'tools'].includes(String(t).toLowerCase())).slice(0, 2)
     .map(t => `<span class="mdl-t">${escapeHtml(t)}</span>`).join('');
   const status = downloading ? '<span class="mdl-status active"><i></i>Downloading</span>' : (m.active ? '<span class="mdl-status active"><i></i>Loaded</span>' : (m.downloaded ? '<span class="mdl-status">Installed</span>' : ''));
@@ -4367,6 +5179,7 @@ function modelCard(m) {
       <div class="mdl-tags">${caps}${tags}</div>
       ${downloading ? modelDownloadProgressHTML(downloading, true) : ''}
       ${modelCompatibility(m, (mmLM || {}).gpuVRAMGB || 0)}
+      ${m.clusterFit ? `<div class="mdl-cluster-fit"><span>Across both Sparks</span><b>${escapeHtml(FIT_LABEL[m.clusterFit] || FIT_LABEL.unknown)}</b></div>` : ''}
       <div class="mdl-foot"><span class="mdl-meta">${escapeHtml(m.use || 'general')}</span><span class="mdl-use">View details ${uiIcon('arrow-right')}</span></div>
     </button>`;
 }
@@ -4397,7 +5210,7 @@ function activeModelCard(m, gpu, memoryType) {
   const meta = [m.params, m.quant, m.contextK ? `${m.contextK}K context` : '', m.minVramGB ? `~${m.minVramGB} GB ${memoryLabel(memoryType)}` : ''].filter(Boolean).join(' · ');
   return `<button class="mm-active-card" data-active-model="${escapeAttr(m.id)}">
     <span class="mm-active-icon">${uiIcon('models')}</span>
-    <span class="mm-active-copy"><span class="mm-active-kicker">Loaded now</span><span class="mm-active-name">${escapeHtml(m.name)}</span><span class="mm-active-meta">${escapeHtml(meta || m.id)}</span></span>
+    <span class="mm-active-copy"><span class="mm-active-kicker">${engineExecutionMode === 'cluster' ? 'Loaded across two Sparks' : 'Loaded now'}</span><span class="mm-active-name">${escapeHtml(m.name)}</span><span class="mm-active-meta">${escapeHtml(meta || m.id)}</span></span>
     <span class="mm-active-action">Manage ${uiIcon('arrow-right')}</span>
   </button>`;
 }
@@ -4549,6 +5362,9 @@ function launchModel(m) {
   const curName = (mmCache['lm:' + curId] && mmCache['lm:' + curId].name) || (curId.split('/').pop()) || 'the current model';
   const gpu = (mmLM && mmLM.gpuVRAMGB) || 0;
   const memoryType = (mmLM && mmLM.memoryType) || 'dedicated';
+  const cluster = (mmLM && mmLM.cluster) || {};
+  const clusterEligible = Boolean(!m.gated && cluster.distributedReady && m.clusterFit && m.clusterFit !== 'over' && m.clusterFit !== 'unknown');
+  let selectedMode = clusterEligible && m.fit === 'over' ? 'cluster' : 'local';
   keyDialogBusy = false;
   keyDialogReturnFocus = document.activeElement;
   const layer = document.getElementById('key-dialog-layer');
@@ -4563,13 +5379,24 @@ function launchModel(m) {
         <div class="model-confirm-fact"><small>Loaded now</small><b>${escapeHtml(curName)}</b></div>
         <div class="model-confirm-fact"><small>Compatibility</small><b>${escapeHtml(FIT_LABEL[m.fit] || FIT_LABEL.unknown)}${m.minVramGB ? ` · ~${m.minVramGB} GB` : ''}</b></div>
       </div>
-      ${m.fit === 'over' ? `<div class="model-confirm-warning">This model needs about ${m.minVramGB} GB of ${memoryLabel(memoryType)}, but this machine reports ${gpu || 'less available'} GB. Launching may fail.</div>` : ''}
+      <div class="model-run-modes" role="radiogroup" aria-label="Where to run this model">
+        <button class="model-run-mode" type="button" data-model-mode="local" role="radio"><span class="model-run-mode-icon">${uiIcon('machine')}</span><span class="model-run-mode-copy"><b>Run on this Spark</b><small>${gpu} GB ${memoryLabel(memoryType)} · fastest startup for models that fit locally</small></span><i class="model-run-mode-check"></i></button>
+        ${clusterEligible ? `<button class="model-run-mode cluster" type="button" data-model-mode="cluster" role="radio"><span class="model-run-mode-icon">${uiIcon('network')}</span><span class="model-run-mode-copy"><b>Use both Sparks</b><small>~${cluster.combinedMemoryGB} GB combined · Cloudless configures distributed inference automatically. The first launch may take longer while the other Spark downloads the model.</small></span><i class="model-run-mode-check"></i></button>` : ''}
+      </div>
+      ${m.fit === 'over' && !clusterEligible ? `<div class="model-confirm-warning">This model needs about ${m.minVramGB} GB of ${memoryLabel(memoryType)}, but this machine reports ${gpu || 'less available'} GB. Launching may fail.</div>` : ''}
       <div class="key-dialog-actions">
         <button class="btn" id="model-launch-cancel" type="button">Cancel</button>
         <button class="btn primary" id="model-launch-confirm" type="button">${uiIcon('rocket')}<span>Launch model</span></button>
       </div>
     </div>`;
   layer.classList.remove('hidden');
+  const paintMode = () => content.querySelectorAll('[data-model-mode]').forEach(button => {
+    const on = button.dataset.modelMode === selectedMode;
+    button.classList.toggle('on', on);
+    button.setAttribute('aria-checked', String(on));
+  });
+  content.querySelectorAll('[data-model-mode]').forEach(button => button.onclick = () => { selectedMode = button.dataset.modelMode; paintMode(); });
+  paintMode();
   const cancel = () => closeKeyDialog();
   document.getElementById('model-launch-close').onclick = cancel;
   document.getElementById('model-launch-cancel').onclick = cancel;
@@ -4577,13 +5404,18 @@ function launchModel(m) {
   confirmButton.onclick = async () => {
     keyDialogBusy = true; confirmButton.disabled = true;
     confirmButton.innerHTML = '<span class="key-dialog-spinner"></span><span>Launching…</span>';
+    engineOperation = 'loading'; engineSwitching = true; engineUnloaded = false; engineReady = false;
+    engineStartup = { phase: 'switching', message: `Starting ${m.name}…` };
+    applyEngineUI();
     try {
-      const r = await api('/api/settings/model', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: m.id }) });
+      const r = await api('/api/settings/model', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: m.id, mode: selectedMode }) });
       keyDialogBusy = false; closeKeyDialog();
+      if (modelsOpen()) closeModelManager();
       toast('Launching ' + m.name + '…');
-      if (r.jobId) trackJobToast(r.jobId, 'Model');
-      mmDetail = null; renderModelManager();
+      if (r.jobId) trackEngineJob(r.jobId); else endSwitch();
+      mmDetail = null;
     } catch {
+      engineOperation = 'idle'; engineSwitching = false; engineLoadJobId = ''; renderEngine();
       keyDialogBusy = false; confirmButton.disabled = false;
       confirmButton.innerHTML = `${uiIcon('rocket')}<span>Try again</span>`;
       toast('Could not launch model', true);
@@ -4649,7 +5481,7 @@ function openModelUninstallDialog(m, modelType = 'lm') {
 }
 /* ---- Model Manager (standalone, opened from the dashboard) ---- */
 let mmTab = 'language', mmDetail = null, mmLM = null, mmDiff = null, mmCustomPrefill = '', mmSort = 'recommended', mmHF = false, mmHFQuery = '', mmHFAccount = null;
-let mmFilter = { q: '', fits: false, vision: false, tools: false, downloaded: false };
+let mmFilter = { q: '', fits: false, cluster: false, vision: false, tools: false, downloaded: false };
 const mmCache = {};
 function modelsOpen() { return !document.getElementById('models').classList.contains('hidden'); }
 // True when a full-screen overlay covers the dashboard. Used to pause the WebGL
@@ -4662,13 +5494,15 @@ function anyOverlayOpen() {
 function openModelManager() { mmDetail = null; mmCustomPrefill = ''; mmHF = false; document.getElementById('models').classList.remove('hidden'); renderModelManager(); }
 async function openModelManagerFor(id) {
   closeAsst();
-  mmTab = 'language'; mmDetail = null; mmHF = false; mmFilter = { q: '', fits: false, vision: false, tools: false, downloaded: false };
+  mmTab = 'language'; mmDetail = null; mmHF = false; mmFilter = { q: '', fits: false, cluster: false, vision: false, tools: false, downloaded: false };
   document.getElementById('models').classList.remove('hidden');
   if (!id) { mmCustomPrefill = ''; renderModelManager(); return; }
   let data = mmLM;
   if (!data) { try { data = await api('/api/models'); } catch {} }
   if (data) {
     mmLM = data;
+    engineUnloaded = !!data.unloaded;
+    engineExecutionMode = data.executionMode === 'cluster' ? 'cluster' : 'local';
     (data.yours || []).concat(data.highlights || []).forEach(m => { mmCache['lm:' + m.id] = m; });
   }
   if (mmCache['lm:' + id]) { mmCustomPrefill = ''; openModelDetail('lm', id); return; }
@@ -4680,6 +5514,7 @@ function openModelDetail(type, id) { mmDetail = { type, id }; renderModelManager
 function modelMatches(m, lm) {
   const f = mmFilter;
   if (f.fits && m.fit === 'over') return false;
+  if (f.cluster && (!m.clusterFit || m.clusterFit === 'over' || m.clusterFit === 'unknown')) return false;
   if (f.downloaded && !m.downloaded) return false;
   if (lm && f.vision && !m.vision) return false;
   if (lm && f.tools && !m.toolCalling) return false;
@@ -4697,7 +5532,7 @@ function renderModelManager() {
       <button class="mm-tab ${mmTab === 'language' ? 'on' : ''}" data-tab="language" role="tab" aria-selected="${mmTab === 'language'}">${uiIcon('models')}<span>Language models</span></button>
       <button class="mm-tab ${mmTab === 'image' ? 'on' : ''}" data-tab="image" role="tab" aria-selected="${mmTab === 'image'}">${uiIcon('appearance')}<span>Image models</span></button>
     </div><div id="mm-tab-body"><div class="set-hint">Loading…</div></div>`;
-  c.querySelectorAll('.mm-tab').forEach(b => b.onclick = () => { if (mmTab === b.dataset.tab) return; mmTab = b.dataset.tab; mmFilter = { q: '', fits: false, vision: false, tools: false, downloaded: false }; renderModelManager(); });
+  c.querySelectorAll('.mm-tab').forEach(b => b.onclick = () => { if (mmTab === b.dataset.tab) return; mmTab = b.dataset.tab; mmFilter = { q: '', fits: false, cluster: false, vision: false, tools: false, downloaded: false }; renderModelManager(); });
   const body = document.getElementById('mm-tab-body');
   if (mmTab === 'image') renderImageModels(body); else renderLanguageModels(body);
 }
@@ -4707,6 +5542,8 @@ async function renderLanguageModels(c) {
   let mdl;
   try { mdl = await api('/api/models'); } catch { return; }
   mmLM = mdl;
+  engineExecutionMode = mdl.executionMode === 'cluster' ? 'cluster' : 'local';
+  engineUnloaded = !!mdl.unloaded;
   applyModelDownloads(mdl.downloads || [], false);
   (mdl.yours || []).concat(mdl.highlights || []).forEach(m => { mmCache['lm:' + m.id] = m; });
   if (!mmDetail && document.body.contains(c)) paintLanguageModels(c, mdl);
@@ -4726,11 +5563,14 @@ function paintImageModels(c, d) { paintModelList(c, d, 'diff'); }
 function paintModelList(c, data, kind) {
   const lm = kind === 'lm', gpu = data.gpuVRAMGB || 0;
   const memoryType = data.memoryType || 'dedicated', memory = memoryLabel(memoryType);
-  const summary = gpu > 0
+  const cluster = data.cluster || {};
+  const summary = cluster.distributedReady
+    ? `${uiIcon('network')}<span class="mm-machine-copy"><span class="mm-machine-label">Two-Spark compute ready</span><span class="mm-machine-value">~${cluster.combinedMemoryGB} GB combined ${memory}</span><span class="mm-machine-note">${gpu} GB on each Spark · distributed compatibility shown separately</span></span>`
+    : gpu > 0
     ? `${uiIcon('machine')}<span class="mm-machine-copy"><span class="mm-machine-label">Available accelerator memory</span><span class="mm-machine-value">${gpu} GB ${memory}</span><span class="mm-machine-note">Compatibility is estimated with runtime headroom</span></span>`
     : `${uiIcon('machine')}<span class="mm-machine-copy"><span class="mm-machine-label">Hardware</span><span class="mm-machine-value">No GPU detected</span><span class="mm-machine-note">Compatibility estimates are unavailable</span></span>`;
   const chip = (key, label) => `<button class="mm-chip ${mmFilter[key] ? 'on' : ''}" data-f="${key}" aria-pressed="${mmFilter[key]}">${label}</button>`;
-  const chips = chip('fits', 'Runs on this GPU') + chip('downloaded', 'Downloaded') + (lm ? chip('vision', 'Vision') + chip('tools', 'Tool calling') : '');
+  const chips = chip('fits', 'Runs on this GPU') + (lm && cluster.distributedReady ? chip('cluster', 'Runs across both Sparks') : '') + chip('downloaded', 'Downloaded') + (lm ? chip('vision', 'Vision') + chip('tools', 'Tool calling') : '');
   const sort = `<span class="mm-sort-wrap"><label for="mm-sort">Sort</label><select class="mm-sort" id="mm-sort">
     <option value="recommended" ${mmSort === 'recommended' ? 'selected' : ''}>Best match</option>
     <option value="memory-low" ${mmSort === 'memory-low' ? 'selected' : ''}>Lowest memory</option>
@@ -4765,10 +5605,10 @@ function paintModelList(c, data, kind) {
     const count = document.getElementById('mm-result-count');
     if (count) count.textContent = `${fy.length + fh.length} result${fy.length + fh.length === 1 ? '' : 's'}`;
     if (!fy.length && !fh.length) {
-      const filtered = mmFilter.q || mmFilter.fits || mmFilter.vision || mmFilter.tools || mmFilter.downloaded;
+      const filtered = mmFilter.q || mmFilter.fits || mmFilter.cluster || mmFilter.vision || mmFilter.tools || mmFilter.downloaded;
       list.innerHTML = `<div class="mm-empty">${filtered ? 'No models match your filters.' : (lm ? 'No models available.' : 'No image models available.')}${filtered ? ' <button class="lnk" id="mm-clearf">Clear filters</button>' : ''}</div>`;
       const cf = document.getElementById('mm-clearf');
-      if (cf) cf.onclick = () => { mmFilter = { q: '', fits: false, vision: false, tools: false, downloaded: false }; paintModelList(c, data, kind); };
+      if (cf) cf.onclick = () => { mmFilter = { q: '', fits: false, cluster: false, vision: false, tools: false, downloaded: false }; paintModelList(c, data, kind); };
       return;
     }
     let sections = modelSection(lm ? 'Installed on this machine' : 'Installed image models', fy, cardFn);
@@ -4959,7 +5799,11 @@ function renderModelDetail(c) {
       state = modelDownloadProgressHTML(downloading, true);
       actions = `<button class="btn danger" data-cancel-dl ${downloading.jobId ? '' : 'disabled'}>${uiIcon('close')}<span>Cancel download</span></button>`;
     }
-    else if (m.active) { state = `<span class="md-state-line active"><i></i>Loaded in ${escapeHtml(activeEngineName)}</span>`; actions = '<button class="btn" data-redl>Re-download</button>'; }
+    else if (m.active && engineReady) { state = `<span class="md-state-line active"><i></i>Loaded in ${escapeHtml(activeEngineName)}</span>`; actions = `<button class="btn" data-redl>Re-download</button><button class="btn" data-unload>${uiIcon('stop')}<span>Unload model</span></button>`; }
+    else if (m.active && engineLoadIsAbortable()) { state = `<span class="md-state-line active"><i></i>Loading in ${escapeHtml(activeEngineName)}</span>`; actions = `<button class="btn model-load-action abort" data-abort-load>${uiIcon('stop')}<span>Abort</span></button>`; }
+    else if (m.active && engineOperation === 'aborting') { state = `<span class="md-state-line active"><i></i>Stopping model loading…</span>`; actions = ''; }
+    else if (m.active && engineOperation === 'unloading') { state = `<span class="md-state-line active"><i></i>Unloading model…</span>`; actions = ''; }
+    else if (m.active) { state = `<span class="md-state-line active"><i></i>Model is starting…</span>`; actions = `<button class="btn" data-unload>${uiIcon('stop')}<span>Unload model</span></button>`; }
     else if (m.downloaded) { state = '<span class="md-state-line ready"><i></i>Downloaded and ready</span>'; actions = `<button class="btn danger" data-uninstall>${uiIcon('trash')}<span>Uninstall</span></button><button class="btn primary" data-launch>${uiIcon('rocket')}<span>Launch model</span></button>`; }
     else { state = '<span class="md-state-line remote"><i></i>Available to download</span>'; actions = `<button class="btn primary" data-dl>${uiIcon('download')}<span>Download model</span></button>`; }
   } else {
@@ -4976,6 +5820,13 @@ function renderModelDetail(c) {
       <div class="md-compat-numbers">${m.minVramGB ? `~${m.minVramGB} GB needed` : 'No estimate'}${gpu ? ` · ${gpu} GB available` : ''}</div>
       ${gpu && m.minVramGB ? `<span class="mdl-meter" aria-hidden="true"><i style="--meter:${modelMeter(m, gpu)}%"></i></span>` : ''}
     </div>`;
+  const clusterInfo = modelData.cluster || {};
+  const clusterFitClass = m.clusterFit || '';
+  const clusterFit = lm && clusterInfo.distributedReady && clusterFitClass ? `<div class="md-compat-panel fit-${clusterFitClass}">
+      <div><div class="md-compat-title">${escapeHtml(FIT_LABEL[clusterFitClass] || FIT_LABEL.unknown)} across both Sparks</div><div class="md-compat-copy">CloudlessOS can split this model across the connected GB10 GPUs and keep the normal API endpoint unchanged.</div></div>
+      <div class="md-compat-numbers">${m.minVramGB ? `~${m.minVramGB} GB needed` : 'No estimate'} · ~${clusterInfo.combinedMemoryGB} GB combined</div>
+      ${clusterInfo.combinedMemoryGB && m.minVramGB ? `<span class="mdl-meter" aria-hidden="true"><i style="--meter:${modelMeter(m, clusterInfo.combinedMemoryGB)}%"></i></span>` : ''}
+    </div>` : '';
   const recNote = m.recommended ? `<div class="md-banner rec">${escapeHtml(m.recommendBy || 'Recommended for your region')}.</div>` : '';
   const gatedNote = (lm && m.gated && !m.downloaded) ? `<div class="md-banner note">This Hugging Face repository is gated. Accept its terms and provide your Hugging Face token before downloading.</div>` : '';
   const sourceNote = (lm && m.source === 'huggingface') ? `<div class="md-banner note hf-source-note"><span class="hf-mark">HF</span><span><b>Imported from Hugging Face</b><br>${escapeHtml(m.runtimeNote || 'This community repository will be validated by the active engine when it launches.')}</span></div>` : '';
@@ -4997,6 +5848,7 @@ function renderModelDetail(c) {
       ${gatedNote}
       ${sourceNote}
       ${fit}
+      ${clusterFit}
       ${m.description ? `<div class="md-section-title">About this model</div><p class="md-desc">${escapeHtml(m.description)}</p>` : ''}
       <div class="md-section-title">Specifications</div>
       <div class="md-specgrid">${specs}</div>
@@ -5011,6 +5863,8 @@ function renderModelDetail(c) {
   const rb = c.querySelector('[data-redl]'); if (rb) rb.onclick = () => downloadModel(m);
   const cb = c.querySelector('[data-cancel-dl]'); if (cb) cb.onclick = () => cancelModelDownload(downloading.jobId, m.id, cb, lm ? 'lm' : 'diff');
   const ub = c.querySelector('[data-uninstall]'); if (ub) ub.onclick = () => openModelUninstallDialog(m, lm ? 'lm' : 'diff');
+  const unload = c.querySelector('[data-unload]'); if (unload) unload.onclick = () => unloadCurrentModel(m.name);
+  const abortLoad = c.querySelector('[data-abort-load]'); if (abortLoad) abortLoad.onclick = abortModelLoad;
   const at = document.getElementById('md-adv-tog');
   if (at) at.onclick = () => {
     const b = document.getElementById('md-adv-body'); const open = b.classList.toggle('hidden') === false;
@@ -5394,14 +6248,18 @@ async function renderGeneralPage(c) {
       <div class="set-row"><span class="srow-label">engine</span><span id="gen-engine">—</span></div>
     </div>`;
   const check = document.getElementById('sys-update-check'); if (check) check.onclick = () => startSystemUpdate('check');
-  const apply = document.getElementById('sys-update-apply'); if (apply) apply.onclick = () => {
-    if (confirm(`Install CloudlessOS ${available}? The interface may restart for a moment.`)) startSystemUpdate('apply');
+  const apply = document.getElementById('sys-update-apply'); if (apply) apply.onclick = async () => {
+    const approved = await openCloudlessDecision({
+      title: `Install CloudlessOS ${available}?`,
+      message: 'CloudlessOS will install the signed update now.',
+      detail: 'Running apps stay installed. The interface may restart for a moment while system components are updated.',
+      confirmLabel: 'Install update',
+      icon: 'download',
+      returnFocus: apply,
+    });
+    if (approved) startSystemUpdate('apply');
   };
-  const reboot = document.getElementById('sys-update-reboot'); if (reboot) reboot.onclick = async () => {
-    if (!confirm('Restart CloudlessOS now to finish the update?')) return;
-    reboot.disabled = true; reboot.textContent = 'Restarting…';
-    try { await api('/api/system/reboot', { method: 'POST', headers: { 'X-Cloudless-Action': 'reboot' } }); } catch {}
-  };
+  const reboot = document.getElementById('sys-update-reboot'); if (reboot) reboot.onclick = () => openPowerDialog('reboot');
   document.getElementById('gen-replay').onclick = () => {
     closeSettings();
     showStartupIntro(showOnboarding, '', true);
@@ -5533,8 +6391,19 @@ async function renderAppPage(c, id) {
     api(`/api/apps/${id}/config`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ files }) })
       .then(r => { if (r.jobId) trackJobToast(r.jobId, id + ' config'); else toast('Saved'); }).catch(() => toast('Failed', true));
   };
-  c.querySelector('[data-appreset]').onclick = () => {
-    if (id !== 'hermes' && !confirm(`Reset ${app.name || id} to defaults? This rebuilds it.`)) return;
+  c.querySelector('[data-appreset]').onclick = async e => {
+    if (id !== 'hermes') {
+      const approved = await openCloudlessDecision({
+        title: `Reset ${app.name || id} to defaults?`,
+        message: 'CloudlessOS will rebuild this app with its default configuration.',
+        detail: 'The app will be temporarily unavailable. Its persistent data will be kept.',
+        confirmLabel: 'Reset app',
+        icon: 'restart',
+        tone: 'danger',
+        returnFocus: e.currentTarget,
+      });
+      if (!approved) return;
+    }
     toast(id === 'hermes' ? 'Restoring the Cloudless model connection…' : 'Resetting ' + id + '…');
     api(`/api/apps/${id}/reset`, { method: 'POST' }).then(r => { if (r.jobId) trackJobToast(r.jobId, id); }).catch(() => toast('Failed', true));
   };
@@ -5566,8 +6435,17 @@ async function renderAppPage(c, id) {
     if (tun.enabled && tun.url) tunRender(out, tun.url, app);
     tunToggle.onchange = async () => {
       const enable = tunToggle.checked;
-      if (enable && shareWarn && !confirm(`⚠ Security warning\n\n${shareWarn}\n\nCreate the public link anyway?`)) {
-        tunToggle.checked = false; return;
+      if (enable && shareWarn) {
+        const approved = await openCloudlessDecision({
+          title: 'Create a public link?',
+          message: 'Anyone with the address may be able to reach this app.',
+          detail: `${shareWarn}\n\nOnly share the link with people you trust. You can remove it at any time.`,
+          confirmLabel: 'Create public link',
+          icon: 'alert',
+          tone: 'danger',
+          returnFocus: tunToggle,
+        });
+        if (!approved) { tunToggle.checked = false; return; }
       }
       tunToggle.disabled = true;
       out.classList.remove('hidden');
@@ -5717,6 +6595,11 @@ document.getElementById('lp-search').addEventListener('input', e => { lpQuery = 
 
 /* ---- Model Manager wiring ---- */
 document.getElementById('open-models-2').onclick = openModelManager;
+document.getElementById('eb-load').onclick = () => {
+  if (engineAborting) return;
+  if (engineLoadIsAbortable()) abortModelLoad();
+  else openModelManager();
+};
 document.getElementById('mm-x').onclick = closeModelManager;
 document.getElementById('models').addEventListener('click', e => { if (e.target.id === 'models') closeModelManager(); });
 
@@ -5760,7 +6643,7 @@ function infHeadSet(engineId, model, ready) {
   if (model) infModel = model;
   if (!engineId) { h.className = 'inf-head'; h.innerHTML = ''; return; }
   h.className = 'inf-head' + (ready ? ' on' : '');
-  h.innerHTML = `<span class="inf-live"></span><b>${escapeHtml(engDisplay(engineId))}</b>${infModel ? `<span class="sep">·</span>${escapeHtml(infModel)}` : ''}<span class="ih-state">${ready ? 'live' : 'loading…'}</span>`;
+  h.innerHTML = `<span class="inf-live"></span><b>${escapeHtml(engDisplay(engineId))}</b>${engineExecutionMode === 'cluster' ? `<span class="sep">·</span>${uiIcon('network')} two Sparks` : ''}${infModel ? `<span class="sep">·</span>${escapeHtml(infModel)}` : ''}<span class="ih-state">${ready ? 'live' : 'loading…'}</span>`;
 }
 function infReset() { infPrev = null; infPeak = 0; infBuf = { pTok: [], gTok: [], run: [], wait: [], kv: [], ttft: [], tpot: [], gutil: [], gpow: [], cpu: [] }; }
 function infStopPoll() {
@@ -5784,7 +6667,7 @@ function renderInference() {
   body.querySelectorAll('.mm-tab').forEach(b => b.onclick = () => { if (infTab === b.dataset.itab) return; infTab = b.dataset.itab; renderInference(); });
   const panel = document.getElementById('inf-panel');
   infStopPoll();
-  if (infTab !== 'activity') api('/api/engine').then(e => infHeadSet(e.active, '', e.ready)).catch(() => {});
+  if (infTab !== 'activity') api('/api/engine').then(e => { setActiveEngine(e); infHeadSet(e.active, '', e.ready); }).catch(() => {});
   if (infTab === 'activity') {
     const rbtn = (r, lbl) => `<button class="us-rbtn ${infActRange === r ? 'on' : ''}" data-arange="${r}">${lbl}</button>`;
     panel.innerHTML = `<div class="inf-actbar"><div class="us-range">${rbtn('live', 'Live')}${rbtn('hour', 'Hour')}${rbtn('day', 'Day')}${rbtn('month', 'Month')}${rbtn('year', 'Year')}</div></div><div id="inf-act"></div>`;
@@ -5801,7 +6684,7 @@ function renderInference() {
 // Activity has a Live real-time view plus historical throughput at hour/day/month/year zoom.
 function infSetActRange(r) { if (infActRange === r) return; infActRange = r; renderInference(); }
 function infActivity() {
-  api('/api/engine').then(e => infHeadSet(e.active, '', e.ready)).catch(() => {}); // keep the header pill fresh
+  api('/api/engine').then(e => { setActiveEngine(e); infHeadSet(e.active, '', e.ready); }).catch(() => {}); // keep the header pill fresh
   if (infActRange === 'live') {
     infReset();
     // Two regions: engine metrics (only when a model is serving) + hardware metrics
@@ -6055,15 +6938,33 @@ function paintPower(c, p) {
       infShowTip(e, `<b>${infEnergy(wh)}</b><span>${b.dataset.label} · avg ${infWatt(+b.dataset.avg)} · peak ${infWatt(+b.dataset.peak)} · click to erase</span>`);
     };
     b.onmouseleave = infHideTip;
-    b.onclick = () => {
+    b.onclick = async () => {
       if (!(wh > 0)) return;
-      if (!confirm(`Erase the electricity log for ${b.dataset.label}? This also updates the month and year totals, and can't be undone.`)) return;
+      const approved = await openCloudlessDecision({
+        title: `Erase the ${b.dataset.label} electricity log?`,
+        message: 'CloudlessOS will permanently remove this recorded interval.',
+        detail: 'This also updates the month and year totals and cannot be undone.',
+        confirmLabel: 'Erase log',
+        icon: 'trash',
+        tone: 'danger',
+        returnFocus: b,
+      });
+      if (!approved) return;
       infPowerClear(p.range, b.dataset.key);
     };
   });
   const clr = document.getElementById('pw-clear');
-  if (clr) clr.onclick = () => {
-    if (!confirm('Erase ALL recorded electricity data?\n\nThis permanently clears every hour, day, month and year, and can\'t be undone.')) return;
+  if (clr) clr.onclick = async () => {
+    const approved = await openCloudlessDecision({
+      title: 'Erase all electricity data?',
+      message: 'Every recorded electricity sample will be permanently removed.',
+      detail: 'This clears every hour, day, month, and year and cannot be undone.',
+      confirmLabel: 'Erase all data',
+      icon: 'trash',
+      tone: 'danger',
+      returnFocus: clr,
+    });
+    if (!approved) return;
     infPowerClear(p.range, '');
   };
 }
@@ -6160,7 +7061,8 @@ function infRender(m, r) {
 // Polled on its own slower timer; renders into #inf-hw, untouched by the engine region.
 function infHwSkeleton() {
   return `
-    <div class="inf-hwhead">Hardware <span>live · this machine</span></div>
+    <div class="inf-hwhead">Hardware <span id="inf-hwscope">live · this machine</span></div>
+    <div class="inf-node-grid" id="inf-node-gpus"></div>
     <div class="inf-grid">
       <div class="inf-metric"><div class="im-label">GPU · utilization</div><div class="im-ringwrap"><canvas class="im-ring" id="c-gutil"></canvas><span class="im-ringval" id="m-gutil">—</span></div><div class="im-sub im-c" id="m-gutilsub">&nbsp;</div></div>
       <div class="inf-metric"><div class="im-label">GPU · memory</div><div class="im-ringwrap"><canvas class="im-ring" id="c-gmem"></canvas><span class="im-ringval" id="m-gmem">—</span></div><div class="im-sub im-c" id="m-gmemsub">— / — GB</div></div>
@@ -6181,6 +7083,13 @@ async function infHwPoll() {
   // GPU — aggregate across all cards (avg utilization, summed memory + power, hottest temp).
   const gpus = (gpu && gpu.gpus) || [];
   const n = gpus.length;
+  const nodes = new Set(gpus.map(g => g.node || (g.remote ? 'Connected Spark' : 'This Spark')));
+  setText('inf-hwscope', nodes.size > 1 ? `live · ${nodes.size} connected Sparks` : 'live · this machine');
+  const nodeHost = document.getElementById('inf-node-gpus');
+  if (nodeHost) nodeHost.innerHTML = gpus.map(g => {
+    const memoryPct = g.memTotalMB > 0 ? Math.round(Math.max(0, g.memUsedMB) / g.memTotalMB * 100) : 0;
+    return `<div class="inf-node-gpu ${g.remote ? 'peer' : ''}"><div class="inf-node-head">${uiIcon(g.remote ? 'network' : 'machine')}<b>${escapeHtml(g.node || (g.remote ? 'Connected Spark' : 'This Spark'))}</b><span>${g.remote ? 'Connected Spark' : 'This Spark'} · ${escapeHtml(g.name)}</span></div><div class="inf-node-stats"><span class="inf-node-stat"><small>Utilization</small><strong>${Math.max(0, g.utilPct)}%</strong></span><span class="inf-node-stat"><small>Memory</small><strong>${memoryPct}%</strong></span><span class="inf-node-stat"><small>Temperature</small><strong>${g.tempC >= 0 ? g.tempC + '°C' : '—'}</strong></span><span class="inf-node-stat"><small>Power</small><strong>${g.powerW >= 0 ? Math.round(g.powerW) + ' W' : '—'}</strong></span></div></div>`;
+  }).join('') + (gpu.peer && gpu.peer.connected && !gpu.peer.reachable ? `<div class="inf-node-gpu peer"><div class="inf-node-head">${uiIcon('alert')}<b>${escapeHtml(gpu.peer.name || 'Connected Spark')}</b><span>Telemetry unavailable</span></div><div class="im-sub">CloudlessOS will retry automatically.</div></div>` : '');
   if (n) {
     const util = Math.round(gpus.reduce((a, g) => a + Math.max(0, g.utilPct), 0) / n);
     const memUsed = gpus.reduce((a, g) => a + Math.max(0, g.memUsedMB), 0);
@@ -6315,6 +7224,7 @@ document.getElementById('inference').addEventListener('click', e => { if (e.targ
 function setActiveEngine(e) {
   const a = (e && e.engines || []).find(x => x.active);
   if (a) activeEngineName = a.name.replace(/ Engine$/, '');
+  engineExecutionMode = e && e.executionMode === 'cluster' ? 'cluster' : 'local';
 }
 async function refreshActiveModel() {
   const el = document.getElementById('gpu-model'); if (!el) return;
@@ -6327,10 +7237,11 @@ async function refreshActiveModel() {
     const name = (s.model || '').split('/').pop();
     const engine = activeEngineName && activeEngineName !== 'the engine' ? activeEngineName : '';
     if (!name) { el.textContent = 'Browse models'; setK('No model loaded'); setDot(''); return; }
-    const loading = e && e.ready === false;
+    const unloaded = !!(e && e.unloaded);
+    const loading = e && e.ready === false && !unloaded;
     el.textContent = name;
-    setK(loading ? 'Loading…' : (engine ? 'Loaded in ' + engine : 'Active model'));
-    setDot(loading ? 'load' : 'on');
+    setK(unloaded ? 'Downloaded · not loaded' : (loading ? (engineExecutionMode === 'cluster' ? 'Loading on two Sparks…' : 'Loading…') : (engineExecutionMode === 'cluster' ? 'Running across two Sparks' : (engine ? 'Loaded in ' + engine : 'Active model'))));
+    setDot(unloaded ? '' : (loading ? 'load' : 'on'));
   } catch {}
 }
 
@@ -6547,6 +7458,16 @@ document.getElementById('app-surface-frame').addEventListener('load', () => {
 });
 document.getElementById('app-surface-back').onclick = closeAppSurface;
 document.getElementById('app-surface-close').onclick = closeAppSurface;
+document.getElementById('cluster-surface-back').onclick = closeSparkClusterSurface;
+document.getElementById('cluster-surface-close').onclick = closeSparkClusterSurface;
+document.getElementById('cluster-surface').addEventListener('keydown', e => {
+  if (e.key !== 'Tab') return;
+  const focusable = [...e.currentTarget.querySelectorAll('button:not([disabled]), input:not([disabled]), summary, [tabindex]:not([tabindex="-1"])')].filter(el => !el.closest('.hidden'));
+  if (!focusable.length) return;
+  const first = focusable[0], last = focusable[focusable.length - 1];
+  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+});
 document.getElementById('app-surface-reload').onclick = () => {
   const frame = document.getElementById('app-surface-frame');
   if (!appSurfaceOpen() || !frame.src || frame.src === 'about:blank') return;
@@ -6584,6 +7505,7 @@ document.addEventListener('keydown', e => {
   const np = document.getElementById('net-pop');
   const pp = document.getElementById('power-pop');
   if (!document.getElementById('key-dialog-layer').classList.contains('hidden')) closeKeyDialog();
+  else if (clusterSurfaceOpen()) closeSparkClusterSurface();
   else if (appSurfaceOpen()) closeAppSurface();
   else if (!pp.classList.contains('hidden')) {
     pp.classList.add('hidden');
@@ -6692,20 +7614,171 @@ function initRenderGovernor() {
   document.addEventListener('visibilitychange', () => scheduleRenderGovernor(0));
 }
 
+/* ---- physical input detection + integrated virtual keyboard ---- */
+const VK_LAYOUT = [
+  [{base:'1',shift:'!'},{base:'2',shift:'@'},{base:'3',shift:'#'},{base:'4',shift:'$'},{base:'5',shift:'%'},{base:'6',shift:'^'},{base:'7',shift:'&'},{base:'8',shift:'*'},{base:'9',shift:'('},{base:'0',shift:')'},{action:'backspace',label:'⌫',wide:true}],
+  ['q','w','e','r','t','y','u','i','o','p'].map(base => ({base})),
+  [{action:'caps',label:'Caps',wide:true}, ...['a','s','d','f','g','h','j','k','l'].map(base => ({base})), {base:"'",shift:'"'}],
+  [{action:'shift',label:'Shift',wide:true}, ...['z','x','c','v','b','n','m'].map(base => ({base})), {base:',',shift:'<'},{base:'.',shift:'>'},{base:'/',shift:'?'},{action:'shift',label:'Shift',wide:true}],
+  [{base:'@'},{base:'-'},{action:'left',label:'←'},{action:'space',label:'Space',space:true},{action:'right',label:'→'},{base:'.'},{action:'enter',label:'Enter',enter:true}]
+];
+let inputHardware = { keyboard: true, mouse: false, pointer: false };
+// Remote desktops, KVMs and some display-integrated pointers can deliver real
+// browser events without creating a Linux input device. Treat an observed
+// pointer event as authoritative client-side evidence, and do the inverse for
+// a real keyboard event so the virtual keyboard never competes with one.
+let virtualPointerObserved = false, physicalKeyboardObserved = false;
+let virtualKeyboardTarget = null, virtualKeyboardSuppressedTarget = null, virtualKeyboardShift = false, virtualKeyboardCaps = false;
+
+function virtualKeyboardEligible(target) {
+  if (!(target instanceof HTMLElement) || target.disabled || target.readOnly) return false;
+  if (target.isContentEditable) return true;
+  if (target.tagName === 'TEXTAREA') return true;
+  if (target.tagName !== 'INPUT') return false;
+  return ['text', 'search', 'password', 'email', 'url', 'tel', 'number'].includes((target.type || 'text').toLowerCase());
+}
+function virtualKeyboardAvailable() {
+  return !inputHardware.keyboard && !physicalKeyboardObserved && !!(inputHardware.mouse || inputHardware.pointer || virtualPointerObserved);
+}
+function virtualKeyboardCharacter(key) {
+  if (!key.base) return '';
+  if (/^[a-z]$/i.test(key.base)) return (virtualKeyboardCaps !== virtualKeyboardShift) ? key.base.toUpperCase() : key.base.toLowerCase();
+  return virtualKeyboardShift && key.shift ? key.shift : key.base;
+}
+function renderVirtualKeyboard() {
+  const rows = document.getElementById('vk-rows'); if (!rows) return;
+  rows.innerHTML = VK_LAYOUT.map(row => `<div class="vk-row">${row.map(key => {
+    const action = key.action || 'character', label = action === 'character' ? virtualKeyboardCharacter(key) : key.label;
+    const active = (action === 'caps' && virtualKeyboardCaps) || (action === 'shift' && virtualKeyboardShift);
+    const classes = ['vk-key', key.wide ? 'wide' : '', key.space ? 'space' : '', key.enter ? 'enter' : '', active ? 'on' : ''].filter(Boolean).join(' ');
+    return `<button class="${classes}" type="button" tabindex="-1" data-vk-action="${action}"${key.base ? ` data-vk-base="${escapeAttr(key.base)}" data-vk-shift="${escapeAttr(key.shift || '')}"` : ''} aria-label="${escapeAttr(label)}">${escapeHtml(label)}</button>`;
+  }).join('')}</div>`).join('');
+}
+function showVirtualKeyboard(target) {
+  if (!virtualKeyboardAvailable() || !virtualKeyboardEligible(target) || target === virtualKeyboardSuppressedTarget) return;
+  virtualKeyboardTarget = target;
+  const keyboard = document.getElementById('virtual-keyboard');
+  renderVirtualKeyboard();
+  keyboard.classList.add('open'); keyboard.setAttribute('aria-hidden', 'false');
+  setTimeout(() => {
+    if (!virtualKeyboardTarget?.isConnected) return hideVirtualKeyboard();
+    const keyTop = keyboard.getBoundingClientRect().top, targetRect = virtualKeyboardTarget.getBoundingClientRect();
+    if (targetRect.bottom > keyTop - 12) virtualKeyboardTarget.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }, 230);
+}
+function hideVirtualKeyboard(suppressCurrent = false) {
+  if (suppressCurrent) virtualKeyboardSuppressedTarget = virtualKeyboardTarget;
+  const keyboard = document.getElementById('virtual-keyboard');
+  keyboard?.classList.remove('open'); keyboard?.setAttribute('aria-hidden', 'true');
+  virtualKeyboardShift = false; virtualKeyboardTarget = null;
+}
+function emitVirtualInput(target, inputType, data = null) {
+  try { target.dispatchEvent(new InputEvent('input', { bubbles: true, inputType, data })); }
+  catch { target.dispatchEvent(new Event('input', { bubbles: true })); }
+}
+function replaceVirtualSelection(target, text, inputType = 'insertText') {
+  if (target.isContentEditable) {
+    target.focus({ preventScroll: true });
+    document.execCommand('insertText', false, text);
+    emitVirtualInput(target, inputType, text);
+    return;
+  }
+  const value = String(target.value || ''), start = Number.isInteger(target.selectionStart) ? target.selectionStart : value.length, end = Number.isInteger(target.selectionEnd) ? target.selectionEnd : start;
+  try { target.setRangeText(text, start, end, 'end'); }
+  catch { target.value = value.slice(0, start) + text + value.slice(end); try { target.setSelectionRange(start + text.length, start + text.length); } catch {} }
+  emitVirtualInput(target, inputType, text);
+}
+function backspaceVirtualSelection(target) {
+  if (target.isContentEditable) {
+    target.focus({ preventScroll: true }); document.execCommand('delete'); emitVirtualInput(target, 'deleteContentBackward'); return;
+  }
+  const value = String(target.value || ''), start = Number.isInteger(target.selectionStart) ? target.selectionStart : value.length, end = Number.isInteger(target.selectionEnd) ? target.selectionEnd : start;
+  if (start !== end) replaceVirtualSelection(target, '', 'deleteContentBackward');
+  else if (start > 0) {
+    try { target.setRangeText('', start - 1, start, 'end'); }
+    catch { target.value = value.slice(0, start - 1) + value.slice(end); }
+    emitVirtualInput(target, 'deleteContentBackward');
+  }
+}
+function moveVirtualCaret(target, direction) {
+  if (target.isContentEditable || !Number.isInteger(target.selectionStart)) return;
+  const next = Math.max(0, Math.min(String(target.value || '').length, target.selectionStart + direction));
+  try { target.setSelectionRange(next, next); } catch {}
+}
+function pressVirtualKey(button) {
+  const target = virtualKeyboardTarget;
+  if (!target?.isConnected || !virtualKeyboardEligible(target)) return hideVirtualKeyboard();
+  const action = button.dataset.vkAction;
+  if (action === 'close') { hideVirtualKeyboard(true); return; }
+  if (action === 'caps') { virtualKeyboardCaps = !virtualKeyboardCaps; renderVirtualKeyboard(); return; }
+  if (action === 'shift') { virtualKeyboardShift = !virtualKeyboardShift; renderVirtualKeyboard(); return; }
+  if (action === 'backspace') backspaceVirtualSelection(target);
+  else if (action === 'space') replaceVirtualSelection(target, ' ');
+  else if (action === 'left' || action === 'right') moveVirtualCaret(target, action === 'left' ? -1 : 1);
+  else if (action === 'enter') {
+    if (target.tagName === 'TEXTAREA' && virtualKeyboardShift) replaceVirtualSelection(target, '\n', 'insertLineBreak');
+    else {
+      const down = new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true, cancelable: true, shiftKey: virtualKeyboardShift });
+      const proceed = target.dispatchEvent(down);
+      if (proceed) target.closest('form')?.requestSubmit();
+      target.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', bubbles: true, shiftKey: virtualKeyboardShift }));
+    }
+  } else {
+    const key = { base: button.dataset.vkBase || '', shift: button.dataset.vkShift || '' };
+    replaceVirtualSelection(target, virtualKeyboardCharacter(key));
+  }
+  if (virtualKeyboardShift) { virtualKeyboardShift = false; renderVirtualKeyboard(); }
+  target.focus({ preventScroll: true });
+}
+async function refreshInputHardware() {
+  let state; try { state = await api('/api/system/input'); } catch { return; }
+  inputHardware = { keyboard: !!state.keyboard, mouse: !!state.mouse, pointer: !!state.pointer };
+  if (!virtualKeyboardAvailable()) hideVirtualKeyboard();
+  else if (virtualKeyboardEligible(document.activeElement)) showVirtualKeyboard(document.activeElement);
+}
+function initVirtualKeyboard() {
+  const keyboard = document.getElementById('virtual-keyboard');
+  document.addEventListener('pointerdown', event => {
+    // KVM and remote-control bridges do not always preserve Event.isTrusted,
+    // but a pointer event outside this keyboard still proves a pointer path.
+    if (!keyboard.contains(event.target)) virtualPointerObserved = true;
+  }, true);
+  document.addEventListener('keydown', event => {
+    if (!event.isTrusted || keyboard.contains(event.target)) return;
+    physicalKeyboardObserved = true;
+    hideVirtualKeyboard();
+  }, true);
+  keyboard.addEventListener('pointerdown', event => {
+    const button = event.target.closest('[data-vk-action]'); if (!button) return;
+    event.preventDefault(); pressVirtualKey(button);
+  });
+  document.addEventListener('focusin', event => {
+    if (event.target !== virtualKeyboardSuppressedTarget) virtualKeyboardSuppressedTarget = null;
+    if (virtualKeyboardEligible(event.target)) showVirtualKeyboard(event.target);
+  });
+  document.addEventListener('focusout', () => setTimeout(() => {
+    if (!virtualKeyboardEligible(document.activeElement)) { virtualKeyboardSuppressedTarget = null; hideVirtualKeyboard(); }
+  }, 0));
+  refreshInputHardware();
+  setInterval(refreshInputHardware, 5000);
+}
+
 /* ---- boot ---- */
 initBackground();
 initRenderGovernor();
+initVirtualKeyboard();
 tickClock(); setInterval(tickClock, 1000);
 async function bootCloudless() {
   await refreshCapabilities();
-  refreshStatus(); renderGPUs(); renderSystem(); renderPlaces(); renderApps(); renderEngine(); refreshNetStatus(); refreshActiveModel(); refreshProfileBadge(); refreshModelDownloads();
+  refreshStatus(); renderGPUs(); renderSystem(); renderHomeCluster(); renderPlaces(); renderApps(); renderEngine(); refreshNetStatus(); refreshActiveModel(); refreshProfileBadge(); refreshModelDownloads();
   api('/api/onboarding').then(o => {
     const afterIntro = () => { if (!o || !o.completed) renderApps().then(showOnboarding); };
     showStartupIntro(afterIntro, (o && o.bootID) || '');
   }).catch(() => showStartupIntro(() => {}));
 }
 bootCloudless();
-setInterval(() => { refreshStatus(); renderGPUs(); renderSystem(); if (!engineSwitching) renderEngine(); }, 4000);
+setInterval(() => { refreshStatus(); renderGPUs(); renderSystem(); renderEngine(); }, 4000);
+setInterval(renderHomeCluster, 10000);
 setInterval(() => { if (installing === 0) renderApps(); }, 8000);
 setInterval(refreshModelDownloads, 3000);
 setInterval(refreshNetStatus, 20000);

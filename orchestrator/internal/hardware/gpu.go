@@ -27,6 +27,8 @@ type GPU struct {
 	PowerLimitW float64 `json:"powerLimitW"`
 	Driver      string  `json:"driver"`
 	MemoryType  string  `json:"memoryType"` // dedicated | unified
+	Node        string  `json:"node,omitempty"`
+	Remote      bool    `json:"remote,omitempty"`
 }
 
 // gpuTTL is how long a nvidia-smi snapshot is reused. GPU stats are read-only
@@ -67,6 +69,17 @@ func queryGPUs(ctx context.Context) ([]GPU, error) {
 		return []GPU{}, err
 	}
 
+	gpus := ParseGPUsCSV(string(out))
+	if hostplatform.IsDGXSpark() {
+		total, available := memInfoMB()
+		ApplyUnifiedMemory(gpus, total, available)
+	}
+	return gpus, nil
+}
+
+// ParseGPUsCSV parses the stable nounits nvidia-smi query format used locally
+// and over the private Spark management connection.
+func ParseGPUsCSV(out string) []GPU {
 	gpus := []GPU{}
 	sc := bufio.NewScanner(strings.NewReader(string(out)))
 	for sc.Scan() {
@@ -87,14 +100,11 @@ func queryGPUs(ctx context.Context) ([]GPU, error) {
 			MemoryType:  "dedicated",
 		})
 	}
-	if hostplatform.IsDGXSpark() {
-		total, available := memInfoMB()
-		applyUnifiedMemory(gpus, total, available)
-	}
-	return gpus, nil
+	return gpus
 }
 
-func applyUnifiedMemory(gpus []GPU, totalMB, availableMB int) {
+// ApplyUnifiedMemory maps host unified-memory capacity onto each GB10 GPU.
+func ApplyUnifiedMemory(gpus []GPU, totalMB, availableMB int) {
 	if totalMB <= 0 {
 		return
 	}

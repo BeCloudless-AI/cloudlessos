@@ -5,12 +5,14 @@ import (
 	"context"
 	"embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -26,6 +28,7 @@ import (
 	"github.com/cloudless/orchestrator/internal/places"
 	"github.com/cloudless/orchestrator/internal/power"
 	"github.com/cloudless/orchestrator/internal/provision"
+	"github.com/cloudless/orchestrator/internal/sparkcluster"
 	"github.com/cloudless/orchestrator/internal/state"
 	"github.com/cloudless/orchestrator/internal/usage"
 )
@@ -55,6 +58,9 @@ type Server struct {
 
 	modelJobsMu sync.Mutex
 	modelJobs   map[string]context.CancelFunc
+
+	engineJobsMu sync.Mutex
+	engineJobs   map[string]context.CancelFunc
 }
 
 // NewServer constructs a Server backed by the given engine, state store and manifests.
@@ -89,6 +95,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/health", s.health)
 	mux.HandleFunc("GET /api/gpu", s.gpu)
 	mux.HandleFunc("GET /api/system", s.system)
+	mux.HandleFunc("GET /api/system/input", s.systemInput)
 	mux.HandleFunc("GET /api/capabilities", s.capabilities)
 	mux.HandleFunc("POST /api/system/shutdown", s.systemShutdown)
 	mux.HandleFunc("POST /api/system/reboot", s.systemReboot)
@@ -100,6 +107,11 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/system/nvidia-driver", s.nvidiaDriverGet)
 	mux.HandleFunc("POST /api/system/nvidia-driver/check", s.nvidiaDriverCheck)
 	mux.HandleFunc("POST /api/system/nvidia-driver/apply", s.nvidiaDriverApply)
+	mux.HandleFunc("GET /api/system/spark-cluster", s.sparkClusterStatus)
+	mux.HandleFunc("POST /api/system/spark-cluster/discover", s.sparkClusterDiscover)
+	mux.HandleFunc("POST /api/system/spark-cluster/preflight", s.sparkClusterPreflight)
+	mux.HandleFunc("POST /api/system/spark-cluster/create", s.sparkClusterCreate)
+	mux.HandleFunc("POST /api/system/spark-cluster/disconnect", s.sparkClusterDisconnect)
 	mux.HandleFunc("GET /api/sysload", s.sysload)
 	mux.HandleFunc("GET /api/profile", s.profileGet)
 	mux.HandleFunc("POST /api/profile", s.profileSet)
@@ -139,6 +151,9 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/folders", s.folders)
 	mux.HandleFunc("POST /api/folders/{id}/open", s.openFolder)
 	mux.HandleFunc("GET /api/engine", s.engineState)
+	mux.HandleFunc("POST /api/engine/load", s.engineLoad)
+	mux.HandleFunc("POST /api/engine/unload", s.engineUnload)
+	mux.HandleFunc("POST /api/engine/abort", s.engineAbort)
 	mux.HandleFunc("GET /api/engine/metrics", s.engineMetricsHandler)
 	mux.HandleFunc("GET /api/engine/usage", s.engineUsage)
 	mux.HandleFunc("GET /api/engine/power", s.enginePower)
@@ -212,11 +227,20 @@ func (s *Server) requireCapability(w http.ResponseWriter, id string) bool {
 }
 
 func (s *Server) gpu(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), 6*time.Second)
 	defer cancel()
 
-	gpus, err := hardware.GPUs(ctx)
-	resp := map[string]any{"available": len(gpus) > 0, "gpus": gpus}
+	local, err := hardware.GPUs(ctx)
+	gpus := append([]hardware.GPU(nil), local...)
+	hostname, _ := os.Hostname()
+	for i := range gpus {
+		gpus[i].Node = hostname
+	}
+	peer, peerErr := sparkcluster.PeerGPUs(ctx)
+	if peerErr == nil && peer.Reachable {
+		gpus = append(gpus, peer.GPUs...)
+	}
+	resp := map[string]any{"available": len(gpus) > 0, "gpus": gpus, "peer": peer}
 	if err != nil && len(gpus) == 0 {
 		resp["error"] = err.Error()
 	}
@@ -270,19 +294,196 @@ func (s *Server) engineState(w http.ResponseWriter, r *http.Request) {
 
 	active := s.activeEngine(ctx)
 	type eng struct {
-		ID     string `json:"id"`
-		Name   string `json:"name"`
-		Active bool   `json:"active"`
+		ID       string `json:"id"`
+		Name     string `json:"name"`
+		Active   bool   `json:"active"`
+		Selected bool   `json:"selected"`
+	}
+	selected := s.state.Get().Engine
+	if selected == "" {
+		selected = catalog.DefaultEngine()
 	}
 	list := []eng{}
 	for _, e := range catalog.Engines() {
-		list = append(list, eng{ID: e.ID, Name: e.Name, Active: e.ID == active})
+		list = append(list, eng{ID: e.ID, Name: e.Name, Active: e.ID == active, Selected: e.ID == selected})
 	}
+	var startup *jobs.Snapshot
+	startupSequence := -1
+	for _, prefix := range []string{"engine:", "model:"} {
+		for _, snapshot := range s.jobs.List(prefix) {
+			sequence, _ := strconv.Atoi(strings.TrimPrefix(snapshot.ID, "job-"))
+			if !snapshot.Done && sequence > startupSequence {
+				copy := snapshot
+				startup = &copy
+				startupSequence = sequence
+			}
+		}
+	}
+	ready := active != "" && engineReady(ctx)
+	if startup == nil && active != "" && !ready {
+		if app, ok := catalog.Get(active); ok {
+			if logs, err := s.eng.Logs(ctx, app.ContainerName()); err == nil {
+				done, total := modelCheckpointProgress(logs)
+				message := "Loading the model across the available hardware …"
+				if total > 0 && done < total {
+					message = fmt.Sprintf("Loading model weights — %d of %d checkpoint shards", done, total)
+				} else if total > 0 {
+					message = "Model weights loaded. Optimizing the inference engine …"
+				}
+				startup = &jobs.Snapshot{AppID: "engine:" + active, Update: jobs.Update{Phase: "loading", Message: message, LayersDone: done, LayersTotal: total}}
+			}
+		}
+	}
+	operation, operationJobID, canAbort := describeEngineOperation(startup, ready, s.state.Get().EngineUnloaded)
 	writeJSON(w, http.StatusOK, map[string]any{
-		"active":  active,
-		"ready":   active != "" && engineReady(ctx),
-		"engines": list,
+		"active":         active,
+		"ready":          ready,
+		"unloaded":       s.state.Get().EngineUnloaded,
+		"engines":        list,
+		"startup":        startup,
+		"operation":      operation,
+		"operationJobId": operationJobID,
+		"canAbort":       canAbort,
+		"executionMode": func() string {
+			if s.state.Get().ExecutionMode == "cluster" {
+				return "cluster"
+			}
+			return "local"
+		}(),
 	})
+}
+
+// describeEngineOperation turns the job manager's implementation details into a
+// stable UI contract. Readiness wins over a launch job that is about to publish
+// its final success update, while unload/abort jobs remain explicit operations.
+func describeEngineOperation(startup *jobs.Snapshot, ready, unloaded bool) (operation, jobID string, canAbort bool) {
+	if startup != nil && !startup.Done {
+		switch startup.AppID {
+		case "engine:unload":
+			return "unloading", startup.ID, false
+		case "engine:abort":
+			return "aborting", startup.ID, false
+		}
+		if !ready && !unloaded && (strings.HasPrefix(startup.AppID, "engine:") || strings.HasPrefix(startup.AppID, "model:")) {
+			return "loading", startup.ID, startup.ID != ""
+		}
+	}
+	return "idle", "", false
+}
+
+// engineUnload releases accelerator memory without deleting the selected model
+// or its downloaded weights. The persisted unloaded flag prevents provisioning
+// from silently loading it again after a daemon restart.
+func (s *Server) engineUnload(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("X-Cloudless-Action") != "model-unload" {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "model unload confirmation header required"})
+		return
+	}
+	job := s.jobs.Create("engine:unload")
+	go s.runEngineUnload(job)
+	writeJSON(w, http.StatusAccepted, map[string]string{"jobId": job.ID})
+}
+
+func (s *Server) engineLoad(w http.ResponseWriter, _ *http.Request) {
+	id := s.state.Get().Engine
+	if id == "" {
+		id = catalog.DefaultEngine()
+	}
+	target, ok := catalog.Get(id)
+	if !ok || !target.Engine {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "the selected inference engine is unavailable"})
+		return
+	}
+	job := s.jobs.Create("engine:" + target.ID)
+	go s.applyEngine(job, target)
+	writeJSON(w, http.StatusAccepted, map[string]string{"jobId": job.ID, "engine": target.ID})
+}
+
+// engineAbort cancels every queued/running engine launch, then uses the same
+// cleanup path as an explicit unload. Cancelling all registered launches is
+// intentional: a second queued launch must not start after the user presses
+// Abort and unexpectedly consume accelerator memory again.
+func (s *Server) engineAbort(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("X-Cloudless-Action") != "model-abort" {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "model abort confirmation header required"})
+		return
+	}
+	if s.cancelEngineJobs() == 0 {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "no model launch is currently active"})
+		return
+	}
+	job := s.jobs.Create("engine:abort")
+	go s.runEngineUnload(job)
+	writeJSON(w, http.StatusAccepted, map[string]string{"jobId": job.ID})
+}
+
+func (s *Server) registerEngineJob(jobID string, cancel context.CancelFunc) {
+	s.engineJobsMu.Lock()
+	defer s.engineJobsMu.Unlock()
+	if s.engineJobs == nil {
+		s.engineJobs = make(map[string]context.CancelFunc)
+	}
+	s.engineJobs[jobID] = cancel
+}
+
+func (s *Server) unregisterEngineJob(jobID string) {
+	s.engineJobsMu.Lock()
+	delete(s.engineJobs, jobID)
+	s.engineJobsMu.Unlock()
+}
+
+func (s *Server) cancelEngineJobs() int {
+	s.engineJobsMu.Lock()
+	cancels := make([]context.CancelFunc, 0, len(s.engineJobs))
+	for _, cancel := range s.engineJobs {
+		cancels = append(cancels, cancel)
+	}
+	s.engineJobsMu.Unlock()
+	for _, cancel := range cancels {
+		cancel()
+	}
+	return len(cancels)
+}
+
+func (s *Server) runEngineUnload(job *jobs.Job) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	provision.EngineMu.Lock()
+	defer provision.EngineMu.Unlock()
+
+	job.Progress("stopping", "Stopping inference and releasing accelerator memory …", -1, -1)
+	if s.state.Get().ExecutionMode == "cluster" {
+		job.Progress("stopping", "Stopping distributed inference on the other Spark …", -1, -1)
+		if err := sparkcluster.StopWorker(ctx); err != nil {
+			job.Fail(err)
+			return
+		}
+	}
+	if proxy, _ := s.eng.Find(ctx, "cloudless-cluster-engine-proxy"); proxy != nil {
+		if err := s.eng.Remove(ctx, proxy.Name); err != nil {
+			job.Fail(err)
+			return
+		}
+	}
+	for _, candidate := range catalog.Engines() {
+		container, err := s.eng.Find(ctx, candidate.ContainerName())
+		if err != nil {
+			job.Fail(err)
+			return
+		}
+		if container != nil {
+			job.Progress("stopping", "Unloading the model from "+candidate.Name+" …", -1, -1)
+			if err := s.eng.Remove(ctx, container.Name); err != nil {
+				job.Fail(err)
+				return
+			}
+		}
+	}
+	if err := s.state.SetEngineUnloaded(true); err != nil {
+		job.Fail(err)
+		return
+	}
+	job.Succeed("")
 }
 
 // engineSwitch stops the current engine and starts the chosen one, which inherits
@@ -332,30 +533,118 @@ func (s *Server) runSwitch(job *jobs.Job, target catalog.App) {
 // applyEngine makes `target` the only running engine, with the current model and
 // the stable alias, then waits until it's serving. Used by switch + model change.
 func (s *Server) applyEngine(job *jobs.Job, target catalog.App) {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+	st := s.state.Get()
+	model := st.Model
+	localFallback := job.AppID == "engine:cluster-disconnect-fallback"
+	distributed := st.ExecutionMode == "cluster" && target.ID == "vllm"
+	timeout := 15 * time.Minute
+	if distributed {
+		timeout = 60 * time.Minute // the peer may need its first image/model download
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-
-	model := s.state.Get().Model
+	s.registerEngineJob(job.ID, cancel)
+	defer s.unregisterEngineJob(job.ID)
 	// Serialize with the startup provisioner so neither clobbers the other (D15).
 	provision.EngineMu.Lock()
 	_ = s.state.SetEngine(target.ID) // remember the choice across restarts
+	_ = s.state.SetEngineUnloaded(false)
+	if target.ID != "vllm" && st.ExecutionMode == "cluster" {
+		distributed = false
+		_ = s.state.SetExecutionMode("local")
+	}
 	for _, e := range catalog.Engines() {
 		if e.ID != target.ID {
-			job.Progress("switching", "Stopping "+e.Name+" …", -1, -1)
+			message := "Stopping " + e.Name + " …"
+			job.Progress("switching", message, -1, -1)
 			_ = s.eng.Stop(ctx, e.ContainerName())
 		}
 	}
-	job.Progress("switching", "Starting "+target.Name+" …", -1, -1)
+	if localFallback {
+		job.Progress("switching", "Releasing the distributed model and its memory …", -1, -1)
+	}
 	_ = s.eng.Remove(ctx, target.ContainerName())
-	override, _ := s.state.EngineCmd(target.ID, resolveModel(model))
-	_, runErr := s.eng.Run(ctx, catalog.EngineSpecOverride(target, model, override))
+	_ = s.eng.Remove(ctx, "cloudless-cluster-engine-proxy")
+	if !distributed {
+		_ = sparkcluster.StopWorker(ctx)
+	}
+	startMessage := "Starting " + target.Name + " …"
+	if localFallback {
+		startMessage = "Starting " + target.Name + " locally on this Spark …"
+	}
+	job.Progress("switching", startMessage, -1, -1)
+	var runErr error
+	if distributed {
+		cluster := clusterCompute(ctx, totalVRAMGB(ctx))
+		if !cluster.DistributedReady {
+			provision.EngineMu.Unlock()
+			job.Fail(errors.New("the two-Spark connection is not healthy enough for distributed inference"))
+			return
+		}
+		spec := sparkcluster.CoordinatorSpec(catalog.EngineSpec(target, model))
+		job.Progress("cluster", "Starting the coordinator on this Spark …", -1, -1)
+		_, runErr = s.eng.Run(ctx, spec)
+		if runErr != nil {
+			provision.EngineMu.Unlock()
+			job.Fail(runErr)
+			return
+		}
+		started := time.Now()
+		job.Progress("cluster", "Preparing "+cluster.PeerName+". The first launch downloads a large NVIDIA runtime and can take several minutes …", -1, -1)
+		workerDone := make(chan error, 1)
+		go func() { workerDone <- sparkcluster.StartWorker(ctx, spec.Image, resolveModel(model)) }()
+		ticker := time.NewTicker(10 * time.Second)
+		var workerErr error
+	workerWait:
+		for {
+			select {
+			case workerErr = <-workerDone:
+				break workerWait
+			case <-ticker.C:
+				elapsed := time.Since(started).Round(time.Second)
+				job.Progress("cluster", "Preparing "+cluster.PeerName+" for distributed inference ("+elapsed.String()+" elapsed) …", -1, -1)
+			case <-ctx.Done():
+				workerErr = ctx.Err()
+				break workerWait
+			}
+		}
+		ticker.Stop()
+		if workerErr != nil {
+			provision.EngineMu.Unlock()
+			job.Fail(workerErr)
+			return
+		}
+		job.Progress("cluster", "Waiting for "+cluster.PeerName+" to join the inference cluster …", -1, -1)
+		if err := s.eng.Exec(ctx, target.ContainerName(), "/bin/bash", "-lc", `until ray status 2>/dev/null | grep -q '/2.0 GPU'; do sleep 2; done`); err != nil {
+			runErr = err
+		}
+		job.Progress("cluster", cluster.PeerName+" joined. Starting the model across both Sparks …", -1, -1)
+		if err := s.eng.Exec(ctx, target.ContainerName(), "touch", "/tmp/cloudless-ray-worker"); err != nil {
+			runErr = err
+		}
+		if runErr == nil {
+			job.Progress("cluster", "Connecting Cloudless apps to the two-Spark engine …", -1, -1)
+			_ = s.eng.Pull(ctx, "alpine/socat:latest")
+			_, runErr = s.eng.Run(ctx, sparkcluster.ProxySpec())
+		}
+		if runErr != nil {
+			_ = sparkcluster.StopWorker(ctx)
+		}
+	} else {
+		override, _ := s.state.EngineCmd(target.ID, resolveModel(model))
+		_, runErr = s.eng.Run(ctx, catalog.EngineSpecOverride(target, model, override))
+	}
 	provision.EngineMu.Unlock()
 	if runErr != nil {
 		job.Fail(runErr)
 		return
 	}
 
-	job.Progress("loading", "Loading model …", -1, -1)
+	loadingMessage := "Loading model …"
+	if localFallback {
+		loadingMessage = "Loading " + resolveModel(model) + " locally on this Spark …"
+	}
+	job.Progress("loading", loadingMessage, -1, -1)
 	for {
 		if ctx.Err() != nil {
 			job.Fail(fmt.Errorf("%s did not become ready in time", target.Name))
@@ -368,8 +657,29 @@ func (s *Server) applyEngine(job *jobs.Job, target catalog.App) {
 			job.Succeed("")
 			return
 		}
+		if logs, err := s.eng.Logs(ctx, target.ContainerName()); err == nil {
+			done, total := modelCheckpointProgress(logs)
+			if total > 0 && done < total {
+				job.Progress("loading", fmt.Sprintf("Loading model weights — %d of %d checkpoint shards", done, total), done, total)
+			} else if total > 0 {
+				job.Progress("loading", "Model weights loaded. Optimizing the inference engine …", done, total)
+			}
+		}
 		time.Sleep(2 * time.Second)
 	}
+}
+
+var checkpointProgressPattern = regexp.MustCompile(`(?m)(\d+)% Completed \| (\d+)/(\d+)`)
+
+func modelCheckpointProgress(logs string) (int, int) {
+	matches := checkpointProgressPattern.FindAllStringSubmatch(logs, -1)
+	if len(matches) == 0 {
+		return 0, 0
+	}
+	last := matches[len(matches)-1]
+	done, _ := strconv.Atoi(last[2])
+	total, _ := strconv.Atoi(last[3])
+	return done, total
 }
 
 func (s *Server) openFolder(w http.ResponseWriter, r *http.Request) {
@@ -976,6 +1286,13 @@ func (s *Server) settingsGet(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"model":        model,
 		"defaultModel": catalog.DefaultModel(),
+		"unloaded":     st.EngineUnloaded,
+		"executionMode": func() string {
+			if st.ExecutionMode == "cluster" {
+				return "cluster"
+			}
+			return "local"
+		}(),
 	})
 }
 
@@ -983,6 +1300,7 @@ func (s *Server) settingsGet(w http.ResponseWriter, r *http.Request) {
 func (s *Server) settingsModel(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Model string `json:"model"`
+		Mode  string `json:"mode"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad request"})
@@ -992,7 +1310,17 @@ func (s *Server) settingsModel(w http.ResponseWriter, r *http.Request) {
 	if model == catalog.DefaultModel() {
 		model = "" // store empty to mean "default"
 	}
+	mode := "local"
+	if body.Mode == "cluster" {
+		cluster := clusterCompute(r.Context(), totalVRAMGB(r.Context()))
+		if !cluster.DistributedReady {
+			writeJSON(w, http.StatusConflict, map[string]string{"error": "the two-Spark connection is not healthy"})
+			return
+		}
+		mode = "cluster"
+	}
 	_ = s.state.SetModel(model)
+	_ = s.state.SetExecutionMode(mode)
 
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	active := s.activeEngine(ctx)
@@ -1003,7 +1331,7 @@ func (s *Server) settingsModel(w http.ResponseWriter, r *http.Request) {
 	app, _ := catalog.Get(active)
 	job := s.jobs.Create("model:" + app.ID)
 	go s.applyEngine(job, app)
-	writeJSON(w, http.StatusAccepted, map[string]string{"jobId": job.ID})
+	writeJSON(w, http.StatusAccepted, map[string]string{"jobId": job.ID, "mode": mode})
 }
 
 func (s *Server) onboardingReset(w http.ResponseWriter, r *http.Request) {

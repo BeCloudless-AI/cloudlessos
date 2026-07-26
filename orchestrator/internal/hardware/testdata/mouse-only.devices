@@ -1,0 +1,7 @@
+I: Bus=0019 Vendor=0000 Product=0001 Version=0000
+N: Name="Power Button"
+H: Handlers=kbd event0
+
+I: Bus=0003 Vendor=046d Product=c077 Version=0111
+N: Name="Cloudless Test Mouse"
+H: Handlers=mouse0 event5

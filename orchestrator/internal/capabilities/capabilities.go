@@ -20,6 +20,7 @@ const (
 	UnifiedAcceleratorRAM   = "unified-accelerator-memory"
 	NVIDIACDI               = "nvidia-cdi"
 	DGXVendorUpdateBoundary = "dgx-vendor-update-boundary"
+	SparkCluster            = "spark-cluster"
 	GenericDriverUpdates    = "generic-nvidia-driver-management"
 )
 
@@ -58,6 +59,7 @@ var definitions = map[string]Requirement{
 	UnifiedAcceleratorRAM:   {Platforms: []string{platform.DGXSpark}},
 	NVIDIACDI:               {Platforms: []string{platform.DGXSpark}},
 	DGXVendorUpdateBoundary: {Platforms: []string{platform.DGXSpark}},
+	SparkCluster:            {Platforms: []string{platform.DGXSpark}, Architectures: []string{"arm64"}},
 	GenericDriverUpdates:    {Platforms: []string{platform.Generic}},
 }
 

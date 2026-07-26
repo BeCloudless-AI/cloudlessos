@@ -40,6 +40,12 @@ dpkg-deb -c "$orchestrator_deb" |
 grep -Fq 'update-alternatives --set default.plymouth' \
     "$DISTRO/packages/cloudless-branding/postinst"
 grep -Fq 'Wants=docker.service' "$DISTRO/packages/cloudless-orchestrator/cloudlessd.service"
+for netplan_runtime_path in /etc/netplan /run/systemd/system /run/systemd/network /run/NetworkManager/conf.d /run/NetworkManager/system-connections /run/udev/rules.d; do
+    grep -Fq "$netplan_runtime_path" "$DISTRO/packages/cloudless-orchestrator/cloudlessd.service" || {
+        echo "cloudlessd sandbox blocks Netplan runtime path: $netplan_runtime_path" >&2
+        exit 1
+    }
+done
 grep -Fq 'updates.becloudless.ai/apt' "$DISTRO/packages/cloudless-updater/cloudless.sources"
 grep -Fq 'cloudless-updater apply' "$DISTRO/packages/cloudless-updater/cloudless-update-apply.service"
 grep -Fq 'cloudless-updater check' "$DISTRO/packages/cloudless-updater/cloudless-update-check.service"

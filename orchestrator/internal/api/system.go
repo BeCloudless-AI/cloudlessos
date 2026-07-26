@@ -36,12 +36,20 @@ func (s *Server) system(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 	gpus, _ := hardware.GPUs(ctx)
+	memoryGB, _ := hardware.AcceleratorMemoryGB(ctx)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"system":       hardware.Sys(),
 		"locale":       locale.Detect(),
 		"gpuCount":     len(gpus),
 		"capabilities": capabilities.Current(),
+		"cluster":      clusterCompute(ctx, memoryGB),
 	})
+}
+
+// systemInput reports hot-pluggable physical input classes independently from
+// the heavier system endpoint so the kiosk can react quickly to USB changes.
+func (s *Server) systemInput(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, hardware.Inputs())
 }
 
 // sysload reports live host utilization and capacity for the dashboard.

@@ -31,7 +31,7 @@ func TestEmbeddedWebIncludesSparkClusterWizard(t *testing.T) {
 			t.Fatalf("embedded cluster UI missing connection failure state %q", want)
 		}
 	}
-	for _, want := range []string{"id=\"home-cluster\"", "function renderHomeCluster", "Two-Spark compute is ready", "computeReady ? 'Manage'", "host.querySelector('button').onclick = openSparkClusterSurface", "Runs across both Sparks", "Use both Sparks", "mode: selectedMode", "distributed compatibility shown separately", "Private · running across two Sparks", "Active across both Sparks", "Model requests are automatically served by your connected Spark pair", "Running across two Sparks", "executionMode === 'cluster'"} {
+	for _, want := range []string{"id=\"home-cluster\"", "function renderHomeCluster", "Two-Spark compute is ready", "computeReady ? 'Manage'", "host.querySelector('button').onclick = openSparkClusterSurface", "Runs across both Sparks", "Use both Sparks", "mode: selectedMode", "distributed compatibility shown separately", "Powered by Hermes Agent", "Active across both Sparks", "Model requests are automatically served by your connected Spark pair", "Running across two Sparks", "executionMode === 'cluster'"} {
 		if !strings.Contains(html, want) {
 			t.Fatalf("embedded UI missing system-wide cluster experience %q", want)
 		}

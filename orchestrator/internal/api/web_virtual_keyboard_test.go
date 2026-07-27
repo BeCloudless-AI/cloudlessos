@@ -29,6 +29,12 @@ func TestEmbeddedWebIncludesConditionalVirtualKeyboard(t *testing.T) {
 		`backspaceVirtualSelection(target)`,
 		`target.closest('form')?.requestSubmit()`,
 		`setInterval(refreshInputHardware, 5000)`,
+		`'/api/system/input/key'`,
+		`'X-Cloudless-Action': 'virtual-keyboard'`,
+		`function embeddedVirtualKeyboardTarget(target)`,
+		`let embeddedVirtualKeyQueue = Promise.resolve()`,
+		`document.activeElement === embeddedFrame`,
+		`window.addEventListener('blur', syncEmbeddedFrameFocus)`,
 	} {
 		if !strings.Contains(page, want) {
 			t.Fatalf("embedded UI is missing virtual keyboard behavior %q", want)

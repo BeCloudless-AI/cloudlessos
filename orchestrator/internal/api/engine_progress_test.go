@@ -1,19 +1,31 @@
 package api
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
-func TestModelCheckpointProgressUsesLatestUpdate(t *testing.T) {
-	logs := "Loading safetensors checkpoint shards:  21% Completed | 9/42\r\n" +
-		"Loading safetensors checkpoint shards: 100% Completed | 42/42\r\n"
-	done, total := modelCheckpointProgress(logs)
-	if done != 42 || total != 42 {
-		t.Fatalf("progress = %d/%d, want 42/42", done, total)
+func TestPeerDownloadStatusIncludesMeasuredProgressAndETA(t *testing.T) {
+	got := peerDownloadStatus("spark-peer", "Qwen/Test", 50<<30, 70<<30, 1<<30)
+	for _, want := range []string{"spark-peer is downloading Qwen/Test", "50.0 / 70.0 GB", "about 20 seconds remaining"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("status missing %q: %q", want, got)
+		}
 	}
 }
 
-func TestModelCheckpointProgressHandlesNoProgress(t *testing.T) {
-	done, total := modelCheckpointProgress("engine is initializing")
-	if done != 0 || total != 0 {
-		t.Fatalf("progress = %d/%d, want 0/0", done, total)
+func TestEngineBannerUsesRealPeerByteProgress(t *testing.T) {
+	content, err := webFS.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(content)
+	for _, want := range []string{"peer-downloading", "engineStartup.bytesDone", "The second Spark is downloading the model", "progress = Math.round(bytesDone / bytesTotal * 100)", "Finalizing"} {
+		if !strings.Contains(page, want) {
+			t.Fatalf("engine progress UI missing %q", want)
+		}
+	}
+	if strings.Contains(page, "done >= total ? 92") {
+		t.Fatal("engine progress UI still contains the synthetic 92% holding value")
 	}
 }

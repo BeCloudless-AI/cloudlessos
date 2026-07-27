@@ -717,6 +717,8 @@
   .eb-percent { grid-column: 3; grid-row: 1; min-width: 44px; color: var(--accent); font-size: 14px; font-weight: 800; text-align: right; font-variant-numeric: tabular-nums; }
   .eb-track { grid-column: 2 / -1; height: 6px; overflow: hidden; border-radius: 999px; background: color-mix(in srgb, var(--accent) 14%, var(--control)); }
   .eb-track i { display: block; width: var(--engine-progress, 6%); height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 68%, white)); transition: width .4s ease; }
+  .eb-track.indeterminate i { width: 32%; animation: engine-indeterminate 1.25s ease-in-out infinite; }
+  @keyframes engine-indeterminate { from { transform: translateX(-110%); } to { transform: translateX(330%); } }
   .eb-action { grid-column: 4; grid-row: 1; }
   .model-load-action {
     min-width: 132px; min-height: 40px; padding: 10px 16px;
@@ -2976,7 +2978,7 @@
       </div>
     </div>
     <form class="ask" id="hero-ask" autocomplete="off">
-      <span class="ask-brand"><svg class="cl-mark" aria-hidden="true"><use href="#cl-star"/></svg><span><b>Ask Cloudless</b><small id="ask-status">Private · ready on this machine</small></span></span>
+      <span class="ask-brand"><svg class="cl-mark" aria-hidden="true"><use href="#cl-star"/></svg><span><b>Ask Cloudless</b><small id="ask-status">Powered by Hermes Agent</small></span></span>
       <input id="hero-ask-input" placeholder="Ask about your models, apps, or this machine…" autocomplete="off">
       <button class="ask-go" type="submit" title="Ask Cloudless" aria-label="Ask Cloudless"><svg class="ui-icon" aria-hidden="true"><use href="#ui-arrow-right"/></svg></button>
     </form>
@@ -3116,7 +3118,7 @@
 <div id="asst" class="asst hidden" role="dialog" aria-label="Cloudless Agent">
   <div class="asst-head">
     <span class="asst-brand-mark"><svg class="cl-mark asst-mark" aria-hidden="true"><use href="#cl-star"/></svg></span>
-    <div class="asst-ttl">Cloudless Agent<span class="asst-sub"><i id="asst-status-dot"></i><span id="asst-status">Private · powered by Hermes</span></span></div>
+    <div class="asst-ttl">Cloudless Agent<span class="asst-sub"><i id="asst-status-dot"></i><span id="asst-status">Powered by Hermes Agent</span></span></div>
     <div class="asst-head-actions">
       <button class="asst-tool" id="asst-clear" title="New conversation" aria-label="Start a new conversation"><svg class="ui-icon" aria-hidden="true"><use href="#ui-trash"/></svg></button>
       <button class="asst-tool asst-hermes" id="asst-hermes" title="Open Hermes dashboard" aria-label="Open Hermes dashboard"><svg class="ui-icon" aria-hidden="true"><use href="#ui-assistant"/></svg></button>
@@ -3828,7 +3830,7 @@ async function renderEngine() {
   syncEngineState(d);
   // When readiness flips (model finished loading / engine went down), re-gate the
   // launch surfaces and update the banner.
-  const startupKey = engineStartup ? `${engineStartup.phase || ''}:${engineStartup.message || ''}:${engineStartup.layersDone || 0}:${engineStartup.layersTotal || 0}` : '';
+  const startupKey = engineStartup ? `${engineStartup.phase || ''}:${engineStartup.message || ''}:${engineStartup.layersDone || 0}:${engineStartup.layersTotal || 0}:${engineStartup.bytesDone || 0}:${engineStartup.bytesTotal || 0}` : '';
   const structuralChange = engineReady !== lastEngineReady || engineExecutionMode !== lastEngineMode || engineUnloaded !== lastEngineUnloaded || engineOperation !== lastEngineOperation;
   if (structuralChange || startupKey !== lastEngineStartup) {
     lastEngineReady = engineReady; lastEngineMode = engineExecutionMode; lastEngineUnloaded = engineUnloaded; lastEngineOperation = engineOperation; lastEngineStartup = startupKey;
@@ -3850,12 +3852,19 @@ function applyEngineUI() {
     const load = document.getElementById('eb-load');
     const abortable = starting && engineLoadIsAbortable();
     banner.classList.toggle('abortable', abortable);
+    const startupPhase = engineStartup?.phase || '';
     if (title) title.textContent = engineUnloaded
       ? 'Cloudless AI is unloaded'
       : engineOperation === 'aborting'
       ? 'Stopping model loading…'
       : engineOperation === 'unloading'
       ? 'Unloading Cloudless AI…'
+      : startupPhase === 'peer-downloading'
+      ? 'The second Spark is downloading the model…'
+      : startupPhase === 'peer-loading'
+      ? 'The second Spark is loading model weights…'
+      : startupPhase === 'optimizing'
+      ? 'Optimizing two-Spark inference…'
       : 'Cloudless AI is starting up…';
     if (load) {
       load.classList.toggle('hidden', !(engineUnloaded || abortable || engineAborting));
@@ -3873,14 +3882,28 @@ function applyEngineUI() {
     if (starting) {
       const phase = engineStartup?.phase || 'loading';
       const msg = (engineStartup?.message || '').toLowerCase();
-      let progress = phase === 'pending' ? 2 : phase === 'switching' ? 8 : phase === 'cluster' ? (msg.includes('preparing') ? 18 : msg.includes('waiting') ? 30 : msg.includes('joined') ? 36 : 34) : 42;
       const done = +(engineStartup?.layersDone || 0), total = +(engineStartup?.layersTotal || 0);
-      if (phase === 'loading' && total > 0) progress = done >= total ? 92 : Math.round(40 + (done / total) * 50);
-      progress = Math.max(0, Math.min(99, progress));
+      const bytesDone = +(engineStartup?.bytesDone || 0), bytesTotal = +(engineStartup?.bytesTotal || 0);
+      let progress = null, progressLabel = 'Preparing';
+      if (phase === 'peer-downloading' && bytesTotal > 0) {
+        progress = Math.round(bytesDone / bytesTotal * 100);
+        progressLabel = `${progress}%`;
+      } else if (phase === 'loading' && total > 0) {
+        progress = Math.round(done / total * 100);
+        progressLabel = `${progress}%`;
+      } else if (phase === 'peer-downloading') progressLabel = 'Downloading';
+      else if (phase === 'peer-loading' || phase === 'loading') progressLabel = 'Loading';
+      else if (phase === 'optimizing') progressLabel = 'Finalizing';
+      else if (phase === 'cluster') progressLabel = msg.includes('joined') ? 'Connected' : 'Preparing';
+      if (progress != null) progress = Math.max(0, Math.min(100, progress));
       const percent = document.getElementById('eb-percent');
-      if (percent) percent.textContent = `${progress}%`;
+      if (percent) percent.textContent = progressLabel;
       const track = banner.querySelector('.eb-track');
-      if (track) { track.style.setProperty('--engine-progress', `${Math.max(2, progress)}%`); track.setAttribute('aria-valuenow', String(progress)); }
+      if (track) {
+        track.classList.toggle('indeterminate', progress == null);
+        if (progress == null) track.removeAttribute('aria-valuenow');
+        else { track.style.setProperty('--engine-progress', `${Math.max(2, progress)}%`); track.setAttribute('aria-valuenow', String(progress)); }
+      }
     }
   }
   const ask = document.getElementById('hero-ask'), inp = document.getElementById('hero-ask-input'), go = ask && ask.querySelector('.ask-go');
@@ -3890,9 +3913,9 @@ function applyEngineUI() {
   const ghost = document.getElementById('open-full-chat'); if (ghost) ghost.classList.toggle('engine-hidden', unavailable);
   document.getElementById('home-apps')?.classList.toggle('engine-hidden', unavailable);
   const askStatus = document.getElementById('ask-status');
-  if (askStatus) askStatus.textContent = engineUnloaded ? 'No model loaded' : (starting ? (engineExecutionMode === 'cluster' ? 'Two-Spark model is starting…' : 'Local model is starting…') : (engineExecutionMode === 'cluster' ? 'Private · running across two Sparks' : 'Private · ready on this machine'));
+  if (askStatus) askStatus.textContent = 'Powered by Hermes Agent';
   const agentStatus = document.getElementById('asst-status');
-  if (agentStatus) agentStatus.textContent = engineUnloaded ? 'Load a model to start the agent' : (starting ? (engineExecutionMode === 'cluster' ? 'Waiting for both Sparks' : 'Waiting for the local model') : (engineExecutionMode === 'cluster' ? 'Private · Hermes across two Sparks' : 'Private · powered by Hermes'));
+  if (agentStatus) agentStatus.textContent = 'Powered by Hermes Agent';
   document.getElementById('asst-status-dot')?.classList.toggle('wait', unavailable);
   const di = document.getElementById('dock-inference'); if (di) di.classList.toggle('running', engineReady);
 }
@@ -7649,6 +7672,7 @@ let virtualKeyboardTarget = null, virtualKeyboardSuppressedTarget = null, virtua
 
 function virtualKeyboardEligible(target) {
   if (!(target instanceof HTMLElement) || target.disabled || target.readOnly) return false;
+  if (target === document.getElementById('app-surface-frame') && appSurfaceOpen()) return true;
   if (target.isContentEditable) return true;
   if (target.tagName === 'TEXTAREA') return true;
   if (target.tagName !== 'INPUT') return false;
@@ -7679,6 +7703,7 @@ function showVirtualKeyboard(target) {
   keyboard.classList.add('open'); keyboard.setAttribute('aria-hidden', 'false');
   setTimeout(() => {
     if (!virtualKeyboardTarget?.isConnected) return hideVirtualKeyboard();
+    if (virtualKeyboardTarget instanceof HTMLIFrameElement) return;
     const keyTop = keyboard.getBoundingClientRect().top, targetRect = virtualKeyboardTarget.getBoundingClientRect();
     if (targetRect.bottom > keyTop - 12) virtualKeyboardTarget.scrollIntoView({ block: 'center', behavior: 'smooth' });
   }, 230);
@@ -7722,6 +7747,22 @@ function moveVirtualCaret(target, direction) {
   const next = Math.max(0, Math.min(String(target.value || '').length, target.selectionStart + direction));
   try { target.setSelectionRange(next, next); } catch {}
 }
+function embeddedVirtualKeyboardTarget(target) {
+  return target instanceof HTMLIFrameElement && target === document.getElementById('app-surface-frame') && appSurfaceOpen();
+}
+let embeddedVirtualKeyQueue = Promise.resolve();
+function emitEmbeddedVirtualKey(action, value = '') {
+  embeddedVirtualKeyQueue = embeddedVirtualKeyQueue.then(async () => {
+    try {
+      const result = await api('/api/system/input/key', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Cloudless-Action': 'virtual-keyboard' },
+        body: JSON.stringify({ action, value })
+      });
+      if (result.error) toast(result.error, true);
+    } catch { toast('Could not type into the embedded app', true); }
+  });
+  return embeddedVirtualKeyQueue;
+}
 function pressVirtualKey(button) {
   const target = virtualKeyboardTarget;
   if (!target?.isConnected || !virtualKeyboardEligible(target)) return hideVirtualKeyboard();
@@ -7729,6 +7770,16 @@ function pressVirtualKey(button) {
   if (action === 'close') { hideVirtualKeyboard(true); return; }
   if (action === 'caps') { virtualKeyboardCaps = !virtualKeyboardCaps; renderVirtualKeyboard(); return; }
   if (action === 'shift') { virtualKeyboardShift = !virtualKeyboardShift; renderVirtualKeyboard(); return; }
+  if (embeddedVirtualKeyboardTarget(target)) {
+    if (action === 'character') {
+      const key = { base: button.dataset.vkBase || '', shift: button.dataset.vkShift || '' };
+      void emitEmbeddedVirtualKey('text', virtualKeyboardCharacter(key));
+    } else if (action === 'space') void emitEmbeddedVirtualKey('text', ' ');
+    else if (action === 'enter') void emitEmbeddedVirtualKey(virtualKeyboardShift ? 'shift-enter' : 'enter');
+    else if (['backspace', 'left', 'right'].includes(action)) void emitEmbeddedVirtualKey(action);
+    if (virtualKeyboardShift) { virtualKeyboardShift = false; renderVirtualKeyboard(); }
+    return;
+  }
   if (action === 'backspace') backspaceVirtualSelection(target);
   else if (action === 'space') replaceVirtualSelection(target, ' ');
   else if (action === 'left' || action === 'right') moveVirtualCaret(target, action === 'left' ? -1 : 1);
@@ -7755,6 +7806,13 @@ async function refreshInputHardware() {
 }
 function initVirtualKeyboard() {
   const keyboard = document.getElementById('virtual-keyboard');
+  const embeddedFrame = document.getElementById('app-surface-frame');
+  const syncEmbeddedFrameFocus = () => setTimeout(() => {
+    if (appSurfaceOpen() && document.activeElement === embeddedFrame) {
+      virtualPointerObserved = true;
+      showVirtualKeyboard(embeddedFrame);
+    }
+  }, 0);
   document.addEventListener('pointerdown', event => {
     // KVM and remote-control bridges do not always preserve Event.isTrusted,
     // but a pointer event outside this keyboard still proves a pointer path.
@@ -7776,6 +7834,8 @@ function initVirtualKeyboard() {
   document.addEventListener('focusout', () => setTimeout(() => {
     if (!virtualKeyboardEligible(document.activeElement)) { virtualKeyboardSuppressedTarget = null; hideVirtualKeyboard(); }
   }, 0));
+  embeddedFrame.addEventListener('focus', syncEmbeddedFrameFocus);
+  window.addEventListener('blur', syncEmbeddedFrameFocus);
   refreshInputHardware();
   setInterval(refreshInputHardware, 5000);
 }

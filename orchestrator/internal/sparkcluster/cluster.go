@@ -53,6 +53,26 @@ case "$action" in
   status)
     docker inspect cloudless-cluster-worker --format '{{.State.Status}}'
     ;;
+  model-progress)
+    model=$(printf %s "$2" | base64 -d)
+    case "$model" in
+      ""|/*|*'..'*) echo "invalid model" >&2; exit 2 ;;
+    esac
+    cache_name=models--$(printf %s "$model" | sed 's#/#--#g')
+    mount=$(docker volume inspect cloudless-hf --format '{{.Mountpoint}}' 2>/dev/null || true)
+    path=$mount/hub/$cache_name
+    bytes=0
+    incomplete=0
+    loaded=0
+    if [ -d "$path" ]; then
+      bytes=$(du -sb "$path" 2>/dev/null | awk '{print $1}')
+      incomplete=$(find "$path" -type f -name '*.incomplete' 2>/dev/null | wc -l)
+    fi
+    if docker exec cloudless-cluster-worker /bin/sh -lc "grep -Rqs 'Model loading took' /tmp/ray/session_latest/logs/worker-*.out 2>/dev/null"; then
+      loaded=1
+    fi
+    printf '%s %s %s\n' "${bytes:-0}" "${incomplete:-0}" "$loaded"
+    ;;
   upgrade)
     payload=$(printf %s "$2" | base64 -d)
     tmp=$(mktemp)
@@ -61,7 +81,7 @@ case "$action" in
     mv -f "$tmp" /usr/lib/cloudless/cloudless-cluster-worker
     ;;
   *)
-    echo "usage: cloudless-cluster-worker start IMAGE_B64 HEAD_IP_B64 WORKER_IP_B64 IFACE_B64 | stop | status | upgrade SCRIPT_B64" >&2
+    echo "usage: cloudless-cluster-worker start IMAGE_B64 HEAD_IP_B64 WORKER_IP_B64 IFACE_B64 | stop | status | model-progress MODEL_B64 | upgrade SCRIPT_B64" >&2
     exit 2
     ;;
 esac
@@ -88,6 +108,15 @@ type PeerTelemetry struct {
 	Host      string         `json:"host,omitempty"`
 	GPUs      []hardware.GPU `json:"gpus,omitempty"`
 	Error     string         `json:"error,omitempty"`
+}
+
+// ModelProgress is the peer's observable model preparation state. Bytes are
+// read from the persistent Hugging Face cache; Incomplete identifies an active
+// Hub download, and WeightsLoaded comes from vLLM's Ray worker log.
+type ModelProgress struct {
+	Bytes         int64
+	Incomplete    int
+	WeightsLoaded bool
 }
 
 type Peer struct {
@@ -784,6 +813,39 @@ func StartWorker(ctx context.Context, image, model string) error {
 		return fmt.Errorf("start distributed worker on %s: %w", state.PeerName, err)
 	}
 	return nil
+}
+
+// PeerModelProgress reports read-only preparation telemetry from the paired
+// Spark through the restricted worker helper installed during pairing.
+func PeerModelProgress(ctx context.Context, model string) (ModelProgress, error) {
+	state, err := load()
+	if err != nil {
+		return ModelProgress{}, err
+	}
+	if !state.Configured || !state.WorkerReady {
+		return ModelProgress{}, errors.New("the distributed worker is not configured")
+	}
+	model = strings.TrimSpace(model)
+	if model == "" {
+		return ModelProgress{}, errors.New("model is required")
+	}
+	encoded := base64.StdEncoding.EncodeToString([]byte(model))
+	command := fmt.Sprintf("sudo -n %s model-progress %s", workerPath, encoded)
+	output, err := remote(ctx, state.PeerHost, state.Username, "", command, nil)
+	if err != nil {
+		return ModelProgress{}, fmt.Errorf("read model progress from %s: %w", state.PeerName, err)
+	}
+	fields := strings.Fields(output)
+	if len(fields) != 3 {
+		return ModelProgress{}, fmt.Errorf("read model progress from %s: invalid response", state.PeerName)
+	}
+	bytes, bytesErr := strconv.ParseInt(fields[0], 10, 64)
+	incomplete, incompleteErr := strconv.Atoi(fields[1])
+	loaded, loadedErr := strconv.Atoi(fields[2])
+	if bytesErr != nil || incompleteErr != nil || loadedErr != nil || bytes < 0 || incomplete < 0 || (loaded != 0 && loaded != 1) {
+		return ModelProgress{}, fmt.Errorf("read model progress from %s: invalid values", state.PeerName)
+	}
+	return ModelProgress{Bytes: bytes, Incomplete: incomplete, WeightsLoaded: loaded == 1}, nil
 }
 
 // StopWorker removes the peer inference worker while leaving the Spark fabric

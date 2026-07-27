@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -38,15 +39,17 @@ var webFS embed.FS
 
 // Server wires the container engine, job manager, and state store to HTTP handlers.
 type Server struct {
-	eng      engine.Engine
-	jobs     *jobs.Manager
-	state    *state.Store
-	manifest *manifest.Store
-	mfModels *manifest.ModelsStore
-	mfDiff   *manifest.DiffusionStore
-	usage    *usage.Store
-	power    *power.Store
-	shutdown func() error
+	eng          engine.Engine
+	jobs         *jobs.Manager
+	state        *state.Store
+	manifest     *manifest.Store
+	mfModels     *manifest.ModelsStore
+	mfDiff       *manifest.DiffusionStore
+	usage        *usage.Store
+	power        *power.Store
+	shutdown     func() error
+	virtualKey   func(context.Context, string, string) error
+	virtualKeyMu sync.Mutex
 
 	shutdownMu     sync.Mutex
 	shutdownQueued bool
@@ -67,7 +70,7 @@ type Server struct {
 func NewServer(eng engine.Engine, st *state.Store, mf *manifest.Store, mfModels *manifest.ModelsStore, mfDiff *manifest.DiffusionStore, us *usage.Store, pw *power.Store) *Server {
 	return &Server{
 		eng: eng, jobs: jobs.NewManager(), state: st, manifest: mf, mfModels: mfModels,
-		mfDiff: mfDiff, usage: us, power: pw, shutdown: systemShutdown,
+		mfDiff: mfDiff, usage: us, power: pw, shutdown: systemShutdown, virtualKey: emitSystemVirtualKey,
 		shutdownDelay: time.Second,
 	}
 }
@@ -96,6 +99,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/gpu", s.gpu)
 	mux.HandleFunc("GET /api/system", s.system)
 	mux.HandleFunc("GET /api/system/input", s.systemInput)
+	mux.HandleFunc("POST /api/system/input/key", s.systemInputKey)
 	mux.HandleFunc("GET /api/capabilities", s.capabilities)
 	mux.HandleFunc("POST /api/system/shutdown", s.systemShutdown)
 	mux.HandleFunc("POST /api/system/reboot", s.systemReboot)
@@ -293,13 +297,14 @@ func (s *Server) engineState(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	active := s.activeEngine(ctx)
+	currentState := s.state.Get()
 	type eng struct {
 		ID       string `json:"id"`
 		Name     string `json:"name"`
 		Active   bool   `json:"active"`
 		Selected bool   `json:"selected"`
 	}
-	selected := s.state.Get().Engine
+	selected := currentState.Engine
 	if selected == "" {
 		selected = catalog.DefaultEngine()
 	}
@@ -325,27 +330,50 @@ func (s *Server) engineState(w http.ResponseWriter, r *http.Request) {
 			if logs, err := s.eng.Logs(ctx, app.ContainerName()); err == nil {
 				done, total := modelCheckpointProgress(logs)
 				message := "Loading the model across the available hardware …"
-				if total > 0 && done < total {
-					message = fmt.Sprintf("Loading model weights — %d of %d checkpoint shards", done, total)
-				} else if total > 0 {
-					message = "Model weights loaded. Optimizing the inference engine …"
+				phase := "loading"
+				var bytesDone, bytesTotal int64
+				if currentState.ExecutionMode == "cluster" {
+					modelID := resolveModel(currentState.Model)
+					probeCtx, probeCancel := context.WithTimeout(ctx, 3*time.Second)
+					peer, peerErr := sparkcluster.PeerModelProgress(probeCtx, modelID)
+					probeCancel()
+					if peerErr == nil && peer.Incomplete > 0 {
+						phase = "peer-downloading"
+						bytesDone = peer.Bytes
+						if mount, mountErr := s.eng.Output(ctx, "volume", "inspect", "cloudless-hf", "--format", "{{.Mountpoint}}"); mountErr == nil {
+							bytesTotal = s.modelRepoBytes(ctx, modelID, strings.TrimSpace(mount))
+						}
+						message = peerDownloadStatus("The second Spark", modelID, bytesDone, bytesTotal, 0)
+					} else if peerErr == nil && !peer.WeightsLoaded {
+						phase = "peer-loading"
+						message = "The second Spark finished downloading. Loading its model weights …"
+					} else if peerErr == nil && peer.WeightsLoaded && total > 0 && done >= total {
+						phase = "optimizing"
+						message = "Both Sparks loaded the model. Optimizing the distributed inference engine …"
+					}
 				}
-				startup = &jobs.Snapshot{AppID: "engine:" + active, Update: jobs.Update{Phase: "loading", Message: message, LayersDone: done, LayersTotal: total}}
+				if phase == "loading" && total > 0 && done < total {
+					message = fmt.Sprintf("Loading model weights — %d of %d checkpoint shards", done, total)
+				} else if phase == "loading" && total > 0 && currentState.ExecutionMode != "cluster" {
+					message = "Model weights loaded. Optimizing the inference engine …"
+					phase = "optimizing"
+				}
+				startup = &jobs.Snapshot{AppID: "engine:" + active, Update: jobs.Update{Phase: phase, Message: message, LayersDone: done, LayersTotal: total, BytesDone: bytesDone, BytesTotal: bytesTotal}}
 			}
 		}
 	}
-	operation, operationJobID, canAbort := describeEngineOperation(startup, ready, s.state.Get().EngineUnloaded)
+	operation, operationJobID, canAbort := describeEngineOperation(startup, ready, currentState.EngineUnloaded)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"active":         active,
 		"ready":          ready,
-		"unloaded":       s.state.Get().EngineUnloaded,
+		"unloaded":       currentState.EngineUnloaded,
 		"engines":        list,
 		"startup":        startup,
 		"operation":      operation,
 		"operationJobId": operationJobID,
 		"canAbort":       canAbort,
 		"executionMode": func() string {
-			if s.state.Get().ExecutionMode == "cluster" {
+			if currentState.ExecutionMode == "cluster" {
 				return "cluster"
 			}
 			return "local"
@@ -535,6 +563,8 @@ func (s *Server) runSwitch(job *jobs.Job, target catalog.App) {
 func (s *Server) applyEngine(job *jobs.Job, target catalog.App) {
 	st := s.state.Get()
 	model := st.Model
+	modelID := resolveModel(model)
+	peerName := "the second Spark"
 	localFallback := job.AppID == "engine:cluster-disconnect-fallback"
 	distributed := st.ExecutionMode == "cluster" && target.ID == "vllm"
 	timeout := 15 * time.Minute
@@ -576,6 +606,9 @@ func (s *Server) applyEngine(job *jobs.Job, target catalog.App) {
 	var runErr error
 	if distributed {
 		cluster := clusterCompute(ctx, totalVRAMGB(ctx))
+		if strings.TrimSpace(cluster.PeerName) != "" {
+			peerName = cluster.PeerName
+		}
 		if !cluster.DistributedReady {
 			provision.EngineMu.Unlock()
 			job.Fail(errors.New("the two-Spark connection is not healthy enough for distributed inference"))
@@ -592,7 +625,7 @@ func (s *Server) applyEngine(job *jobs.Job, target catalog.App) {
 		started := time.Now()
 		job.Progress("cluster", "Preparing "+cluster.PeerName+". The first launch downloads a large NVIDIA runtime and can take several minutes …", -1, -1)
 		workerDone := make(chan error, 1)
-		go func() { workerDone <- sparkcluster.StartWorker(ctx, spec.Image, resolveModel(model)) }()
+		go func() { workerDone <- sparkcluster.StartWorker(ctx, spec.Image, modelID) }()
 		ticker := time.NewTicker(10 * time.Second)
 		var workerErr error
 	workerWait:
@@ -631,7 +664,7 @@ func (s *Server) applyEngine(job *jobs.Job, target catalog.App) {
 			_ = sparkcluster.StopWorker(ctx)
 		}
 	} else {
-		override, _ := s.state.EngineCmd(target.ID, resolveModel(model))
+		override, _ := s.state.EngineCmd(target.ID, modelID)
 		_, runErr = s.eng.Run(ctx, catalog.EngineSpecOverride(target, model, override))
 	}
 	provision.EngineMu.Unlock()
@@ -645,6 +678,15 @@ func (s *Server) applyEngine(job *jobs.Job, target catalog.App) {
 		loadingMessage = "Loading " + resolveModel(model) + " locally on this Spark …"
 	}
 	job.Progress("loading", loadingMessage, -1, -1)
+	var peerTotal, peerLastBytes int64
+	var peerLastAt, nextPeerProbe time.Time
+	var peerBytesPerSecond float64
+	if distributed {
+		totalCtx, totalCancel := context.WithTimeout(ctx, 8*time.Second)
+		token, _ := s.state.HuggingFaceToken()
+		peerTotal = huggingFaceModelBytes(totalCtx, modelID, token)
+		totalCancel()
+	}
 	for {
 		if ctx.Err() != nil {
 			job.Fail(fmt.Errorf("%s did not become ready in time", target.Name))
@@ -657,16 +699,58 @@ func (s *Server) applyEngine(job *jobs.Job, target catalog.App) {
 			job.Succeed("")
 			return
 		}
+		if distributed && !time.Now().Before(nextPeerProbe) {
+			nextPeerProbe = time.Now().Add(5 * time.Second)
+			probeCtx, probeCancel := context.WithTimeout(ctx, 4*time.Second)
+			peer, peerErr := sparkcluster.PeerModelProgress(probeCtx, modelID)
+			probeCancel()
+			if peerErr == nil {
+				now := time.Now()
+				if !peerLastAt.IsZero() && peer.Bytes > peerLastBytes {
+					instant := float64(peer.Bytes-peerLastBytes) / now.Sub(peerLastAt).Seconds()
+					if peerBytesPerSecond == 0 {
+						peerBytesPerSecond = instant
+					} else {
+						peerBytesPerSecond = peerBytesPerSecond*0.7 + instant*0.3
+					}
+				}
+				peerLastBytes, peerLastAt = peer.Bytes, now
+				if peer.Incomplete > 0 {
+					message := peerDownloadStatus(peerName, modelID, peer.Bytes, peerTotal, peerBytesPerSecond)
+					job.ProgressBytes("peer-downloading", message, peer.Bytes, peerTotal)
+					time.Sleep(2 * time.Second)
+					continue
+				}
+				if !peer.WeightsLoaded {
+					job.ProgressBytes("peer-loading", peerName+" finished downloading. Loading model weights on the second Spark …", 0, 0)
+					time.Sleep(2 * time.Second)
+					continue
+				}
+			}
+		}
 		if logs, err := s.eng.Logs(ctx, target.ContainerName()); err == nil {
 			done, total := modelCheckpointProgress(logs)
 			if total > 0 && done < total {
 				job.Progress("loading", fmt.Sprintf("Loading model weights — %d of %d checkpoint shards", done, total), done, total)
 			} else if total > 0 {
-				job.Progress("loading", "Model weights loaded. Optimizing the inference engine …", done, total)
+				job.Progress("optimizing", "Both Sparks loaded the model. Optimizing the distributed inference engine …", done, total)
 			}
 		}
 		time.Sleep(2 * time.Second)
 	}
+}
+
+func peerDownloadStatus(peerName, model string, done, total int64, bytesPerSecond float64) string {
+	message := peerName + " is downloading " + model + " — " + formatDownloadProgress(done, total)
+	if total > done && bytesPerSecond > 0 {
+		remaining := time.Duration(float64(time.Second) * float64(total-done) / bytesPerSecond)
+		if remaining < time.Minute {
+			message += fmt.Sprintf(" · about %d seconds remaining", max(1, int(math.Ceil(remaining.Seconds()))))
+		} else {
+			message += fmt.Sprintf(" · about %d minutes remaining", max(1, int(math.Ceil(remaining.Minutes()))))
+		}
+	}
+	return message
 }
 
 var checkpointProgressPattern = regexp.MustCompile(`(?m)(\d+)% Completed \| (\d+)/(\d+)`)

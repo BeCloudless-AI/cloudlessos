@@ -42,7 +42,7 @@ func TestSSHPasswordCommandInvokesSSHThroughSSHPass(t *testing.T) {
 }
 
 func TestWorkerHelperUsesOfficialRayTopology(t *testing.T) {
-	for _, want := range []string{"--network host", "--device nvidia.com/gpu=all", "ray[default]>=2.9", "ray start --block", "NCCL_SOCKET_IFNAME", "--num-gpus=1"} {
+	for _, want := range []string{"--network host", "--device nvidia.com/gpu=all", "ray[default]>=2.9", "ray start --block", "NCCL_SOCKET_IFNAME", "--num-gpus=1", "model-progress", "*.incomplete", "Model loading took"} {
 		if !strings.Contains(workerScript, want) {
 			t.Fatalf("worker helper missing %q", want)
 		}

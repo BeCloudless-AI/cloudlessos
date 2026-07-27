@@ -54,13 +54,14 @@ Configure the bucket credentials and signing-key backup, commit the release,
 and push the current branch. Then run exactly one production command:
 
 ```bash
-export CLOUDLESS_ARCHIVE_SECRET=/secure/offline-backup/cloudless-archive-secret.asc
-export AWS_ACCESS_KEY_ID=...
-export AWS_SECRET_ACCESS_KEY=...
-export CLOUDLESS_R2_ENDPOINT=https://ACCOUNT_ID.r2.cloudflarestorage.com
-export CLOUDLESS_R2_BUCKET=cloudless-updates
+bash distro/scripts/configure-release-env.sh # one time per release workstation
 bash distro/scripts/release.sh 0.2.1 stable
 ```
+
+The one-time setup stores these values in `~/.config/cloudless/release.env` with
+mode `0600`. The release command loads only the five supported settings from that
+file without evaluating it as shell code. Set `CLOUDLESS_RELEASE_ENV` to use a
+different private path. Never put this file in the repository.
 
 The command refuses dirty or unpushed tracked source. It runs the Go, browser
 JavaScript, AMD64, ARM64, package-content, signed-repository, and atomic

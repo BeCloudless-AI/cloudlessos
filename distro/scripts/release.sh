@@ -5,6 +5,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 VERSION="${1:-}"
 CHANNEL="${2:-stable}"
+source "$ROOT/distro/scripts/release-env.sh"
+load_cloudless_release_env
 SECRET_KEY="${CLOUDLESS_ARCHIVE_SECRET:-/mnt/d/CloudlessSecrets/cloudless-archive-secret.asc}"
 
 usage() {
@@ -87,6 +89,8 @@ run_publisher() {
 echo "==> Go tests"
 docker run --rm -v "$ROOT:/src" -w /src/orchestrator \
     cloudless-release-builder go test ./...
+echo "==> Release environment loader"
+bash "$ROOT/distro/scripts/test-release-env.sh"
 echo "==> Browser JavaScript syntax"
 docker run --rm -v "$ROOT:/src" -w /src \
     node:22-bookworm node distro/scripts/test-web-js.js

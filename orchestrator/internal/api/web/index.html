@@ -2978,7 +2978,7 @@
       </div>
     </div>
     <form class="ask" id="hero-ask" autocomplete="off">
-      <span class="ask-brand"><svg class="cl-mark" aria-hidden="true"><use href="#cl-star"/></svg><span><b>Ask Cloudless</b><small id="ask-status">Private · ready on this machine</small></span></span>
+      <span class="ask-brand"><svg class="cl-mark" aria-hidden="true"><use href="#cl-star"/></svg><span><b>Ask Cloudless</b><small id="ask-status">Powered by Hermes Agent</small></span></span>
       <input id="hero-ask-input" placeholder="Ask about your models, apps, or this machine…" autocomplete="off">
       <button class="ask-go" type="submit" title="Ask Cloudless" aria-label="Ask Cloudless"><svg class="ui-icon" aria-hidden="true"><use href="#ui-arrow-right"/></svg></button>
     </form>
@@ -3118,7 +3118,7 @@
 <div id="asst" class="asst hidden" role="dialog" aria-label="Cloudless Agent">
   <div class="asst-head">
     <span class="asst-brand-mark"><svg class="cl-mark asst-mark" aria-hidden="true"><use href="#cl-star"/></svg></span>
-    <div class="asst-ttl">Cloudless Agent<span class="asst-sub"><i id="asst-status-dot"></i><span id="asst-status">Private · powered by Hermes</span></span></div>
+    <div class="asst-ttl">Cloudless Agent<span class="asst-sub"><i id="asst-status-dot"></i><span id="asst-status">Powered by Hermes Agent</span></span></div>
     <div class="asst-head-actions">
       <button class="asst-tool" id="asst-clear" title="New conversation" aria-label="Start a new conversation"><svg class="ui-icon" aria-hidden="true"><use href="#ui-trash"/></svg></button>
       <button class="asst-tool asst-hermes" id="asst-hermes" title="Open Hermes dashboard" aria-label="Open Hermes dashboard"><svg class="ui-icon" aria-hidden="true"><use href="#ui-assistant"/></svg></button>
@@ -3913,9 +3913,9 @@ function applyEngineUI() {
   const ghost = document.getElementById('open-full-chat'); if (ghost) ghost.classList.toggle('engine-hidden', unavailable);
   document.getElementById('home-apps')?.classList.toggle('engine-hidden', unavailable);
   const askStatus = document.getElementById('ask-status');
-  if (askStatus) askStatus.textContent = engineUnloaded ? 'No model loaded' : (starting ? (engineExecutionMode === 'cluster' ? 'Two-Spark model is starting…' : 'Local model is starting…') : (engineExecutionMode === 'cluster' ? 'Private · running across two Sparks' : 'Private · ready on this machine'));
+  if (askStatus) askStatus.textContent = 'Powered by Hermes Agent';
   const agentStatus = document.getElementById('asst-status');
-  if (agentStatus) agentStatus.textContent = engineUnloaded ? 'Load a model to start the agent' : (starting ? (engineExecutionMode === 'cluster' ? 'Waiting for both Sparks' : 'Waiting for the local model') : (engineExecutionMode === 'cluster' ? 'Private · Hermes across two Sparks' : 'Private · powered by Hermes'));
+  if (agentStatus) agentStatus.textContent = 'Powered by Hermes Agent';
   document.getElementById('asst-status-dot')?.classList.toggle('wait', unavailable);
   const di = document.getElementById('dock-inference'); if (di) di.classList.toggle('running', engineReady);
 }

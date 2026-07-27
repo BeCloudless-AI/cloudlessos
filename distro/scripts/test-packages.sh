@@ -35,6 +35,7 @@ grep -Fq 'capabilities.BuildVersion=$VERSION' "$DISTRO/scripts/build-packages.sh
 orchestrator_deb="$(find "$DISTRO/out/packages" -maxdepth 1 -type f -name 'cloudless-orchestrator_*_amd64.deb' -print -quit)"
 test -n "$orchestrator_deb"
 dpkg-deb -f "$orchestrator_deb" Depends | grep -Eq '(^|, )gpgv(,|$)'
+dpkg-deb -f "$orchestrator_deb" Depends | grep -Eq '(^|, )xdotool(,|$)'
 dpkg-deb -c "$orchestrator_deb" |
     grep -F './usr/share/cloudless/cloudless-archive-keyring.pgp' >/dev/null
 grep -Fq 'update-alternatives --set default.plymouth' \

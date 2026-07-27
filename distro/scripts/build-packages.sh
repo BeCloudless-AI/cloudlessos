@@ -45,7 +45,7 @@ finish_package() {
 }
 
 PKG="$WORK/cloudless-orchestrator"
-make_control "$PKG" cloudless-orchestrator "CloudlessOS local AI orchestrator" "docker.io | docker-ce, ca-certificates, gpgv, openssh-client, sshpass, avahi-utils, netplan.io, iputils-ping"
+make_control "$PKG" cloudless-orchestrator "CloudlessOS local AI orchestrator" "docker.io | docker-ce, ca-certificates, gpgv, openssh-client, sshpass, avahi-utils, netplan.io, iputils-ping, xdotool"
 install -Dm0755 "$WORK/cloudlessd" "$PKG/usr/lib/cloudless/cloudlessd"
 install -Dm0644 "$DISTRO/release/keys/cloudless-archive-keyring.pgp" \
     "$PKG/usr/share/cloudless/cloudless-archive-keyring.pgp"

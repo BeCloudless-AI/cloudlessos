@@ -84,8 +84,20 @@ func TestEmbeddedManifestDefinesOptionalCapabilityPacks(t *testing.T) {
 }
 
 func TestSingleApplicationCapabilitiesUseProductNames(t *testing.T) {
+	doc, err := ParseManifest(embeddedManifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	packs := make(map[string]Pack, len(doc.Packs))
+	for _, pack := range doc.Packs {
+		packs[pack.ID] = pack
+	}
+	apps := make(map[string]App, len(doc.Apps))
+	for _, app := range doc.Apps {
+		apps[app.ID] = app
+	}
 	for id, want := range map[string]string{"search": "SearXNG", "research": "Perplexica", "workflows": "n8n"} {
-		pack, ok := GetPack(id)
+		pack, ok := packs[id]
 		if !ok {
 			t.Fatalf("missing capability %s", id)
 		}
@@ -94,7 +106,7 @@ func TestSingleApplicationCapabilitiesUseProductNames(t *testing.T) {
 		}
 	}
 	for id, want := range map[string]string{"searxng": "SearXNG", "perplexica": "Perplexica", "n8n": "n8n", "qdrant": "Qdrant", "embeddings": "Hugging Face TEI"} {
-		app, ok := Get(id)
+		app, ok := apps[id]
 		if !ok {
 			t.Fatalf("missing app %s", id)
 		}

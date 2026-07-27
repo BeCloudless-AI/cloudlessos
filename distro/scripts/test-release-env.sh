@@ -21,6 +21,14 @@ CLOUDLESS_RELEASE_ENV="$file" load_cloudless_release_env
 [ "$AWS_ACCESS_KEY_ID" = "test-access" ]
 [ "$AWS_SECRET_ACCESS_KEY" = "test-secret" ]
 
+printf '%s\n' \
+    $'CLOUDLESS_R2_ENDPOINT=\xEF\xBB\xBF"https://quoted.example.invalid"' \
+    "CLOUDLESS_R2_BUCKET='quoted-bucket'" > "$file"
+chmod 600 "$file"
+CLOUDLESS_RELEASE_ENV="$file" load_cloudless_release_env
+[ "$CLOUDLESS_R2_ENDPOINT" = "https://quoted.example.invalid" ]
+[ "$CLOUDLESS_R2_BUCKET" = "quoted-bucket" ]
+
 chmod 644 "$file"
 if CLOUDLESS_RELEASE_ENV="$file" load_cloudless_release_env 2>/dev/null; then
     echo "Public release environment permissions were accepted." >&2

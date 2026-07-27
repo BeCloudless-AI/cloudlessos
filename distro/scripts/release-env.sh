@@ -19,6 +19,7 @@ load_cloudless_release_env() {
     local line key value
     while IFS= read -r line || [ -n "$line" ]; do
         line="${line%$'\r'}"
+        line="${line#$'\xEF\xBB\xBF'}"
         case "$line" in ""|'#'*) continue ;; esac
         key="${line%%=*}"
         value="${line#*=}"
@@ -26,6 +27,14 @@ load_cloudless_release_env() {
             echo "Invalid release environment entry in $file" >&2
             return 1
         }
+        # Editors and copy/paste can introduce a UTF-8 BOM immediately after
+        # '='. Also accept conventional matching quotes without evaluating the
+        # file as shell code.
+        value="${value#$'\xEF\xBB\xBF'}"
+        if [[ "$value" == \"*\" && "$value" == *\" ]] ||
+           [[ "$value" == \'*\' && "$value" == *\' ]]; then
+            value="${value:1:${#value}-2}"
+        fi
         case "$key" in
             CLOUDLESS_ARCHIVE_SECRET|CLOUDLESS_R2_ENDPOINT|CLOUDLESS_R2_BUCKET|AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY)
                 export "$key=$value"

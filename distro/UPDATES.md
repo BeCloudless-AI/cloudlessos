@@ -75,6 +75,17 @@ publication, rerun the same `release.sh` command: it cryptographically verifies
 and resumes that generation only when the version, commit, source artifacts,
 and signatures still match.
 
+If signing already completed and only the upload failed, skip all build gates
+and resume the exact signed generation with:
+
+```bash
+bash distro/scripts/publish-signed-release.sh 0.2.2 stable
+```
+
+This command loads the same private environment file, validates its endpoint,
+checks the requested version and channel, and lets the publisher verify every
+local signature and hash before uploading. It never rebuilds or signs packages.
+
 Release builds compare each candidate package with the currently published signed
 baseline. Only packages whose installed contents changed receive the new version and are
 added to the repository. For example, an interface-only `0.1.2` release updates

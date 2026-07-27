@@ -25,6 +25,7 @@ import (
 	"github.com/cloudless/orchestrator/internal/engine"
 	"github.com/cloudless/orchestrator/internal/hardware"
 	"github.com/cloudless/orchestrator/internal/jobs"
+	"github.com/cloudless/orchestrator/internal/localrecipes"
 	"github.com/cloudless/orchestrator/internal/manifest"
 	"github.com/cloudless/orchestrator/internal/places"
 	"github.com/cloudless/orchestrator/internal/power"
@@ -66,6 +67,7 @@ type Server struct {
 	engineJobs   map[string]context.CancelFunc
 
 	installMu sync.Mutex // one catalog/pack transaction may change containers at a time
+	recipes   *localrecipes.Store
 }
 
 // NewServer constructs a Server backed by the given engine, state store and manifests.
@@ -73,7 +75,7 @@ func NewServer(eng engine.Engine, st *state.Store, mf *manifest.Store, mfModels 
 	return &Server{
 		eng: eng, jobs: jobs.NewManager(), state: st, manifest: mf, mfModels: mfModels,
 		mfDiff: mfDiff, usage: us, power: pw, shutdown: systemShutdown, virtualKey: emitSystemVirtualKey,
-		shutdownDelay: time.Second,
+		shutdownDelay: time.Second, recipes: localrecipes.New(st.Dir()),
 	}
 }
 
@@ -151,6 +153,14 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/models/download", s.modelDownload)
 	mux.HandleFunc("POST /api/models/download/cancel", s.modelDownloadCancel)
 	mux.HandleFunc("POST /api/models/uninstall", s.modelUninstall)
+	mux.HandleFunc("GET /api/recipes", s.localRecipesList)
+	mux.HandleFunc("POST /api/recipes", s.localRecipeCreate)
+	mux.HandleFunc("POST /api/recipes/import", s.localRecipeImport)
+	mux.HandleFunc("DELETE /api/recipes/{id}", s.localRecipeDelete)
+	mux.HandleFunc("PUT /api/recipes/{id}", s.localRecipeUpdate)
+	mux.HandleFunc("GET /api/recipes/{id}/source", s.localRecipeSource)
+	mux.HandleFunc("POST /api/recipes/{id}/run", s.localRecipeRun)
+	mux.HandleFunc("POST /api/recipes/{id}/stop", s.localRecipeStop)
 	mux.HandleFunc("GET /api/diffusion", s.diffusionList)
 	mux.HandleFunc("GET /api/diffusion/downloads", s.diffusionDownloads)
 	mux.HandleFunc("POST /api/diffusion/{id}/download", s.diffusionDownload)
@@ -290,6 +300,9 @@ func (s *Server) activeEngine(ctx context.Context) string {
 		if running[e.ContainerName()] {
 			return e.ID
 		}
+	}
+	if current := s.state.Get(); current.LocalRecipeID != "" && !current.EngineUnloaded && running["cloudless-cluster-engine-proxy"] {
+		return "vllm"
 	}
 	return ""
 }

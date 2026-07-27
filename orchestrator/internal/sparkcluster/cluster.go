@@ -1159,13 +1159,40 @@ func shellJoin(args []string) string {
 // ProxySpec preserves the cloudless-ai Docker alias for apps while rank 0 uses
 // host networking for NCCL and native vLLM multi-node rendezvous traffic.
 func ProxySpec() engine.RunSpec {
-	return engine.RunSpec{
+	return ProxySpecPort(8000)
+}
+
+// ProxySpecPort preserves the stable cloudless-ai alias for a reviewed local
+// recipe whose OpenAI-compatible server listens on a different host port.
+func ProxySpecPort(port int) engine.RunSpec {
+	return ProxySpecTarget("host.docker.internal", port)
+}
+
+// ProxySpecTarget preserves the stable cloudless-ai alias while allowing a
+// local recipe to define where its OpenAI-compatible server is listening.
+func ProxySpecTarget(host string, port int) engine.RunSpec {
+	if port < 1 || port > 65535 {
+		port = 8000
+	}
+	if host == "" {
+		host = "host.docker.internal"
+	}
+	spec := engine.RunSpec{
 		Name: "cloudless-cluster-engine-proxy", Image: "alpine/socat:latest",
 		Network: "cloudless", NetworkAlias: "cloudless-ai",
 		ExtraHosts: []string{"host.docker.internal:host-gateway"},
-		Args:       []string{"tcp-listen:8000,fork,reuseaddr", "tcp-connect:host.docker.internal:8000"},
+		Args:       []string{"tcp-listen:8000,fork,reuseaddr", fmt.Sprintf("tcp-connect:%s:%d", host, port)},
 	}
+	if port != 8000 {
+		spec.Ports = map[int]int{8000: 8000}
+	}
+	return spec
 }
+
+// SSHIdentityPaths returns the restricted identity installed during cluster
+// enrollment. Local recipe runners use it through a private generated SSH
+// config; credentials are never copied into recipe metadata.
+func SSHIdentityPaths() (string, string) { return keyPath, knownPath }
 
 func Disconnect(ctx context.Context, passwords map[string]string) error {
 	mutationMu.Lock()

@@ -94,6 +94,7 @@ type State struct {
 	Model          string                  `json:"model,omitempty"`          // selected model ("" = catalog default)
 	EngineUnloaded bool                    `json:"engineUnloaded,omitempty"` // selected model stays cached but no inference engine holds accelerator memory
 	ExecutionMode  string                  `json:"executionMode,omitempty"`  // local | cluster; empty is local
+	LocalRecipeID  string                  `json:"localRecipeId,omitempty"`  // reviewed local recipe owning the active engine
 	Pinned         []string                `json:"pinned,omitempty"`         // app ids pinned to the dashboard "fast launch"
 	PinnedSet      bool                    `json:"pinnedSet,omitempty"`      // user has customized pins (else use catalog default)
 	LocalNet       bool                    `json:"localNet"`                 // serve apps on the local network (LAN)
@@ -232,6 +233,16 @@ func (s *Store) SetEngineUnloaded(unloaded bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.st.EngineUnloaded = unloaded
+	return s.save()
+}
+
+// SetLocalRecipe records the reviewed local recipe which owns the inference
+// endpoint. Empty values clear recipe ownership and return provisioning to the
+// regular Cloudless engine lifecycle.
+func (s *Store) SetLocalRecipe(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.st.LocalRecipeID = id
 	return s.save()
 }
 

@@ -40,6 +40,10 @@ func (s *Server) GatewayHandler() http.Handler {
 	engineProxy.Director = func(req *http.Request) {
 		orig(req)
 		req.Host = engineTarget.Host
+		apiPath, _ := s.activeRecipeGatewaySettings()
+		if apiPath != "" && apiPath != "/v1" && strings.HasPrefix(req.URL.Path, "/v1") {
+			req.URL.Path = strings.TrimRight(apiPath, "/") + strings.TrimPrefix(req.URL.Path, "/v1")
+		}
 		req.Header.Del("Authorization") // the engine doesn't need (and shouldn't see) the user's key
 	}
 	engineProxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
@@ -70,7 +74,8 @@ func (s *Server) GatewayHandler() http.Handler {
 		if !ok {
 			return
 		}
-		rewriteModel(r) // let callers use any model name; the engine serves exactly one
+		_, modelName := s.activeRecipeGatewaySettings()
+		rewriteModel(r, modelName) // let callers use any model name; the engine serves exactly one
 		s.serveGatewayProxy(w, r, id, state.APIKeyScopeModel, engineProxy)
 	})
 	agent := func(w http.ResponseWriter, r *http.Request) {
@@ -228,7 +233,24 @@ func bearerToken(r *http.Request) string {
 // rewriteModel forces the request body's "model" to the engine's served name, so a
 // caller can send any model id (e.g. the real HF id, or "gpt-4") and it just works.
 // Best-effort: on any parse issue the original body is preserved untouched.
-func rewriteModel(r *http.Request) {
+func (s *Server) activeRecipeGatewaySettings() (string, string) {
+	current := s.state.Get()
+	if current.LocalRecipeID != "" && !current.EngineUnloaded {
+		if recipe, ok, err := s.recipes.Get(current.LocalRecipeID); err == nil && ok {
+			path, name := recipe.Engine.APIPath, recipe.Engine.ServedModelName
+			if path == "" {
+				path = "/v1"
+			}
+			if name == "" {
+				name = servedModelName
+			}
+			return path, name
+		}
+	}
+	return "/v1", servedModelName
+}
+
+func rewriteModel(r *http.Request, activeModel string) {
 	if r.Method != http.MethodPost || r.Body == nil {
 		return
 	}
@@ -245,7 +267,7 @@ func rewriteModel(r *http.Request) {
 	var m map[string]any
 	if json.Unmarshal(body, &m) == nil {
 		if _, has := m["model"]; has {
-			m["model"] = servedModelName
+			m["model"] = activeModel
 			if nb, err := json.Marshal(m); err == nil {
 				body = nb
 			}

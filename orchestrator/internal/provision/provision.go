@@ -58,6 +58,13 @@ func Run(ctx context.Context, eng engine.Engine, st *state.Store, mf *manifest.S
 			logf("manifest channel: " + ch)
 		}
 	}
+	// A reviewed local recipe owns its own pinned runtime and the stable
+	// cloudless-ai endpoint. Do not replace it with the generic catalog command
+	// after cloudlessd or the host restarts.
+	if current := st.Get(); current.LocalRecipeID != "" && !current.EngineUnloaded {
+		logf("local recipe " + current.LocalRecipeID + " owns the active inference runtime")
+		return
+	}
 
 	// Engines: pull all images (either is ready); the slow pulls need no lock.
 	for _, e := range catalog.Engines() {

@@ -113,6 +113,31 @@
   /* numbers stay tabular so live metrics don't jitter */
   #clock, #big-clock, .us-val, .im-val, .key-meta, .im-ringval, .inf-hero-val { font-variant-numeric: tabular-nums; }
 
+  /* Compact system captions use a technical voice; descriptive copy stays Roboto. */
+  #clock, #big-clock,
+  .hero-date, .hero-zone,
+  .nvidia-brand-name, .nav-group, .key-scope, .cfg-lang,
+  .hw-link-k, .mdl-tag, .mdl-meta, .md-k, .md-adv-badge, .md-adv-lbl,
+  .inf-head .ih-state, .inf-hwhead, .inf-hwhead span, .inf-node-stat small,
+  .inf-hero-cap, .inf-time, .im-label, .us-time, .us-tile .us-label,
+  .ku-lifetime, .ku-state, .ku-stat-label, .chart-tip span,
+  .card-live, .gpu-overview-copy small, .gpu-overview-state,
+  .gpu-overview .stat-row > span, .gpu-overview-stat small,
+  .gpu-name .idx, .gpu .stat-row > span, #sys-body .stat-row > span,
+  .ec-runs, .inf-page-eyebrow, .inf-state-pill, .doctor-state,
+  .machine-fact-label, .machine-gpu-index, .machine-gpu-metric span,
+  .machine-driver-badge, .machine-driver-fact span,
+  .cluster-field label, .display-resolution-badge small, .display-field label,
+  .ec-active, .api-service-state, .api-endpoint-label,
+  .tour-path, .tour-count, .pack-fact span, .pack-component-state,
+  .ac-badge, .msg-label, .asst-compose-meta,
+  .ask-brand small, .hero-model-copy small,
+  .mm-machine small, .mm-machine-label, .mm-filter-label, .mm-chip,
+  .md-eyebrow, .recipe-trust, .recipe-review-card span,
+  .mm-active-kicker, .model-confirm-fact small {
+    font-family: 'Roboto Mono', ui-monospace, SFMono-Regular, Consolas, monospace;
+  }
+
   /* ---------- wallpaper: soft iridescent gradient mesh (the Cloudless brand) ---------- */
   .wall { position: fixed; inset: 0; z-index: -2; background: var(--w-base); overflow: hidden; }
   .wall::before {

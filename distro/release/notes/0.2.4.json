@@ -4,9 +4,10 @@
   "changes": [
     "Unify the active model and live metrics into one aligned desktop control while hiding unavailable metrics during model loading.",
     "Keep the desktop shelf visible during AI startup and clearly dim pinned applications until the engine is ready.",
-    "Move Places into a centered shelf menu with a clear separator between system shortcuts and pinned applications.",
+    "Simplify the desktop shelf by removing its redundant label and move Places into a centered menu with a clear separator from pinned applications.",
     "Present multi-Spark hardware as an aggregate summary with expandable per-device telemetry and clearer storage usage.",
     "Align the Ask Cloudless control, active-model capsule, hardware, and desktop spacing into a more consistent responsive grid.",
+    "Adopt locally bundled Roboto and Roboto Mono typography and the official vector Cloudless wordmark across the desktop and first-launch experience.",
     "Expand Profile from a small hard-coded list to 68 alphabetized regions, including United Arab Emirates.",
     "Synchronize single-timezone region choices such as United Arab Emirates with the host timezone and render the Cloudless clock explicitly in that timezone.",
     "Prefer Ubuntu's active timezone link over stale legacy timezone metadata so Settings and the desktop clock remain accurate after a change."

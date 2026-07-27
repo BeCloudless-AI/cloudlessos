@@ -35,12 +35,10 @@
   })();
 </script>
 <style>
-  @font-face { font-family: 'Red Hat Mono'; font-weight: 400; font-display: swap;
-    src: url('vendor/fonts/red-hat-mono-latin-400-normal.woff2') format('woff2'); }
-  @font-face { font-family: 'Red Hat Mono'; font-weight: 500; font-display: swap;
-    src: url('vendor/fonts/red-hat-mono-latin-500-normal.woff2') format('woff2'); }
-  @font-face { font-family: 'Red Hat Mono'; font-weight: 700; font-display: swap;
-    src: url('vendor/fonts/red-hat-mono-latin-700-normal.woff2') format('woff2'); }
+  @font-face { font-family: 'Roboto'; font-style: normal; font-weight: 100 900; font-display: swap;
+    src: url('vendor/fonts/roboto-latin-variable.woff2') format('woff2'); }
+  @font-face { font-family: 'Roboto Mono'; font-style: normal; font-weight: 100 700; font-display: swap;
+    src: url('vendor/fonts/roboto-mono-latin-variable.woff2') format('woff2'); }
 
   :root {
     /* ---- Cloudless: soft iridescent wallpaper + frosted glass (UmbrelOS-style) ----
@@ -107,7 +105,7 @@
   html, body { height: 100%; margin: 0; }
   body {
     color: var(--ink); background: var(--bg);
-    font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+    font-family: 'Roboto', system-ui, -apple-system, 'Segoe UI', sans-serif;
     font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
   }
   ::selection { background: var(--blue-soft); }
@@ -164,10 +162,15 @@
     padding: 0 20px; font-size: 12px; color: var(--ink);
     background: var(--card); border-bottom: 1px solid var(--hair);
   }
-  .menubar .brand { display: flex; align-items: center; gap: 8px; font-weight: 600; letter-spacing: 0.1px; font-size: 13.5px; }
+  .menubar .brand { display: flex; align-items: center; gap: 10px; }
   /* shared brand sparkle — painted with the iridescent Cloudless gradient */
   .cl-mark { display: block; fill: url(#cl-star-grad); }
-  .menubar .brand .mark { width: 12px; height: 18px; flex: none; }
+  .menubar .brand-wordmark {
+    width: 68px; height: 23px; flex: none; display: block; background: var(--brand-mark, var(--ink));
+    -webkit-mask: url('vendor/cloudless-wordmark.svg') center / contain no-repeat;
+    mask: url('vendor/cloudless-wordmark.svg') center / contain no-repeat;
+    transition: background-color .2s ease;
+  }
   .nvidia-brand {
     display: none; align-items: center; gap: 5px; margin-left: 3px; padding-left: 11px;
     border-left: 1px solid var(--line-2); color: #76b900; opacity: .78;
@@ -285,17 +288,17 @@
     color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, transparent);
     border: 1px solid color-mix(in srgb, var(--warn) 32%, transparent); }
   .adm-k { width: 110px; color: var(--muted); flex: none; }
-  .adm-v { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; background: var(--card);
+  .adm-v { font-family: 'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; background: var(--card);
     border: 1px solid var(--hair); border-radius: 6px; padding: 2px 8px; color: var(--ink); user-select: all; }
   /* API access page */
   .code-box { margin-top: 12px; background: var(--panel-2); border: 1px solid var(--hair); border-radius: 10px; overflow-x: auto; }
-  .code-box pre { margin: 0; padding: 13px 15px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  .code-box pre { margin: 0; padding: 13px 15px; font-family: 'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
     font-size: 12px; line-height: 1.55; color: var(--ink-2); white-space: pre; }
   .key-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--hair); }
   .key-row:last-child { border-bottom: none; }
   .key-main { display: flex; align-items: center; gap: 9px; min-width: 0; }
   .key-name { font-weight: 600; font-size: 13.5px; color: var(--ink); }
-  .key-prefix { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; color: var(--muted); }
+  .key-prefix { font-family: 'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; color: var(--muted); }
   .key-meta { margin-left: auto; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
   .key-scope { padding: 3px 7px; border-radius: 99px; color: var(--blue); background: var(--blue-soft); font-size: 9px; font-weight: 760; text-transform: uppercase; letter-spacing: .35px; }
   .app-head a { margin-left: auto; }
@@ -485,7 +488,7 @@
     border-radius: 14px; background: var(--panel-2); border: 1px solid var(--hair); }
   .md-hd { min-width: 0; flex: 1; }
   .md-nm { font-size: 21px; font-weight: 800; letter-spacing: -0.3px; color: var(--ink); line-height: 1.1; }
-  .md-sub { font-size: 12px; color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; margin-top: 4px; word-break: break-all; }
+  .md-sub { font-size: 12px; color: var(--muted); font-family: 'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, monospace; margin-top: 4px; word-break: break-all; }
   .md-caps { margin-top: 10px; }
   .md-desc { color: var(--ink-2); font-size: 14px; line-height: 1.65; margin: 0 0 20px; }
   .md-banner { display: flex; align-items: center; gap: 9px; font-size: 13px; font-weight: 600; line-height: 1.45;
@@ -639,7 +642,7 @@
   .ku-icon .ui-icon { width: 14px; height: 14px; }
   .ku-identity { min-width: 0; flex: 1; }
   .ku-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); font-size: 12.5px; font-weight: 740; }
-  .ku-prefix { display: block; margin-top: 1px; overflow: hidden; text-overflow: ellipsis; color: var(--faint); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 9.5px; }
+  .ku-prefix { display: block; margin-top: 1px; overflow: hidden; text-overflow: ellipsis; color: var(--faint); font-family: 'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 9.5px; }
   .ku-state { flex: none; padding: 3px 7px; border-radius: 999px; color: var(--ok); background: color-mix(in srgb, var(--ok) 11%, transparent); font-size: 9px; font-weight: 750; }
   .ku-state.idle { color: var(--muted); background: var(--panel-2); }
   .ku-stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 11px 14px; padding-top: 12px; }
@@ -1016,7 +1019,7 @@
   .cluster-peer-copy { min-width: 0; flex: 1; }
   .cluster-peer-copy b, .cluster-peer-copy span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .cluster-peer-copy b { font-size: 11.5px; }
-  .cluster-peer-copy span { margin-top: 2px; color: var(--muted); font: 9.5px ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .cluster-peer-copy span { margin-top: 2px; color: var(--muted); font: 9.5px 'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, monospace; }
   .cluster-discovery { display: grid; grid-template-columns: minmax(220px, .82fr) minmax(260px, 1.18fr); gap: 16px; }
   .cluster-discovery-stage { position: relative; min-height: 224px; padding: 16px; display: grid; place-items: center; border: 1px solid color-mix(in srgb, var(--blue) 19%, var(--hair)); border-radius: 16px; background: radial-gradient(circle at 50% 45%, color-mix(in srgb, var(--blue) 8%, transparent), transparent 58%), var(--panel-2); overflow: hidden; isolation: isolate; }
   .cluster-discovery-stage::after { content: ''; position: absolute; inset: auto 18px 14px; height: 1px; background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--blue) 24%, var(--hair)), transparent); }
@@ -1245,7 +1248,7 @@
   .machine-place-icon { width: 38px; height: 38px; flex: none; display: grid; place-items: center; border: 1px solid var(--hair); border-radius: 10px; background: var(--control); font-size: 17px; }
   .machine-place-copy { min-width: 0; flex: 1; }
   .machine-place-name { display: block; font-size: 12.5px; font-weight: 740; }
-  .machine-place-path { display: block; margin-top: 3px; overflow: hidden; color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 9.5px; text-overflow: ellipsis; white-space: nowrap; }
+  .machine-place-path { display: block; margin-top: 3px; overflow: hidden; color: var(--muted); font-family: 'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 9.5px; text-overflow: ellipsis; white-space: nowrap; }
   .machine-place-go { width: 26px; height: 26px; flex: none; display: grid; place-items: center; border-radius: 8px; color: var(--muted); background: var(--control); transition: color .16s, transform .16s; }
   .machine-place-go .ui-icon { width: 13px; height: 13px; }
   button.machine-place:hover .machine-place-go { color: var(--blue); transform: translateX(2px); }
@@ -1364,7 +1367,7 @@
   .key-dialog-secret code {
     display: block; width: 100%; padding: 10px 11px; overflow-x: auto; white-space: nowrap; user-select: all;
     border: 1px solid var(--hair); border-radius: 9px; background: var(--card-strong); color: var(--ink);
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px;
+    font-family: 'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px;
   }
   .key-dialog-note { margin-top: 9px; display: flex; align-items: flex-start; gap: 7px; color: var(--warn); font-size: 10.5px; line-height: 1.45; }
   .key-dialog-note .ui-icon { width: 13px; height: 13px; margin-top: 1px; flex: none; }
@@ -1804,7 +1807,7 @@
   .msg.bot h3, .msg.bot h4 { margin: 2px 0 7px; font-size: 13px; }
   .msg.bot ul, .msg.bot ol { margin: 5px 0 9px; padding-left: 19px; }
   .msg.bot li { margin: 3px 0; }
-  .msg.bot code { padding: 1px 4px; border: 1px solid var(--hair); border-radius: 5px; background: var(--control); font: 11px/1.45 'Red Hat Mono', monospace; }
+  .msg.bot code { padding: 1px 4px; border: 1px solid var(--hair); border-radius: 5px; background: var(--control); font: 11px/1.45 'Roboto Mono', monospace; }
   .msg.bot pre { margin: 9px 0; padding: 10px 11px; overflow-x: auto; border: 1px solid var(--hair); border-radius: 10px; background: color-mix(in srgb, var(--ink) 7%, var(--control)); }
   .msg.bot pre code { padding: 0; border: 0; background: none; white-space: pre; }
   .msg-tools { display: flex; flex-direction: column; gap: 5px; max-width: 100%; margin: 7px 0 0 3px; }
@@ -2174,9 +2177,8 @@
     background: color-mix(in srgb, var(--card-strong) 88%, transparent);
     border-bottom: 1px solid var(--hair); box-shadow: 0 1px 0 rgba(255,255,255,.35);
   }
-  .menubar .brand { gap: 10px; font-size: 15px; font-weight: 750; letter-spacing: -.25px; text-transform: none; }
-  .menubar .brand .mark { width: 13px; height: 22px; }
-  .menubar .cl-mark { fill: var(--brand-mark); transition: fill .2s ease; }
+  .menubar .brand { gap: 10px; }
+  .menubar .brand-wordmark { width: 72px; height: 24px; }
   .menubar .mi {
     min-height: 30px; padding: 0 10px; gap: 7px; border: 1px solid var(--hair);
     border-radius: 999px; background: var(--panel-2); color: var(--ink-2);
@@ -2336,12 +2338,6 @@
     -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.45); backdrop-filter: blur(var(--glass-blur)) saturate(1.45);
     transform: translateX(-50%); animation: none !important;
   }
-  .apps-dock-label {
-    min-width: 63px; align-self: stretch; padding: 0 10px 0 7px; display: flex; flex-direction: column;
-    justify-content: center; gap: 2px; border-right: 1px solid var(--hair);
-  }
-  .apps-dock-label small { color: var(--muted); font-size: 8px; font-weight: 760; letter-spacing: .7px; text-transform: uppercase; }
-  .apps-dock-label b { color: var(--ink); font-size: 11px; line-height: 1.15; }
   .apps-sec .pad { transition: opacity .2s, filter .2s; }
   .apps-sec.engine-loading .pad { opacity: .34; filter: grayscale(.82) saturate(.28); pointer-events: none; }
   .apps-sec.engine-loading .pad .tile { transform: none; }
@@ -2662,7 +2658,7 @@
   .recipe-desc { margin-top: 6px; color: var(--muted); font-size: 11.5px; line-height: 1.5; }
   .recipe-facts { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 11px; }
   .recipe-fact { padding: 5px 8px; border: 1px solid var(--hair); border-radius: 8px; color: var(--muted); font-size: 9.5px; }
-  .recipe-source { margin-top: 10px; color: var(--faint); font: 9.5px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; }
+  .recipe-source { margin-top: 10px; color: var(--faint); font: 9.5px/1.4 'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; }
   .recipe-side { min-width: 190px; display: grid; gap: 8px; justify-items: stretch; }
   .recipe-side select { min-height: 36px; border: 1px solid var(--line); border-radius: 9px; padding: 0 9px; background: var(--control); color: var(--ink); font: inherit; font-size: 10.5px; }
   .recipe-actions { display: flex; gap: 7px; justify-content: flex-end; }
@@ -2713,7 +2709,7 @@
   .recipe-builder-field.full { grid-column: 1 / -1; }
   .recipe-builder-field label { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; color: var(--ink-2); font-size: 10.5px; font-weight: 700; }
   .recipe-builder-field label small { color: var(--faint); font-size: 8.5px; font-weight: 600; }
-  .recipe-builder-field textarea { min-height: 86px; resize: vertical; font-family: ui-monospace,SFMono-Regular,Menlo,monospace; font-size: 10px; line-height: 1.5; }
+  .recipe-builder-field textarea { min-height: 86px; resize: vertical; font-family: 'Roboto Mono',ui-monospace,SFMono-Regular,Menlo,monospace; font-size: 10px; line-height: 1.5; }
   .recipe-builder-field textarea.tall { min-height: 145px; }
   .recipe-builder-check { min-height: 42px; padding: 10px 12px; display: flex; align-items: center; gap: 9px; border: 1px solid var(--hair); border-radius: 10px; background: var(--control); color: var(--ink-2); font-size: 10.5px; }
   .recipe-builder-check input { width: 16px; height: 16px; accent-color: var(--blue); }
@@ -2988,7 +2984,6 @@
     .ask { grid-column: 1; align-items: center; }
     .ask::before { display: none; }
     .apps-sec { bottom: 82px; width: calc(100vw - 24px); max-width: none; min-height: 64px; padding: 6px; }
-    .apps-dock-label { min-width: 56px; padding-right: 8px; }
     .sec-act.apps-dock-all { width: 46px; height: 46px; }
     .tile { width: 52px; min-width: 52px; min-height: 50px; }
     .tile .ic { width: 44px; height: 44px; }
@@ -3057,7 +3052,6 @@
     .hero-metrics > span:last-child { display: none; }
     .ask input { font-size: 13px; }
     .card-head { margin-bottom: 15px; }
-    .apps-dock-label { display: none; }
     .pad { grid-template-columns: 1fr; }
     .set { flex-direction: column; }
     .set-sidebar { width: 100%; max-height: 120px; border-right: 0; border-bottom: 1px solid var(--hair); }
@@ -3179,7 +3173,7 @@
 </svg>
 
 <div class="menubar">
-  <div class="brand"><svg class="mark cl-mark" aria-hidden="true"><use href="#cl-star"/></svg> cloudless
+  <div class="brand"><span class="brand-wordmark" role="img" aria-label="Cloudless"></span>
     <span class="nvidia-brand" title="Powered by NVIDIA DGX Spark" aria-label="NVIDIA DGX Spark">
       <!-- NVIDIA brand icon from Simple Icons (CC0-1.0); NVIDIA is a trademark of NVIDIA Corporation. -->
       <svg class="nvidia-brand-logo" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.948 8.798v-1.43a6.7 6.7 0 0 1 .424-.018c3.922-.124 6.493 3.374 6.493 3.374s-2.774 3.851-5.75 3.851c-.398 0-.787-.062-1.158-.185v-4.346c1.528.185 1.837.857 2.747 2.385l2.04-1.714s-1.492-1.952-4-1.952a6.016 6.016 0 0 0-.796.035m0-4.735v2.138l.424-.027c5.45-.185 9.01 4.47 9.01 4.47s-4.08 4.964-8.33 4.964c-.37 0-.733-.035-1.095-.097v1.325c.3.035.61.062.91.062 3.957 0 6.82-2.023 9.593-4.408.459.371 2.34 1.263 2.73 1.652-2.633 2.208-8.772 3.984-12.253 3.984-.335 0-.653-.018-.971-.053v1.864H24V4.063zm0 10.326v1.131c-3.657-.654-4.673-4.46-4.673-4.46s1.758-1.944 4.673-2.262v1.237H8.94c-1.528-.186-2.73 1.245-2.73 1.245s.68 2.412 2.739 3.11M2.456 10.9s2.164-3.197 6.5-3.533V6.201C4.153 6.59 0 10.653 0 10.653s2.35 6.802 8.948 7.42v-1.237c-4.84-.6-6.492-5.936-6.492-5.936z"/></svg>
@@ -3247,7 +3241,6 @@
   <section class="home-cluster hidden" id="home-cluster" aria-live="polite"></section>
 
   <section class="apps-sec" id="home-apps">
-    <div class="apps-dock-label"><small>Desktop</small><b>Your apps</b></div>
     <div class="pad" id="pad"></div>
     <div class="places-launch-wrap">
       <button class="sec-act apps-dock-all apps-dock-places" id="open-places" type="button" title="Open a place" aria-label="Places" aria-expanded="false" aria-controls="places-quick"><svg class="ui-icon" aria-hidden="true"><use href="#ui-folder"/></svg><span>Places</span></button>

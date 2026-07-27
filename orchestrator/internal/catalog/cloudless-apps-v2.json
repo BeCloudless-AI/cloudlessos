@@ -255,7 +255,7 @@
       "verified": true,
       "preinstall": true,
       "service": false,
-      "hidden": true,
+      "hidden": false,
       "engine": false,
       "needsEngine": true,
       "network": "cloudless",
@@ -723,7 +723,7 @@
     },
     {
       "id": "searxng",
-      "name": "Private Search",
+      "name": "SearXNG",
       "description": "Search the web through a private local SearXNG instance.",
       "category": "Knowledge & research",
       "tagline": "Private web search for people and agents.",
@@ -743,7 +743,7 @@
     },
     {
       "id": "qdrant",
-      "name": "Knowledge Index",
+      "name": "Qdrant",
       "description": "Local vector database for private retrieval and long-term knowledge.",
       "category": "Knowledge & research",
       "tagline": "Store private embeddings and retrieval indexes.",
@@ -762,7 +762,7 @@
     },
     {
       "id": "embeddings",
-      "name": "Embedding Engine",
+      "name": "Hugging Face TEI",
       "description": "Local text embeddings for semantic search and RAG.",
       "category": "Knowledge & research",
       "tagline": "Turn documents into a searchable semantic index.",
@@ -783,7 +783,7 @@
     },
     {
       "id": "perplexica",
-      "name": "Cloudless Research",
+      "name": "Perplexica",
       "description": "Deep research across private search and the active Cloudless model.",
       "category": "Knowledge & research",
       "tagline": "Research a subject using local reasoning and private search.",
@@ -805,16 +805,17 @@
     },
     {
       "id": "n8n",
-      "name": "Cloudless Workflows",
+      "name": "n8n",
       "description": "Visual workflow automation connected to local AI.",
       "category": "Agents & automation",
       "tagline": "Build automations that use your local model.",
       "long": "n8n provides a visual workflow builder for scheduled jobs, APIs, databases and AI-powered automations.",
       "image": "n8nio/n8n:2.6.4",
       "ports": {"5678": 5678},
-      "env": {"N8N_HOST": "localhost", "N8N_PORT": "5678", "N8N_PROTOCOL": "http", "N8N_SECURE_COOKIE": "false", "GENERIC_TIMEZONE": "UTC"},
+      "env": {"N8N_HOST": "localhost", "N8N_PORT": "5678", "N8N_PROTOCOL": "http", "N8N_SECURE_COOKIE": "false", "N8N_PATH": "/apps/n8n/", "GENERIC_TIMEZONE": "UTC"},
       "volumes": {"cloudless-n8n": "/home/node/.n8n"},
       "openPath": "/",
+      "embeddedPath": "/apps/n8n/",
       "verified": false,
       "hidden": true,
       "network": "cloudless",
@@ -830,6 +831,14 @@
       "description": "Private speech-to-text and natural text-to-speech services for local apps and agents.",
       "category": "Voice & audio",
       "icon": "voice",
+      "tagline": "Let local apps and agents listen and speak.",
+      "long": "Cloudless Voice adds a private audio layer to this machine. It combines local speech recognition with natural text-to-speech, so compatible apps and agents can transcribe recordings, understand spoken requests, and answer with a voice without sending audio to a hosted provider.",
+      "examples": [
+        "Transcribe meetings, interviews, and voice notes locally",
+        "Add spoken responses to assistants and automations",
+        "Build private voice interfaces using OpenAI-compatible APIs",
+        "Keep recordings and generated speech on your own machine"
+      ],
       "apps": ["whisper", "kokoro"],
       "launchApp": "kokoro"
     },
@@ -839,33 +848,65 @@
       "description": "Local embeddings and a private vector index for retrieval-augmented generation.",
       "category": "Knowledge & research",
       "icon": "knowledge",
+      "tagline": "Give local AI a searchable private memory.",
+      "long": "Private Knowledge provides the local building blocks for retrieval-augmented generation. An embedding service turns documents into searchable meaning, while a private vector database stores the resulting index. Cloudless apps and workflows can then retrieve relevant passages before asking the active model to answer.",
+      "examples": [
+        "Build a private knowledge base from internal documents",
+        "Retrieve relevant passages before generating an answer",
+        "Store semantic indexes locally instead of in a hosted database",
+        "Connect RAG pipelines and agents through local APIs"
+      ],
       "apps": ["embeddings", "qdrant"],
       "launchApp": "qdrant"
     },
     {
       "id": "search",
-      "name": "Private Search",
-      "description": "A local metasearch service for Cloudless apps and agents.",
+      "name": "SearXNG",
+      "description": "Private metasearch integrated with Cloudless apps and agents.",
       "category": "Knowledge & research",
       "icon": "search",
+      "tagline": "Private metasearch for you and your local agents.",
+      "long": "SearXNG gathers results from multiple search sources through an interface hosted on this machine. Cloudless configures it as the private search endpoint for research tools, workflows, and agents without disguising which application is being installed.",
+      "examples": [
+        "Search the web from a private local interface",
+        "Give Hermes and research tools access to current information",
+        "Use one local search endpoint across workflows and applications",
+        "Reduce dependence on a single search provider"
+      ],
       "apps": ["searxng"],
       "launchApp": "searxng"
     },
     {
       "id": "research",
-      "name": "Cloudless Research",
-      "description": "Sourced deep research using Private Search and the active Cloudless model.",
+      "name": "Perplexica",
+      "description": "AI research using SearXNG and the active Cloudless model.",
       "category": "Knowledge & research",
       "icon": "research",
+      "tagline": "Sourced research, preconfigured for Cloudless AI.",
+      "long": "Perplexica combines SearXNG results with the model already running on CloudlessOS. Cloudless installs and connects both services automatically, while keeping the application name and every installed dependency visible.",
+      "examples": [
+        "Research a topic and receive a structured, sourced answer",
+        "Compare information across multiple web sources",
+        "Explore follow-up questions with the active local model",
+        "Keep research synthesis on your own accelerator"
+      ],
       "apps": ["perplexica"],
       "launchApp": "perplexica"
     },
     {
       "id": "workflows",
-      "name": "Cloudless Workflows",
-      "description": "Visual local automation for schedules, APIs, data, and AI-powered workflows.",
+      "name": "n8n",
+      "description": "Visual workflow automation integrated with the local Cloudless model.",
       "category": "Agents & automation",
       "icon": "workflow",
+      "tagline": "Workflow automation, integrated with Cloudless AI.",
+      "long": "n8n is a visual automation studio for connecting schedules, webhooks, APIs, files, databases, and AI models. Cloudless installs the standard n8n application locally and makes it available inside the CloudlessOS experience.",
+      "examples": [
+        "Run scheduled jobs that call the active Cloudless model",
+        "Connect local files, databases, webhooks, and external APIs",
+        "Build repeatable approval and data-processing workflows",
+        "Automate AI tasks through a visual editor"
+      ],
       "apps": ["n8n"],
       "launchApp": "n8n"
     }

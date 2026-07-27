@@ -116,6 +116,7 @@ type App struct {
 	Env                 map[string]string   `json:"env,omitempty"`
 	GPUs                string              `json:"gpus"`                   // "all", "0", ... or "" for none
 	OpenPath            string              `json:"openPath"`               // URL path to open once running
+	EmbeddedPath        string              `json:"embeddedPath,omitempty"` // same-origin path used by the Cloudless app viewer
 	MinVRAMGB           int                 `json:"minVramGB"`              // rough VRAM floor for usefulness
 	Verified            bool                `json:"verified"`               // recipe validated on Cloudless dev hardware
 	Preinstall          bool                `json:"preinstall"`             // pulled AND run automatically on first boot
@@ -386,3 +387,22 @@ func DefaultPins() []string { return nil }
 // Launchable reports whether an app belongs in the App Launcher (user-facing,
 // not an inference engine / infrastructure service).
 func (a App) Launchable() bool { return !a.Service && !a.Hidden }
+
+// Pinnable includes ordinary launcher apps plus hidden recipes that are the
+// launch target of a user-facing capability. Hidden prevents duplicate entries
+// in the launcher; it must not prevent the installed product becoming a
+// dashboard shortcut.
+func (a App) Pinnable() bool {
+	if a.Service {
+		return false
+	}
+	if !a.Hidden {
+		return true
+	}
+	for _, pack := range Packs() {
+		if pack.LaunchApp == a.ID {
+			return true
+		}
+	}
+	return false
+}

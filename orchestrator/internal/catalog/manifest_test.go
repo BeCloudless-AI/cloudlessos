@@ -70,12 +70,36 @@ func TestEmbeddedManifestDefinesOptionalCapabilityPacks(t *testing.T) {
 	want := map[string]bool{"voice": false, "rag": false, "search": false, "research": false, "workflows": false}
 	for _, pack := range doc.Packs {
 		if _, ok := want[pack.ID]; ok {
+			if pack.Category == "" || pack.Tagline == "" || pack.Long == "" || len(pack.Examples) < 3 {
+				t.Errorf("optional %s pack lacks launcher metadata", pack.ID)
+			}
 			want[pack.ID] = true
 		}
 	}
 	for id, found := range want {
 		if !found {
 			t.Errorf("missing optional %s pack", id)
+		}
+	}
+}
+
+func TestSingleApplicationCapabilitiesUseProductNames(t *testing.T) {
+	for id, want := range map[string]string{"search": "SearXNG", "research": "Perplexica", "workflows": "n8n"} {
+		pack, ok := GetPack(id)
+		if !ok {
+			t.Fatalf("missing capability %s", id)
+		}
+		if pack.Name != want {
+			t.Errorf("%s is shown as %q, want product name %q", id, pack.Name, want)
+		}
+	}
+	for id, want := range map[string]string{"searxng": "SearXNG", "perplexica": "Perplexica", "n8n": "n8n", "qdrant": "Qdrant", "embeddings": "Hugging Face TEI"} {
+		app, ok := Get(id)
+		if !ok {
+			t.Fatalf("missing app %s", id)
+		}
+		if app.Name != want {
+			t.Errorf("%s is shown as %q, want %q", id, app.Name, want)
 		}
 	}
 }
@@ -94,5 +118,19 @@ func TestManifestRejectsPackWithUnknownComponent(t *testing.T) {
 	raw := `{"schema":"cloudless.apps.v2","version":2,"apps":[{"id":"known","name":"Known","image":"x/y:1"}],"packs":[{"id":"bad","name":"Bad","description":"Bad pack","apps":["missing"]}]}`
 	if _, err := ParseManifest([]byte(raw)); err == nil || !strings.Contains(err.Error(), "unknown app") {
 		t.Fatalf("unknown pack component was accepted: %v", err)
+	}
+}
+
+func TestWorkflowsUsesValidatedSameOriginPath(t *testing.T) {
+	app, ok := Get("n8n")
+	if !ok {
+		t.Fatal("n8n is missing")
+	}
+	if app.EmbeddedPath != "/apps/n8n/" || app.Env["N8N_PATH"] != app.EmbeddedPath {
+		t.Fatalf("n8n path is not aligned: embedded=%q env=%q", app.EmbeddedPath, app.Env["N8N_PATH"])
+	}
+	bad := `{"schema":"cloudless.apps.v2","version":2,"apps":[{"id":"demo","name":"Demo","image":"x/y:1","ports":{"8080":80},"embeddedPath":"/wrong/"}]}`
+	if _, err := ParseManifest([]byte(bad)); err == nil || !strings.Contains(err.Error(), "embeddedPath") {
+		t.Fatalf("unsafe embedded path accepted: %v", err)
 	}
 }

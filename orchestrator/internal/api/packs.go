@@ -1,9 +1,12 @@
 package api
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/cloudless/orchestrator/internal/catalog"
@@ -112,18 +115,22 @@ func (s *Server) runPackInstall(job *jobs.Job, pack catalog.Pack, order []catalo
 		}
 	}
 	for index, app := range order {
-		if existing, _ := s.eng.Find(ctx, app.ContainerName()); existing != nil && existing.State == "running" {
-			continue
+		if existing, _ := s.eng.Find(ctx, app.ContainerName()); existing == nil || existing.State != "running" {
+			job.Progress("component", fmt.Sprintf("Installing %s — component %d of %d", app.Name, index+1, len(order)), index, len(order))
+			id, err := s.installOne(ctx, job, app)
+			if err != nil {
+				rollback()
+				job.Fail(fmt.Errorf("%s could not install %s: %w; newly installed components were removed", pack.Name, app.Name, err))
+				return
+			}
+			if id != "" {
+				newContainers = append(newContainers, app.ContainerName())
+			}
 		}
-		job.Progress("component", fmt.Sprintf("Installing %s — component %d of %d", app.Name, index+1, len(order)), index, len(order))
-		id, err := s.installOne(ctx, job, app)
-		if err != nil {
+		if err := s.configurePackApp(ctx, job, app); err != nil {
 			rollback()
-			job.Fail(fmt.Errorf("%s could not install %s: %w; newly installed components were removed", pack.Name, app.Name, err))
+			job.Fail(fmt.Errorf("%s installed but %s could not be configured: %w", pack.Name, app.Name, err))
 			return
-		}
-		if id != "" {
-			newContainers = append(newContainers, app.ContainerName())
 		}
 	}
 	if err := s.state.SetPackInstalled(pack.ID, true); err != nil {
@@ -133,6 +140,98 @@ func (s *Server) runPackInstall(job *jobs.Job, pack catalog.Pack, order []catalo
 	}
 	job.Progress("verifying", "All components passed their health contracts.", len(order), len(order))
 	job.Succeed("")
+}
+
+func (s *Server) configurePackApp(ctx context.Context, job *jobs.Job, app catalog.App) error {
+	if app.ID != "perplexica" {
+		return nil
+	}
+	job.Progress("configuring", "Connecting Cloudless Research to your Cloudless model…", 0, 1)
+	for port := range app.Ports {
+		return configureCloudlessResearch(ctx, fmt.Sprintf("http://127.0.0.1:%d", port))
+	}
+	return fmt.Errorf("research endpoint is unavailable")
+}
+
+type researchProvider struct {
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	ChatModels []struct {
+		Key string `json:"key"`
+	} `json:"chatModels"`
+}
+
+// configureCloudlessResearch is idempotent, so retrying an interrupted install
+// never duplicates the Cloudless provider or model.
+func configureCloudlessResearch(ctx context.Context, baseURL string) error {
+	client := &http.Client{Timeout: 15 * time.Second}
+	requestJSON := func(method, path string, payload any, result any) error {
+		var raw []byte
+		var err error
+		if payload != nil {
+			raw, err = json.Marshal(payload)
+			if err != nil {
+				return err
+			}
+		}
+		req, err := http.NewRequestWithContext(ctx, method, baseURL+path, bytes.NewReader(raw))
+		if err != nil {
+			return err
+		}
+		if payload != nil {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			return fmt.Errorf("%s returned %s", path, resp.Status)
+		}
+		if result != nil {
+			return json.NewDecoder(resp.Body).Decode(result)
+		}
+		return nil
+	}
+
+	var listing struct {
+		Providers []researchProvider `json:"providers"`
+	}
+	if err := requestJSON(http.MethodGet, "/api/providers", nil, &listing); err != nil {
+		return err
+	}
+	var cloudless *researchProvider
+	for i := range listing.Providers {
+		if listing.Providers[i].Name == "Cloudless" {
+			cloudless = &listing.Providers[i]
+			break
+		}
+	}
+	if cloudless == nil {
+		var created struct {
+			Provider researchProvider `json:"provider"`
+		}
+		payload := map[string]any{
+			"type": "openai", "name": "Cloudless",
+			"config": map[string]string{"apiKey": "cloudless", "baseURL": "http://cloudless-ai:8000/v1"},
+		}
+		if err := requestJSON(http.MethodPost, "/api/providers", payload, &created); err != nil {
+			return err
+		}
+		cloudless = &created.Provider
+	}
+	hasModel := false
+	for _, model := range cloudless.ChatModels {
+		hasModel = hasModel || model.Key == "cloudless"
+	}
+	if !hasModel {
+		payload := map[string]string{"type": "chat", "key": "cloudless", "name": "Cloudless"}
+		if err := requestJSON(http.MethodPost, "/api/providers/"+url.PathEscape(cloudless.ID)+"/models", payload, nil); err != nil {
+			return err
+		}
+	}
+	return requestJSON(http.MethodPost, "/api/config/setup-complete", nil, nil)
 }
 
 func (s *Server) packUninstall(w http.ResponseWriter, r *http.Request) {

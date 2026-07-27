@@ -31,6 +31,9 @@ type Pack struct {
 	Description string   `json:"description"`
 	Category    string   `json:"category,omitempty"`
 	Icon        string   `json:"icon,omitempty"`
+	Tagline     string   `json:"tagline,omitempty"`
+	Long        string   `json:"long,omitempty"`
+	Examples    []string `json:"examples,omitempty"`
 	Apps        []string `json:"apps"`
 	LaunchApp   string   `json:"launchApp,omitempty"`
 }
@@ -139,6 +142,15 @@ func validateApp(a App) error {
 	for host, container := range a.Ports {
 		if host < 1 || host > 65535 || container < 1 || container > 65535 {
 			return fmt.Errorf("invalid port mapping %d:%d", host, container)
+		}
+	}
+	if a.EmbeddedPath != "" {
+		expected := "/apps/" + a.ID + "/"
+		if a.EmbeddedPath != expected {
+			return fmt.Errorf("embeddedPath must be %q", expected)
+		}
+		if len(a.Ports) != 1 {
+			return errors.New("embedded apps must expose exactly one port")
 		}
 	}
 	if a.Resources.MemoryGB < 0 || a.Resources.DiskGB < 0 || a.Resources.VRAMGB < 0 || a.MinVRAMGB < 0 {

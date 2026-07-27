@@ -193,6 +193,9 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/apps/{id}/update", s.updateApply)
 	mux.HandleFunc("POST /api/assistant/chat", s.assistantChat)
 	mux.HandleFunc("GET /api/hermes", s.hermesStatus)
+	for _, method := range []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"} {
+		mux.HandleFunc(method+" /apps/{id}/", s.appViewProxy)
+	}
 
 	sub, err := fs.Sub(webFS, "web")
 	if err != nil {

@@ -30,10 +30,10 @@ func envOr(k, d string) string {
 // ConfigFile is an editable config file for an app, mounted into the container
 // from the state dir (seeded from the app's embedded default).
 type ConfigFile struct {
-	File string `json:"file"` // filename in the app's embedded context + state dir
-	Path string `json:"-"`    // mount path inside the container ("" when Env)
-	Lang string `json:"lang"` // json5 | yaml | env (UI hint)
-	Env  bool   `json:"-"`    // inject this env file's KEY=VALUE into the container ENV instead of mounting it (for apps that read process env, e.g. Open WebUI)
+	File string `json:"file"`           // filename in the app's embedded context + state dir
+	Path string `json:"path,omitempty"` // mount path inside the container ("" when Env)
+	Lang string `json:"lang"`           // json5 | yaml | env (UI hint)
+	Env  bool   `json:"env,omitempty"`  // inject this env file's KEY=VALUE into the container ENV instead of mounting it (for apps that read process env, e.g. Open WebUI)
 }
 
 // AdminInfo explains how an app is administered beyond Cloudless's own settings —
@@ -53,8 +53,46 @@ type Field struct {
 	Type    string   `json:"type"` // text | password | number | toggle | select
 	Options []string `json:"options,omitempty"`
 	Default string   `json:"default"`
-	File    string   `json:"-"` // a ConfigFile.File this value lives in
-	Path    string   `json:"-"` // JSON dot-path (json file) or env key (env file)
+	File    string   `json:"file,omitempty"` // a ConfigFile.File this value lives in
+	Path    string   `json:"path,omitempty"` // JSON dot-path (json file) or env key (env file)
+}
+
+// HealthContract is the declarative readiness contract for an application.
+// The orchestrator uses it after installs, updates, dependency starts and model
+// promotions instead of assuming that a running container is ready.
+type HealthContract struct {
+	Kind           string `json:"kind,omitempty"` // http | container | openai
+	Path           string `json:"path,omitempty"`
+	Port           int    `json:"port,omitempty"`
+	TimeoutSeconds int    `json:"timeoutSeconds,omitempty"`
+}
+
+// LLMContract declares how an application consumes the active inference
+// service. It lets model changes prove dependent applications before promotion.
+type LLMContract struct {
+	Consumes   bool   `json:"consumes"`
+	Route      string `json:"route,omitempty"`      // gateway | direct
+	Pinning    string `json:"pinning,omitempty"`    // none | dynamic
+	MinContext int    `json:"minContext,omitempty"` // tokens
+	ProbePath  string `json:"probePath,omitempty"`
+}
+
+// ResourceContract records the installation and runtime envelope used by the
+// launcher, dependency resolver and model-fit guidance.
+type ResourceContract struct {
+	MemoryGB int `json:"memoryGB,omitempty"`
+	DiskGB   int `json:"diskGB,omitempty"`
+	VRAMGB   int `json:"vramGB,omitempty"`
+}
+
+// ExposureContract makes network risk reviewable data. Public and LAN access
+// remain explicit user actions; RequireAuth is enforced before an app may be
+// exposed outside loopback.
+type ExposureContract struct {
+	Risk        string `json:"risk,omitempty"`
+	LAN         string `json:"lan,omitempty"`    // none | opt-in
+	Public      string `json:"public,omitempty"` // none | opt-in
+	RequireAuth bool   `json:"requireAuth,omitempty"`
 }
 
 // App is a curated, installable AI application backed by a container image.
@@ -62,43 +100,48 @@ type App struct {
 	ID                  string              `json:"id"`
 	Name                string              `json:"name"`
 	Description         string              `json:"description"`
-	Category            string              `json:"category,omitempty"`  // launcher grouping (user-facing apps)
-	Tagline             string              `json:"tagline,omitempty"`   // short "what it's for" line for the launcher
-	Long                string              `json:"long,omitempty"`      // full paragraph for the app's launcher page
-	Examples            []string            `json:"examples,omitempty"`  // example "what you can do" bullets
-	Image               string              `json:"image"`               // empty = recipe not yet available
-	ArchImages          map[string]string   `json:"-"`                   // architecture-specific image override
-	Architectures       []string            `json:"-"`                   // empty = image is expected to be multi-arch
-	Platforms           []string            `json:"platforms,omitempty"` // empty = every supported Cloudless platform
-	ArchPlatforms       map[string][]string `json:"-"`                   // architecture-specific platform restriction
+	Category            string              `json:"category,omitempty"`      // launcher grouping (user-facing apps)
+	Tagline             string              `json:"tagline,omitempty"`       // short "what it's for" line for the launcher
+	Long                string              `json:"long,omitempty"`          // full paragraph for the app's launcher page
+	Examples            []string            `json:"examples,omitempty"`      // example "what you can do" bullets
+	Image               string              `json:"image"`                   // empty = recipe not yet available
+	ArchImages          map[string]string   `json:"archImages,omitempty"`    // architecture-specific image override
+	Architectures       []string            `json:"architectures,omitempty"` // empty = image is expected to be multi-arch
+	Platforms           []string            `json:"platforms,omitempty"`     // empty = every supported Cloudless platform
+	ArchPlatforms       map[string][]string `json:"archPlatforms,omitempty"` // architecture-specific platform restriction
 	MinCloudlessVersion string              `json:"minCloudlessVersion,omitempty"`
 	MinDGXOSVersion     string              `json:"minDgxOsVersion,omitempty"`
 	RequiredFeatures    []string            `json:"requiredFeatures,omitempty"`
 	Ports               map[int]int         `json:"ports"` // hostPort -> containerPort
 	Env                 map[string]string   `json:"env,omitempty"`
-	GPUs                string              `json:"gpus"`                // "all", "0", ... or "" for none
-	OpenPath            string              `json:"openPath"`            // URL path to open once running
-	MinVRAMGB           int                 `json:"minVramGB"`           // rough VRAM floor for usefulness
-	Verified            bool                `json:"verified"`            // recipe validated on Cloudless dev hardware
-	Preinstall          bool                `json:"preinstall"`          // pulled AND run automatically on first boot
-	Prefetch            bool                `json:"-"`                   // image pulled on boot but not run (ready alternative)
-	Service             bool                `json:"service"`             // infrastructure (engine), hidden from the launcher
-	Hidden              bool                `json:"hidden,omitempty"`    // installed/usable but not shown as a launcher tile
-	LocalOnly           bool                `json:"localOnly,omitempty"` // never create LAN or public tunnel sidecars
-	Engine              bool                `json:"engine"`              // switchable inference engine (carries the stable alias)
-	NeedsEngine         bool                `json:"needsEngine"`         // depends on the LLM engine (gated until the model is served)
-	Network             string              `json:"-"`                   // docker network to join (for inter-app DNS)
-	IPC                 string              `json:"-"`                   // container IPC namespace mode
-	Ulimits             []string            `json:"-"`                   // container resource limits
-	Command             []string            `json:"-"`                   // container command/args
-	ArchCommands        map[string][]string `json:"-"`                   // architecture-specific command override
-	Volumes             map[string]string   `json:"-"`                   // host-or-named-volume -> containerPath
-	DataPath            string              `json:"-"`                   // mount the app's complete Cloudless-managed state directory here
-	DataUID             int                 `json:"-"`                   // container UID that must own DataPath (0 = keep host ownership)
-	Build               string              `json:"-"`                   // embedded build-context name (build instead of pull)
-	Config              []ConfigFile        `json:"config,omitempty"`    // editable config files (mounted)
-	Settings            []Field             `json:"-"`                   // form fields (via /api/apps/{id}/settings)
-	Admin               *AdminInfo          `json:"-"`                   // how the app is administered beyond Cloudless settings
+	GPUs                string              `json:"gpus"`                   // "all", "0", ... or "" for none
+	OpenPath            string              `json:"openPath"`               // URL path to open once running
+	MinVRAMGB           int                 `json:"minVramGB"`              // rough VRAM floor for usefulness
+	Verified            bool                `json:"verified"`               // recipe validated on Cloudless dev hardware
+	Preinstall          bool                `json:"preinstall"`             // pulled AND run automatically on first boot
+	Prefetch            bool                `json:"prefetch,omitempty"`     // image pulled on boot but not run (ready alternative)
+	Service             bool                `json:"service"`                // infrastructure (engine), hidden from the launcher
+	Hidden              bool                `json:"hidden,omitempty"`       // installed/usable but not shown as a launcher tile
+	LocalOnly           bool                `json:"localOnly,omitempty"`    // never create LAN or public tunnel sidecars
+	Engine              bool                `json:"engine"`                 // switchable inference engine (carries the stable alias)
+	NeedsEngine         bool                `json:"needsEngine"`            // depends on the LLM engine (gated until the model is served)
+	Network             string              `json:"network,omitempty"`      // docker network to join (for inter-app DNS)
+	IPC                 string              `json:"ipc,omitempty"`          // container IPC namespace mode
+	Ulimits             []string            `json:"ulimits,omitempty"`      // container resource limits
+	Command             []string            `json:"command,omitempty"`      // container command/args
+	ArchCommands        map[string][]string `json:"archCommands,omitempty"` // architecture-specific command override
+	Volumes             map[string]string   `json:"volumes,omitempty"`      // host-or-named-volume -> containerPath
+	DataPath            string              `json:"dataPath,omitempty"`     // mount the app's complete Cloudless-managed state directory here
+	DataUID             int                 `json:"dataUID,omitempty"`      // container UID that must own DataPath (0 = keep host ownership)
+	Build               string              `json:"build,omitempty"`        // embedded build-context name (build instead of pull)
+	Config              []ConfigFile        `json:"config,omitempty"`       // editable config files (mounted)
+	Settings            []Field             `json:"settings,omitempty"`     // form fields (via /api/apps/{id}/settings)
+	Admin               *AdminInfo          `json:"admin,omitempty"`        // how the app is administered beyond Cloudless settings
+	Dependencies        []string            `json:"dependencies,omitempty"`
+	Health              HealthContract      `json:"health,omitempty"`
+	LLM                 *LLMContract        `json:"llm,omitempty"`
+	Resources           ResourceContract    `json:"resources,omitempty"`
+	Exposure            ExposureContract    `json:"exposure,omitempty"`
 }
 
 // ContainerName is the orchestrator-managed container name for this app.
@@ -165,12 +208,19 @@ func (a App) TunnelName() string { return "cloudless-tunnel-" + a.ID }
 // LanName is the orchestrator-managed LAN-forwarder container name for this app.
 func (a App) LanName() string { return "cloudless-lan-" + a.ID }
 
-// HasWebPort reports whether an app serves a web port that can be exposed
-// (on the LAN or online). Engines/services are excluded.
-func (a App) HasWebPort() bool { return a.Launchable() && !a.LocalOnly && a.PrimaryHostPort() > 0 }
+// HasWebPort reports whether an app serves a web port that its signed exposure
+// contract permits CloudlessOS to publish outside loopback.
+func (a App) HasWebPort() bool {
+	return a.Launchable() && !a.LocalOnly && a.PrimaryHostPort() > 0 &&
+		(a.Exposure.LAN == "opt-in" || a.Exposure.Public == "opt-in")
+}
+
+func (a App) LanShareable() bool { return a.HasWebPort() && a.Exposure.LAN == "opt-in" }
 
 // Tunnelable reports whether an app can be exposed online.
-func (a App) Tunnelable() bool { return a.HasWebPort() }
+func (a App) Tunnelable() bool {
+	return a.HasWebPort() && a.Exposure.Public == "opt-in" && a.Exposure.RequireAuth
+}
 
 // LanSidecarSpec builds the host-networked socat forwarder that re-serves this app
 // on <ip>:<port> (same port as localhost; binding the specific LAN IP avoids a
@@ -306,7 +356,9 @@ const (
 // EngineEndpoint is the stable OpenAI base URL clients are configured with.
 const EngineEndpoint = "http://cloudless-ai:8000/v1"
 
-var apps = []App{
+// legacyApps is retained temporarily as migration evidence. Runtime authority
+// comes from the signed embedded App Manifest v2 below.
+var legacyApps = []App{
 	{
 		// vLLM is the default inference engine powering "Cloudless AI" (D12).
 		// OpenAI-compatible server; Open WebUI talks to it over the OpenAI API.
@@ -354,6 +406,9 @@ var apps = []App{
 		Service:    true,
 		Engine:     true,
 		Network:    cloudlessNet,
+		Health:     HealthContract{Kind: "openai", Path: "/v1/models", TimeoutSeconds: 900},
+		Resources:  ResourceContract{MemoryGB: 8, DiskGB: 12, VRAMGB: 6},
+		Exposure:   ExposureContract{Risk: "inference-control-plane", LAN: "none", Public: "none", RequireAuth: true},
 	},
 	{
 		// Alternative engine (D13): pre-fetched (image ready) but not run by
@@ -400,6 +455,9 @@ var apps = []App{
 		Service:   true,
 		Engine:    true,
 		Network:   cloudlessNet,
+		Health:    HealthContract{Kind: "openai", Path: "/v1/models", TimeoutSeconds: 900},
+		Resources: ResourceContract{MemoryGB: 8, DiskGB: 45, VRAMGB: 6},
+		Exposure:  ExposureContract{Risk: "inference-control-plane", LAN: "none", Public: "none", RequireAuth: true},
 	},
 	{
 		// Lightweight engine: runs on CPU+GPU and can offload layers to system RAM, so
@@ -429,6 +487,9 @@ var apps = []App{
 		Service:   true,
 		Engine:    true,
 		Network:   cloudlessNet,
+		Health:    HealthContract{Kind: "openai", Path: "/v1/models", TimeoutSeconds: 600},
+		Resources: ResourceContract{MemoryGB: 4, DiskGB: 8},
+		Exposure:  ExposureContract{Risk: "inference-control-plane", LAN: "none", Public: "none", RequireAuth: true},
 	},
 	{
 		ID:          "open-webui",
@@ -486,6 +547,10 @@ var apps = []App{
 		Preinstall: true,
 		Hidden:     true, // reached via the hero "Chat with your Cloudless AI" button, not a tile
 		Network:    cloudlessNet,
+		Health:     HealthContract{Kind: "http", Path: "/health", TimeoutSeconds: 180},
+		LLM:        &LLMContract{Consumes: true, Route: "gateway", Pinning: "dynamic", MinContext: 8192, ProbePath: "/api/models"},
+		Resources:  ResourceContract{MemoryGB: 4, DiskGB: 5},
+		Exposure:   ExposureContract{Risk: "chat-ui", LAN: "opt-in", Public: "opt-in", RequireAuth: true},
 	},
 	{
 		ID:          "comfyui",
@@ -517,6 +582,9 @@ var apps = []App{
 		Verified:   false,
 		Preinstall: false,
 		Network:    cloudlessNet,
+		Health:     HealthContract{Kind: "http", Path: "/system_stats", TimeoutSeconds: 600},
+		Resources:  ResourceContract{MemoryGB: 8, DiskGB: 20, VRAMGB: 6},
+		Exposure:   ExposureContract{Risk: "gpu-workload-ui", LAN: "opt-in", Public: "none"},
 	},
 	{
 		// Ostris AI Toolkit — diffusion-model trainer with a web UI (official image
@@ -553,6 +621,9 @@ var apps = []App{
 		Verified:   false,
 		Preinstall: false,
 		Network:    cloudlessNet,
+		Health:     HealthContract{Kind: "http", Path: "/", TimeoutSeconds: 300},
+		Resources:  ResourceContract{MemoryGB: 12, DiskGB: 30, VRAMGB: 24},
+		Exposure:   ExposureContract{Risk: "model-training-ui", LAN: "opt-in", Public: "opt-in", RequireAuth: true},
 	},
 	{
 		// Unsloth — fast, low-VRAM LLM fine-tuning. Official image bundles Jupyter
@@ -586,6 +657,9 @@ var apps = []App{
 		Verified:   false,
 		Preinstall: false,
 		Network:    cloudlessNet,
+		Health:     HealthContract{Kind: "http", Path: "/lab", TimeoutSeconds: 300},
+		Resources:  ResourceContract{MemoryGB: 16, DiskGB: 30, VRAMGB: 8},
+		Exposure:   ExposureContract{Risk: "code-execution-ui", LAN: "opt-in", Public: "opt-in", RequireAuth: true},
 	},
 	{
 		// Agent (D13/D14). No upstream image; built locally from an embedded
@@ -622,7 +696,11 @@ var apps = []App{
 		Verified:  false,
 		// Host networking: the gateway binds host 127.0.0.1 so it can run with no
 		// auth, and reaches the active engine via the host-published :8000 (D16).
-		Network: "host",
+		Network:   "host",
+		Health:    HealthContract{Kind: "http", Path: "/", TimeoutSeconds: 180},
+		LLM:       &LLMContract{Consumes: true, Route: "gateway", Pinning: "dynamic", MinContext: 32768, ProbePath: "/"},
+		Resources: ResourceContract{MemoryGB: 4, DiskGB: 5},
+		Exposure:  ExposureContract{Risk: "autonomous-agent", LAN: "none", Public: "none", RequireAuth: true},
 	},
 	{
 		// The official Hermes container includes its gateway and browser dashboard.
@@ -678,9 +756,15 @@ var apps = []App{
 		Preinstall: true,
 		LocalOnly:  true, // dashboard can read/write credentials; never expose it implicitly
 		// Loopback dashboard + direct access to the host-published Cloudless engine.
-		Network: "host",
+		Network:   "host",
+		Health:    HealthContract{Kind: "http", Path: "/api/status", TimeoutSeconds: 180},
+		LLM:       &LLMContract{Consumes: true, Route: "gateway", Pinning: "dynamic", MinContext: 32768, ProbePath: "/api/talk/message/stream"},
+		Resources: ResourceContract{MemoryGB: 6, DiskGB: 8},
+		Exposure:  ExposureContract{Risk: "autonomous-agent", LAN: "none", Public: "none", RequireAuth: true},
 	},
 }
+
+var apps = mustLoadManifest()
 
 // All returns recipes supported by this host. Unsupported architecture-specific
 // apps are omitted instead of presenting an Install action that can never work.

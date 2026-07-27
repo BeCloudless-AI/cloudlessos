@@ -5189,12 +5189,15 @@ function fitExplain(fit, type) {
   })[fit] || 'CloudlessOS cannot estimate compatibility for this model yet.';
 }
 function modelMeter(m, gpu) {
-  if (!gpu || !m.minVramGB) return 0;
-  return Math.max(4, Math.min(100, Math.round((m.minVramGB / gpu) * 100)));
+  const required = ((m.fitEstimate || {}).requiredPerNodeGB) || m.minVramGB || 0;
+  const usable = ((m.fitEstimate || {}).usablePerNodeGB) || gpu || 0;
+  if (!usable || !required) return 0;
+  return Math.max(4, Math.min(100, Math.round((required / usable) * 100)));
 }
 function modelCompatibility(m, gpu) {
   const label = FIT_LABEL[m.fit] || FIT_LABEL.unknown;
-  const amount = m.minVramGB ? `~${m.minVramGB} GB${gpu ? ` of ${gpu} GB` : ''}` : 'No estimate';
+  const estimate = m.fitEstimate || {};
+  const amount = estimate.requiredPerNodeGB ? `~${estimate.requiredPerNodeGB} GB${estimate.usablePerNodeGB ? ` of ${estimate.usablePerNodeGB} GB usable` : ''}` : (m.minVramGB ? `~${m.minVramGB} GB` : 'No estimate');
   return `<div class="mdl-compat">
     <div class="mdl-compat-row"><span class="mdl-fit fit-${m.fit || 'unknown'}">${label}</span><span class="mdl-vram">${amount}</span></div>
     ${gpu && m.minVramGB ? `<span class="mdl-meter" aria-hidden="true"><i style="--meter:${modelMeter(m, gpu)}%"></i></span>` : ''}
@@ -5265,7 +5268,8 @@ function modelSection(title, list, cardFn) {
 }
 function activeModelCard(m, gpu, memoryType) {
   if (!m) return '';
-  const meta = [m.params, m.quant, m.contextK ? `${m.contextK}K context` : '', m.minVramGB ? `~${m.minVramGB} GB ${memoryLabel(memoryType)}` : ''].filter(Boolean).join(' · ');
+  const estimate = m.fitEstimate || {};
+  const meta = [m.params, m.quant, m.contextK ? `${m.contextK}K context` : '', estimate.requiredPerNodeGB ? `~${estimate.requiredPerNodeGB} GB at ${estimate.contextK || 32}K` : (m.minVramGB ? `~${m.minVramGB} GB ${memoryLabel(memoryType)}` : '')].filter(Boolean).join(' · ');
   return `<button class="mm-active-card" data-active-model="${escapeAttr(m.id)}">
     <span class="mm-active-icon">${uiIcon('models')}</span>
     <span class="mm-active-copy"><span class="mm-active-kicker">${engineExecutionMode === 'cluster' ? `Loaded across ${sparkCount((mmLM || {}).cluster)} Sparks` : 'Loaded now'}</span><span class="mm-active-name">${escapeHtml(m.name)}</span><span class="mm-active-meta">${escapeHtml(meta || m.id)}</span></span>
@@ -5436,13 +5440,13 @@ function launchModel(m) {
     <div class="key-dialog-body">
       <div class="model-confirm-facts">
         <div class="model-confirm-fact"><small>Loaded now</small><b>${escapeHtml(curName)}</b></div>
-        <div class="model-confirm-fact"><small>Compatibility</small><b>${escapeHtml(FIT_LABEL[m.fit] || FIT_LABEL.unknown)}${m.minVramGB ? ` · ~${m.minVramGB} GB` : ''}</b></div>
+        <div class="model-confirm-fact"><small>Compatibility</small><b>${escapeHtml(FIT_LABEL[m.fit] || FIT_LABEL.unknown)}${(m.fitEstimate || {}).requiredPerNodeGB ? ` · ~${m.fitEstimate.requiredPerNodeGB} GB at ${m.fitEstimate.contextK || 32}K` : (m.minVramGB ? ` · ~${m.minVramGB} GB` : '')}</b></div>
       </div>
       <div class="model-run-modes" role="radiogroup" aria-label="Where to run this model">
         <button class="model-run-mode" type="button" data-model-mode="local" role="radio"><span class="model-run-mode-icon">${uiIcon('machine')}</span><span class="model-run-mode-copy"><b>Run on this Spark</b><small>${gpu} GB ${memoryLabel(memoryType)} · fastest startup for models that fit locally</small></span><i class="model-run-mode-check"></i></button>
         ${clusterEligible ? `<button class="model-run-mode cluster" type="button" data-model-mode="cluster" role="radio"><span class="model-run-mode-icon">${uiIcon('network')}</span><span class="model-run-mode-copy"><b>Use all ${clusterNodes} Sparks</b><small>~${cluster.combinedMemoryGB} GB aggregate · Cloudless configures distributed inference automatically. First launch may take longer while workers download the model.</small></span><i class="model-run-mode-check"></i></button>` : ''}
       </div>
-      ${m.fit === 'over' && !clusterEligible ? `<div class="model-confirm-warning">This model needs about ${m.minVramGB} GB of ${memoryLabel(memoryType)}, but this machine reports ${gpu || 'less available'} GB. Launching may fail.</div>` : ''}
+      ${m.fit === 'over' && !clusterEligible ? `<div class="model-confirm-warning">This model is estimated to need about ${((m.fitEstimate || {}).requiredPerNodeGB) || m.minVramGB} GB at ${((m.fitEstimate || {}).contextK) || 32}K context. CloudlessOS reserves part of the machine's memory for the OS and services, so launching may fail.</div>` : ''}
       <div class="key-dialog-actions">
         <button class="btn" id="model-launch-cancel" type="button">Cancel</button>
         <button class="btn primary" id="model-launch-confirm" type="button">${uiIcon('rocket')}<span>Launch model</span></button>
@@ -5876,8 +5880,8 @@ function renderModelDetail(c) {
   }
   const fitClass = m.fit || 'unknown';
   const fit = `<div class="md-compat-panel fit-${fitClass}">
-      <div><div class="md-compat-title">${escapeHtml(FIT_LABEL[fitClass] || FIT_LABEL.unknown)} on this machine</div><div class="md-compat-copy">${escapeHtml(fitExplain(fitClass, memoryType))}</div></div>
-      <div class="md-compat-numbers">${m.minVramGB ? `~${m.minVramGB} GB needed` : 'No estimate'}${gpu ? ` · ${gpu} GB available` : ''}</div>
+      <div><div class="md-compat-title">${escapeHtml(FIT_LABEL[fitClass] || FIT_LABEL.unknown)} on this machine</div><div class="md-compat-copy">${escapeHtml(fitExplain(fitClass, memoryType))}${(m.fitEstimate || {}).recommendedContextK && m.contextK > m.fitEstimate.recommendedContextK ? ` Recommended context: ${m.fitEstimate.recommendedContextK}K.` : ''}</div></div>
+      <div class="md-compat-numbers">${(m.fitEstimate || {}).requiredPerNodeGB ? `~${m.fitEstimate.requiredPerNodeGB} GB needed at ${m.fitEstimate.contextK || 32}K` : (m.minVramGB ? `~${m.minVramGB} GB needed` : 'No estimate')}${(m.fitEstimate || {}).usablePerNodeGB ? ` · ${m.fitEstimate.usablePerNodeGB} GB usable` : (gpu ? ` · ${gpu} GB available` : '')}</div>
       ${gpu && m.minVramGB ? `<span class="mdl-meter" aria-hidden="true"><i style="--meter:${modelMeter(m, gpu)}%"></i></span>` : ''}
     </div>`;
   const clusterInfo = modelData.cluster || {};
@@ -5885,8 +5889,8 @@ function renderModelDetail(c) {
   const clusterFitClass = m.clusterFit || '';
   const clusterFit = lm && clusterInfo.distributedReady && clusterFitClass ? `<div class="md-compat-panel fit-${clusterFitClass}">
       <div><div class="md-compat-title">${escapeHtml(FIT_LABEL[clusterFitClass] || FIT_LABEL.unknown)} across ${clusterNodes} Sparks</div><div class="md-compat-copy">CloudlessOS can partition this model across the connected GB10 GPUs and keep the normal API endpoint unchanged.</div></div>
-      <div class="md-compat-numbers">${m.minVramGB ? `~${m.minVramGB} GB needed` : 'No estimate'} · ~${clusterInfo.combinedMemoryGB} GB aggregate</div>
-      ${clusterInfo.combinedMemoryGB && m.minVramGB ? `<span class="mdl-meter" aria-hidden="true"><i style="--meter:${modelMeter(m, clusterInfo.combinedMemoryGB)}%"></i></span>` : ''}
+      <div class="md-compat-numbers">${(m.clusterEstimate || {}).requiredPerNodeGB ? `~${m.clusterEstimate.requiredPerNodeGB} GB per Spark` : (m.minVramGB ? `~${m.minVramGB} GB total` : 'No estimate')} · ${clusterNodes} tensor shards</div>
+      ${(m.clusterEstimate || {}).usablePerNodeGB ? `<span class="mdl-meter" aria-hidden="true"><i style="--meter:${Math.max(4, Math.min(100, Math.round((m.clusterEstimate.requiredPerNodeGB / m.clusterEstimate.usablePerNodeGB) * 100)))}%"></i></span>` : ''}
     </div>` : '';
   const recNote = m.recommended ? `<div class="md-banner rec">${escapeHtml(m.recommendBy || 'Recommended for your region')}.</div>` : '';
   const gatedNote = (lm && m.gated && !m.downloaded) ? `<div class="md-banner note">This Hugging Face repository is gated. Accept its terms and provide your Hugging Face token before downloading.</div>` : '';

@@ -1,0 +1,819 @@
+{
+  "schema": "cloudless.apps.v2",
+  "version": 2,
+  "description": "CloudlessOS signed application and service catalog",
+  "apps": [
+    {
+      "id": "vllm",
+      "name": "vLLM Engine",
+      "description": "High-throughput inference engine powering Cloudless AI.",
+      "image": "vllm/vllm-openai:latest",
+      "archImages": {
+        "arm64": "nvcr.io/nvidia/vllm:26.05.post1-py3"
+      },
+      "archPlatforms": {
+        "arm64": [
+          "dgx-spark"
+        ]
+      },
+      "ports": {
+        "8000": 8000
+      },
+      "gpus": "all",
+      "openPath": "/",
+      "minVramGB": 6,
+      "verified": true,
+      "preinstall": true,
+      "service": true,
+      "engine": true,
+      "needsEngine": false,
+      "network": "cloudless",
+      "ipc": "host",
+      "ulimits": [
+        "memlock=-1",
+        "stack=67108864"
+      ],
+      "command": [
+        "Qwen/Qwen2.5-1.5B-Instruct",
+        "--served-model-name",
+        "cloudless",
+        "--gpu-memory-utilization",
+        "0.5",
+        "--max-model-len",
+        "32768",
+        "--enable-auto-tool-choice",
+        "--tool-call-parser",
+        "hermes"
+      ],
+      "archCommands": {
+        "arm64": [
+          "vllm",
+          "serve",
+          "Qwen/Qwen2.5-1.5B-Instruct",
+          "--served-model-name",
+          "cloudless",
+          "--gpu-memory-utilization",
+          "0.75",
+          "--max-model-len",
+          "32768",
+          "--reasoning-parser",
+          "qwen3",
+          "--enable-auto-tool-choice",
+          "--tool-call-parser",
+          "qwen3_coder"
+        ]
+      },
+      "volumes": {
+        "cloudless-hf": "/root/.cache/huggingface"
+      },
+      "health": {
+        "kind": "openai",
+        "path": "/v1/models",
+        "timeoutSeconds": 900
+      },
+      "resources": {
+        "memoryGB": 8,
+        "diskGB": 12,
+        "vramGB": 6
+      },
+      "exposure": {
+        "risk": "inference-control-plane",
+        "lan": "none",
+        "public": "none",
+        "requireAuth": true
+      }
+    },
+    {
+      "id": "sglang",
+      "name": "SGLang Engine",
+      "description": "Alternative high-performance inference engine (OpenAI-compatible).",
+      "image": "lmsysorg/sglang:latest",
+      "archImages": {
+        "arm64": "lmsysorg/sglang:latest-cu130"
+      },
+      "archPlatforms": {
+        "arm64": [
+          "dgx-spark"
+        ]
+      },
+      "ports": {
+        "8000": 8000
+      },
+      "gpus": "all",
+      "openPath": "/",
+      "minVramGB": 6,
+      "verified": false,
+      "preinstall": false,
+      "prefetch": true,
+      "service": true,
+      "engine": true,
+      "needsEngine": false,
+      "network": "cloudless",
+      "command": [
+        "python3",
+        "-m",
+        "sglang.launch_server",
+        "--model-path",
+        "Qwen/Qwen2.5-1.5B-Instruct",
+        "--served-model-name",
+        "cloudless",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+        "--mem-fraction-static",
+        "0.5",
+        "--context-length",
+        "32768",
+        "--tool-call-parser",
+        "qwen25",
+        "--enable-metrics"
+      ],
+      "archCommands": {
+        "arm64": [
+          "python3",
+          "-m",
+          "sglang.launch_server",
+          "--model-path",
+          "Qwen/Qwen2.5-1.5B-Instruct",
+          "--served-model-name",
+          "cloudless",
+          "--host",
+          "0.0.0.0",
+          "--port",
+          "8000",
+          "--mem-fraction-static",
+          "0.75",
+          "--context-length",
+          "32768",
+          "--reasoning-parser",
+          "qwen3",
+          "--tool-call-parser",
+          "qwen3_coder",
+          "--enable-metrics"
+        ]
+      },
+      "volumes": {
+        "cloudless-hf": "/root/.cache/huggingface"
+      },
+      "health": {
+        "kind": "openai",
+        "path": "/v1/models",
+        "timeoutSeconds": 900
+      },
+      "resources": {
+        "memoryGB": 8,
+        "diskGB": 45,
+        "vramGB": 6
+      },
+      "exposure": {
+        "risk": "inference-control-plane",
+        "lan": "none",
+        "public": "none",
+        "requireAuth": true
+      }
+    },
+    {
+      "id": "llamacpp",
+      "name": "llama.cpp Engine",
+      "description": "Lightweight engine — runs on CPU+GPU and offloads to system RAM (GGUF models).",
+      "image": "ghcr.io/ggml-org/llama.cpp:server-cuda",
+      "ports": {
+        "8000": 8000
+      },
+      "gpus": "all",
+      "openPath": "/",
+      "minVramGB": 0,
+      "verified": false,
+      "preinstall": false,
+      "prefetch": true,
+      "service": true,
+      "engine": true,
+      "needsEngine": false,
+      "network": "cloudless",
+      "command": [
+        "-hf",
+        "bartowski/Qwen2.5-1.5B-Instruct-GGUF:Q4_K_M",
+        "--alias",
+        "cloudless",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+        "-ngl",
+        "999",
+        "--jinja",
+        "--metrics"
+      ],
+      "volumes": {
+        "cloudless-llamacpp": "/root/.cache/llama.cpp"
+      },
+      "health": {
+        "kind": "openai",
+        "path": "/v1/models",
+        "timeoutSeconds": 600
+      },
+      "resources": {
+        "memoryGB": 4,
+        "diskGB": 8
+      },
+      "exposure": {
+        "risk": "inference-control-plane",
+        "lan": "none",
+        "public": "none",
+        "requireAuth": true
+      }
+    },
+    {
+      "id": "open-webui",
+      "name": "Open WebUI",
+      "description": "Chat with your local LLMs — the face of Cloudless AI.",
+      "category": "Chat \u0026 interfaces",
+      "tagline": "Full chat interface for your local model.",
+      "long": "Open WebUI is a full-featured chat interface for your local models — the friendly face of Cloudless AI. Hold long private conversations, upload documents to ask about, tune system prompts, and switch models, all running on your own GPU with nothing sent to the cloud.",
+      "examples": [
+        "Have long, private conversations with your local LLM",
+        "Upload a document and ask questions about its contents",
+        "Tune system prompts and switch between models",
+        "Revisit and continue your past chats"
+      ],
+      "image": "ghcr.io/open-webui/open-webui:main",
+      "ports": {
+        "3000": 8080
+      },
+      "env": {
+        "ENABLE_OLLAMA_API": "False",
+        "ENABLE_SIGNUP": "True",
+        "OPENAI_API_BASE_URL": "http://cloudless-ai:8000/v1",
+        "OPENAI_API_KEY": "cloudless",
+        "WEBUI_AUTH": "False",
+        "WEBUI_NAME": "Cloudless AI"
+      },
+      "gpus": "",
+      "openPath": "/",
+      "minVramGB": 0,
+      "verified": true,
+      "preinstall": true,
+      "service": false,
+      "hidden": true,
+      "engine": false,
+      "needsEngine": true,
+      "network": "cloudless",
+      "volumes": {
+        "cloudless-open-webui": "/app/backend/data"
+      },
+      "config": [
+        {
+          "file": "webui.env",
+          "lang": "env",
+          "env": true
+        }
+      ],
+      "settings": [
+        {
+          "key": "requireAuth",
+          "label": "Require an account to use it",
+          "help": "Off: anyone who opens Open WebUI can use it, no login. On: people must sign in with an account — the first account created becomes the administrator.",
+          "type": "toggle",
+          "default": "false",
+          "file": "webui.env",
+          "path": "WEBUI_AUTH"
+        },
+        {
+          "key": "allowSignup",
+          "label": "Allow new sign-ups",
+          "help": "Let people create their own accounts. Turn off once your accounts exist to lock new sign-ups.",
+          "type": "toggle",
+          "default": "true",
+          "file": "webui.env",
+          "path": "ENABLE_SIGNUP"
+        }
+      ],
+      "admin": {
+        "note": "Everything else about Open WebUI — users, model access, permissions, document/RAG settings and more — is managed inside Open WebUI's own Admin Panel (open the app, then top-right menu → Admin Panel). When you turn on account login, sign in with the built-in admin below (if Open WebUI asks you to create the admin instead, use the same details), then change the password right away — these are well-known defaults.",
+        "user": "admin@localhost",
+        "pass": "admin"
+      },
+      "health": {
+        "kind": "http",
+        "path": "/health",
+        "timeoutSeconds": 180
+      },
+      "llm": {
+        "consumes": true,
+        "route": "gateway",
+        "pinning": "dynamic",
+        "minContext": 8192,
+        "probePath": "/api/models"
+      },
+      "resources": {
+        "memoryGB": 4,
+        "diskGB": 5
+      },
+      "exposure": {
+        "risk": "chat-ui",
+        "lan": "opt-in",
+        "public": "opt-in",
+        "requireAuth": true
+      }
+    },
+    {
+      "id": "comfyui",
+      "name": "ComfyUI",
+      "description": "Node-based image/video generation (Stable Diffusion, Flux, …).",
+      "category": "Image \u0026 video",
+      "tagline": "Generate and edit images locally.",
+      "long": "ComfyUI is a powerful node-based studio for image and video generation. Build repeatable pipelines with Stable Diffusion and Flux — text-to-image, inpainting, upscaling and more — entirely on your own hardware, with full control over every step.",
+      "examples": [
+        "Generate images from a text prompt",
+        "Edit or restyle an existing photo with inpainting",
+        "Upscale images to high resolution",
+        "Design reusable generation workflows as node graphs"
+      ],
+      "image": "mmartial/comfyui-nvidia-docker:latest",
+      "archImages": {
+        "arm64": "mmartial/comfyui-nvidia-docker:ubuntu24_cuda13.2-dgx-latest"
+      },
+      "architectures": [
+        "amd64",
+        "arm64"
+      ],
+      "archPlatforms": {
+        "arm64": [
+          "dgx-spark"
+        ]
+      },
+      "ports": {
+        "8188": 8188
+      },
+      "gpus": "all",
+      "openPath": "/",
+      "minVramGB": 6,
+      "verified": false,
+      "preinstall": false,
+      "service": false,
+      "engine": false,
+      "needsEngine": false,
+      "network": "cloudless",
+      "volumes": {
+        "cloudless-comfyui": "/comfy/mnt"
+      },
+      "health": {
+        "kind": "http",
+        "path": "/system_stats",
+        "timeoutSeconds": 600
+      },
+      "resources": {
+        "memoryGB": 8,
+        "diskGB": 20,
+        "vramGB": 6
+      },
+      "exposure": {
+        "risk": "gpu-workload-ui",
+        "lan": "opt-in",
+        "public": "none"
+      }
+    },
+    {
+      "id": "ai-toolkit",
+      "name": "AI Toolkit",
+      "description": "Ostris AI Toolkit — train your own image-model LoRAs (FLUX, SDXL).",
+      "category": "Training \u0026 fine-tuning",
+      "tagline": "Train image-model LoRAs — by Ostris.",
+      "long": "Ostris AI Toolkit is the ultimate trainer for fine-tuning diffusion models. From its web UI you can train your own LoRAs for FLUX, SDXL and more, on your own images — entirely on your GPU. The UI is protected by a password (default: cloudless).",
+      "examples": [
+        "Train a FLUX LoRA on your own photos",
+        "Fine-tune SDXL on a custom style",
+        "Prepare datasets and run training jobs from a web UI",
+        "Export trained models to use in ComfyUI"
+      ],
+      "image": "ostris/aitoolkit:latest",
+      "architectures": [
+        "amd64"
+      ],
+      "ports": {
+        "8675": 8675
+      },
+      "env": {
+        "AI_TOOLKIT_AUTH": "cloudless",
+        "NODE_ENV": "production",
+        "TZ": "UTC"
+      },
+      "gpus": "all",
+      "openPath": "/",
+      "minVramGB": 24,
+      "verified": false,
+      "preinstall": false,
+      "service": false,
+      "engine": false,
+      "needsEngine": false,
+      "network": "cloudless",
+      "volumes": {
+        "cloudless-aitk-config": "/app/ai-toolkit/config",
+        "cloudless-aitk-data": "/app/ai-toolkit/datasets",
+        "cloudless-aitk-hf": "/root/.cache/huggingface/hub",
+        "cloudless-aitk-out": "/app/ai-toolkit/output"
+      },
+      "health": {
+        "kind": "http",
+        "path": "/",
+        "timeoutSeconds": 300
+      },
+      "resources": {
+        "memoryGB": 12,
+        "diskGB": 30,
+        "vramGB": 24
+      },
+      "exposure": {
+        "risk": "model-training-ui",
+        "lan": "opt-in",
+        "public": "opt-in",
+        "requireAuth": true
+      }
+    },
+    {
+      "id": "unsloth",
+      "name": "Unsloth",
+      "description": "Fast, low-VRAM fine-tuning for LLMs (Llama, Qwen, Gemma) in a notebook.",
+      "category": "Training \u0026 fine-tuning",
+      "tagline": "Fine-tune LLMs 2× faster, with less VRAM.",
+      "long": "Unsloth makes fine-tuning large language models fast and memory-efficient — often 2× faster and with far less VRAM. This image bundles Jupyter Lab with Unsloth and ready-to-run notebooks, so you can fine-tune models like Llama, Qwen and Gemma on your own data, then export to GGUF or your inference engine. The notebook is protected by a password (default: cloudless).",
+      "examples": [
+        "Fine-tune Llama or Qwen on your own dataset",
+        "Train QLoRA adapters that fit in low VRAM",
+        "Run ready-made fine-tuning notebooks",
+        "Export trained models to GGUF for local inference"
+      ],
+      "image": "unsloth/unsloth:latest",
+      "architectures": [
+        "amd64"
+      ],
+      "ports": {
+        "8888": 8888
+      },
+      "env": {
+        "JUPYTER_PASSWORD": "cloudless"
+      },
+      "gpus": "all",
+      "openPath": "/",
+      "minVramGB": 8,
+      "verified": false,
+      "preinstall": false,
+      "service": false,
+      "engine": false,
+      "needsEngine": false,
+      "network": "cloudless",
+      "volumes": {
+        "cloudless-unsloth-work": "/workspace/work"
+      },
+      "health": {
+        "kind": "http",
+        "path": "/lab",
+        "timeoutSeconds": 300
+      },
+      "resources": {
+        "memoryGB": 16,
+        "diskGB": 30,
+        "vramGB": 8
+      },
+      "exposure": {
+        "risk": "code-execution-ui",
+        "lan": "opt-in",
+        "public": "opt-in",
+        "requireAuth": true
+      }
+    },
+    {
+      "id": "openclaw",
+      "name": "OpenClaw",
+      "description": "Open-source personal AI agent that takes actions on your machine. Pre-wired to Cloudless AI.",
+      "category": "Agents \u0026 automation",
+      "tagline": "Autonomous agent that uses tools.",
+      "long": "OpenClaw is an open-source autonomous agent that takes real actions on your machine — reading files, running tools, and chaining steps to finish a task. It comes pre-wired to Cloudless AI, so there's nothing to set up: just tell it what you need.",
+      "examples": [
+        "Ask it to explain or refactor code in a project",
+        "Automate multi-step tasks using tools",
+        "Have it read files and answer questions about them",
+        "Let it draft and run commands on your behalf"
+      ],
+      "image": "samuelcardillo/cloudless-openclaw:v1",
+      "architectures": [
+        "amd64"
+      ],
+      "ports": {
+        "18789": 18789
+      },
+      "env": {
+        "CUSTOM_API_KEY": "cloudless"
+      },
+      "gpus": "",
+      "openPath": "/",
+      "minVramGB": 0,
+      "verified": false,
+      "preinstall": false,
+      "service": false,
+      "engine": false,
+      "needsEngine": true,
+      "network": "host",
+      "config": [
+        {
+          "file": "openclaw.json",
+          "path": "/root/.openclaw/openclaw.json",
+          "lang": "json"
+        }
+      ],
+      "settings": [
+        {
+          "key": "baseUrl",
+          "label": "AI endpoint",
+          "help": "OpenAI-compatible URL OpenClaw sends requests to.",
+          "type": "text",
+          "default": "http://127.0.0.1:8000/v1",
+          "file": "openclaw.json",
+          "path": "models.providers.custom.baseUrl"
+        },
+        {
+          "key": "alias",
+          "label": "Model name",
+          "help": "Display name shown for the model.",
+          "type": "text",
+          "default": "Cloudless AI",
+          "file": "openclaw.json",
+          "path": "agents.defaults.models.custom/cloudless.alias"
+        }
+      ],
+      "health": {
+        "kind": "http",
+        "path": "/",
+        "timeoutSeconds": 180
+      },
+      "llm": {
+        "consumes": true,
+        "route": "gateway",
+        "pinning": "dynamic",
+        "minContext": 32768,
+        "probePath": "/"
+      },
+      "resources": {
+        "memoryGB": 4,
+        "diskGB": 5
+      },
+      "exposure": {
+        "risk": "autonomous-agent",
+        "lan": "none",
+        "public": "none",
+        "requireAuth": true
+      }
+    },
+    {
+      "id": "hermes",
+      "name": "Hermes",
+      "description": "Nous Research's personal agent and dashboard, integrated with Cloudless AI.",
+      "category": "Agents \u0026 automation",
+      "tagline": "A persistent local agent with tools and memory.",
+      "long": "Hermes is a personal AI agent from Nous Research with persistent memory, tools, scheduled tasks and messaging integrations. CloudlessOS opens its local dashboard directly and connects it to the active Cloudless AI engine, so chats and model inference stay on this machine.",
+      "examples": [
+        "Use the local dashboard for persistent agent conversations",
+        "Chat with your AI from Telegram or Discord",
+        "Run tool-assisted tasks and scheduled automations",
+        "Keep memory and context across sessions and upgrades"
+      ],
+      "image": "nousresearch/hermes-agent:v2026.7.20",
+      "ports": {
+        "9119": 9119
+      },
+      "env": {
+        "API_SERVER_ENABLED": "true",
+        "API_SERVER_HOST": "127.0.0.1",
+        "API_SERVER_MODEL_NAME": "hermes-agent",
+        "API_SERVER_PORT": "8642",
+        "HERMES_DASHBOARD": "1",
+        "HERMES_DASHBOARD_FILES_ROOT": "/opt/data/workspace",
+        "HERMES_DASHBOARD_HOST": "127.0.0.1",
+        "HERMES_DASHBOARD_PORT": "9119",
+        "HERMES_MAX_TOKENS": "4096",
+        "OPENAI_API_KEY": "cloudless"
+      },
+      "gpus": "",
+      "openPath": "/",
+      "minVramGB": 0,
+      "verified": false,
+      "preinstall": true,
+      "service": false,
+      "localOnly": true,
+      "engine": false,
+      "needsEngine": true,
+      "network": "host",
+      "command": [
+        "gateway",
+        "run"
+      ],
+      "dataPath": "/opt/data",
+      "dataUID": 10000,
+      "config": [
+        {
+          "file": "config.yaml",
+          "lang": "yaml"
+        },
+        {
+          "file": "hermes.env",
+          "lang": "env",
+          "env": true
+        }
+      ],
+      "settings": [
+        {
+          "key": "allowAll",
+          "label": "Allow all users",
+          "help": "Let anyone message the agent (otherwise use the allowlist below).",
+          "type": "toggle",
+          "default": "false",
+          "file": "hermes.env",
+          "path": "GATEWAY_ALLOW_ALL_USERS"
+        },
+        {
+          "key": "tgToken",
+          "label": "Telegram bot token",
+          "type": "password",
+          "default": "",
+          "file": "hermes.env",
+          "path": "TELEGRAM_BOT_TOKEN"
+        },
+        {
+          "key": "tgUsers",
+          "label": "Telegram allowed users",
+          "help": "Comma-separated Telegram user IDs.",
+          "type": "text",
+          "default": "",
+          "file": "hermes.env",
+          "path": "TELEGRAM_ALLOWED_USERS"
+        },
+        {
+          "key": "discordToken",
+          "label": "Discord bot token",
+          "type": "password",
+          "default": "",
+          "file": "hermes.env",
+          "path": "DISCORD_BOT_TOKEN"
+        }
+      ],
+      "health": {
+        "kind": "http",
+        "path": "/api/status",
+        "timeoutSeconds": 180
+      },
+      "llm": {
+        "consumes": true,
+        "route": "gateway",
+        "pinning": "dynamic",
+        "minContext": 32768,
+        "probePath": "/api/talk/message/stream"
+      },
+      "resources": {
+        "memoryGB": 6,
+        "diskGB": 8
+      },
+      "exposure": {
+        "risk": "autonomous-agent",
+        "lan": "none",
+        "public": "none",
+        "requireAuth": true
+      }
+    },
+    {
+      "id": "whisper",
+      "name": "Cloudless Transcription",
+      "description": "Private speech-to-text powered by Whisper-compatible models.",
+      "category": "Voice & audio",
+      "tagline": "Transcribe audio without sending it away.",
+      "long": "A local OpenAI-compatible transcription service for applications, workflows and the Cloudless voice experience.",
+      "image": "ghcr.io/speaches-ai/speaches:0.9.0-rc.3-cuda",
+      "architectures": ["amd64", "arm64"],
+      "ports": {"9000": 8000},
+      "env": {"WHISPER__TTL": "86400"},
+      "volumes": {"cloudless-whisper": "/home/ubuntu/.cache/huggingface/hub"},
+      "gpus": "all",
+      "openPath": "/docs",
+      "minVramGB": 2,
+      "verified": false,
+      "network": "cloudless",
+      "health": {"kind": "http", "path": "/health", "port": 9000, "timeoutSeconds": 600},
+      "resources": {"memoryGB": 8, "diskGB": 12, "vramGB": 2},
+      "exposure": {"risk": "audio-inference-api", "lan": "none", "public": "none"}
+    },
+    {
+      "id": "kokoro",
+      "name": "Cloudless Voice",
+      "description": "Private, natural text-to-speech powered by Kokoro.",
+      "category": "Voice & audio",
+      "tagline": "Give local applications a natural voice.",
+      "long": "An OpenAI-compatible speech service that runs locally and can be used by Cloudless apps and workflows.",
+      "image": "ghcr.io/remsky/kokoro-fastapi-cpu:v0.2.4",
+      "architectures": ["amd64"],
+      "ports": {"8880": 8880},
+      "env": {"DEFAULT_VOICE": "af_heart", "UVICORN_WORKERS": "2"},
+      "openPath": "/docs",
+      "verified": false,
+      "network": "cloudless",
+      "health": {"kind": "http", "path": "/health", "port": 8880, "timeoutSeconds": 180},
+      "resources": {"memoryGB": 4, "diskGB": 4},
+      "exposure": {"risk": "speech-inference-api", "lan": "none", "public": "none"}
+    },
+    {
+      "id": "searxng",
+      "name": "Private Search",
+      "description": "Search the web through a private local SearXNG instance.",
+      "category": "Knowledge & research",
+      "tagline": "Private web search for people and agents.",
+      "long": "A local metasearch service used by Cloudless research tools and Hermes without handing one provider your complete search history.",
+      "image": "searxng/searxng:2026.3.8-a563127a2",
+      "ports": {"8888": 8080},
+      "env": {"SEARXNG_BASE_URL": "http://127.0.0.1:8888/", "SEARXNG_SECRET": "cloudless-local-search"},
+      "volumes": {"cloudless-searxng": "/etc/searxng"},
+      "openPath": "/",
+      "verified": false,
+      "localOnly": true,
+      "network": "cloudless",
+      "health": {"kind": "http", "path": "/healthz", "port": 8888, "timeoutSeconds": 120},
+      "resources": {"memoryGB": 1, "diskGB": 1},
+      "exposure": {"risk": "private-search-history", "lan": "none", "public": "none"}
+    },
+    {
+      "id": "qdrant",
+      "name": "Knowledge Index",
+      "description": "Local vector database for private retrieval and long-term knowledge.",
+      "category": "Knowledge & research",
+      "tagline": "Store private embeddings and retrieval indexes.",
+      "long": "Qdrant stores the semantic index used by local RAG and research workflows. Its API remains internal to CloudlessOS.",
+      "image": "qdrant/qdrant:v1.16.3",
+      "ports": {"6333": 6333, "6334": 6334},
+      "volumes": {"cloudless-qdrant": "/qdrant/storage"},
+      "openPath": "/dashboard",
+      "verified": false,
+      "localOnly": true,
+      "network": "cloudless",
+      "health": {"kind": "http", "path": "/", "port": 6333, "timeoutSeconds": 120},
+      "resources": {"memoryGB": 2, "diskGB": 10},
+      "exposure": {"risk": "private-vector-data", "lan": "none", "public": "none", "requireAuth": true}
+    },
+    {
+      "id": "embeddings",
+      "name": "Embedding Engine",
+      "description": "Local text embeddings for semantic search and RAG.",
+      "category": "Knowledge & research",
+      "tagline": "Turn documents into a searchable semantic index.",
+      "long": "A local Hugging Face TEI service used by knowledge and retrieval applications.",
+      "image": "ghcr.io/huggingface/text-embeddings-inference:cpu-1.9.1",
+      "architectures": ["amd64"],
+      "ports": {"8090": 80},
+      "env": {"MODEL_ID": "BAAI/bge-base-en-v1.5", "HF_HUB_DOWNLOAD_TIMEOUT": "120"},
+      "volumes": {"cloudless-embeddings": "/data"},
+      "openPath": "/docs",
+      "verified": false,
+      "localOnly": true,
+      "network": "cloudless",
+      "health": {"kind": "http", "path": "/health", "port": 8090, "timeoutSeconds": 600},
+      "resources": {"memoryGB": 4, "diskGB": 4},
+      "exposure": {"risk": "embedding-api", "lan": "none", "public": "none"}
+    },
+    {
+      "id": "perplexica",
+      "name": "Cloudless Research",
+      "description": "Deep research across private search and the active Cloudless model.",
+      "category": "Knowledge & research",
+      "tagline": "Research a subject using local reasoning and private search.",
+      "long": "Perplexica combines SearXNG results with the active Cloudless model to produce sourced research without a hosted research subscription.",
+      "image": "itzcrazykns1337/perplexica:slim-latest@sha256:6e399abf4ff587822b0ef0df11f36088fb928e17ac61556fe89beb68d48c378e",
+      "ports": {"3004": 3000},
+      "env": {"SEARXNG_API_URL": "http://cloudless-searxng:8080", "OPENAI_BASE_URL": "http://cloudless-ai:8000/v1", "OPENAI_API_KEY": "cloudless", "HOSTNAME": "0.0.0.0"},
+      "volumes": {"cloudless-perplexica-data": "/home/perplexica/data", "cloudless-perplexica-uploads": "/home/perplexica/uploads"},
+      "openPath": "/",
+      "verified": false,
+      "needsEngine": true,
+      "network": "cloudless",
+      "dependencies": ["searxng"],
+      "health": {"kind": "http", "path": "/", "port": 3004, "timeoutSeconds": 180},
+      "llm": {"consumes": true, "route": "gateway", "pinning": "dynamic", "minContext": 16384, "probePath": "/"},
+      "resources": {"memoryGB": 3, "diskGB": 5},
+      "exposure": {"risk": "research-ui", "lan": "opt-in", "public": "none"}
+    },
+    {
+      "id": "n8n",
+      "name": "Cloudless Workflows",
+      "description": "Visual workflow automation connected to local AI.",
+      "category": "Agents & automation",
+      "tagline": "Build automations that use your local model.",
+      "long": "n8n provides a visual workflow builder for scheduled jobs, APIs, databases and AI-powered automations.",
+      "image": "n8nio/n8n:2.6.4",
+      "ports": {"5678": 5678},
+      "env": {"N8N_HOST": "localhost", "N8N_PORT": "5678", "N8N_PROTOCOL": "http", "N8N_SECURE_COOKIE": "false", "GENERIC_TIMEZONE": "UTC"},
+      "volumes": {"cloudless-n8n": "/home/node/.n8n"},
+      "openPath": "/",
+      "verified": false,
+      "network": "cloudless",
+      "health": {"kind": "http", "path": "/healthz", "port": 5678, "timeoutSeconds": 180},
+      "resources": {"memoryGB": 4, "diskGB": 5},
+      "exposure": {"risk": "workflow-code-execution", "lan": "opt-in", "public": "opt-in", "requireAuth": true}
+    }
+  ]
+}

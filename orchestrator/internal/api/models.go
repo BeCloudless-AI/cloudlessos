@@ -18,6 +18,7 @@ import (
 	"github.com/cloudless/orchestrator/internal/catalog"
 	"github.com/cloudless/orchestrator/internal/hardware"
 	"github.com/cloudless/orchestrator/internal/jobs"
+	"github.com/cloudless/orchestrator/internal/modelfit"
 	"github.com/cloudless/orchestrator/internal/models"
 	"github.com/cloudless/orchestrator/internal/places"
 )
@@ -327,12 +328,14 @@ func (s *Server) modelDownloads(w http.ResponseWriter, _ *http.Request) {
 
 type modelView struct {
 	models.Model
-	Fit         string `json:"fit"`                   // fits | tight | over | unknown
-	ClusterFit  string `json:"clusterFit,omitempty"`  // fit when distributed across a healthy Spark cluster
-	Active      bool   `json:"active"`                // currently the served model
-	Downloaded  bool   `json:"downloaded"`            // present in the HF cache
-	Recommended bool   `json:"recommended,omitempty"` // recommended for the machine's region
-	RecommendBy string `json:"recommendBy,omitempty"` // why, e.g. "Recommended in France"
+	Fit             string             `json:"fit"` // fits | tight | over | unknown
+	FitEstimate     modelfit.Estimate  `json:"fitEstimate"`
+	ClusterFit      string             `json:"clusterFit,omitempty"`
+	ClusterEstimate *modelfit.Estimate `json:"clusterEstimate,omitempty"`
+	Active          bool               `json:"active"`                // currently the served model
+	Downloaded      bool               `json:"downloaded"`            // present in the HF cache
+	Recommended     bool               `json:"recommended,omitempty"` // recommended for the machine's region
+	RecommendBy     string             `json:"recommendBy,omitempty"` // why, e.g. "Recommended in France"
 }
 
 // modelsList returns two views: "yours" (models present on disk) and the curated
@@ -383,9 +386,18 @@ func (s *Server) modelsList(w http.ResponseWriter, r *http.Request) {
 	have[current] = true // the served model is, by definition, present
 
 	view := func(m models.Model) modelView {
-		mv := modelView{Model: m, Fit: fitFor(m.MinVRAMGB, gpuGB), Active: !engineUnloaded && m.ID == current, Downloaded: have[m.ID]}
+		estimate := modelfit.EstimateModel(m, modelfit.Envelope{
+			MemoryGB: float64(gpuGB), MemoryType: memoryType, Nodes: 1,
+		})
+		mv := modelView{Model: m, Fit: estimate.Status, FitEstimate: estimate,
+			Active: !engineUnloaded && m.ID == current, Downloaded: have[m.ID]}
 		if cluster.DistributedReady {
-			mv.ClusterFit = fitFor(m.MinVRAMGB, cluster.CombinedMemoryGB)
+			clusterEstimate := modelfit.EstimateModel(m, modelfit.Envelope{
+				MemoryGB: float64(cluster.LocalMemoryGB), MemoryType: memoryType,
+				Nodes: cluster.Nodes, Sharded: true,
+			})
+			mv.ClusterFit = clusterEstimate.Status
+			mv.ClusterEstimate = &clusterEstimate
 		}
 		if m.Region != "" && m.Region == country {
 			mv.Recommended = true

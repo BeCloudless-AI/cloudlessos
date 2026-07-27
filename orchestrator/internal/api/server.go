@@ -890,6 +890,31 @@ func (s *Server) runInstall(job *jobs.Job, app catalog.App) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer cancel()
 
+	dependencies, err := catalog.Dependencies(app.ID)
+	if err != nil {
+		job.Fail(err)
+		return
+	}
+	for _, dependency := range dependencies {
+		if current, _ := s.eng.Find(ctx, dependency.ContainerName()); current != nil && current.State == "running" {
+			continue
+		}
+		job.Progress("dependency", "Preparing required service: "+dependency.Name, -1, -1)
+		if _, err := s.installOne(ctx, job, dependency); err != nil {
+			job.Fail(fmt.Errorf("dependency %s: %w", dependency.Name, err))
+			return
+		}
+	}
+	id, err := s.installOne(ctx, job, app)
+	if err != nil {
+		job.Fail(err)
+		return
+	}
+	job.Succeed(id)
+}
+
+func (s *Server) installOne(ctx context.Context, job *jobs.Job, app catalog.App) (string, error) {
+
 	_ = s.eng.Remove(ctx, app.ContainerName()) // clear any stale container
 
 	// Use the manifest's validated digest when pinned, else the catalog tag.
@@ -900,15 +925,13 @@ func (s *Server) runInstall(job *jobs.Job, app catalog.App) {
 		job.Progress("building", "Building "+app.Name+" …", -1, -1)
 		dir, err := apps.Materialize(app.Build)
 		if err != nil {
-			job.Fail(err)
-			return
+			return "", err
 		}
 		defer os.RemoveAll(dir)
 		if err := s.eng.Build(ctx, app.Image, dir, func(l string) {
 			log.Printf("[build %s] %s", app.ID, l)
 		}); err != nil {
-			job.Fail(err)
-			return
+			return "", err
 		}
 	} else {
 		job.Progress("pulling", "Pulling image…", 0, 0)
@@ -932,8 +955,7 @@ func (s *Server) runInstall(job *jobs.Job, app catalog.App) {
 			job.Progress("pulling", fmt.Sprintf("Downloading layers %d/%d", done, total), done, total)
 		})
 		if err != nil {
-			job.Fail(err)
-			return
+			return "", err
 		}
 	}
 
@@ -942,10 +964,63 @@ func (s *Server) runInstall(job *jobs.Job, app catalog.App) {
 	spec.Image = img // run the exact image we pulled (pinned digest when manifest applies)
 	id, err := s.eng.Run(ctx, spec)
 	if err != nil {
-		job.Fail(err)
-		return
+		return "", err
 	}
-	job.Succeed(id)
+	job.Progress("verifying", "Checking "+app.Name+" readinessâ€¦", -1, -1)
+	if err := s.waitForAppHealth(ctx, app); err != nil {
+		_ = s.eng.Remove(context.Background(), app.ContainerName())
+		return "", err
+	}
+	return id, nil
+}
+
+func (s *Server) waitForAppHealth(parent context.Context, app catalog.App) error {
+	timeout := time.Duration(app.Health.TimeoutSeconds) * time.Second
+	if timeout <= 0 {
+		timeout = 60 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(parent, timeout)
+	defer cancel()
+	var last string
+	for {
+		container, err := s.eng.Find(ctx, app.ContainerName())
+		if err == nil && container != nil && container.State == "running" {
+			healthPort := app.Health.Port
+			if healthPort == 0 {
+				healthPort = app.PrimaryHostPort()
+			}
+			if app.Health.Kind == "container" || healthPort == 0 {
+				return nil
+			}
+			path := app.Health.Path
+			if path == "" {
+				path = "/"
+			}
+			req, _ := http.NewRequestWithContext(ctx, http.MethodGet,
+				fmt.Sprintf("http://127.0.0.1:%d%s", healthPort, path), nil)
+			if resp, requestErr := http.DefaultClient.Do(req); requestErr == nil {
+				_ = resp.Body.Close()
+				if resp.StatusCode < http.StatusInternalServerError {
+					return nil
+				}
+				last = resp.Status
+			} else {
+				last = requestErr.Error()
+			}
+		} else if err != nil {
+			last = err.Error()
+		} else if container != nil {
+			last = container.State
+		}
+		select {
+		case <-ctx.Done():
+			if last == "" {
+				last = ctx.Err().Error()
+			}
+			return fmt.Errorf("%s failed its %s health contract: %s", app.Name, app.Health.Kind, last)
+		case <-time.After(time.Second):
+		}
+	}
 }
 
 func (s *Server) jobState(w http.ResponseWriter, r *http.Request) {

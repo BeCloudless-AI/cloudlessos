@@ -354,8 +354,8 @@
   .sys-update-progress { margin-top: 13px; }
   .sys-update-progress-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 7px; color: var(--muted); font-size: 11.5px; }
   .sys-update-progress-head strong { color: var(--ink); font-variant-numeric: tabular-nums; }
-  .sys-update-progress-track { height: 7px; overflow: hidden; border-radius: 999px; background: color-mix(in srgb, var(--blue) 13%, var(--control)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--blue) 10%, transparent); }
-  .sys-update-progress-fill { height: 100%; min-width: 2px; border-radius: inherit; background: linear-gradient(90deg, var(--blue), color-mix(in srgb, var(--blue) 68%, var(--accent))); transition: width .35s ease; }
+  .sys-update-progress-track { height: 7px; overflow: hidden; border-radius: 999px; background: var(--progress-rail); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--progress-end) 12%, transparent); }
+  .sys-update-progress-fill { height: 100%; min-width: 2px; border-radius: inherit; background: linear-gradient(90deg, var(--progress-start), var(--progress-end)); box-shadow: 0 1px 5px -1px var(--progress-glow); transition: width .35s ease; }
   .sys-update-changelog { margin-top: 13px; padding: 12px 13px; border: 1px solid var(--hair); border-radius: 11px; background: var(--control); }
   .sys-update-changelog-title { font-size: 12.5px; font-weight: 700; color: var(--ink); }
   .sys-update-changelog-summary { margin-top: 4px; font-size: 11.5px; line-height: 1.45; color: var(--muted); }
@@ -738,9 +738,9 @@
     border-top-color: var(--accent); animation: spin 0.9s linear infinite; }
   .eb-txt { grid-column: 2; grid-row: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.4; }
   .eb-txt b { font-size: 13.5px; color: var(--ink); } .eb-txt span { font-size: 12px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .eb-percent { grid-column: 3; grid-row: 1; min-width: 44px; color: var(--accent); font-size: 14px; font-weight: 800; text-align: right; font-variant-numeric: tabular-nums; }
-  .eb-track { grid-column: 2 / -1; height: 6px; overflow: hidden; border-radius: 999px; background: color-mix(in srgb, var(--accent) 14%, var(--control)); }
-  .eb-track i { display: block; width: var(--engine-progress, 6%); height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 68%, white)); transition: width .4s ease; }
+  .eb-percent { grid-column: 3; grid-row: 1; min-width: 44px; color: var(--progress-end); font-size: 14px; font-weight: 800; text-align: right; font-variant-numeric: tabular-nums; }
+  .eb-track { grid-column: 2 / -1; height: 6px; overflow: hidden; border-radius: 999px; background: var(--progress-rail); }
+  .eb-track i { display: block; width: var(--engine-progress, 6%); height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--progress-start), var(--progress-end)); box-shadow: 0 1px 5px -1px var(--progress-glow); transition: width .4s ease; }
   .eb-track.indeterminate i { width: 32%; animation: engine-indeterminate 1.25s ease-in-out infinite; }
   @keyframes engine-indeterminate { from { transform: translateX(-110%); } to { transform: translateX(330%); } }
   .eb-action { grid-column: 4; grid-row: 1; }
@@ -841,15 +841,15 @@
   @property --m1 { syntax: "<color>"; inherits: false; initial-value: #46c7dd; }
   @property --m2 { syntax: "<color>"; inherits: false; initial-value: #5a8cff; }
   .track { height: 9px; border-radius: 999px; overflow: hidden; position: relative;
-    background: color-mix(in srgb, var(--ink) 8%, transparent);
+    background: var(--progress-rail);
     box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.12), inset 0 -1px 0 rgba(255, 255, 255, 0.25); }
   .track > i { display: block; height: 100%; min-width: 9px; border-radius: 999px; position: relative;
-    --m1: #46c7dd; --m2: #5a8cff;   /* calm: cyan → blue */
+    --m1: var(--progress-start); --m2: var(--progress-end);
     background: linear-gradient(90deg, var(--m1), var(--m2));
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), 0 1px 4px -1px color-mix(in srgb, var(--m2) 55%, transparent);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), 0 1px 4px -1px var(--progress-glow);
     transition: width 0.9s cubic-bezier(.22, 1, .36, 1), --m1 .5s ease, --m2 .5s ease; }
-  .track > i.mid { --m1: #5f8bff; --m2: #9a6bff; }   /* busy: blue → violet */
-  .track > i.hi  { --m1: #ffb24d; --m2: #ff5e6c; }   /* hot:  amber → red */
+  .track > i.mid { --m1: var(--progress-mid-start); --m2: var(--progress-mid-end); }
+  .track > i.hi  { --m1: var(--progress-hot-start); --m2: var(--progress-hot-end); }
   /* a small soft cap so the leading edge of the fill reads as rounded + lit */
   .track > i::after { content: ""; position: absolute; top: 0; right: 0; bottom: 0; width: 9px; border-radius: 999px;
     background: linear-gradient(180deg, rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.05)); }
@@ -959,8 +959,8 @@
   .machine-vram { margin-top: 13px; }
   .machine-vram-copy { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 10px; }
   .machine-vram-copy strong { color: var(--ink); font-size: 10.5px; font-variant-numeric: tabular-nums; }
-  .machine-vram-track { height: 6px; margin-top: 7px; overflow: hidden; border-radius: 999px; background: var(--control); }
-  .machine-vram-fill { width: var(--machine-meter); height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--blue), color-mix(in srgb, var(--blue) 58%, var(--accent))); }
+  .machine-vram-track { height: 6px; margin-top: 7px; overflow: hidden; border-radius: 999px; background: var(--progress-rail); }
+  .machine-vram-fill { width: var(--machine-meter); height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--progress-start), var(--progress-end)); box-shadow: 0 1px 5px -1px var(--progress-glow); }
   .machine-gpu-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 7px; margin-top: 11px; }
   .machine-gpu-metric { min-width: 0; padding: 8px 9px; border-radius: 9px; background: var(--control); }
   .machine-gpu-metric span { display: block; color: var(--muted); font-size: 8.5px; font-weight: 720; letter-spacing: .35px; text-transform: uppercase; }
@@ -989,8 +989,8 @@
   .machine-driver-fact { min-width: 0; padding: 8px 9px; border-radius: 9px; background: var(--control); }
   .machine-driver-fact span { display: block; color: var(--muted); font-size: 8.5px; font-weight: 720; letter-spacing: .35px; text-transform: uppercase; }
   .machine-driver-fact b { display: block; margin-top: 4px; overflow: hidden; color: var(--ink); font-size: 10.5px; text-overflow: ellipsis; white-space: nowrap; }
-  .machine-driver-progress { height: 6px; margin-top: 11px; overflow: hidden; border-radius: 999px; background: var(--control); }
-  .machine-driver-progress > span { display: block; width: var(--driver-progress); height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--blue), var(--accent)); transition: width .25s; }
+  .machine-driver-progress { height: 6px; margin-top: 11px; overflow: hidden; border-radius: 999px; background: var(--progress-rail); }
+  .machine-driver-progress > span { display: block; width: var(--driver-progress); height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--progress-start), var(--progress-end)); box-shadow: 0 1px 5px -1px var(--progress-glow); transition: width .25s; }
   .machine-driver-note { display: flex; align-items: flex-start; gap: 7px; margin-top: 10px; color: var(--warn); font-size: 9.5px; line-height: 1.45; }
   .machine-driver-note .ui-icon { width: 13px; height: 13px; margin-top: 1px; flex: none; }
   .machine-driver-actions { display: flex; justify-content: flex-end; gap: 7px; margin-top: 11px; }
@@ -1127,8 +1127,8 @@
   .cluster-connect-visual { width: min(430px, 88%); display: grid; grid-template-columns: 64px minmax(100px, 1fr) 64px; align-items: center; gap: 14px; }
   .cluster-connect-device { width: 64px; height: 64px; display: grid; place-items: center; border: 1px solid color-mix(in srgb, #76b900 35%, var(--hair)); border-radius: 18px; color: #76b900; background: var(--card-strong); box-shadow: 0 14px 30px -24px color-mix(in srgb, #76b900 75%, transparent); }
   .cluster-connect-device .ui-icon { width: 27px; height: 27px; }
-  .cluster-connect-line { position: relative; height: 6px; overflow: hidden; border-radius: 999px; background: var(--control); }
-  .cluster-connect-line::after { content: ''; position: absolute; inset: 0; border-radius: inherit; background: linear-gradient(90deg, transparent, #76b900 35% 65%, transparent); transform: translateX(-100%); animation: clusterConnecting 1.6s ease-in-out infinite; }
+  .cluster-connect-line { position: relative; height: 6px; overflow: hidden; border-radius: 999px; background: var(--progress-rail); }
+  .cluster-connect-line::after { content: ''; position: absolute; inset: 0; border-radius: inherit; background: linear-gradient(90deg, transparent, var(--progress-end) 35% 65%, transparent); box-shadow: 0 1px 5px -1px var(--progress-glow); transform: translateX(-100%); animation: clusterConnecting 1.6s ease-in-out infinite; }
   @keyframes clusterConnecting { to { transform: translateX(100%); } }
   .cluster-connect-progress h3 { margin: 24px 0 0; color: var(--ink); font-size: 16px; }
   .cluster-connect-progress > p { max-width: 520px; margin: 7px 0 0; color: var(--muted); font-size: 10.5px; line-height: 1.55; }
@@ -1139,8 +1139,8 @@
   .cluster-connect-stage i { width: 7px; height: 7px; flex: none; border-radius: 50%; background: #76b900; box-shadow: 0 0 0 4px color-mix(in srgb, #76b900 12%, transparent); }
   .cluster-disconnect-meter { width: min(540px, 100%); margin-top: 20px; }
   .cluster-disconnect-meter-head { margin-bottom: 7px; display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 9.5px; font-weight: 650; }
-  .cluster-disconnect-meter-track { height: 7px; overflow: hidden; border-radius: 999px; background: color-mix(in srgb, var(--muted) 18%, transparent); }
-  .cluster-disconnect-meter-track i { display: block; width: var(--disconnect-progress, 4%); height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 55%, #76b900)); transition: width .45s ease; }
+  .cluster-disconnect-meter-track { height: 7px; overflow: hidden; border-radius: 999px; background: var(--progress-rail); }
+  .cluster-disconnect-meter-track i { display: block; width: var(--disconnect-progress, 4%); height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--progress-start), var(--progress-end)); box-shadow: 0 1px 5px -1px var(--progress-glow); transition: width .45s ease; }
   .cluster-disconnect-stages .cluster-connect-stage { animation: none; }
   .cluster-disconnect-stages .cluster-connect-stage.active { color: var(--ink); border-color: color-mix(in srgb, var(--accent) 55%, var(--hair)); background: color-mix(in srgb, var(--accent) 9%, var(--card-strong)); }
   .cluster-disconnect-stages .cluster-connect-stage.done { color: var(--ok); }
@@ -1509,10 +1509,10 @@
   /* per-tile install progress — determinate when layers are known, a flowing
      barber-pole when not (organic, not a dead static stripe) */
   .tbar { height: 3px; width: 60px; margin: 8px auto 0; border-radius: 99px;
-    background: var(--panel-2); overflow: hidden; opacity: 0; transition: opacity 0.3s; }
+    background: var(--progress-rail); overflow: hidden; opacity: 0; transition: opacity 0.3s; }
   .tile.busy .tbar { opacity: 1; }
-  .tbar > i { display: block; height: 100%; width: 0; border-radius: 99px; background: var(--blue);
-    box-shadow: 0 0 8px -1px color-mix(in srgb, var(--blue) 70%, transparent);
+  .tbar > i { display: block; height: 100%; width: 0; border-radius: 99px; background: linear-gradient(90deg, var(--progress-start), var(--progress-end));
+    box-shadow: 0 0 8px -1px var(--progress-glow);
     transition: width 0.5s cubic-bezier(.22, 1, .36, 1); }
   .tile.busy .tbar.indet > i { width: 42%; transition: none; animation: indet 1.15s ease-in-out infinite; }
   @keyframes indet { 0% { margin-left: -42%; } 100% { margin-left: 100%; } }
@@ -1542,7 +1542,7 @@
   .model-download-copy { min-width: 0; display: grid; gap: 5px; }
   .model-download-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; font-weight: 760; }
   .model-download-meta { color: var(--muted); font-size: 10.5px; font-variant-numeric: tabular-nums; }
-  .model-download-percent { min-width: 42px; color: var(--blue); font-size: 12px; font-weight: 800; text-align: right; font-variant-numeric: tabular-nums; }
+  .model-download-percent { min-width: 42px; color: var(--progress-end); font-size: 12px; font-weight: 800; text-align: right; font-variant-numeric: tabular-nums; }
   .model-download-actions { display: flex; align-items: center; gap: 9px; }
   .model-download-cancel {
     width: 30px; height: 30px; padding: 0; display: grid; place-items: center; border-radius: 9px;
@@ -1552,11 +1552,12 @@
   .model-download-cancel:disabled { cursor: wait; opacity: .45; }
   .model-download-cancel .ui-icon { width: 13px; height: 13px; }
   .model-download-track, .mdl-download-track {
-    height: 5px; overflow: hidden; border-radius: 99px; background: var(--panel-2);
+    height: 5px; overflow: hidden; border-radius: 99px; background: var(--progress-rail);
   }
   .model-download-track > i, .mdl-download-track > i {
     display: block; height: 100%; width: var(--progress, 0%); border-radius: inherit;
-    background: linear-gradient(90deg, var(--blue), color-mix(in srgb, var(--blue) 55%, var(--accent)));
+    background: linear-gradient(90deg, var(--progress-start), var(--progress-end));
+    box-shadow: 0 1px 5px -1px var(--progress-glow);
     transition: width .35s ease;
   }
   .model-download-track.indeterminate > i, .mdl-download-track.indeterminate > i {
@@ -1564,7 +1565,7 @@
   }
   @keyframes model-download-indeterminate { from { transform: translateX(-105%); } to { transform: translateX(285%); } }
   .mdl-download-state { margin-top: 2px; display: grid; gap: 6px; }
-  .mdl-download-line { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--blue); font-size: 10px; font-weight: 700; }
+  .mdl-download-line { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--progress-end); font-size: 10px; font-weight: 700; }
   .mdl.downloading { border-color: color-mix(in srgb, var(--blue) 48%, var(--hair)); box-shadow: inset 3px 0 0 var(--blue); }
 
   /* toast */
@@ -1632,8 +1633,8 @@
     color: var(--blue); background: var(--blue-soft); font-size: 10.5px; font-weight: 720; line-height: 1.4; }
   .tour-await-dot { width: 7px; height: 7px; flex: none; border-radius: 50%; background: var(--blue); box-shadow: 0 0 0 0 color-mix(in srgb, var(--blue) 38%, transparent); animation: tour-await 1.55s ease-out infinite; }
   @keyframes tour-await { 70%, 100% { box-shadow: 0 0 0 7px transparent; } }
-  .tour-progress { height: 4px; margin-top: 18px; overflow: hidden; border-radius: 99px; background: var(--control); }
-  .tour-progress > i { display: block; width: var(--tour-progress); height: 100%; border-radius: inherit; background: var(--blue); transition: width .28s ease; }
+  .tour-progress { height: 4px; margin-top: 18px; overflow: hidden; border-radius: 99px; background: var(--progress-rail); }
+  .tour-progress > i { display: block; width: var(--tour-progress); height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--progress-start), var(--progress-end)); box-shadow: 0 1px 5px -1px var(--progress-glow); transition: width .28s ease; }
   .tour-actions { margin-top: 14px; display: flex; align-items: center; gap: 8px; }
   .tour-skip { padding-left: 0; color: var(--muted); }
   .tour-spacer { flex: 1; }
@@ -1917,6 +1918,13 @@
        notifications in dark themes such as Midnight. */
     --toast-bg: #111528; --toast-ink: #ffffff; --toast-edge: rgba(255, 255, 255, .16);
     --toast-error-bg: #a9262d; --toast-error-ink: #ffffff; --toast-error-edge: rgba(255, 255, 255, .22);
+    /* One progress language, recolored by each appearance theme. */
+    --progress-rail: rgba(49, 92, 245, .12);
+    --progress-start: #46c7dd; --progress-end: #5a8cff;
+    --progress-mid-start: #5f8bff; --progress-mid-end: #9a6bff;
+    --progress-hot-start: #ffb24d; --progress-hot-end: #ff5e6c;
+    --progress-good-start: #40c989; --progress-good-end: #1aa870;
+    --progress-glow: rgba(90, 140, 255, .42);
     --wall-motion: wall-mesh; --wall-speed: 34s; --wall-glow-speed: 24s; --wall-direction: alternate;
     --wall-parallax-x: 0px; --wall-parallax-y: 0px;
     --wall-glow-x: 0px; --wall-glow-y: 0px;
@@ -1927,6 +1935,10 @@
   }
   html[data-theme="dawn"], html[data-theme="dusk"] {
     --brand-mark: #c75838;
+    --progress-rail: rgba(199, 88, 56, .13);
+    --progress-start: #f09a5d; --progress-end: #d86d92;
+    --progress-mid-start: #e27c71; --progress-mid-end: #a978d4;
+    --progress-glow: rgba(216, 109, 146, .38);
     --wall-motion: wall-solar;
     --wall-speed: 29s; --wall-glow-speed: 20s; --wall-direction: alternate-reverse;
     --wall-glow-a: rgba(255, 126, 79, .28); --wall-glow-b: rgba(118, 128, 235, .17);
@@ -1935,6 +1947,10 @@
   }
   html[data-theme="night"] {
     --brand-mark: #7896ff;
+    --progress-rail: rgba(120, 150, 255, .14);
+    --progress-start: #668cff; --progress-end: #a779ff;
+    --progress-mid-start: #8098ff; --progress-mid-end: #c06dff;
+    --progress-glow: rgba(130, 104, 255, .48);
     --wall-motion: wall-deep;
     --wall-speed: 42s; --wall-glow-speed: 30s;
     --wall-glow-a: rgba(76, 123, 255, .3); --wall-glow-b: rgba(160, 79, 210, .19);
@@ -1949,6 +1965,10 @@
   }
   html[data-theme="midnight"] {
     --brand-mark: #7898ff;
+    --progress-rail: rgba(120, 152, 255, .15);
+    --progress-start: #648dff; --progress-end: #8e6fff;
+    --progress-mid-start: #7898ff; --progress-mid-end: #b66eff;
+    --progress-glow: rgba(106, 120, 255, .5);
     --wall-motion: wall-deep;
     --wall-speed: 46s; --wall-glow-speed: 34s; --wall-direction: alternate-reverse;
     --wall-glow-a: rgba(60, 107, 255, .32); --wall-glow-b: rgba(121, 72, 190, .21);
@@ -1965,6 +1985,11 @@
   }
   html[data-theme="aurora"] {
     --brand-mark: #55d9c2;
+    --progress-rail: rgba(85, 217, 194, .14);
+    --progress-start: #44d8bd; --progress-end: #5aa8ff;
+    --progress-mid-start: #34cdb6; --progress-mid-end: #8a79ff;
+    --progress-good-start: #71e6a8; --progress-good-end: #36c996;
+    --progress-glow: rgba(64, 220, 191, .46);
     --wall-motion: wall-aurora;
     --wall-speed: 22s; --wall-glow-speed: 15s;
     --wall-glow-a: rgba(50, 242, 201, .3); --wall-glow-b: rgba(112, 90, 255, .24);
@@ -1981,6 +2006,10 @@
   }
   html[data-theme="ember"] {
     --brand-mark: #c84b2b;
+    --progress-rail: rgba(200, 75, 43, .12);
+    --progress-start: #e85b32; --progress-end: #ff9a58;
+    --progress-mid-start: #dd6843; --progress-mid-end: #d67a87;
+    --progress-glow: rgba(232, 77, 42, .38);
     --wall-motion: wall-solar;
     --wall-speed: 31s; --wall-glow-speed: 21s; --wall-direction: alternate-reverse;
     --wall-glow-a: rgba(232, 77, 42, .26); --wall-glow-b: rgba(255, 177, 94, .2);
@@ -1997,6 +2026,10 @@
   }
   html[data-theme="sunbeam"] {
     --brand-mark: #d85a16;
+    --progress-rail: rgba(216, 90, 22, .14);
+    --progress-start: #e9681f; --progress-end: #ffb436;
+    --progress-mid-start: #e85a20; --progress-mid-end: #f28b34;
+    --progress-glow: rgba(255, 148, 34, .42);
     --wall-motion: wall-sunbeam;
     --wall-speed: 25s; --wall-glow-speed: 17s;
     --wall-glow-a: rgba(255, 247, 132, .48); --wall-glow-b: rgba(255, 130, 29, .25);
@@ -2867,8 +2900,8 @@
   .mdl-compat { margin-top: auto; display: flex; flex-direction: column; gap: 6px; }
   .mdl-compat-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
   .mdl-vram { color: var(--muted); font-size: 9.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .mdl-meter { height: 4px; overflow: hidden; border-radius: 999px; background: var(--hair); }
-  .mdl-meter > i { display: block; width: var(--meter); height: 100%; border-radius: inherit; background: #2faa5b; }
+  .mdl-meter { height: 4px; overflow: hidden; border-radius: 999px; background: var(--progress-rail); }
+  .mdl-meter > i { display: block; width: var(--meter); height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--progress-good-start), var(--progress-good-end)); }
   .fit-tight .mdl-meter > i { background: var(--warn); }
   .fit-over .mdl-meter > i { background: var(--err); }
   .mdl-foot { min-height: 28px; padding-top: 8px; }

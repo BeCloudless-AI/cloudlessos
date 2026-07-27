@@ -47,6 +47,56 @@ func TestEmbeddedWebToastUsesThemeIndependentAccessibleColors(t *testing.T) {
 	}
 }
 
+func TestEmbeddedWebProgressBarsUseThemePalettes(t *testing.T) {
+	content, err := webFS.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(content)
+
+	// Every user-selectable palette (plus Automatic's dawn/dusk/night states) must
+	// provide a distinct progress treatment instead of inheriting a fixed blue bar.
+	for _, want := range []string{
+		"--progress-start: #46c7dd; --progress-end: #5a8cff;",
+		"--progress-start: #f09a5d; --progress-end: #d86d92;",
+		"--progress-start: #668cff; --progress-end: #a779ff;",
+		"--progress-start: #648dff; --progress-end: #8e6fff;",
+		"--progress-start: #44d8bd; --progress-end: #5aa8ff;",
+		"--progress-start: #e85b32; --progress-end: #ff9a58;",
+		"--progress-start: #e9681f; --progress-end: #ffb436;",
+	} {
+		if !strings.Contains(page, want) {
+			t.Fatalf("embedded UI is missing progress theme palette %q", want)
+		}
+	}
+
+	for _, selector := range []string{
+		".sys-update-progress-fill",
+		".eb-track i",
+		".track > i",
+		".tbar > i",
+		".tour-progress > i",
+		".machine-vram-fill",
+		".machine-driver-progress > span",
+		".cluster-connect-line::after",
+		".cluster-disconnect-meter-track i",
+		".model-download-track > i, .mdl-download-track > i",
+	} {
+		start := strings.Index(page, selector+" {")
+		if start < 0 {
+			t.Fatalf("embedded UI is missing progress implementation %q", selector)
+		}
+		end := strings.Index(page[start:], "}")
+		if end < 0 {
+			t.Fatalf("embedded UI has an unterminated rule for %q", selector)
+		}
+		rule := page[start : start+end]
+		if !strings.Contains(rule, "var(--progress-") {
+			t.Fatalf("progress implementation %q bypasses theme progress tokens", selector)
+		}
+	}
+}
+
 func contrastRatio(a, b string) float64 {
 	lighter, darker := relativeLuminance(a), relativeLuminance(b)
 	if lighter < darker {

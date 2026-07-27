@@ -5,6 +5,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 atomic="$ROOT/distro/scripts/test-atomic-repository.sh"
 builder="$ROOT/distro/scripts/build-apt-repository.sh"
 release="$ROOT/distro/scripts/release.sh"
+matrix="$ROOT/distro/scripts/validate-release-matrix.sh"
 
 grep -Fq 'TEST_VERSION="0.0.0-test-only"' "$atomic"
 grep -Fq 'CLOUDLESS_PACKAGE_OUT="$work/packages"' "$atomic"
@@ -23,5 +24,8 @@ fi
 grep -Fq 'TEST ONLY: atomic publication simulation' "$release"
 grep -Fq 'PRODUCTION: clean rebuild and signing of CloudlessOS $VERSION' "$release"
 grep -Fq 'CLOUDLESS_SKIP_PACKAGE_BUILD=1' "$release"
+grep -Fq 'CLOUDLESS_SOURCE_COMMIT="$full_commit"' "$release"
+grep -Fq 'commit="${CLOUDLESS_SOURCE_COMMIT:-}"' "$matrix"
+grep -Fq 'if [ -z "$commit" ]; then' "$matrix"
 
 echo "Release test isolation checks passed."

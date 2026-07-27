@@ -111,7 +111,10 @@ echo "    Nothing from this test can enter distro/out or the production R2 bucke
 docker run --rm -v "$ROOT:/src" -w /src \
     cloudless-release-builder bash distro/scripts/test-atomic-repository.sh
 echo "==> Binding the validated platform matrix to this exact release"
-docker run --rm -e CLOUDLESS_PACKAGE_OUT=/src/distro/out/packages -v "$ROOT:/src" -w /src \
+docker run --rm \
+    -e CLOUDLESS_PACKAGE_OUT=/src/distro/out/packages \
+    -e CLOUDLESS_SOURCE_COMMIT="$full_commit" \
+    -v "$ROOT:/src" -w /src \
     cloudless-package-builder bash distro/scripts/validate-release-matrix.sh "$VERSION" "$CHANNEL"
 
 signed_manifest="$ROOT/distro/out/apt-repository/dists/$CHANNEL/cloudless-release.json"

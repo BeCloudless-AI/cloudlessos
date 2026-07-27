@@ -15,12 +15,16 @@ for command in file go python3 dpkg-deb sha256sum; do
     command -v "$command" >/dev/null || { echo "Missing release-gate command: $command" >&2; exit 1; }
 done
 test -s "$MATRIX" || { echo "Missing release validation matrix" >&2; exit 1; }
-commit="$(git -C "$ROOT" rev-parse HEAD)"
+commit="${CLOUDLESS_SOURCE_COMMIT:-}"
+if [ -z "$commit" ]; then
+    command -v git >/dev/null || { echo "Git is required when CLOUDLESS_SOURCE_COMMIT is not set." >&2; exit 1; }
+    commit="$(git -C "$ROOT" rev-parse HEAD)"
+    git -C "$ROOT" diff --quiet && git -C "$ROOT" diff --cached --quiet || {
+        echo "Release gates require a clean tracked source tree." >&2
+        exit 1
+    }
+fi
 [[ "$commit" =~ ^[0-9a-f]{40}$ ]] || { echo "Invalid source commit" >&2; exit 1; }
-git -C "$ROOT" diff --quiet && git -C "$ROOT" diff --cached --quiet || {
-    echo "Release gates require a clean tracked source tree." >&2
-    exit 1
-}
 
 python3 - "$MATRIX" <<'PY'
 import json, sys

@@ -696,6 +696,7 @@
       "openPath": "/docs",
       "minVramGB": 2,
       "verified": false,
+      "hidden": true,
       "network": "cloudless",
       "health": {"kind": "http", "path": "/health", "port": 9000, "timeoutSeconds": 600},
       "resources": {"memoryGB": 8, "diskGB": 12, "vramGB": 2},
@@ -714,6 +715,7 @@
       "env": {"DEFAULT_VOICE": "af_heart", "UVICORN_WORKERS": "2"},
       "openPath": "/docs",
       "verified": false,
+      "hidden": true,
       "network": "cloudless",
       "health": {"kind": "http", "path": "/health", "port": 8880, "timeoutSeconds": 180},
       "resources": {"memoryGB": 4, "diskGB": 4},
@@ -728,10 +730,11 @@
       "long": "A local metasearch service used by Cloudless research tools and Hermes without handing one provider your complete search history.",
       "image": "searxng/searxng:2026.3.8-a563127a2",
       "ports": {"8888": 8080},
-      "env": {"SEARXNG_BASE_URL": "http://127.0.0.1:8888/", "SEARXNG_SECRET": "cloudless-local-search"},
+      "env": {"SEARXNG_BASE_URL": "http://127.0.0.1:8888/"},
       "volumes": {"cloudless-searxng": "/etc/searxng"},
       "openPath": "/",
       "verified": false,
+      "hidden": true,
       "localOnly": true,
       "network": "cloudless",
       "health": {"kind": "http", "path": "/healthz", "port": 8888, "timeoutSeconds": 120},
@@ -750,6 +753,7 @@
       "volumes": {"cloudless-qdrant": "/qdrant/storage"},
       "openPath": "/dashboard",
       "verified": false,
+      "hidden": true,
       "localOnly": true,
       "network": "cloudless",
       "health": {"kind": "http", "path": "/", "port": 6333, "timeoutSeconds": 120},
@@ -770,6 +774,7 @@
       "volumes": {"cloudless-embeddings": "/data"},
       "openPath": "/docs",
       "verified": false,
+      "hidden": true,
       "localOnly": true,
       "network": "cloudless",
       "health": {"kind": "http", "path": "/health", "port": 8090, "timeoutSeconds": 600},
@@ -789,6 +794,7 @@
       "volumes": {"cloudless-perplexica-data": "/home/perplexica/data", "cloudless-perplexica-uploads": "/home/perplexica/uploads"},
       "openPath": "/",
       "verified": false,
+      "hidden": true,
       "needsEngine": true,
       "network": "cloudless",
       "dependencies": ["searxng"],
@@ -810,10 +816,58 @@
       "volumes": {"cloudless-n8n": "/home/node/.n8n"},
       "openPath": "/",
       "verified": false,
+      "hidden": true,
       "network": "cloudless",
       "health": {"kind": "http", "path": "/healthz", "port": 5678, "timeoutSeconds": 180},
       "resources": {"memoryGB": 4, "diskGB": 5},
-      "exposure": {"risk": "workflow-code-execution", "lan": "opt-in", "public": "opt-in", "requireAuth": true}
+      "exposure": {"risk": "workflow-code-execution", "lan": "opt-in", "public": "none", "requireAuth": true}
+    }
+  ],
+  "packs": [
+    {
+      "id": "voice",
+      "name": "Cloudless Voice",
+      "description": "Private speech-to-text and natural text-to-speech services for local apps and agents.",
+      "category": "Voice & audio",
+      "icon": "voice",
+      "apps": ["whisper", "kokoro"],
+      "launchApp": "kokoro"
+    },
+    {
+      "id": "rag",
+      "name": "Private Knowledge",
+      "description": "Local embeddings and a private vector index for retrieval-augmented generation.",
+      "category": "Knowledge & research",
+      "icon": "knowledge",
+      "apps": ["embeddings", "qdrant"],
+      "launchApp": "qdrant"
+    },
+    {
+      "id": "search",
+      "name": "Private Search",
+      "description": "A local metasearch service for Cloudless apps and agents.",
+      "category": "Knowledge & research",
+      "icon": "search",
+      "apps": ["searxng"],
+      "launchApp": "searxng"
+    },
+    {
+      "id": "research",
+      "name": "Cloudless Research",
+      "description": "Sourced deep research using Private Search and the active Cloudless model.",
+      "category": "Knowledge & research",
+      "icon": "research",
+      "apps": ["perplexica"],
+      "launchApp": "perplexica"
+    },
+    {
+      "id": "workflows",
+      "name": "Cloudless Workflows",
+      "description": "Visual local automation for schedules, APIs, data, and AI-powered workflows.",
+      "category": "Agents & automation",
+      "icon": "workflow",
+      "apps": ["n8n"],
+      "launchApp": "n8n"
     }
   ]
 }

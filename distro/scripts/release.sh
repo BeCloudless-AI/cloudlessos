@@ -89,6 +89,9 @@ run_publisher() {
 echo "==> Go tests"
 docker run --rm -v "$ROOT:/src" -w /src/orchestrator \
     cloudless-release-builder go test ./...
+echo "==> Go static analysis"
+docker run --rm -v "$ROOT:/src" -w /src/orchestrator \
+    cloudless-release-builder go vet ./...
 echo "==> Release environment loader"
 bash "$ROOT/distro/scripts/test-release-env.sh"
 echo "==> Release test isolation"
@@ -107,6 +110,9 @@ echo "    Uses version 0.0.0-test-only, a disposable key, temporary packages, an
 echo "    Nothing from this test can enter distro/out or the production R2 bucket."
 docker run --rm -v "$ROOT:/src" -w /src \
     cloudless-release-builder bash distro/scripts/test-atomic-repository.sh
+echo "==> Binding the validated platform matrix to this exact release"
+docker run --rm -e CLOUDLESS_PACKAGE_OUT=/src/distro/out/packages -v "$ROOT:/src" -w /src \
+    cloudless-package-builder bash distro/scripts/validate-release-matrix.sh "$VERSION" "$CHANNEL"
 
 signed_manifest="$ROOT/distro/out/apt-repository/dists/$CHANNEL/cloudless-release.json"
 assert_source_unchanged

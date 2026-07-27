@@ -64,6 +64,8 @@ type Server struct {
 
 	engineJobsMu sync.Mutex
 	engineJobs   map[string]context.CancelFunc
+
+	installMu sync.Mutex // one catalog/pack transaction may change containers at a time
 }
 
 // NewServer constructs a Server backed by the given engine, state store and manifests.
@@ -111,6 +113,9 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/system/nvidia-driver", s.nvidiaDriverGet)
 	mux.HandleFunc("POST /api/system/nvidia-driver/check", s.nvidiaDriverCheck)
 	mux.HandleFunc("POST /api/system/nvidia-driver/apply", s.nvidiaDriverApply)
+	mux.HandleFunc("GET /api/system/doctor", s.systemDoctor)
+	mux.HandleFunc("POST /api/system/doctor/run", s.systemDoctor)
+	mux.HandleFunc("POST /api/system/doctor/bundle", s.systemDoctorBundle)
 	mux.HandleFunc("GET /api/system/spark-cluster", s.sparkClusterStatus)
 	mux.HandleFunc("POST /api/system/spark-cluster/discover", s.sparkClusterDiscover)
 	mux.HandleFunc("POST /api/system/spark-cluster/preflight", s.sparkClusterPreflight)
@@ -120,6 +125,9 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/profile", s.profileGet)
 	mux.HandleFunc("POST /api/profile", s.profileSet)
 	mux.HandleFunc("GET /api/catalog", s.catalog)
+	mux.HandleFunc("GET /api/packs", s.packsList)
+	mux.HandleFunc("POST /api/packs/{id}/install", s.packInstall)
+	mux.HandleFunc("POST /api/packs/{id}/uninstall", s.packUninstall)
 	mux.HandleFunc("GET /api/apps", s.apps)
 	mux.HandleFunc("POST /api/apps/{id}/start", s.start)
 	mux.HandleFunc("POST /api/apps/{id}/stop", s.stop)
@@ -390,6 +398,7 @@ func (s *Server) engineState(w http.ResponseWriter, r *http.Request) {
 		"unloaded":       currentState.EngineUnloaded,
 		"engines":        list,
 		"startup":        startup,
+		"promotion":      currentState.ModelPromotion,
 		"operation":      operation,
 		"operationJobId": operationJobID,
 		"canAbort":       canAbort,
@@ -887,6 +896,8 @@ func (s *Server) start(w http.ResponseWriter, r *http.Request) {
 
 // runInstall pulls the image (streaming progress into the job) and runs it.
 func (s *Server) runInstall(job *jobs.Job, app catalog.App) {
+	s.installMu.Lock()
+	defer s.installMu.Unlock()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer cancel()
 
@@ -966,7 +977,7 @@ func (s *Server) installOne(ctx context.Context, job *jobs.Job, app catalog.App)
 	if err != nil {
 		return "", err
 	}
-	job.Progress("verifying", "Checking "+app.Name+" readinessâ€¦", -1, -1)
+	job.Progress("verifying", "Checking "+app.Name+" readiness…", -1, -1)
 	if err := s.waitForAppHealth(ctx, app); err != nil {
 		_ = s.eng.Remove(context.Background(), app.ContainerName())
 		return "", err

@@ -73,6 +73,14 @@ manifest_path, base_path = sys.argv[1:]
 base = pathlib.Path(base_path)
 with open(manifest_path, encoding="utf-8") as handle:
     release = json.load(handle)
+validation = release.get("validation")
+if not isinstance(validation, dict) or validation.get("schema") != "cloudless.release-gates.v1":
+    raise SystemExit("Signed release is missing its validation-gate attestation")
+if validation.get("version") != release.get("version") or validation.get("channel") != release.get("channel") or validation.get("sourceCommit") != release.get("sourceCommit"):
+    raise SystemExit("Signed release validation attestation does not match the release identity")
+required = {"go-tests", "go-vet", "web-javascript", "app-manifest-v2", "platform-matrix", "package-architecture", "package-contents", "release-isolation", "atomic-repository"}
+if set(validation.get("passedGates", [])) != required:
+    raise SystemExit("Signed release validation gate set is incomplete")
 artifacts = release.get("artifacts")
 if not isinstance(artifacts, list) or {item.get("name") for item in artifacts} != {
     "install-dgx-spark.sh", "cloudless-apps-manifest.json"

@@ -77,6 +77,14 @@ func Run(ctx context.Context, eng engine.Engine, st *state.Store, mf *manifest.S
 		desired = catalog.DefaultEngine()
 	}
 	model := currentState.Model
+	bootstrapMode := ShouldBootstrap(currentState, st.FirstRun())
+	if bootstrapMode {
+		model = BootstrapModel()
+		promotion := promotionSnapshot(currentState.ModelPromotion, "bootstrap", model, catalog.DefaultModel(), model, "Starting a lightweight model so Cloudless AI becomes available quickly.")
+		promotion.Rollback = model
+		_ = st.SetModelPromotion(promotion)
+		logf("model promotion: starting bootstrap model " + model)
+	}
 	clusterMode := currentState.ExecutionMode == "cluster" && desired == "vllm" && !currentState.EngineUnloaded
 	if !clusterMode {
 		_ = sparkcluster.StopWorker(ctx)
@@ -257,6 +265,9 @@ func Run(ctx context.Context, eng engine.Engine, st *state.Store, mf *manifest.S
 
 	// Local-network serving: match the persisted preference (default ON).
 	EnsureLAN(ctx, eng, mf, PrimaryLANIP(), st.LocalNetwork(), logf)
+	if bootstrapMode {
+		PromoteDefault(ctx, eng, st, mf, logf)
+	}
 	logf("done")
 }
 

@@ -31,6 +31,25 @@ type DisplayPreference struct {
 	Height int    `json:"height,omitempty"`
 }
 
+// ModelPromotion records the durable bootstrap-to-target model transition. It
+// intentionally lives in the install state (rather than only in process memory)
+// so an interrupted download or verification can be resumed safely after boot.
+type ModelPromotion struct {
+	Phase       string `json:"phase,omitempty"` // idle | waiting-hardware | bootstrap | downloading | switching | verifying | ready | rollback | canceled | error
+	Bootstrap   string `json:"bootstrap,omitempty"`
+	Target      string `json:"target,omitempty"`
+	Active      string `json:"active,omitempty"`
+	Rollback    string `json:"rollback,omitempty"`
+	Message     string `json:"message,omitempty"`
+	BytesDone   int64  `json:"bytesDone,omitempty"`
+	BytesTotal  int64  `json:"bytesTotal,omitempty"`
+	Started     string `json:"started,omitempty"`
+	Updated     string `json:"updated,omitempty"`
+	Error       string `json:"error,omitempty"`
+	TargetReady bool   `json:"targetReady,omitempty"`
+	Attempts    int    `json:"attempts,omitempty"`
+}
+
 // APIKey is a user-generated credential for the Cloudless Proxy (the OpenAI-compatible
 // gateway). The full key is shown ONCE at creation; only its SHA-256 hash is stored.
 type APIKey struct {
@@ -83,6 +102,8 @@ type State struct {
 	APIKeys        []APIKey                `json:"apiKeys,omitempty"`        // Cloudless Proxy credentials
 	Display        DisplayPreference       `json:"display,omitempty"`        // preferred display output and mode
 	CustomModels   map[string]models.Model `json:"customModels,omitempty"`   // user-imported Hugging Face repositories
+	ModelPromotion ModelPromotion          `json:"modelPromotion,omitempty"` // verified bootstrap/full-model lifecycle
+	InstalledPacks []string                `json:"installedPacks,omitempty"` // optional capability packs installed by Cloudless
 
 	// EngineCmds holds user-edited launch commands, keyed "engineID\x00modelID".
 	// The value is the container command (args after the image) to use when that
@@ -222,6 +243,20 @@ func (s *Store) SetModel(model string) error {
 	return s.save()
 }
 
+// SetModelPromotion persists a complete promotion snapshot atomically. The
+// caller owns phase transitions; the store stamps Updated for consistent UI and
+// support-bundle timelines.
+func (s *Store) SetModelPromotion(p ModelPromotion) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	p.Updated = now()
+	if p.Started == "" && p.Phase != "" && p.Phase != "idle" {
+		p.Started = p.Updated
+	}
+	s.st.ModelPromotion = p
+	return s.save()
+}
+
 // SetExecutionMode persists whether inference runs locally or across a healthy
 // multi-Spark cluster. Unknown values safely fall back to local execution.
 func (s *Store) SetExecutionMode(mode string) error {
@@ -231,6 +266,33 @@ func (s *Store) SetExecutionMode(mode string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.st.ExecutionMode = mode
+	return s.save()
+}
+
+func (s *Store) Packs() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]string(nil), s.st.InstalledPacks...)
+}
+
+func (s *Store) SetPackInstalled(id string, installed bool) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	next := make([]string, 0, len(s.st.InstalledPacks)+1)
+	found := false
+	for _, existing := range s.st.InstalledPacks {
+		if existing == id {
+			found = true
+			if !installed {
+				continue
+			}
+		}
+		next = append(next, existing)
+	}
+	if installed && !found {
+		next = append(next, id)
+	}
+	s.st.InstalledPacks = next
 	return s.save()
 }
 

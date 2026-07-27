@@ -1,0 +1,19 @@
+{
+  "schema": "cloudless.release-validation.v1",
+  "targets": [
+    { "platform": "generic", "architecture": "amd64", "packages": true, "binary": true },
+    { "platform": "generic", "architecture": "arm64", "packages": true, "binary": true },
+    { "platform": "dgx-spark", "architecture": "arm64", "packages": true, "binary": true }
+  ],
+  "requiredGates": [
+    "go-tests",
+    "go-vet",
+    "web-javascript",
+    "app-manifest-v2",
+    "platform-matrix",
+    "package-architecture",
+    "package-contents",
+    "release-isolation",
+    "atomic-repository"
+  ]
+}

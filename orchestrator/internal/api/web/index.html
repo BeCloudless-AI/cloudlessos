@@ -871,6 +871,19 @@
   .inf-state-pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
   .inf-state-pill.ready { color: #2faa5b; background: color-mix(in srgb, #2faa5b 9%, var(--card)); border-color: color-mix(in srgb, #2faa5b 25%, var(--hair)); }
   /* Settings: Machine */
+
+  .doctor-page{display:flex;flex-direction:column;gap:18px;padding-bottom:28px}
+  .doctor-summary{display:flex;align-items:center;gap:16px;padding:20px;border:1px solid var(--line);border-radius:20px;background:var(--panel-2)}
+  .doctor-summary-mark{width:50px;height:50px;border-radius:16px;display:grid;place-items:center;background:color-mix(in srgb,var(--accent) 15%,var(--panel));color:var(--accent);flex:0 0 auto}
+  .doctor-summary-mark .ui-icon{width:23px;height:23px}
+  .doctor-summary-copy{min-width:0;flex:1}.doctor-summary-copy b{display:block;font-size:18px;color:var(--text);margin-bottom:4px}.doctor-summary-copy span{color:var(--muted);font-size:14px}
+  .doctor-state{font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;border-radius:999px;padding:7px 10px;background:var(--panel);border:1px solid var(--line)}
+  .doctor-state.healthy{color:#2fc477}.doctor-state.warning{color:#e7a83d}.doctor-state.needs-attention{color:#ef6c67}
+  .doctor-checks{display:grid;gap:10px}.doctor-check{display:grid;grid-template-columns:34px minmax(0,1fr);gap:12px;padding:15px 16px;border:1px solid var(--line);border-radius:16px;background:var(--panel-2)}
+  .doctor-check-dot{width:28px;height:28px;border-radius:10px;display:grid;place-items:center;font-size:13px;font-weight:900;background:var(--panel)}
+  .doctor-check.pass .doctor-check-dot{color:#2fc477}.doctor-check.warning .doctor-check-dot{color:#e7a83d}.doctor-check.fail .doctor-check-dot{color:#ef6c67}
+  .doctor-check-copy b{display:block;color:var(--text);font-size:14px;margin:2px 0 4px}.doctor-check-copy span,.doctor-check-copy small{display:block;color:var(--muted);font-size:13px;line-height:1.45}.doctor-check-copy small{margin-top:6px;color:var(--text-2)}
+  .doctor-actions{display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap}
   .machine-page { display: flex; flex-direction: column; gap: 14px; }
   .machine-layout { display: grid; grid-template-columns: minmax(0, .92fr) minmax(0, 1.08fr); gap: 14px; align-items: stretch; }
   .machine-card { min-width: 0; padding: 17px; border: 1px solid var(--hair); border-radius: 16px;
@@ -1672,7 +1685,7 @@
 
   /* right: intro by default, app detail when selected */
   .lp-detail { flex: 1; overflow-y: auto; padding: 30px 34px; min-width: 0; }
-  .lp-intro { max-width: 460px; margin: 4vh auto 0; text-align: center; animation: rise-in .4s ease both; }
+  .lp-intro { max-width: 900px; margin: 2vh auto 0; text-align: center; animation: rise-in .4s ease both; }
   .lp-intro .ii { width: 56px; height: 56px; border-radius: 15px; margin: 0 auto 20px; background: var(--blue); position: relative; }
   .lp-intro .ii::after { content: ""; position: absolute; right: 9px; top: 9px; width: 9px; height: 9px; border-radius: 50%; background: var(--accent); }
   .lp-intro h2 { margin: 0 0 10px; font-size: 20px; font-weight: 700; letter-spacing: -0.3px; }
@@ -1682,6 +1695,14 @@
   .lp-cc .cc-ic { font-size: 18px; line-height: 1.4; flex: none; }
   .lp-cc .cc-d { font-size: 12.5px; } .lp-cc .cc-t { font-weight: 700; font-size: 13px; margin-bottom: 1px; }
   .lp-cc .cc-d span { color: var(--muted); line-height: 1.5; }
+  .pack-title{margin:28px 0 6px;font-size:16px;text-align:left}.pack-sub{margin:0 0 14px!important;text-align:left;font-size:13px!important}
+  .pack-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;text-align:left}
+  .pack-card{display:flex;flex-direction:column;min-height:178px;padding:18px;border:1px solid var(--hair);border-radius:17px;background:var(--panel-2);transition:border-color .18s,transform .18s}
+  .pack-card:hover{border-color:color-mix(in srgb,var(--accent) 55%,var(--hair));transform:translateY(-1px)}
+  .pack-head{display:flex;align-items:flex-start;gap:12px}.pack-icon{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;background:color-mix(in srgb,var(--accent) 14%,var(--panel));color:var(--accent)}.pack-icon .ui-icon{width:19px;height:19px}
+  .pack-copy{min-width:0;flex:1}.pack-copy b{display:block;font-size:14px;margin:1px 0 4px}.pack-copy span{display:block;color:var(--muted);font-size:12px;line-height:1.45}
+  .pack-components{margin:14px 0;color:var(--muted);font-size:11px;line-height:1.5}.pack-foot{display:flex;align-items:center;gap:10px;margin-top:auto}.pack-foot small{color:var(--muted);font-size:11px;flex:1}.pack-foot .btn{min-height:34px;padding:7px 12px}
+  @media(max-width:820px){.pack-grid{grid-template-columns:1fr}}
 
   .ad { animation: rise-in .32s cubic-bezier(.22, 1, .36, 1) both; }
   .ad-head { display: flex; align-items: center; gap: 18px; margin: 0 0 22px; }
@@ -3197,7 +3218,7 @@ const glyph = id => GLYPH[id] || '⚙️';
 const uiIcon = (name, cls = 'ui-icon') => `<svg class="${cls}" aria-hidden="true"><use href="#ui-${name}"/></svg>`;
 const tileBg = id => TILE_BG[id] || 'linear-gradient(135deg,#cfd9e8,#aab8cc)';
 const gb = mb => (mb / 1024).toFixed(1);
-let installing = 0, catalogCache = [], gpuBuilt = 0, appsEntered = false;
+let installing = 0, catalogCache = [], packCache = [], gpuBuilt = 0, appsEntered = false;
 let lastRunning = {}, engineReady = false, engineUnloaded = false, engineActive = '', engineExecutionMode = 'local', engineOperation = 'idle', engineSwitching = false, engineAborting = false, engineLoadJobId = '', activeEngineName = 'the engine';
 let pinnedIds = [], lpQuery = '', lpView = '';
 let clusterWizard = { step: 1, peers: [], host: '', username: '', password: '', cable: false, preflight: null, busy: false, error: '', adding: false, existingNodes: 0 };
@@ -3653,7 +3674,13 @@ function openLauncher() {
   document.getElementById('launcher').classList.remove('hidden');
   document.getElementById('lp-search').value = lpQuery;
   renderLauncher();
+  refreshPacks();
   setTimeout(() => document.getElementById('lp-search').focus(), 60);
+}
+async function refreshPacks() {
+  try { packCache = await api('/api/packs'); }
+  catch { packCache = []; }
+  if (launcherOpen() && !lpView) renderLauncher();
 }
 function closeLauncher() { document.getElementById('launcher').classList.add('hidden'); }
 function selectApp(id) { lpView = id; renderLauncher(); document.getElementById('lp-detail').scrollTop = 0; }
@@ -3661,7 +3688,7 @@ function selectApp(id) { lpView = id; renderLauncher(); document.getElementById(
 function renderLauncher() {
   renderAppList();
   const el = document.getElementById('lp-detail');
-  const app = lpView && catalogCache.find(a => a.id === lpView && !a.service);
+  const app = lpView && catalogCache.find(a => a.id === lpView && !a.service && !a.hidden);
   if (app) renderAppDetail(el, app); else renderAppIntro(el);
 }
 
@@ -3669,7 +3696,7 @@ function renderLauncher() {
 function renderAppList() {
   const q = lpQuery.trim().toLowerCase();
   const match = a => !q || (a.name + ' ' + (a.tagline || '') + ' ' + (a.description || '') + ' ' + (a.category || '')).toLowerCase().includes(q);
-  const apps = catalogCache.filter(a => !a.service && match(a));
+  const apps = catalogCache.filter(a => !a.service && !a.hidden && match(a));
   const list = document.getElementById('lp-list');
   if (!apps.length) { list.innerHTML = `<div class="lp-empty">No apps match “${escapeHtml(lpQuery)}”.</div>`; return; }
   const cats = {};
@@ -3687,6 +3714,13 @@ function renderAppList() {
 
 // right pane (default): what the launcher is about
 function renderAppIntro(el) {
+  const packs = packCache.map(pack => {
+    const componentNames = (pack.components || []).map(component => component.name).join(' · ');
+    const installed = pack.status === 'installed';
+    const partial = pack.status === 'partial';
+    const resources = [pack.diskGB ? `~${pack.diskGB} GB disk` : '', pack.vramGB ? `${pack.vramGB} GB accelerator memory` : ''].filter(Boolean).join(' · ');
+    return `<article class="pack-card" data-pack="${escapeAttr(pack.id)}"><div class="pack-head"><span class="pack-icon">${uiIcon(pack.icon === 'search' ? 'search' : pack.icon === 'workflow' ? 'assistant' : 'apps')}</span><div class="pack-copy"><b>${escapeHtml(pack.name)}</b><span>${escapeHtml(pack.description)}</span></div></div><div class="pack-components">${escapeHtml(componentNames)}</div><div class="pack-foot"><small>${escapeHtml(resources)}</small>${installed ? '<button class="btn" data-pack-remove>Remove</button>' : ''}<button class="btn ${installed ? '' : 'primary'}" data-pack-install>${installed ? 'Open' : partial ? 'Finish setup' : 'Install pack'}</button></div></article>`;
+  }).join('');
   el.innerHTML = `
     <div class="lp-intro">
       <div class="ii"></div>
@@ -3694,7 +3728,61 @@ function renderAppIntro(el) {
       <p>Everything here runs privately on your own GPU — no cloud, no accounts. Pick an app on the left to see what it does, install it in one click, and pin your favourites to the dashboard.</p>
       <div class="lp-cats">${LP_CAT_BLURBS.map(([t, d, ic]) =>
         `<div class="lp-cc"><span class="cc-ic">${ic}</span><div class="cc-d"><div class="cc-t">${escapeHtml(t)}</div><span>${escapeHtml(d)}</span></div></div>`).join('')}</div>
+      ${packs ? `<h3 class="pack-title">Optional Cloudless packs</h3><p class="pack-sub">Add complete capabilities in one click. Every component is checked and newly installed components roll back together if setup fails.</p><div class="pack-grid">${packs}</div>` : ''}
     </div>`;
+  el.querySelectorAll('[data-pack-install]').forEach(button => button.onclick = () => {
+    const pack = packCache.find(item => item.id === button.closest('[data-pack]').dataset.pack);
+    if (pack?.status === 'installed' && pack.launchApp) {
+      const app = catalogCache.find(item => item.id === pack.launchApp);
+      if (app) openApp(app);
+      return;
+    }
+    installPack(pack?.id || '', button);
+  });
+  el.querySelectorAll('[data-pack-remove]').forEach(button => button.onclick = async () => {
+    const pack = packCache.find(item => item.id === button.closest('[data-pack]').dataset.pack);
+    if (!pack) return;
+    const approved = await openCloudlessDecision({ title: `Remove ${pack.name}?`, message: 'CloudlessOS will stop and remove this pack’s components.', detail: 'A shared component stays installed when another installed pack still needs it. Persistent application data is kept.', confirmLabel: 'Remove pack', icon: 'stop', returnFocus: button });
+    if (approved) uninstallPack(pack.id, button);
+  });
+}
+
+async function installPack(id, button) {
+  if (button.disabled) return;
+  button.disabled = true; button.innerHTML = '<span class="key-dialog-spinner" aria-hidden="true"></span><span>Preparing…</span>';
+  try {
+    const started = await api(`/api/packs/${id}/install`, { method: 'POST' });
+    if (!started.jobId) throw new Error('No installation job');
+    const stream = new EventSource(`/api/jobs/${started.jobId}/events`);
+    let closed = false;
+    const finish = async ok => { if (closed) return; closed = true; stream.close(); await refreshPacks(); toast(ok ? 'Cloudless pack installed' : 'Pack installation rolled back', !ok); };
+    stream.onmessage = event => {
+      const update = JSON.parse(event.data);
+      if (update.message) button.textContent = update.message;
+      if (update.phase === 'error') finish(false);
+      else if (update.done) finish(update.phase === 'running');
+    };
+    stream.onerror = async () => {
+      try { const status = await api(`/api/jobs/${started.jobId}`); if (status.done) finish(status.phase === 'running'); }
+      catch { finish(false); }
+    };
+  } catch (error) {
+    button.disabled = false; button.textContent = 'Install pack';
+    toast(error.message || 'Could not install pack', true);
+  }
+}
+
+async function uninstallPack(id, button) {
+  button.disabled = true; button.innerHTML = '<span class="key-dialog-spinner" aria-hidden="true"></span><span>Removing…</span>';
+  try {
+    const started = await api(`/api/packs/${id}/uninstall`, { method: 'POST', headers: { 'X-Cloudless-Action': 'pack-uninstall' } });
+    if (!started.jobId) throw new Error('No removal job');
+    const stream = new EventSource(`/api/jobs/${started.jobId}/events`);
+    let closed = false;
+    const finish = async ok => { if (closed) return; closed = true; stream.close(); await refreshPacks(); toast(ok ? 'Cloudless pack removed' : 'Could not remove the complete pack', !ok); };
+    stream.onmessage = event => { const update = JSON.parse(event.data); if (update.message) button.textContent = update.message; if (update.phase === 'error') finish(false); else if (update.done) finish(update.phase === 'running'); };
+    stream.onerror = async () => { try { const status = await api(`/api/jobs/${started.jobId}`); if (status.done) finish(status.phase === 'running'); } catch { finish(false); } };
+  } catch (error) { button.disabled = false; button.textContent = 'Remove'; toast(error.message || 'Could not remove pack', true); }
 }
 
 function statusBadge(a) {
@@ -3808,13 +3896,14 @@ function installById(id) {
 // renderEngine() runs on the 4s poll, so it ONLY updates state — it must never
 // rebuild Settings (that would flicker the panel and wipe form input every poll).
 // Settings is redrawn solely by user actions (open / nav click / switch / job done).
-let lastEngineReady = null, lastEngineMode = null, lastEngineUnloaded = null, lastEngineOperation = null, engineStartup = null, lastEngineStartup = '';
+let lastEngineReady = null, lastEngineMode = null, lastEngineUnloaded = null, lastEngineOperation = null, engineStartup = null, enginePromotion = null, lastEngineStartup = '';
 function engineLoadIsAbortable() { return engineOperation === 'loading' && !engineReady && !!engineLoadJobId; }
 function syncEngineState(d) {
   engineReady = !!d.ready;
   engineUnloaded = !!d.unloaded;
   engineActive = d.active || '';
   engineStartup = d.startup || null;
+  enginePromotion = d.promotion || null;
   engineExecutionMode = d.executionMode === 'cluster' ? 'cluster' : 'local';
   let operation = ['loading', 'unloading', 'aborting'].includes(d.operation) ? d.operation : 'idle';
   // Readiness is authoritative even if a launch job has not yet emitted its
@@ -3834,7 +3923,7 @@ async function renderEngine() {
   syncEngineState(d);
   // When readiness flips (model finished loading / engine went down), re-gate the
   // launch surfaces and update the banner.
-  const startupKey = engineStartup ? `${engineStartup.phase || ''}:${engineStartup.message || ''}:${engineStartup.layersDone || 0}:${engineStartup.layersTotal || 0}:${engineStartup.bytesDone || 0}:${engineStartup.bytesTotal || 0}` : '';
+  const startupKey = `${engineStartup ? `${engineStartup.phase || ''}:${engineStartup.message || ''}:${engineStartup.layersDone || 0}:${engineStartup.layersTotal || 0}:${engineStartup.bytesDone || 0}:${engineStartup.bytesTotal || 0}` : ''}|${enginePromotion ? `${enginePromotion.phase || ''}:${enginePromotion.message || ''}:${enginePromotion.bytesDone || 0}:${enginePromotion.bytesTotal || 0}:${enginePromotion.error || ''}` : ''}`;
   const structuralChange = engineReady !== lastEngineReady || engineExecutionMode !== lastEngineMode || engineUnloaded !== lastEngineUnloaded || engineOperation !== lastEngineOperation;
   if (structuralChange || startupKey !== lastEngineStartup) {
     lastEngineReady = engineReady; lastEngineMode = engineExecutionMode; lastEngineUnloaded = engineUnloaded; lastEngineOperation = engineOperation; lastEngineStartup = startupKey;
@@ -3847,9 +3936,10 @@ async function renderEngine() {
 function applyEngineUI() {
   const starting = !engineReady && !engineUnloaded;
   const unavailable = starting || engineUnloaded;
+  const promotionActive = engineReady && enginePromotion && ['bootstrap', 'downloading', 'switching', 'verifying', 'rollback'].includes(enginePromotion.phase);
   const banner = document.getElementById('engine-banner');
   if (banner) {
-    banner.classList.toggle('hidden', !unavailable);
+    banner.classList.toggle('hidden', !unavailable && !promotionActive);
     banner.classList.toggle('unloaded', engineUnloaded);
     const title = document.getElementById('eb-title');
     const sub = document.getElementById('eb-sub');
@@ -3857,7 +3947,9 @@ function applyEngineUI() {
     const abortable = starting && engineLoadIsAbortable();
     banner.classList.toggle('abortable', abortable);
     const startupPhase = engineStartup?.phase || '';
-    if (title) title.textContent = engineUnloaded
+    if (title) title.textContent = promotionActive
+      ? (enginePromotion.phase === 'downloading' ? 'Preparing your full Cloudless model…' : enginePromotion.phase === 'verifying' ? 'Verifying your full Cloudless model…' : enginePromotion.phase === 'rollback' ? 'Keeping Cloudless AI available…' : 'Upgrading Cloudless AI…')
+      : engineUnloaded
       ? 'Cloudless AI is unloaded'
       : engineOperation === 'aborting'
       ? 'Stopping model loading…'
@@ -3883,13 +3975,20 @@ function applyEngineUI() {
     }
     if (sub && engineUnloaded) sub.textContent = 'Accelerator memory has been released. Your selected model remains downloaded and ready to load again.';
     if (sub && starting) sub.textContent = engineStartup?.message || ((activeEngineName !== 'the engine' ? activeEngineName + ' is loading your model' : 'Your model is loading') + ' — chat and AI apps will be ready in a moment.');
-    if (starting) {
+    if (sub && promotionActive) sub.textContent = enginePromotion.message || 'The lightweight model remains usable while Cloudless prepares the full model.';
+    if (starting || promotionActive) {
       const phase = engineStartup?.phase || 'loading';
       const msg = (engineStartup?.message || '').toLowerCase();
       const done = +(engineStartup?.layersDone || 0), total = +(engineStartup?.layersTotal || 0);
       const bytesDone = +(engineStartup?.bytesDone || 0), bytesTotal = +(engineStartup?.bytesTotal || 0);
       let progress = null, progressLabel = 'Preparing';
-      if (phase === 'peer-downloading' && bytesTotal > 0) {
+      if (promotionActive && enginePromotion.bytesTotal > 0) {
+        progress = Math.round(enginePromotion.bytesDone / enginePromotion.bytesTotal * 100);
+        progressLabel = `${progress}%`;
+      } else if (promotionActive && enginePromotion.phase === 'verifying') progressLabel = 'Verifying';
+      else if (promotionActive && enginePromotion.phase === 'switching') progressLabel = 'Switching';
+      else if (promotionActive && enginePromotion.phase === 'rollback') progressLabel = 'Restoring';
+      else if (phase === 'peer-downloading' && bytesTotal > 0) {
         progress = Math.round(bytesDone / bytesTotal * 100);
         progressLabel = `${progress}%`;
       } else if (phase === 'loading' && total > 0) {
@@ -4246,7 +4345,7 @@ async function renderSettings() {
     .filter(c => c.state === 'running')
     .map(c => c.name.replace(/^cloudless-/, '')));
   const hermes = catalog.find(a => a.id === 'hermes');
-  const apps = catalog.filter(a => a.id !== 'hermes' && !a.service && installed.has(a.id));
+  const apps = catalog.filter(a => a.id !== 'hermes' && !a.service && !a.hidden && installed.has(a.id));
   const configurableApps = hermes ? [hermes, ...apps] : apps;
   const dgxSpark = hasCapability('dgx-appliance');
   if (setPage.startsWith('app:') && !configurableApps.some(a => 'app:' + a.id === setPage)) setPage = 'hardware';
@@ -4262,7 +4361,7 @@ async function renderSettings() {
       ...(hermes ? [{ id: 'app:hermes', glyph: glyph('hermes'), label: hermes.name }] : []),
     ] },
     { label: 'apps', items: apps.map(a => ({ id: 'app:' + a.id, glyph: glyph(a.id), label: a.name })) },
-    { label: 'system', items: [{ id: 'display', icon: 'display', label: 'Display' }, { id: 'appearance', icon: 'appearance', label: 'Appearance' }, { id: 'general', icon: 'general', label: 'General' }] },
+    { label: 'system', items: [{ id: 'doctor', icon: 'metrics', label: 'Cloudless Doctor' }, { id: 'display', icon: 'display', label: 'Display' }, { id: 'appearance', icon: 'appearance', label: 'Appearance' }, { id: 'general', icon: 'general', label: 'General' }] },
   ];
   document.getElementById('set-nav').innerHTML = groups.filter(g => g.items.length).map(g =>
     `<div class="nav-group">${g.label}</div>` + g.items.map(it =>
@@ -4274,7 +4373,7 @@ async function renderSettings() {
     renderSettings();
   });
 
-  let title = { profile: 'Profile', hardware: 'Machine', 'dgx-dashboard': 'DGX Dashboard', engine: 'Engine', api: 'API access', display: 'Display', appearance: 'Appearance', general: 'General' }[setPage] || '';
+  let title = { profile: 'Profile', hardware: 'Machine', 'dgx-dashboard': 'DGX Dashboard', engine: 'Engine', api: 'API access', doctor: 'Cloudless Doctor', display: 'Display', appearance: 'Appearance', general: 'General' }[setPage] || '';
   if (setPage.startsWith('app:')) { const a = configurableApps.find(x => 'app:' + x.id === setPage); title = a ? a.name : ''; }
   document.getElementById('set-page-title').textContent = title;
 
@@ -4284,6 +4383,7 @@ async function renderSettings() {
   else if (setPage === 'dgx-dashboard') renderDGXDashboardPage(c);
   else if (setPage === 'engine') renderEnginePage(c);
   else if (setPage === 'api') renderApiPage(c);
+  else if (setPage === 'doctor') renderDoctorPage(c);
   else if (setPage === 'display') renderDisplayPage(c);
   else if (setPage === 'appearance') renderAppearancePage(c);
   else if (setPage === 'general') renderGeneralPage(c);
@@ -6264,6 +6364,44 @@ function renderAppearancePage(c) {
     setSparkAnimationsEnabled(motionToggle.checked);
     renderAppearancePage(c);
     toast(motionToggle.checked ? 'Animations enabled for this display' : 'Animations disabled');
+  };
+}
+
+async function renderDoctorPage(c) {
+  c.innerHTML = '<div class="set-hint">Running safe, read-only checks…</div>';
+  let report;
+  try { report = await api('/api/system/doctor'); }
+  catch { c.innerHTML = '<div class="set-hint">Cloudless Doctor could not complete its checks.</div>'; return; }
+  const checks = Array.isArray(report.checks) ? report.checks : [];
+  const counts = checks.reduce((value, check) => { value[check.status] = (value[check.status] || 0) + 1; return value; }, {});
+  const healthy = report.overall === 'healthy';
+  const headline = healthy ? 'CloudlessOS looks healthy' : report.overall === 'warning' ? 'CloudlessOS has a few recommendations' : 'CloudlessOS needs attention';
+  const detail = `${checks.length} checks · ${counts.pass || 0} passed${counts.warning ? ` · ${counts.warning} warning${counts.warning === 1 ? '' : 's'}` : ''}${counts.fail ? ` · ${counts.fail} failed` : ''}`;
+  c.innerHTML = `<div class="doctor-page">
+    <div class="doctor-summary"><span class="doctor-summary-mark">${uiIcon(healthy ? 'check' : 'metrics')}</span><div class="doctor-summary-copy"><b>${headline}</b><span>${detail}</span></div><span class="doctor-state ${escapeAttr(report.overall || '')}">${escapeHtml((report.overall || 'unknown').replace('-', ' '))}</span></div>
+    <div class="doctor-checks">${checks.map(check => `<div class="doctor-check ${escapeAttr(check.status)}"><span class="doctor-check-dot">${check.status === 'pass' ? '✓' : check.status === 'warning' ? '!' : '×'}</span><div class="doctor-check-copy"><b>${escapeHtml(check.name)}</b><span>${escapeHtml(check.summary)}</span>${check.action ? `<small>${escapeHtml(check.action)}</small>` : ''}</div></div>`).join('')}</div>
+    <div class="set-block"><h3>privacy-safe support bundle</h3><div class="fld-help">Creates a ZIP on this device containing this report, Cloudless container status, and recent logs. Tokens, passwords, API-key hashes, hostnames, and home paths are removed before the ZIP is created. Nothing is uploaded automatically.</div></div>
+    <div class="doctor-actions"><button class="btn" id="doctor-rerun">${uiIcon('restart')}<span>Run checks again</span></button><button class="btn primary" id="doctor-bundle">${uiIcon('download')}<span>Save support bundle</span></button></div>
+  </div>`;
+  document.getElementById('doctor-rerun').onclick = () => renderDoctorPage(c);
+  document.getElementById('doctor-bundle').onclick = async event => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    const old = button.innerHTML;
+    button.innerHTML = '<span class="key-dialog-spinner" aria-hidden="true"></span><span>Building safely…</span>';
+    try {
+      const response = await fetch('/api/system/doctor/bundle', { method: 'POST', headers: { 'X-Cloudless-Action': 'support-bundle' } });
+      if (!response.ok) throw new Error('bundle failed');
+      const blob = await response.blob();
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      const disposition = response.headers.get('Content-Disposition') || '';
+      link.download = disposition.match(/filename="([^"]+)"/)?.[1] || 'cloudless-support.zip';
+      document.body.appendChild(link); link.click(); link.remove();
+      setTimeout(() => URL.revokeObjectURL(link.href), 3000);
+      toast('Support bundle saved to Downloads');
+    } catch { toast('Could not build the support bundle', true); }
+    finally { button.disabled = false; button.innerHTML = old; }
   };
 }
 

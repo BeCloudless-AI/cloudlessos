@@ -102,6 +102,7 @@ func main() {
 		gpus, gpuErr := hardware.GPUs(probeCtx)
 		probeCancel()
 		if gpuErr != nil || len(gpus) == 0 {
+			provision.RecordBootstrapPending(st, "Waiting for an NVIDIA accelerator before starting the bootstrap model.")
 			log.Printf("provisioning skipped: no usable NVIDIA GPU detected (%v)", gpuErr)
 		} else {
 			log.Printf("provisioning enabled: %d NVIDIA GPU(s) detected", len(gpus))

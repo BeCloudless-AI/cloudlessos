@@ -61,3 +61,38 @@ func TestDependenciesAreTopologicallyOrdered(t *testing.T) {
 		t.Fatalf("dependency order = %#v", deps)
 	}
 }
+
+func TestEmbeddedManifestDefinesOptionalCapabilityPacks(t *testing.T) {
+	doc, err := ParseManifest(embeddedManifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]bool{"voice": false, "rag": false, "search": false, "research": false, "workflows": false}
+	for _, pack := range doc.Packs {
+		if _, ok := want[pack.ID]; ok {
+			want[pack.ID] = true
+		}
+	}
+	for id, found := range want {
+		if !found {
+			t.Errorf("missing optional %s pack", id)
+		}
+	}
+}
+
+func TestPackInstallOrderIncludesDependenciesFirst(t *testing.T) {
+	order, err := PackInstallOrder("research")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(order) != 2 || order[0].ID != "searxng" || order[1].ID != "perplexica" {
+		t.Fatalf("research install order = %#v", order)
+	}
+}
+
+func TestManifestRejectsPackWithUnknownComponent(t *testing.T) {
+	raw := `{"schema":"cloudless.apps.v2","version":2,"apps":[{"id":"known","name":"Known","image":"x/y:1"}],"packs":[{"id":"bad","name":"Bad","description":"Bad pack","apps":["missing"]}]}`
+	if _, err := ParseManifest([]byte(raw)); err == nil || !strings.Contains(err.Error(), "unknown app") {
+		t.Fatalf("unknown pack component was accepted: %v", err)
+	}
+}

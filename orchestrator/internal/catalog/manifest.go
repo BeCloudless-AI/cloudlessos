@@ -20,16 +20,29 @@ type ManifestDocument struct {
 	Version     int    `json:"version"`
 	Description string `json:"description,omitempty"`
 	Apps        []App  `json:"apps"`
+	Packs       []Pack `json:"packs,omitempty"`
+}
+
+// Pack is a curated, transactional installation experience composed from App
+// Manifest v2 components. Apps remain independently reusable dependencies.
+type Pack struct {
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	Category    string   `json:"category,omitempty"`
+	Icon        string   `json:"icon,omitempty"`
+	Apps        []string `json:"apps"`
+	LaunchApp   string   `json:"launchApp,omitempty"`
 }
 
 var appIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
 
-func mustLoadManifest() []App {
+func mustLoadManifest() ManifestDocument {
 	doc, err := ParseManifest(embeddedManifest)
 	if err != nil {
 		panic("invalid embedded Cloudless app manifest: " + err.Error())
 	}
-	return doc.Apps
+	return doc
 }
 
 // ParseManifest validates a declarative catalog before any recipe reaches the
@@ -84,6 +97,32 @@ func ParseManifest(raw []byte) (ManifestDocument, error) {
 	if err := validateDependencyGraph(doc.Apps); err != nil {
 		return doc, err
 	}
+	packIDs := map[string]bool{}
+	for i, pack := range doc.Packs {
+		if !appIDPattern.MatchString(pack.ID) || strings.TrimSpace(pack.Name) == "" || strings.TrimSpace(pack.Description) == "" {
+			return doc, fmt.Errorf("packs[%d]: id, name, and description are required", i)
+		}
+		if packIDs[pack.ID] {
+			return doc, fmt.Errorf("duplicate pack id %q", pack.ID)
+		}
+		packIDs[pack.ID] = true
+		if len(pack.Apps) == 0 {
+			return doc, fmt.Errorf("pack %s must contain at least one app", pack.ID)
+		}
+		seen := map[string]bool{}
+		for _, id := range pack.Apps {
+			if _, ok := byID[id]; !ok {
+				return doc, fmt.Errorf("pack %s contains unknown app %s", pack.ID, id)
+			}
+			if seen[id] {
+				return doc, fmt.Errorf("pack %s repeats app %s", pack.ID, id)
+			}
+			seen[id] = true
+		}
+		if pack.LaunchApp != "" && !seen[pack.LaunchApp] {
+			return doc, fmt.Errorf("pack %s launchApp must be one of its apps", pack.ID)
+		}
+	}
 	return doc, nil
 }
 
@@ -108,7 +147,7 @@ func validateApp(a App) error {
 	if !slices.Contains([]string{"", "container", "http", "openai"}, a.Health.Kind) {
 		return fmt.Errorf("unsupported health kind %q", a.Health.Kind)
 	}
-	if a.Health.Kind == "http" && !strings.HasPrefix(a.Health.Path, "/") {
+	if (a.Health.Kind == "http" || a.Health.Kind == "openai") && !strings.HasPrefix(a.Health.Path, "/") {
 		return errors.New("http health path must begin with /")
 	}
 	if a.Health.Port < 0 || a.Health.Port > 65535 {
@@ -196,4 +235,65 @@ func Dependencies(id string) ([]App, error) {
 		return nil, err
 	}
 	return out, nil
+}
+
+// Packs returns packs whose complete component set is supported by this host.
+func Packs() []Pack {
+	out := make([]Pack, 0, len(manifestDocument.Packs))
+	for _, pack := range manifestDocument.Packs {
+		supported := true
+		for _, id := range pack.Apps {
+			if _, ok := Get(id); !ok {
+				supported = false
+				break
+			}
+		}
+		if supported {
+			copy := pack
+			copy.Apps = append([]string(nil), pack.Apps...)
+			out = append(out, copy)
+		}
+	}
+	return out
+}
+
+func GetPack(id string) (Pack, bool) {
+	for _, pack := range Packs() {
+		if pack.ID == id {
+			return pack, true
+		}
+	}
+	return Pack{}, false
+}
+
+// PackInstallOrder returns dependencies and pack components once each in
+// deterministic startup order.
+func PackInstallOrder(id string) ([]App, error) {
+	pack, ok := GetPack(id)
+	if !ok {
+		return nil, fmt.Errorf("unknown or unsupported pack %q", id)
+	}
+	seen := map[string]bool{}
+	var result []App
+	for _, appID := range pack.Apps {
+		dependencies, err := Dependencies(appID)
+		if err != nil {
+			return nil, err
+		}
+		for _, app := range append(dependencies, mustGet(appID)) {
+			if !seen[app.ID] {
+				seen[app.ID] = true
+				result = append(result, app)
+			}
+		}
+	}
+	return result, nil
+}
+
+func mustGet(id string) App {
+	app, ok := Get(id)
+	if !ok {
+		panic("validated manifest app became unavailable: " + id)
+	}
+	return app
 }

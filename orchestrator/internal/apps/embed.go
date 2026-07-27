@@ -134,6 +134,11 @@ func EnvOverrides(configDir string, app catalog.App) map[string]string {
 			out[HermesAPIKeyEnv] = key
 		}
 	}
+	if app.ID == "searxng" {
+		if key, err := managedSecret(configDir, "searxng-secret", "cloudless-search-"); err == nil {
+			out["SEARXNG_SECRET"] = key
+		}
+	}
 	return out
 }
 
@@ -194,6 +199,10 @@ func ConfigVolumes(configDir string, app catalog.App) (map[string]string, error)
 // between cloudlessd and Hermes. It is stored outside Hermes' container-writable
 // data mount and is never returned to the browser or clients.
 func HermesAPIKey(configDir string) (string, error) {
+	return managedSecret(configDir, "hermes-api-key", "cloudless-hermes-")
+}
+
+func managedSecret(configDir, name, prefix string) (string, error) {
 	configMu.Lock()
 	defer configMu.Unlock()
 	stateDir := filepath.Dir(filepath.Dir(filepath.Clean(configDir)))
@@ -201,7 +210,7 @@ func HermesAPIKey(configDir string) (string, error) {
 	if err := os.MkdirAll(secretDir, 0o700); err != nil {
 		return "", err
 	}
-	path := filepath.Join(secretDir, "hermes-api-key")
+	path := filepath.Join(secretDir, name)
 	if b, err := os.ReadFile(path); err == nil && strings.TrimSpace(string(b)) != "" {
 		return strings.TrimSpace(string(b)), nil
 	}
@@ -209,7 +218,7 @@ func HermesAPIKey(configDir string) (string, error) {
 	if _, err := rand.Read(raw); err != nil {
 		return "", err
 	}
-	secret := "cloudless-hermes-" + hex.EncodeToString(raw)
+	secret := prefix + hex.EncodeToString(raw)
 	if err := os.WriteFile(path, []byte(secret+"\n"), 0o600); err != nil {
 		return "", err
 	}

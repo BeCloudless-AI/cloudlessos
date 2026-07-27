@@ -12,6 +12,7 @@ FINGERPRINT_FILE="${CLOUDLESS_ARCHIVE_FINGERPRINT_FILE:-$DISTRO/release/keys/clo
 NOTES="${CLOUDLESS_RELEASE_NOTES:-$DISTRO/release/notes/$VERSION.json}"
 APP_MANIFEST="${CLOUDLESS_APP_MANIFEST:-$DISTRO/release/manifests/cloudless-apps-manifest.json}"
 DGX_INSTALLER="${CLOUDLESS_DGX_INSTALLER:-$DISTRO/scripts/install-dgx-spark.sh}"
+RELEASE_GATES="${CLOUDLESS_RELEASE_GATES:-$DISTRO/out/release-gates.json}"
 SOURCE_COMMIT="${CLOUDLESS_SOURCE_COMMIT:-$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || true)}"
 PACKAGES=(cloudless-orchestrator cloudless-shell cloudless-branding cloudless-hardware cloudless-firstboot cloudless-updater)
 read -r -a ARCHES <<< "${CLOUDLESS_ARCHES:-amd64 arm64}"
@@ -34,6 +35,7 @@ test -s "$FINGERPRINT_FILE" || { echo "Missing archive fingerprint file." >&2; e
 test -s "$NOTES" || { echo "Missing release notes: $NOTES" >&2; exit 1; }
 test -s "$APP_MANIFEST" || { echo "Missing application manifest: $APP_MANIFEST" >&2; exit 1; }
 test -s "$DGX_INSTALLER" || { echo "Missing DGX Spark installer: $DGX_INSTALLER" >&2; exit 1; }
+test -s "$RELEASE_GATES" || { echo "Missing release-gate attestation. Run distro/scripts/release.sh so every required gate executes before signing." >&2; exit 1; }
 [[ "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]] || {
     echo "A full Git source commit is required for a production release." >&2
     exit 1
@@ -46,6 +48,21 @@ if not isinstance(notes.get("title"), str) or not notes["title"].strip():
     raise SystemExit("Release notes require a non-empty title")
 if not isinstance(notes.get("changes"), list) or not notes["changes"] or not all(isinstance(item, str) and item.strip() for item in notes["changes"]):
     raise SystemExit("Release notes require at least one non-empty change")
+PY
+python3 - "$RELEASE_GATES" "$VERSION" "$CHANNEL" "$SOURCE_COMMIT" "$DISTRO/release/validation-matrix.json" <<'PY'
+import hashlib, json, sys
+path, version, channel, commit, matrix_path = sys.argv[1:]
+with open(path, encoding="utf-8") as handle:
+    gates = json.load(handle)
+with open(matrix_path, "rb") as handle:
+    matrix_hash = hashlib.sha256(handle.read()).hexdigest()
+if gates.get("schema") != "cloudless.release-gates.v1":
+    raise SystemExit("invalid release-gate schema")
+for field, expected in (("version", version), ("channel", channel), ("sourceCommit", commit), ("matrixSha256", matrix_hash)):
+    if gates.get(field) != expected:
+        raise SystemExit(f"release-gate {field} mismatch: expected {expected}, got {gates.get(field)}")
+if not gates.get("passedGates") or not gates.get("targets"):
+    raise SystemExit("release-gate attestation is incomplete")
 PY
 fingerprint="$(tr -d '[:space:]' < "$FINGERPRINT_FILE")"
 if [ "${CLOUDLESS_RELEASE_DRY_RUN:-0}" != "1" ]; then
@@ -224,9 +241,9 @@ for artifact in install-dgx-spark.sh cloudless-apps-manifest.json; do
         >> "$artifacts_file"
 done
 manifest="$REPO/releases/$VERSION.json"
-python3 - "$NOTES" "$changes_file" "$artifacts_file" "$manifest" "$VERSION" "$CHANNEL" "$SOURCE_COMMIT" "$(date -u +%FT%TZ)" <<'PY'
+python3 - "$NOTES" "$changes_file" "$artifacts_file" "$RELEASE_GATES" "$manifest" "$VERSION" "$CHANNEL" "$SOURCE_COMMIT" "$(date -u +%FT%TZ)" <<'PY'
 import json, sys
-notes_path, changes_path, artifacts_path, output, version, channel, source_commit, published_at = sys.argv[1:]
+notes_path, changes_path, artifacts_path, gates_path, output, version, channel, source_commit, published_at = sys.argv[1:]
 with open(notes_path, encoding="utf-8") as handle:
     notes = json.load(handle)
 packages = []
@@ -247,6 +264,8 @@ with open(artifacts_path, encoding="utf-8") as handle:
             "signatureSha256": signature_sha256,
             "signatureSize": int(signature_size),
         })
+with open(gates_path, encoding="utf-8") as handle:
+    validation = json.load(handle)
 manifest = {
     "version": version,
     "channel": channel,
@@ -257,6 +276,7 @@ manifest = {
     "changes": [item.strip() for item in notes["changes"]],
     "packages": packages,
     "artifacts": artifacts,
+    "validation": validation,
 }
 with open(output, "w", encoding="utf-8") as handle:
     json.dump(manifest, handle, ensure_ascii=False, separators=(",", ":"))

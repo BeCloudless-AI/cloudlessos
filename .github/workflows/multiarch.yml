@@ -33,3 +33,5 @@ jobs:
       - run: sudo apt-get update
       - run: sudo apt-get install -y file imagemagick librsvg2-bin
       - run: bash distro/scripts/test-architectures.sh
+      - name: Validate platform/package release matrix
+        run: bash distro/scripts/validate-release-matrix.sh "$(tr -d '[:space:]' < distro/VERSION)" stable

@@ -17,6 +17,10 @@ printf '%s\n' "$fingerprint" > "$work/test-fingerprint.txt"
 cat > "$work/test-notes.json" <<'EOF'
 {"title":"Test release","summary":"Signed test notes.","changes":["Shows verified release notes before installation."]}
 EOF
+matrix_sha="$(sha256sum "$ROOT/distro/release/validation-matrix.json" | awk '{print $1}')"
+cat > "$work/test-release-gates.json" <<EOF
+{"schema":"cloudless.release-gates.v1","version":"$TEST_VERSION","channel":"stable","sourceCommit":"0123456789abcdef0123456789abcdef01234567","completedAt":"2000-01-01T00:00:00Z","matrixSha256":"$matrix_sha","targets":[{"platform":"generic","architecture":"amd64"},{"platform":"generic","architecture":"arm64"},{"platform":"dgx-spark","architecture":"arm64"}],"passedGates":["go-tests","go-vet","web-javascript","app-manifest-v2","platform-matrix","package-architecture","package-contents","release-isolation","atomic-repository"]}
+EOF
 
 CLOUDLESS_APT_REPO_OUT="$work/repository" \
 CLOUDLESS_PACKAGE_OUT="$work/packages" \
@@ -24,6 +28,7 @@ CLOUDLESS_APT_BASE_URL=https://invalid.invalid \
 CLOUDLESS_ARCHIVE_KEY="$work/test-keyring.pgp" \
 CLOUDLESS_ARCHIVE_FINGERPRINT_FILE="$work/test-fingerprint.txt" \
 CLOUDLESS_RELEASE_NOTES="$work/test-notes.json" \
+CLOUDLESS_RELEASE_GATES="$work/test-release-gates.json" \
 CLOUDLESS_SOURCE_COMMIT=0123456789abcdef0123456789abcdef01234567 \
     bash "$ROOT/distro/scripts/build-apt-repository.sh" "$TEST_VERSION" stable
 

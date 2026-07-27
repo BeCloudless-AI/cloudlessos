@@ -1,0 +1,14 @@
+{
+  "title": "Smarter app integrations and scalable DGX Spark foundations",
+  "summary": "CloudlessOS 0.2.3 makes optional applications feel native, expands DGX Spark cluster foundations beyond two nodes, and adds hardware-aware compatibility and diagnostics throughout the platform.",
+  "changes": [
+    "Scale the DGX Spark cluster model from a fixed pair to managed topologies of up to eight Sparks, with clearer node health and support diagnostics.",
+    "Introduce the Cloudless application manifest v2 so apps, capabilities, hardware requirements, secrets, and promotion rules share one validated source of truth.",
+    "Evaluate model and application compatibility against detected architecture, GPU, unified memory, storage, and cluster capacity before installation or launch.",
+    "Present optional applications by their real product names, descriptions, categories, services, and storage requirements in a more consistent App Launcher.",
+    "Embed n8n inside the CloudlessOS experience and automatically connect Perplexica to the active Cloudless model when the research applications are installed.",
+    "Allow installed optional applications to be pinned while preventing unavailable, stopped, or failed applications from appearing as usable shortcuts.",
+    "Add platform doctor checks, support bundles, and safer managed-secret handling for easier troubleshooting and recovery.",
+    "Harden the unified AMD64 and ARM64 release pipeline with isolated simulations, signed platform matrices, private reusable credentials, and safer atomic publication retries."
+  ]
+}

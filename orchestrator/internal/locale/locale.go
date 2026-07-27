@@ -7,6 +7,7 @@ package locale
 import (
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 	"time"
 )
@@ -44,20 +45,21 @@ func Detect() Info {
 	return in
 }
 
-// timezone resolves the IANA zone name from $TZ, /etc/timezone, or the
-// /etc/localtime symlink (the three places Linux distros keep it).
+// timezone resolves the IANA zone name from $TZ, the active /etc/localtime
+// symlink, or the legacy /etc/timezone file. The symlink is authoritative:
+// timedatectl can update it while /etc/timezone remains stale on Ubuntu.
 func timezone() string {
 	if tz := strings.TrimSpace(os.Getenv("TZ")); tz != "" {
 		return strings.TrimPrefix(tz, ":")
 	}
-	if b, err := os.ReadFile("/etc/timezone"); err == nil {
-		if s := strings.TrimSpace(string(b)); s != "" {
-			return s
-		}
-	}
 	if p, err := os.Readlink("/etc/localtime"); err == nil {
 		if i := strings.LastIndex(p, "zoneinfo/"); i >= 0 {
 			return p[i+len("zoneinfo/"):]
+		}
+	}
+	if b, err := os.ReadFile("/etc/timezone"); err == nil {
+		if s := strings.TrimSpace(string(b)); s != "" {
+			return s
 		}
 	}
 	return ""
@@ -112,6 +114,31 @@ func CountryName(code string) string {
 	return strings.ToUpper(code)
 }
 
+// Region is a country/region offered by the profile picker. The catalog lives
+// here, beside CountryName, so API responses and the UI cannot drift apart.
+type Region struct {
+	Code     string `json:"code"`
+	Name     string `json:"name"`
+	Timezone string `json:"timezone,omitempty"`
+}
+
+// Regions returns the supported profile regions, alphabetized for display.
+func Regions() []Region {
+	regions := make([]Region, 0, len(countryNames))
+	for code, name := range countryNames {
+		regions = append(regions, Region{Code: code, Name: name, Timezone: DefaultTimezone(code)})
+	}
+	sort.Slice(regions, func(i, j int) bool { return regions[i].Name < regions[j].Name })
+	return regions
+}
+
+// DefaultTimezone returns a safe country-wide default when a region has one.
+// Countries with several meaningful timezones are intentionally omitted so a
+// broad region choice never silently moves the user's clock to the wrong coast.
+func DefaultTimezone(code string) string {
+	return countryDefaultTimezones[strings.ToUpper(strings.TrimSpace(code))]
+}
+
 // tzToCountry maps the IANA zones we care about to ISO country codes. France is
 // covered thoroughly (metropolitan + overseas); common Western zones are included
 // so the display is useful elsewhere too. Unknown zones leave Country empty.
@@ -149,26 +176,91 @@ var tzToCountry = map[string]string{
 	"Europe/Prague":     "CZ",
 	"Europe/Athens":     "GR",
 	"Europe/Helsinki":   "FI",
+	"Europe/Bucharest":  "RO",
+	"Europe/Budapest":   "HU",
+	"Europe/Sofia":      "BG",
+	"Europe/Zagreb":     "HR",
+	"Europe/Belgrade":   "RS",
+	"Europe/Kyiv":       "UA",
+	"Europe/Istanbul":   "TR",
+	// Middle East / Africa
+	"Asia/Dubai":          "AE",
+	"Asia/Riyadh":         "SA",
+	"Asia/Qatar":          "QA",
+	"Asia/Kuwait":         "KW",
+	"Asia/Bahrain":        "BH",
+	"Asia/Muscat":         "OM",
+	"Asia/Jerusalem":      "IL",
+	"Africa/Cairo":        "EG",
+	"Africa/Casablanca":   "MA",
+	"Africa/Johannesburg": "ZA",
+	"Africa/Lagos":        "NG",
+	"Africa/Nairobi":      "KE",
 	// the Americas / APAC commonly seen in dev
-	"America/New_York":    "US",
-	"America/Chicago":     "US",
-	"America/Denver":      "US",
-	"America/Los_Angeles": "US",
-	"America/Toronto":     "CA",
-	"America/Sao_Paulo":   "BR",
-	"Asia/Tokyo":          "JP",
-	"Asia/Shanghai":       "CN",
-	"Asia/Singapore":      "SG",
-	"Asia/Kolkata":        "IN",
-	"Australia/Sydney":    "AU",
+	"America/New_York":               "US",
+	"America/Chicago":                "US",
+	"America/Denver":                 "US",
+	"America/Los_Angeles":            "US",
+	"America/Toronto":                "CA",
+	"America/Vancouver":              "CA",
+	"America/Mexico_City":            "MX",
+	"America/Sao_Paulo":              "BR",
+	"America/Argentina/Buenos_Aires": "AR",
+	"Asia/Tokyo":                     "JP",
+	"Asia/Shanghai":                  "CN",
+	"Asia/Hong_Kong":                 "HK",
+	"Asia/Seoul":                     "KR",
+	"Asia/Singapore":                 "SG",
+	"Asia/Kolkata":                   "IN",
+	"Asia/Jakarta":                   "ID",
+	"Asia/Kuala_Lumpur":              "MY",
+	"Asia/Manila":                    "PH",
+	"Asia/Bangkok":                   "TH",
+	"Asia/Ho_Chi_Minh":               "VN",
+	"Asia/Taipei":                    "TW",
+	"Australia/Sydney":               "AU",
+	"Pacific/Auckland":               "NZ",
 }
 
 var countryNames = map[string]string{
-	"FR": "France", "BE": "Belgium", "NL": "Netherlands", "LU": "Luxembourg",
-	"ES": "Spain", "PT": "Portugal", "DE": "Germany", "CH": "Switzerland",
-	"IT": "Italy", "GB": "United Kingdom", "IE": "Ireland", "AT": "Austria",
-	"SE": "Sweden", "NO": "Norway", "DK": "Denmark", "PL": "Poland",
-	"CZ": "Czechia", "GR": "Greece", "FI": "Finland", "US": "United States",
-	"CA": "Canada", "BR": "Brazil", "JP": "Japan", "CN": "China",
-	"SG": "Singapore", "IN": "India", "AU": "Australia",
+	"AE": "United Arab Emirates", "AR": "Argentina", "AT": "Austria",
+	"AU": "Australia", "BE": "Belgium", "BG": "Bulgaria", "BH": "Bahrain",
+	"BR": "Brazil", "CA": "Canada", "CH": "Switzerland", "CL": "Chile",
+	"CN": "China", "CO": "Colombia", "CR": "Costa Rica", "HR": "Croatia",
+	"CY": "Cyprus", "CZ": "Czechia", "DE": "Germany", "DK": "Denmark",
+	"EE": "Estonia", "EG": "Egypt", "ES": "Spain", "FI": "Finland",
+	"FR": "France", "GB": "United Kingdom", "GR": "Greece", "HK": "Hong Kong",
+	"HU": "Hungary", "ID": "Indonesia", "IE": "Ireland", "IL": "Israel",
+	"IN": "India", "IS": "Iceland", "IT": "Italy", "JP": "Japan",
+	"KE": "Kenya", "KR": "South Korea", "KW": "Kuwait", "LT": "Lithuania",
+	"LU": "Luxembourg", "LV": "Latvia", "MA": "Morocco", "MX": "Mexico",
+	"MY": "Malaysia", "NG": "Nigeria", "NL": "Netherlands", "NO": "Norway",
+	"NZ": "New Zealand", "OM": "Oman", "PE": "Peru", "PH": "Philippines",
+	"PL": "Poland", "PT": "Portugal", "QA": "Qatar", "RO": "Romania",
+	"RS": "Serbia", "SA": "Saudi Arabia", "SE": "Sweden", "SG": "Singapore",
+	"SK": "Slovakia", "SI": "Slovenia", "TH": "Thailand", "TR": "Türkiye",
+	"TW": "Taiwan", "UA": "Ukraine", "US": "United States", "VN": "Vietnam",
+	"ZA": "South Africa",
+}
+
+var countryDefaultTimezones = map[string]string{
+	"AE": "Asia/Dubai", "AT": "Europe/Vienna", "BE": "Europe/Brussels",
+	"BG": "Europe/Sofia", "BH": "Asia/Bahrain", "CH": "Europe/Zurich",
+	"CN": "Asia/Shanghai", "CO": "America/Bogota", "CR": "America/Costa_Rica",
+	"CY": "Asia/Nicosia", "CZ": "Europe/Prague", "DE": "Europe/Berlin",
+	"DK": "Europe/Copenhagen", "EE": "Europe/Tallinn", "EG": "Africa/Cairo",
+	"FI": "Europe/Helsinki", "GB": "Europe/London", "GR": "Europe/Athens",
+	"HK": "Asia/Hong_Kong", "HR": "Europe/Zagreb", "HU": "Europe/Budapest",
+	"IE": "Europe/Dublin", "IL": "Asia/Jerusalem", "IN": "Asia/Kolkata",
+	"IS": "Atlantic/Reykjavik", "IT": "Europe/Rome", "JP": "Asia/Tokyo",
+	"KE": "Africa/Nairobi", "KR": "Asia/Seoul", "KW": "Asia/Kuwait",
+	"LT": "Europe/Vilnius", "LU": "Europe/Luxembourg", "LV": "Europe/Riga",
+	"MA": "Africa/Casablanca", "MY": "Asia/Kuala_Lumpur", "NG": "Africa/Lagos",
+	"NL": "Europe/Amsterdam", "NO": "Europe/Oslo", "OM": "Asia/Muscat",
+	"PE": "America/Lima", "PH": "Asia/Manila", "PL": "Europe/Warsaw",
+	"QA": "Asia/Qatar", "RO": "Europe/Bucharest", "RS": "Europe/Belgrade",
+	"SA": "Asia/Riyadh", "SE": "Europe/Stockholm", "SG": "Asia/Singapore",
+	"SI": "Europe/Ljubljana", "SK": "Europe/Bratislava", "TH": "Asia/Bangkok",
+	"TR": "Europe/Istanbul", "TW": "Asia/Taipei", "UA": "Europe/Kyiv",
+	"VN": "Asia/Ho_Chi_Minh", "ZA": "Africa/Johannesburg",
 }

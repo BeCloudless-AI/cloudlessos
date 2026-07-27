@@ -65,8 +65,9 @@ func (s *Server) profileGet(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"name":          p.Name,
 		"region":        p.Region, // the override ("" = auto)
-		"detected":      info,     // OS-detected timezone/locale/country
-		"country":       code,     // effective country (override or detected)
+		"regions":       locale.Regions(),
+		"detected":      info, // OS-detected timezone/locale/country
+		"country":       code, // effective country (override or detected)
 		"countryName":   name,
 		"countrySource": source, // "override" | "locale" | "timezone" | ""
 		"inFrance":      code == "FR",
@@ -83,9 +84,18 @@ func (s *Server) profileSet(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad request"})
 		return
 	}
+	region := strings.ToUpper(strings.TrimSpace(body.Region))
+	if zone := locale.DefaultTimezone(region); zone != "" && zone != locale.Detect().Timezone {
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		defer cancel()
+		if err := locale.SetSystemTimezone(ctx, zone); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+	}
 	p := state.Profile{
 		Name:   strings.TrimSpace(body.Name),
-		Region: strings.ToUpper(strings.TrimSpace(body.Region)),
+		Region: region,
 	}
 	if err := s.state.SetProfile(p); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})

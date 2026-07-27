@@ -91,15 +91,20 @@ docker run --rm -v "$ROOT:/src" -w /src/orchestrator \
     cloudless-release-builder go test ./...
 echo "==> Release environment loader"
 bash "$ROOT/distro/scripts/test-release-env.sh"
+echo "==> Release test isolation"
+bash "$ROOT/distro/scripts/test-release-isolation.sh"
 echo "==> Browser JavaScript syntax"
 docker run --rm -v "$ROOT:/src" -w /src \
     node:22-bookworm node distro/scripts/test-web-js.js
-echo "==> AMD64 and ARM64 package validation"
-docker run --rm -v "$ROOT:/src" -w /src \
+echo "==> Building and validating the $VERSION release candidates for AMD64 and ARM64"
+docker run --rm -e CLOUDLESS_VERSION="$VERSION" -v "$ROOT:/src" -w /src \
     cloudless-package-builder bash distro/scripts/test-architectures.sh
-docker run --rm -v "$ROOT:/src" -w /src \
+echo "==> Validating release package contents (reusing the candidates just built)"
+docker run --rm -e CLOUDLESS_VERSION="$VERSION" -e CLOUDLESS_SKIP_PACKAGE_BUILD=1 -v "$ROOT:/src" -w /src \
     cloudless-package-builder bash distro/scripts/test-packages.sh
-echo "==> Atomic repository and standalone-artifact publication test"
+echo "==> TEST ONLY: atomic publication simulation"
+echo "    Uses version 0.0.0-test-only, a disposable key, temporary packages, and fake.invalid."
+echo "    Nothing from this test can enter distro/out or the production R2 bucket."
 docker run --rm -v "$ROOT:/src" -w /src \
     cloudless-release-builder bash distro/scripts/test-atomic-repository.sh
 
@@ -122,7 +127,8 @@ then
     fi
 fi
 if ! $reuse_signed; then
-    echo "==> Production signing"
+    echo "==> PRODUCTION: clean rebuild and signing of CloudlessOS $VERSION"
+    echo "    The release is rebuilt once inside the protected signing environment."
     bash "$ROOT/distro/scripts/sign-release-interactive.sh" "$VERSION" "$CHANNEL"
 fi
 assert_source_unchanged

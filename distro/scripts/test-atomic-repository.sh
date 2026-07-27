@@ -5,6 +5,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 export PATH="/usr/local/go/bin:$PATH"
 export GNUPGHOME="$(mktemp -d)"
 work="$(mktemp -d)"
+TEST_VERSION="0.0.0-test-only"
 trap 'rm -rf "$GNUPGHOME" "$work"' EXIT
 chmod 0700 "$GNUPGHOME"
 
@@ -18,31 +19,32 @@ cat > "$work/test-notes.json" <<'EOF'
 EOF
 
 CLOUDLESS_APT_REPO_OUT="$work/repository" \
+CLOUDLESS_PACKAGE_OUT="$work/packages" \
 CLOUDLESS_APT_BASE_URL=https://invalid.invalid \
 CLOUDLESS_ARCHIVE_KEY="$work/test-keyring.pgp" \
 CLOUDLESS_ARCHIVE_FINGERPRINT_FILE="$work/test-fingerprint.txt" \
 CLOUDLESS_RELEASE_NOTES="$work/test-notes.json" \
 CLOUDLESS_SOURCE_COMMIT=0123456789abcdef0123456789abcdef01234567 \
-    bash "$ROOT/distro/scripts/build-apt-repository.sh" 9.9.9 stable
+    bash "$ROOT/distro/scripts/build-apt-repository.sh" "$TEST_VERSION" stable
 
 repo="$work/repository"
 gpgv --keyring "$work/test-keyring.pgp" "$repo/dists/stable/InRelease"
 grep -Fqx 'Acquire-By-Hash: yes' "$repo/dists/stable/Release"
 grep -Fq ' cloudless-release.json' "$repo/dists/stable/Release"
-cmp "$repo/releases/9.9.9.json" "$repo/dists/stable/cloudless-release.json"
-grep -Fq '"architecture":"amd64"' "$repo/releases/9.9.9.json"
-grep -Fq '"architecture":"arm64"' "$repo/releases/9.9.9.json"
-grep -Fq '"sourceCommit":"0123456789abcdef0123456789abcdef01234567"' "$repo/releases/9.9.9.json"
-grep -Fq '"install-dgx-spark.sh"' "$repo/releases/9.9.9.json"
-grep -Fq '"cloudless-apps-manifest.json"' "$repo/releases/9.9.9.json"
+cmp "$repo/releases/$TEST_VERSION.json" "$repo/dists/stable/cloudless-release.json"
+grep -Fq '"architecture":"amd64"' "$repo/releases/$TEST_VERSION.json"
+grep -Fq '"architecture":"arm64"' "$repo/releases/$TEST_VERSION.json"
+grep -Fq '"sourceCommit":"0123456789abcdef0123456789abcdef01234567"' "$repo/releases/$TEST_VERSION.json"
+grep -Fq '"install-dgx-spark.sh"' "$repo/releases/$TEST_VERSION.json"
+grep -Fq '"cloudless-apps-manifest.json"' "$repo/releases/$TEST_VERSION.json"
 for artifact in install-dgx-spark.sh cloudless-apps-manifest.json; do
     gpgv --keyring "$work/test-keyring.pgp" \
-        "$repo/artifacts/9.9.9/$artifact.asc" \
-        "$repo/artifacts/9.9.9/$artifact"
+        "$repo/artifacts/$TEST_VERSION/$artifact.asc" \
+        "$repo/artifacts/$TEST_VERSION/$artifact"
 done
 tampered="$work/tampered-repository"
 cp -a "$repo" "$tampered"
-printf '\n# tampered\n' >> "$tampered/artifacts/9.9.9/install-dgx-spark.sh"
+printf '\n# tampered\n' >> "$tampered/artifacts/$TEST_VERSION/install-dgx-spark.sh"
 if CLOUDLESS_APT_REPO_OUT="$tampered" \
    CLOUDLESS_R2_ENDPOINT=https://invalid.invalid \
    CLOUDLESS_R2_BUCKET=invalid \

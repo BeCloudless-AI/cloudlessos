@@ -5,6 +5,7 @@ DISTRO="$ROOT/distro"
 VERSION="${1:-}"
 CHANNEL="${2:-stable}"
 REPO="${CLOUDLESS_APT_REPO_OUT:-$DISTRO/out/apt-repository}"
+PACKAGE_OUT="${CLOUDLESS_PACKAGE_OUT:-$DISTRO/out/packages}"
 BASE_URL="${CLOUDLESS_APT_BASE_URL:-https://updates.becloudless.ai/apt}"
 KEY="${CLOUDLESS_ARCHIVE_KEY:-$DISTRO/release/keys/cloudless-archive-keyring.pgp}"
 FINGERPRINT_FILE="${CLOUDLESS_ARCHIVE_FINGERPRINT_FILE:-$DISTRO/release/keys/cloudless-archive-fingerprint.txt}"
@@ -55,7 +56,7 @@ if [ "${CLOUDLESS_RELEASE_DRY_RUN:-0}" != "1" ]; then
 fi
 
 for arch in "${ARCHES[@]}"; do
-    CLOUDLESS_VERSION="$VERSION" CLOUDLESS_ARCH="$arch" "$DISTRO/scripts/build-packages.sh"
+    CLOUDLESS_VERSION="$VERSION" CLOUDLESS_ARCH="$arch" CLOUDLESS_PACKAGE_OUT="$PACKAGE_OUT" "$DISTRO/scripts/build-packages.sh"
 done
 
 work="$(mktemp -d)"
@@ -126,7 +127,7 @@ for arch in "${ARCHES[@]}"; do
         if ${REMOTE_BASELINE[$arch]}; then
             previous="$(find "$work/baseline/$arch" -type f -name "${package}_*_${arch}.deb" -print -quit 2>/dev/null || true)"
         fi
-        candidate="$DISTRO/out/packages/${package}_${VERSION}_${arch}.deb"
+        candidate="$PACKAGE_OUT/${package}_${VERSION}_${arch}.deb"
         test -s "$candidate" || { echo "Missing candidate package: $candidate" >&2; exit 1; }
         if [ -n "$previous" ]; then
             PREVIOUS_DEB[$key]="$previous"
@@ -187,7 +188,7 @@ for arch in "${ARCHES[@]}"; do
     for package in "${PACKAGES[@]}"; do
         key="$arch/$package"
         if ${CHANGED[$key]}; then
-            reprepro --basedir "$REPO" includedeb "$CHANNEL" "$DISTRO/out/packages/${package}_${VERSION}_${arch}.deb"
+            reprepro --basedir "$REPO" includedeb "$CHANNEL" "$PACKAGE_OUT/${package}_${VERSION}_${arch}.deb"
         fi
     done
 done

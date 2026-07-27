@@ -2,8 +2,11 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 DISTRO="$ROOT/distro"
-"$DISTRO/scripts/build-packages.sh"
-for package in "$DISTRO"/out/packages/*.deb; do
+OUT="${CLOUDLESS_PACKAGE_OUT:-$DISTRO/out/packages}"
+if [ "${CLOUDLESS_SKIP_PACKAGE_BUILD:-0}" != "1" ]; then
+    "$DISTRO/scripts/build-packages.sh"
+fi
+for package in "$OUT"/*.deb; do
     echo "==> Checking $(basename "$package")"
     dpkg-deb --info "$package" >/dev/null
     dpkg-deb --contents "$package" >/dev/null
@@ -32,7 +35,7 @@ grep -Fq 'CLOUDLESS_HOME=/home/cloudless/Cloudless' \
 grep -Fq 'CLOUDLESS_DESKTOP_HOME=/home/cloudless' \
     "$DISTRO/packages/cloudless-orchestrator/cloudless.env"
 grep -Fq 'capabilities.BuildVersion=$VERSION' "$DISTRO/scripts/build-packages.sh"
-orchestrator_deb="$(find "$DISTRO/out/packages" -maxdepth 1 -type f -name 'cloudless-orchestrator_*_amd64.deb' -print -quit)"
+orchestrator_deb="$(find "$OUT" -maxdepth 1 -type f -name 'cloudless-orchestrator_*_amd64.deb' -print -quit)"
 test -n "$orchestrator_deb"
 dpkg-deb -f "$orchestrator_deb" Depends | grep -Eq '(^|, )gpgv(,|$)'
 dpkg-deb -f "$orchestrator_deb" Depends | grep -Eq '(^|, )xdotool(,|$)'

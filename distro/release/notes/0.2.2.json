@@ -1,0 +1,14 @@
+{
+  "title": "Two-Spark inference and a clearer Cloudless Agent",
+  "summary": "CloudlessOS 0.2.2 turns paired DGX Sparks into a managed distributed inference system, improves model-loading visibility, and completes the Hermes-powered assistant experience.",
+  "changes": [
+    "Connect, verify, manage, and safely disconnect two DGX Sparks from a guided CloudlessOS interface built into the DGX Dashboard.",
+    "Run supported models across both Sparks through a managed Ray and vLLM topology, with peer GPU and unified-memory visibility on the Cloudless desktop.",
+    "Report distributed model startup accurately by distinguishing the peer download, peer weight loading, checkpoint loading, inference optimization, and ready stages.",
+    "Show real model download bytes, percentage, and an estimated remaining time instead of holding the interface at a synthetic 92 percent.",
+    "Protect cluster removal by stopping distributed inference first, removing the private fabric safely, and returning the system to a compatible local model.",
+    "Allow the Cloudless virtual keyboard to type into focused controls inside embedded dashboards without leaving the CloudlessOS experience.",
+    "Identify Ask Cloudless and the Cloudless Agent consistently as powered by Hermes Agent.",
+    "Harden multi-architecture release baseline recovery so AMD64 and ARM64 package generations remain signed, isolated, and reproducible."
+  ]
+}

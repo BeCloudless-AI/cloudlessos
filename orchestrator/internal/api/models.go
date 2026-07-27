@@ -328,7 +328,7 @@ func (s *Server) modelDownloads(w http.ResponseWriter, _ *http.Request) {
 type modelView struct {
 	models.Model
 	Fit         string `json:"fit"`                   // fits | tight | over | unknown
-	ClusterFit  string `json:"clusterFit,omitempty"`  // fit when distributed across a healthy Spark pair
+	ClusterFit  string `json:"clusterFit,omitempty"`  // fit when distributed across a healthy Spark cluster
 	Active      bool   `json:"active"`                // currently the served model
 	Downloaded  bool   `json:"downloaded"`            // present in the HF cache
 	Recommended bool   `json:"recommended,omitempty"` // recommended for the machine's region

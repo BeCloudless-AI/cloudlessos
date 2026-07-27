@@ -35,9 +35,10 @@ type Context struct {
 	GPU           string          // human summary, e.g. "RTX 5090 (32 GB)"
 	GPUVRAMGB     int             // total VRAM used by Model Manager fit calculations
 	GPUMemoryType string          // dedicated | unified | unknown
-	ClusterReady  bool            // healthy two-Spark fabric is available for distributed inference
-	ClusterPeer   string          // display name of the connected peer
-	ClusterMemory int             // approximate combined accelerator memory across both Sparks
+	ClusterReady  bool            // healthy multi-Spark fabric is available for distributed inference
+	ClusterPeer   string          // legacy display name of the first connected worker
+	ClusterNodes  int             // coordinator plus all workers
+	ClusterMemory int             // approximate aggregate accelerator memory across the cluster
 	Models        []ModelOption   // curated choices and fit verdicts shown by Model Manager
 }
 
@@ -50,7 +51,7 @@ type ModelOption struct {
 	Quant      string
 	MinVRAMGB  int
 	Fit        string // fits | tight | over | unknown
-	ClusterFit string // distributed fit across a healthy two-Spark cluster
+	ClusterFit string // distributed fit across a healthy Spark cluster
 }
 
 // ModelAdvice is a deterministic compatibility answer plus the Model Manager
@@ -112,7 +113,8 @@ func SystemPrompt(c Context) string {
 	}
 	fmt.Fprintf(&b, "Live machine state: GPU = %s; inference engine = %s (%s); model = %s.\n", c.GPU, eng, ready, c.Model)
 	if c.ClusterReady {
-		fmt.Fprintf(&b, "A second DGX Spark (%s) is connected and healthy. Model Manager can offer distributed inference across both Sparks with approximately %d GB combined unified memory. Never describe this as one shared-memory computer; it is a two-node distributed system.\n", c.ClusterPeer, c.ClusterMemory)
+		nodes := max(2, c.ClusterNodes)
+		fmt.Fprintf(&b, "%d DGX Sparks are connected and healthy. Model Manager can offer distributed inference with approximately %d GB aggregate unified memory. Never describe this as one shared-memory computer; it is a %d-node distributed system.\n", nodes, c.ClusterMemory, nodes)
 	}
 	if c.FirstRun || !c.Onboarded {
 		b.WriteString("This is an early session for this user — be welcoming and offer one simple, concrete starting point.\n")
@@ -156,7 +158,7 @@ func SystemPrompt(c Context) string {
 		}
 		fit := m.Fit
 		if c.ClusterReady && m.ClusterFit != "" {
-			fit += "; across both Sparks: " + m.ClusterFit
+			fit += fmt.Sprintf("; across %d Sparks: %s", max(2, c.ClusterNodes), m.ClusterFit)
 		}
 		fmt.Fprintf(&b, "- %s (id: %s; %s%s; %s) — %s.\n", m.Name, m.ID, m.Params, quant, memory, fit)
 	}
@@ -292,7 +294,8 @@ func modelGuidance(text string, c Context, forced bool) (ModelAdvice, bool) {
 				return ModelAdvice{Reply: fmt.Sprintf("%s is available, but Model Manager marks it as a tight fit on this machine. It needs %s and may leave little room for context or other GPU apps. Review its card before launching.", m.Name, need), ModelID: m.ID, Label: labelFor(m.Name)}, true
 			case "over":
 				if c.ClusterReady && (m.ClusterFit == "fits" || m.ClusterFit == "tight") {
-					return ModelAdvice{Reply: fmt.Sprintf("%s is too large for one Spark, but your connected two-Spark cluster can run it in distributed mode. It needs %s and Model Manager reports approximately %d GB combined unified memory across both nodes. Open its card to prepare and launch it across the cluster.", m.Name, need, c.ClusterMemory), ModelID: m.ID, Label: labelFor(m.Name)}, true
+					nodes := max(2, c.ClusterNodes)
+					return ModelAdvice{Reply: fmt.Sprintf("%s is too large for one Spark, but your connected %d-Spark cluster can run it in distributed mode. It needs %s and Model Manager reports approximately %d GB aggregate unified memory. Open its card to prepare and launch it across the cluster.", m.Name, nodes, need, c.ClusterMemory), ModelID: m.ID, Label: labelFor(m.Name)}, true
 				}
 				return ModelAdvice{Reply: fmt.Sprintf("%s is listed, but Model Manager estimates it needs %s—more than this machine can comfortably provide. Its card can help you compare a smaller or quantized variant.", m.Name, need), ModelID: m.ID, Label: labelFor(m.Name)}, true
 			default:

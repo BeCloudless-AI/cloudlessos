@@ -59,6 +59,14 @@ func TestCoordinatorUsesRayAndWaitsForWorker(t *testing.T) {
 	}
 }
 
+func TestCoordinatorUsesAllEightSparkRanks(t *testing.T) {
+	nodes := make([]Node, 7)
+	spec := coordinatorSpec(engine.RunSpec{Args: []string{"vllm", "serve", "Qwen/Test"}}, State{Configured: true, Nodes: nodes})
+	if joined := strings.Join(spec.Args, " "); !strings.Contains(joined, "--tensor-parallel-size 8") {
+		t.Fatalf("eight-Spark coordinator command = %s", joined)
+	}
+}
+
 func TestDiscoveryNameDecodesAvahiEscapes(t *testing.T) {
 	if got := discoveryName(`spark-44f5\032SSH`, "spark-44f5.local"); got != "spark-44f5" {
 		t.Fatalf("discoveryName() = %q", got)
@@ -80,6 +88,46 @@ func TestNetplanCreatesSeparateSubnets(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Fatalf("netplan missing %q:\n%s", want, got)
 		}
+	}
+}
+
+func TestNetplanSupportsEighthSparkAddress(t *testing.T) {
+	got := netplan([]string{"cx-a", "cx-b"}, 8)
+	for _, want := range []string{"10.100.0.8/24", "10.100.1.8/24"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("eighth-node netplan missing %q: %s", want, got)
+		}
+	}
+}
+
+func TestNormalizeStateMigratesLegacyPair(t *testing.T) {
+	state := normalizeState(State{Configured: true, WorkerReady: true, PeerName: "spark-2", PeerHost: "spark-2.local", Username: "cloudless", PeerIPs: []string{"10.100.0.2"}})
+	if state.NodeCount != 2 || len(state.Nodes) != 1 || state.Nodes[0].Host != "spark-2.local" || state.Topology != "direct" {
+		t.Fatalf("legacy state migration = %#v", state)
+	}
+}
+
+func TestNodeCountSupportsEightSparks(t *testing.T) {
+	nodes := make([]Node, 7)
+	for i := range nodes {
+		nodes[i] = Node{Name: "worker", WorkerReady: true}
+	}
+	if got := nodeCountForState(State{Configured: true, Nodes: nodes}); got != 8 {
+		t.Fatalf("node count = %d", got)
+	}
+}
+
+func TestEnrollmentIndexEnforcesUniqueEightSparkLimit(t *testing.T) {
+	state := State{Configured: true, Nodes: []Node{{Host: "spark-2.local"}, {Host: "spark-3.local"}}}
+	if got, err := enrollmentIndex(state, "spark-4.local"); err != nil || got != 4 {
+		t.Fatalf("next enrollment = %d, %v", got, err)
+	}
+	if _, err := enrollmentIndex(state, "SPARK-2.LOCAL"); err == nil || !strings.Contains(err.Error(), "already part") {
+		t.Fatalf("duplicate enrollment error = %v", err)
+	}
+	state.Nodes = make([]Node, 7)
+	if _, err := enrollmentIndex(state, "spark-9.local"); err == nil || !strings.Contains(err.Error(), "maximum of 8") {
+		t.Fatalf("cluster limit error = %v", err)
 	}
 }
 

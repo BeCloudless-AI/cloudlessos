@@ -6,6 +6,7 @@ package provision
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"path/filepath"
 	"strings"
@@ -131,7 +132,7 @@ func Run(ctx context.Context, eng engine.Engine, st *state.Store, mf *manifest.S
 					// Both ranks must receive the exact same vLLM topology and model
 					// arguments. Local-only saved commands and manifest revisions cannot
 					// safely be applied to only the coordinator.
-					logf(e.ID + ": using standard two-Spark distributed launch command")
+					logf(fmt.Sprintf("%s: using standard %d-Spark distributed launch command", e.ID, sparkcluster.NodeCount()))
 				} else if override, ok := st.EngineCmd(e.ID, served); ok {
 					spec.Args = override // a user-saved launch command wins verbatim
 					logf(e.ID + ": using saved launch command")
@@ -143,11 +144,6 @@ func Run(ctx context.Context, eng engine.Engine, st *state.Store, mf *manifest.S
 				if clusterMode {
 					spec = sparkcluster.CoordinatorSpec(spec)
 					_ = eng.Remove(ctx, "cloudless-cluster-engine-proxy")
-					logf(e.ID + ": preparing connected Spark worker")
-					if err := sparkcluster.StartWorker(ctx, spec.Image, served); err != nil {
-						logf(e.ID + ": cluster worker start failed: " + err.Error())
-						continue
-					}
 				}
 				if _, err := eng.Run(ctx, spec); err != nil {
 					if clusterMode {
@@ -155,11 +151,29 @@ func Run(ctx context.Context, eng engine.Engine, st *state.Store, mf *manifest.S
 					}
 					logf(e.ID + ": start failed: " + err.Error())
 				} else if clusterMode {
+					nodes := sparkcluster.NodeCount()
+					logf(fmt.Sprintf("%s: preparing %d connected Spark workers", e.ID, nodes-1))
+					if err := sparkcluster.StartWorker(ctx, spec.Image, served); err != nil {
+						_ = eng.Remove(ctx, e.ContainerName())
+						logf(e.ID + ": cluster worker start failed: " + err.Error())
+						continue
+					}
+					wait := fmt.Sprintf("until ray status 2>/dev/null | grep -q '/%d.0 GPU'; do sleep 2; done", nodes)
+					if err := eng.Exec(ctx, e.ContainerName(), "/bin/bash", "-lc", wait); err != nil {
+						_ = sparkcluster.StopWorker(ctx)
+						logf(e.ID + ": cluster membership failed: " + err.Error())
+						continue
+					}
+					if err := eng.Exec(ctx, e.ContainerName(), "touch", "/tmp/cloudless-ray-worker"); err != nil {
+						_ = sparkcluster.StopWorker(ctx)
+						logf(e.ID + ": cluster launch gate failed: " + err.Error())
+						continue
+					}
 					_ = eng.Pull(ctx, "alpine/socat:latest")
 					if _, err := eng.Run(ctx, sparkcluster.ProxySpec()); err != nil {
 						logf(e.ID + ": cluster proxy start failed: " + err.Error())
 					} else {
-						logf(e.ID + ": started across two Sparks")
+						logf(fmt.Sprintf("%s: started across %d Sparks", e.ID, nodes))
 					}
 				} else {
 					logf(e.ID + ": started (active engine)")

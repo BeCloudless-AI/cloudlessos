@@ -2919,6 +2919,7 @@
     <symbol id="ui-key" viewBox="0 0 24 24"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m11.5 11.5 9-9M15 8l3 3m-6-6 3 3"/></symbol>
     <symbol id="ui-keyboard" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M6 9h.01M10 9h.01M14 9h.01M18 9h.01M6 13h.01M10 13h.01M14 13h.01M18 13h.01M7 16h10"/></symbol>
     <symbol id="ui-network" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="16" y="16" width="6" height="6" rx="1"/><path d="M5 16v-3h14v3M12 8v5"/></symbol>
+    <symbol id="ui-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
     <symbol id="ui-unlink" viewBox="0 0 24 24"><path d="m18.84 12.25 1.72-1.71a5 5 0 0 0-7.07-7.07l-1.72 1.71M5.17 11.75l-1.71 1.71a5 5 0 0 0 7.07 7.07l1.71-1.71M8 2v3M2 8h3m11 11v3m3-6h3"/><path d="m8 16 8-8"/></symbol>
     <symbol id="ui-terminal" viewBox="0 0 24 24"><path d="m4 17 6-5-6-5m8 10h8"/></symbol>
     <symbol id="ui-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></symbol>
@@ -3199,7 +3200,7 @@ const gb = mb => (mb / 1024).toFixed(1);
 let installing = 0, catalogCache = [], gpuBuilt = 0, appsEntered = false;
 let lastRunning = {}, engineReady = false, engineUnloaded = false, engineActive = '', engineExecutionMode = 'local', engineOperation = 'idle', engineSwitching = false, engineAborting = false, engineLoadJobId = '', activeEngineName = 'the engine';
 let pinnedIds = [], lpQuery = '', lpView = '';
-let clusterWizard = { step: 1, peers: [], host: '', username: '', password: '', cable: false, preflight: null, busy: false, error: '' };
+let clusterWizard = { step: 1, peers: [], host: '', username: '', password: '', cable: false, preflight: null, busy: false, error: '', adding: false, existingNodes: 0 };
 let asstMsgs = [], asstBusy = false, asstController = null, asstStreamQueued = false, asstStreamIndex = -1;
 let capabilityCache = { facts: {}, features: {} };
 function applyCapabilitySnapshot(snapshot) {
@@ -3420,8 +3421,9 @@ async function renderGPUs() {
   const gpus = (data && data.gpus) || [];
   const body = document.getElementById('gpu-body');
   if (!gpus.length) { body.innerHTML = '<div class="empty">No NVIDIA GPU detected on this machine.</div>'; gpuBuilt = 0; return; }
-  const peerMissing = Boolean(data.peer && data.peer.connected && !data.peer.reachable);
-  const signature = gpus.map(g => `${g.remote ? 'peer' : 'local'}:${g.node || ''}:${g.index}`).join('|') + (peerMissing ? '|peer-offline' : '');
+  const unavailablePeers = (data.peers || (data.peer ? [data.peer] : [])).filter(peer => peer.connected && !peer.reachable);
+  const offlineSignature = unavailablePeers.map(peer => peer.host || peer.name || 'worker').join(',');
+  const signature = gpus.map(g => `${g.remote ? 'peer' : 'local'}:${g.node || ''}:${g.index}`).join('|') + (offlineSignature ? `|peer-offline:${offlineSignature}` : '');
   const calc = g => ({
     vram: g.memTotalMB > 0 ? Math.round(g.memUsedMB / g.memTotalMB * 100) : 0,
     util: Math.max(0, g.utilPct),
@@ -3441,7 +3443,7 @@ async function renderGPUs() {
           <div class="track"><i data-k="utilbar" style="width:0%"></i></div></div>
         <div class="chips"><span data-k="temp">${g.tempC}°C</span><span><b data-k="pw">${c.power}</b></span><span>Driver ${g.driver}</span></div>
       </div>`;
-    }).join('') + (peerMissing ? `<div class="gpu-peer-offline">${uiIcon('alert')}<span>${escapeHtml((data.peer && data.peer.name) || 'The connected Spark')} telemetry is temporarily unavailable. Its private compute connection remains configured.</span></div>` : '');
+    }).join('') + unavailablePeers.map(peer => `<div class="gpu-peer-offline">${uiIcon('alert')}<span>${escapeHtml(peer.name || 'A connected Spark')} telemetry is temporarily unavailable. Its private compute connection remains configured.</span></div>`).join('');
     gpuBuilt = signature;
     requestAnimationFrame(() => updateGPUValues(gpus, calc)); // fill from 0 → value
   } else {
@@ -3492,6 +3494,7 @@ async function renderSystem() {
 
 /* ---- connected Spark compute (system-wide dashboard state) ---- */
 let connectedSpark = null;
+const sparkCount = cluster => Math.max(2, Number(cluster?.nodeCount || cluster?.nodes || 2));
 async function renderHomeCluster() {
   const host = document.getElementById('home-cluster'); if (!host) return;
   let status; try { status = await api('/api/system/spark-cluster'); } catch { status = null; }
@@ -3499,9 +3502,10 @@ async function renderHomeCluster() {
   if (!connectedSpark) { host.classList.add('hidden'); host.innerHTML = ''; return; }
   const healthy = Boolean(connectedSpark.healthy);
   const computeReady = healthy && Boolean(connectedSpark.workerReady);
-  const peer = connectedSpark.peerName || connectedSpark.peerHost || 'the other Spark';
+  const peer = connectedSpark.peerName || connectedSpark.peerHost || 'a worker Spark';
+  const nodes = sparkCount(connectedSpark);
   host.classList.remove('hidden');
-  host.innerHTML = `<span class="home-cluster-icon">${uiIcon('network')}</span><span class="home-cluster-copy"><b>${computeReady ? `Two-Spark compute is ready` : (healthy ? 'Two Sparks are connected' : `The connection to ${escapeHtml(peer)} needs attention`)}</b><span>${computeReady ? `${escapeHtml(connectedSpark.localName || 'This Spark')} + ${escapeHtml(peer)} · two GB10 GPUs · distributed models available` : (healthy ? 'The private link is healthy. Reconnect it once to enable one-click distributed models from this update.' : 'Local AI remains available. Open the DGX cluster dashboard to inspect the private link.')}</span></span><button class="btn ${computeReady ? 'primary' : ''} home-cluster-action" type="button">${uiIcon(computeReady ? 'settings' : 'alert')}<span>${computeReady ? 'Manage' : 'Manage connection'}</span></button>`;
+  host.innerHTML = `<span class="home-cluster-icon">${uiIcon('network')}</span><span class="home-cluster-copy"><b>${computeReady ? `${nodes}-Spark compute is ready` : (healthy ? `${nodes} Sparks are connected` : `The cluster needs attention`)}</b><span>${computeReady ? `${nodes} GB10 GPUs · distributed models available` : (healthy ? 'The private fabric is healthy. Re-enroll any legacy worker once to enable distributed models.' : `Local AI remains available. Check ${escapeHtml(peer)} and the other workers in the DGX cluster dashboard.`)}</span></span><button class="btn ${computeReady ? 'primary' : ''} home-cluster-action" type="button">${uiIcon(computeReady ? 'settings' : 'alert')}<span>${computeReady ? 'Manage' : 'Manage connection'}</span></button>`;
   host.querySelector('button').onclick = openSparkClusterSurface;
 }
 
@@ -3860,11 +3864,11 @@ function applyEngineUI() {
       : engineOperation === 'unloading'
       ? 'Unloading Cloudless AI…'
       : startupPhase === 'peer-downloading'
-      ? 'The second Spark is downloading the model…'
+      ? 'Worker Sparks are downloading the model…'
       : startupPhase === 'peer-loading'
-      ? 'The second Spark is loading model weights…'
+      ? 'Worker Sparks are loading model weights…'
       : startupPhase === 'optimizing'
-      ? 'Optimizing two-Spark inference…'
+      ? 'Optimizing distributed inference…'
       : 'Cloudless AI is starting up…';
     if (load) {
       load.classList.toggle('hidden', !(engineUnloaded || abortable || engineAborting));
@@ -4308,8 +4312,8 @@ function renderDGXDashboardPage(c) {
       <div class="machine-driver-actions dgx-dashboard-actions"><button class="btn primary dgx-dashboard-launch" id="open-dgx-dashboard">${uiIcon('arrow-right')}<span>Open DGX Dashboard</span></button></div>
     </section>
     ${hasCapability('spark-cluster') ? `<section class="machine-card" id="dgx-cluster-card">
-      <div class="machine-card-head"><div><div class="machine-card-title">Connect two Sparks</div><div class="machine-card-desc">Create and manage a dedicated 200 Gbps ConnectX-7 link for distributed workloads.</div></div><span class="inf-state-pill" id="dgx-cluster-state">CHECKING</span></div>
-      <div class="machine-facts"><div class="machine-fact"><div class="machine-fact-label">What it does</div><div class="machine-fact-value">Lets two Sparks work together</div></div><div class="machine-fact"><div class="machine-fact-label">What you need</div><div class="machine-fact-value">One high-speed Spark cable</div></div></div>
+      <div class="machine-card-head"><div><div class="machine-card-title">DGX Spark cluster</div><div class="machine-card-desc">Connect and manage up to eight Sparks over their dedicated 200 Gbps ConnectX-7 fabric.</div></div><span class="inf-state-pill" id="dgx-cluster-state">CHECKING</span></div>
+      <div class="machine-facts"><div class="machine-fact"><div class="machine-fact-label">Scale</div><div class="machine-fact-value">2–8 DGX Sparks</div></div><div class="machine-fact"><div class="machine-fact-label">Network</div><div class="machine-fact-value">Direct cable or RoCE switch</div></div></div>
       <div class="machine-driver-actions dgx-dashboard-actions"><button class="btn primary dgx-dashboard-launch" id="open-spark-cluster" disabled>${uiIcon('network')}<span>CHECKING</span></button></div>
     </section>` : ''}
   </div>`;
@@ -4326,7 +4330,7 @@ async function refreshDGXClusterCard() {
   const state = card.querySelector('#dgx-cluster-state'), button = card.querySelector('#open-spark-cluster'), label = button.querySelector('span');
   button.disabled = false;
   if (status.error) { state.textContent = 'UNAVAILABLE'; label.textContent = 'TRY AGAIN'; button.onclick = refreshDGXClusterCard; return; }
-  state.textContent = status.configured ? 'CONFIGURED' : 'NOT CONFIGURED';
+  state.textContent = status.configured ? `${status.nodeCount || 2} NODES` : 'NOT CONFIGURED';
   state.classList.toggle('ready', Boolean(status.configured && status.healthy));
   label.textContent = status.configured ? 'MANAGE' : 'CONNECT NOW';
   button.onclick = openSparkClusterSurface;
@@ -4378,7 +4382,7 @@ function clusterChecks(checks = []) {
   return `<div class="cluster-checks" role="list">${ordered.map(check => { const isPing = String(check.id || '').startsWith('ping-'); const friendly = clusterCheckLabels[check.id] || (isPing ? ['Private path between the Sparks', 'The two Sparks can exchange data over the cable.'] : [check.label || 'Readiness check', '']); const title = check.ok ? friendly[0] : (clusterCheckFailureLabels[check.id] || friendly[0]); const detail = check.ok ? (check.details && String(check.details).includes('will be reused') ? check.details : friendly[1]) : (clusterCheckFailures[check.id] || check.details || friendly[1]); return `<div class="cluster-check ${check.ok ? '' : 'fail'}" role="listitem"><span class="cluster-check-icon ${check.ok ? '' : 'fail'}">${uiIcon(check.ok ? 'check' : 'close')}</span><span class="cluster-check-copy"><b>${escapeHtml(title)}</b>${detail ? `<span>${escapeHtml(detail)}</span>` : ''}</span></div>`; }).join('')}</div>`;
 }
 function clusterHero(stateText = 'Not configured', ready = false) {
-  return `<div class="inf-page-hero cluster-hero"><span class="inf-page-icon">${uiIcon('network')}</span><div class="inf-page-copy"><div class="inf-page-eyebrow">NVIDIA DGX Spark</div><div class="inf-page-title">Connect two Sparks</div><div class="inf-page-desc">A guided setup for the private high-speed link. Your normal Wi-Fi or Ethernet connection stays exactly as it is.</div></div><span class="inf-state-pill ${ready ? 'ready' : ''}">${escapeHtml(stateText)}</span></div>`;
+  return `<div class="inf-page-hero cluster-hero"><span class="inf-page-icon">${uiIcon('network')}</span><div class="inf-page-copy"><div class="inf-page-eyebrow">NVIDIA DGX Spark</div><div class="inf-page-title">Spark cluster</div><div class="inf-page-desc">Connect two to eight Sparks for distributed AI. Management Wi-Fi or Ethernet remains unchanged.</div></div><span class="inf-state-pill ${ready ? 'ready' : ''}">${escapeHtml(stateText)}</span></div>`;
 }
 async function renderSparkClusterPage(c) {
   c.innerHTML = `<div class="cluster-page">${clusterHero('Checking')}<section class="machine-card" aria-busy="true"><div class="cluster-busy-panel" role="status"><i>${uiIcon('reload')}</i><span><b>Checking your Spark</b><span>Reading the high-speed connection and current cluster setup…</span></span></div></section></div>`;
@@ -4390,14 +4394,19 @@ async function renderSparkClusterPage(c) {
 function renderSparkClusterWizard(c) {
   const w = clusterWizard; let body = '';
   if (w.step === 1) {
-    const peers = w.peers.length ? `<div><div class="machine-card-title">Choose the Spark to connect</div><div class="machine-card-desc">${w.peers.length} compatible ${w.peers.length === 1 ? 'Spark was' : 'Sparks were'} found nearby.</div><div class="cluster-peer-list spaced">${w.peers.map((peer, index) => `<button class="cluster-peer" type="button" data-cluster-peer="${index}">${uiIcon('machine')}<span class="cluster-peer-copy"><b>${escapeHtml(peer.name || peer.host)}</b><span>${escapeHtml(peer.host)}${peer.ip ? ` · ${escapeHtml(peer.ip)}` : ''}</span></span>${uiIcon('arrow-right')}</button>`).join('')}</div></div>` : `<div class="cluster-discovery"><div class="cluster-discovery-stage ${w.busy ? 'searching' : ''}"><div class="cluster-radar" aria-hidden="true"><i class="cluster-radar-sweep"></i><span class="cluster-radar-core">${uiIcon('machine')}</span><span class="cluster-radar-peer">${uiIcon('machine')}</span></div><span class="cluster-radar-status" role="status"><i></i>${w.busy ? 'Searching your network…' : 'Ready to search nearby'}</span></div><div class="cluster-discovery-copy"><strong>${w.busy ? 'Looking for your other Spark' : 'Find the second Spark nearby'}</strong><span>Both Sparks only need to be turned on and connected to the same Wi-Fi or Ethernet network. The high-speed cable is handled in the next step.</span><button class="cluster-find-button ${w.busy ? 'searching' : ''}" id="cluster-discover" ${w.busy ? 'disabled' : ''}><span class="cluster-find-icon">${uiIcon(w.busy ? 'reload' : 'search')}</span><span class="cluster-find-copy"><b>${w.busy ? 'Searching nearby…' : 'Find my Spark'}</b><small>${w.busy ? 'Checking the local network' : 'Securely search this network'}</small></span><span class="cluster-find-arrow">${uiIcon('arrow-right')}</span></button></div></div>`;
-    body = `<section class="machine-card"><div class="machine-card-head"><div><div class="machine-card-title">Choose the other DGX Spark</div><div class="machine-card-desc">No technical setup is needed yet. Both Sparks only need to be visible on the same normal network.</div></div></div><div class="cluster-form">${peers}<details class="cluster-manual" ${w.host || w.error ? 'open' : ''}><summary>Can’t find it? Enter its address manually</summary><div class="cluster-field"><label for="cluster-host">Spark name or network address</label><input class="fld-input" id="cluster-host" value="${escapeAttr(w.host)}" placeholder="For example: spark-2.local" spellcheck="false" autocomplete="off"></div></details>${w.error ? `<div class="machine-driver-note">${uiIcon('alert')}<span>${escapeHtml(w.error)}</span></div>` : ''}<div class="cluster-actions">${w.peers.length ? `<button class="btn" id="cluster-discover" ${w.busy ? 'disabled' : ''}>${uiIcon('reload')}Search again</button>` : ''}<button class="btn primary" id="cluster-use-host" ${w.busy || !w.host ? 'disabled' : ''}>Use this address${uiIcon('arrow-right')}</button></div></div></section>`;
+    const peers = w.peers.length ? `<div><div class="machine-card-title">Choose a Spark to add</div><div class="machine-card-desc">${w.peers.length} compatible ${w.peers.length === 1 ? 'Spark was' : 'Sparks were'} found nearby.</div><div class="cluster-peer-list spaced">${w.peers.map((peer, index) => `<button class="cluster-peer" type="button" data-cluster-peer="${index}">${uiIcon('machine')}<span class="cluster-peer-copy"><b>${escapeHtml(peer.name || peer.host)}</b><span>${escapeHtml(peer.host)}${peer.ip ? ` · ${escapeHtml(peer.ip)}` : ''}</span></span>${uiIcon('arrow-right')}</button>`).join('')}</div></div>` : `<div class="cluster-discovery"><div class="cluster-discovery-stage ${w.busy ? 'searching' : ''}"><div class="cluster-radar" aria-hidden="true"><i class="cluster-radar-sweep"></i><span class="cluster-radar-core">${uiIcon('machine')}</span><span class="cluster-radar-peer">${uiIcon('machine')}</span></div><span class="cluster-radar-status" role="status"><i></i>${w.busy ? 'Searching your network…' : 'Ready to search nearby'}</span></div><div class="cluster-discovery-copy"><strong>${w.busy ? 'Looking for another Spark' : 'Find a DGX Spark nearby'}</strong><span>The new Spark only needs to be on the same management network. Cloudless checks the high-speed fabric next.</span><button class="cluster-find-button ${w.busy ? 'searching' : ''}" id="cluster-discover" ${w.busy ? 'disabled' : ''}><span class="cluster-find-icon">${uiIcon(w.busy ? 'reload' : 'search')}</span><span class="cluster-find-copy"><b>${w.busy ? 'Searching nearby…' : 'Find a Spark'}</b><small>${w.busy ? 'Checking the local network' : 'Securely search this network'}</small></span><span class="cluster-find-arrow">${uiIcon('arrow-right')}</span></button></div></div>`;
+    body = `<section class="machine-card"><div class="machine-card-head"><div><div class="machine-card-title">Choose a DGX Spark</div><div class="machine-card-desc">Add one machine at a time. CloudlessOS validates every node before changing the cluster.</div></div></div><div class="cluster-form">${peers}<details class="cluster-manual" ${w.host || w.error ? 'open' : ''}><summary>Can’t find it? Enter its address manually</summary><div class="cluster-field"><label for="cluster-host">Spark name or network address</label><input class="fld-input" id="cluster-host" value="${escapeAttr(w.host)}" placeholder="For example: spark-2.local" spellcheck="false" autocomplete="off"></div></details>${w.error ? `<div class="machine-driver-note">${uiIcon('alert')}<span>${escapeHtml(w.error)}</span></div>` : ''}<div class="cluster-actions">${w.peers.length ? `<button class="btn" id="cluster-discover" ${w.busy ? 'disabled' : ''}>${uiIcon('reload')}Search again</button>` : ''}<button class="btn primary" id="cluster-use-host" ${w.busy || !w.host ? 'disabled' : ''}>Use this address${uiIcon('arrow-right')}</button></div></div></section>`;
   } else if (w.step === 2) {
-    body = `<section class="machine-card"><div class="machine-card-head"><div><div class="machine-card-title">Plug in the high-speed cable</div><div class="machine-card-desc">Connect the two matching rear ports, then let CloudlessOS test both ends.</div></div></div><div class="cluster-form">
-      <div class="cluster-cable-guide"><div class="cluster-cable-title">One cable. The same port on both Sparks.</div><div class="cluster-cable-intro">Use the wide NVIDIA high-speed cable included for Spark clustering (QSFP112 DAC).</div>
+    const switched = w.existingNodes >= 2;
+    const upgradingPair = w.existingNodes === 2;
+    const switchIntro = upgradingPair
+      ? 'Before adding a third Spark, unplug the direct cable and connect both existing Sparks plus this new Spark to the same managed RoCE v2 QSFP switch.'
+      : `Connect this Spark to the same managed RoCE v2 QSFP switch as every existing node. Do not daisy-chain the machines.${w.existingNodes >= 4 ? ' Five-to-eight-node fabrics are an advanced CloudlessOS topology beyond NVIDIA Sync’s currently validated four-node setup.' : ''}`;
+    body = `<section class="machine-card"><div class="machine-card-head"><div><div class="machine-card-title">${switched ? 'Connect this Spark to the cluster switch' : 'Plug in the high-speed cable'}</div><div class="machine-card-desc">${switched ? 'Use one 200 Gbps-class port on the same managed RoCE v2 switch as the existing Sparks.' : 'Connect the two matching rear ports, then let CloudlessOS test both ends.'}</div></div></div><div class="cluster-form">
+      <div class="cluster-cable-guide"><div class="cluster-cable-title">${switched ? (upgradingPair ? 'Move the pair to one shared switch first.' : 'One Spark. One port on the shared switch.') : 'One cable. The same port on both Sparks.'}</div><div class="cluster-cable-intro">${switched ? switchIntro : 'Use the wide NVIDIA high-speed cable included for Spark clustering (QSFP112 DAC).'}</div>
         <div class="cluster-cable-visual" aria-label="Connect the same rear port on both DGX Sparks"><div class="cluster-spark-device"><strong>This Spark</strong><div class="cluster-spark-back" aria-label="Rear high-speed ports"><i class="cluster-spark-port connected"></i><i class="cluster-spark-port"></i></div></div><div class="cluster-cable-route"><span>Private 200 Gbps link</span><i class="cluster-cable-flow"></i></div><div class="cluster-spark-device"><strong>${escapeHtml(w.host || 'Other Spark')}</strong><div class="cluster-spark-back" aria-label="Rear high-speed ports"><i class="cluster-spark-port connected"></i><i class="cluster-spark-port"></i></div></div></div>
-        <div class="cluster-cable-tips"><div class="cluster-cable-tip"><i>1</i><span>Pick either rear high-speed port.</span></div><div class="cluster-cable-tip"><i>2</i><span>Use the matching port on the other Spark: left-to-left or right-to-right.</span></div><div class="cluster-cable-tip"><i>3</i><span>Keep the pull-tab facing up. If it resists, turn it over—do not force it.</span></div></div>
-        <label class="cluster-cable-confirm"><input type="checkbox" id="cluster-cable" ${w.cable ? 'checked' : ''}><span><b>Yes, the cable is plugged into both Sparks</b><span>Cloudless will automatically check the cable after you continue.</span></span></label>
+        <div class="cluster-cable-tips"><div class="cluster-cable-tip"><i>1</i><span>${switched ? (upgradingPair ? 'Move both existing Sparks from their direct cable to the shared switch.' : 'Leave every existing Spark connected to the shared switch.') : 'Pick either rear high-speed port.'}</span></div><div class="cluster-cable-tip"><i>2</i><span>${switched ? 'Connect one high-speed port on the new Spark to an available switch port.' : 'Use the matching port on the other Spark: left-to-left or right-to-right.'}</span></div><div class="cluster-cable-tip"><i>3</i><span>${switched ? 'Keep management Ethernet or Wi-Fi connected for secure setup.' : 'Keep the pull-tab facing up. If it resists, turn it over—do not force it.'}</span></div></div>
+        <label class="cluster-cable-confirm"><input type="checkbox" id="cluster-cable" ${w.cable ? 'checked' : ''}><span><b>${switched ? 'Yes, this Spark is connected to the cluster switch' : 'Yes, the cable is plugged into both Sparks'}</b><span>Cloudless will automatically check the fabric after you continue.</span></span></label>
       </div>
       <div class="cluster-fields"><div class="cluster-field"><label for="cluster-user">Login name on the other Spark</label><input class="fld-input" id="cluster-user" value="${escapeAttr(w.username)}" placeholder="For example: ledomaine" autocomplete="username" spellcheck="false"></div><div class="cluster-field"><label for="cluster-password">Password for the other Spark</label><input class="fld-input" id="cluster-password" type="password" value="${escapeAttr(w.password)}" autocomplete="current-password"></div></div><div class="fld-help">This lets CloudlessOS test and configure the other Spark. The password stays in memory only during setup and is never saved.</div>${w.busy ? `<div class="cluster-busy-panel" role="status"><i>${uiIcon('reload')}</i><span><b>Testing the connection</b><span>Checking the cable, secure login, and both high-speed ports…</span></span></div>` : ''}${w.error ? `<div class="machine-driver-note" role="alert">${uiIcon('alert')}<span>${escapeHtml(w.error)}</span></div>` : ''}<div class="cluster-actions"><button class="btn" id="cluster-back" ${w.busy ? 'disabled' : ''}>${uiIcon('arrow-left')}Back</button><button class="btn primary ${w.busy ? 'cluster-busy' : ''}" id="cluster-preflight" ${w.busy ? 'disabled' : ''}>${uiIcon(w.busy ? 'reload' : 'network')}<span>${w.busy ? 'Testing both Sparks…' : 'Check my connection'}</span></button></div></div></section>`;
   } else {
@@ -4405,12 +4414,12 @@ function renderSparkClusterWizard(c) {
     const failed = (p.checks || []).filter(check => !check.ok).length;
     const createFailed = Boolean(p.ready && w.error && !w.busy);
     const summaryReady = p.ready && !createFailed;
-    const summaryTitle = createFailed ? 'The Sparks were not connected' : (p.ready ? 'Everything looks ready' : `${failed || 'A few'} ${failed === 1 ? 'item needs' : 'items need'} attention`);
-    const summaryDetail = createFailed ? w.error : (p.ready ? 'Both Sparks can see each other and the private high-speed link is ready to configure.' : 'Nothing has been changed yet. Follow the highlighted guidance, then check again.');
+    const summaryTitle = createFailed ? 'The Spark was not added' : (p.ready ? `Spark ${p.nodeIndex || ''} is ready` : `${failed || 'A few'} ${failed === 1 ? 'item needs' : 'items need'} attention`);
+    const summaryDetail = createFailed ? w.error : (p.ready ? `The new Spark can reach the private fabric and will make this a ${p.nodeCount || 2}-node cluster.` : 'Nothing has been changed yet. Follow the highlighted guidance, then check again.');
     if (w.busy && p.ready) {
-      body = `<section class="machine-card" aria-busy="true"><div class="cluster-connect-progress" role="status" aria-live="polite"><div class="cluster-connect-visual" aria-hidden="true"><span class="cluster-connect-device">${uiIcon('machine')}</span><i class="cluster-connect-line"></i><span class="cluster-connect-device">${uiIcon('machine')}</span></div><h3>Connecting both Sparks…</h3><p>CloudlessOS is applying the private network, exchanging the secure login key, and waiting for both high-speed paths to come online. Keep this window open; this can take up to one minute.</p><div class="cluster-connect-stages"><span class="cluster-connect-stage"><i></i>Configure this Spark</span><span class="cluster-connect-stage"><i></i>Configure ${escapeHtml(p.peerName || 'the other Spark')}</span><span class="cluster-connect-stage"><i></i>Verify both paths</span></div></div></section>`;
+      body = `<section class="machine-card" aria-busy="true"><div class="cluster-connect-progress" role="status" aria-live="polite"><div class="cluster-connect-visual" aria-hidden="true"><span class="cluster-connect-device">${uiIcon('machine')}</span><i class="cluster-connect-line"></i><span class="cluster-connect-device">${uiIcon('machine')}</span></div><h3>Adding ${escapeHtml(p.peerName || 'the Spark')}…</h3><p>CloudlessOS is applying its private address, installing the restricted cluster identity, and verifying both high-speed paths.</p><div class="cluster-connect-stages"><span class="cluster-connect-stage"><i></i>Protect existing cluster</span><span class="cluster-connect-stage"><i></i>Configure ${escapeHtml(p.peerName || 'new Spark')}</span><span class="cluster-connect-stage"><i></i>Verify node ${p.nodeIndex || ''}</span></div></div></section>`;
     } else {
-    body = `<section class="machine-card" aria-busy="${w.busy}"><div class="cluster-readiness-summary ${summaryReady ? '' : 'attention'}"><span class="cluster-readiness-symbol">${uiIcon(summaryReady ? 'check' : 'alert')}</span><span class="cluster-readiness-copy"><b>${escapeHtml(summaryTitle)}</b><span>${escapeHtml(summaryDetail)}</span></span></div>${clusterChecks(p.checks)}${w.busy ? `<div class="cluster-busy-panel" role="status"><i>${uiIcon('reload')}</i><span><b>${p.ready ? 'Connecting both Sparks' : 'Checking again'}</b><span>${p.ready ? 'Applying the private network and verifying both ends…' : 'Repeating the cable and readiness checks…'}</span></span></div>` : ''}${!p.ready ? `<div class="cluster-actions"><button class="btn" id="cluster-back" ${w.busy ? 'disabled' : ''}>${uiIcon('arrow-left')}Check cable and login</button><button class="btn primary ${w.busy ? 'cluster-busy' : ''}" id="cluster-recheck" ${w.busy ? 'disabled' : ''}>${uiIcon('reload')}Check again</button></div>` : `<div class="cluster-next"><div class="cluster-next-title">What CloudlessOS will do</div><ol class="cluster-next-list"><li>Create a private connection between the two Sparks.</li><li>Add a secure Spark-to-Spark login key.</li><li>Test the link without changing normal Internet access.</li></ol></div><div class="cluster-fingerprint">Security code for <b>${escapeHtml(p.peerName || w.host)}</b><code>${escapeHtml(p.fingerprint || 'Unavailable')}</code></div><label class="cluster-cable"><input type="checkbox" id="cluster-fingerprint-confirm"><span><b>Yes, this is the Spark I want to connect</b><span>The security code prevents CloudlessOS from connecting to a different computer by mistake.</span></span></label><div class="cluster-actions"><button class="btn" id="cluster-back" ${w.busy ? 'disabled' : ''}>${uiIcon('arrow-left')}Back</button><button class="btn primary ${w.busy ? 'cluster-busy' : ''}" id="cluster-create" ${w.busy ? 'disabled' : ''}>${uiIcon(w.busy ? 'reload' : 'network')}<span>${w.busy ? 'Connecting both Sparks…' : (createFailed ? 'Try connecting again' : 'Connect both Sparks')}</span></button></div>`}</section>`;
+    body = `<section class="machine-card" aria-busy="${w.busy}"><div class="cluster-readiness-summary ${summaryReady ? '' : 'attention'}"><span class="cluster-readiness-symbol">${uiIcon(summaryReady ? 'check' : 'alert')}</span><span class="cluster-readiness-copy"><b>${escapeHtml(summaryTitle)}</b><span>${escapeHtml(summaryDetail)}</span></span></div>${clusterChecks(p.checks)}${w.busy ? `<div class="cluster-busy-panel" role="status"><i>${uiIcon('reload')}</i><span><b>${p.ready ? 'Adding Spark to cluster' : 'Checking again'}</b><span>${p.ready ? 'Applying the private network and verifying the new node…' : 'Repeating the fabric and readiness checks…'}</span></span></div>` : ''}${!p.ready ? `<div class="cluster-actions"><button class="btn" id="cluster-back" ${w.busy ? 'disabled' : ''}>${uiIcon('arrow-left')}Check cable and login</button><button class="btn primary ${w.busy ? 'cluster-busy' : ''}" id="cluster-recheck" ${w.busy ? 'disabled' : ''}>${uiIcon('reload')}Check again</button></div>` : `<div class="cluster-next"><div class="cluster-next-title">What CloudlessOS will do</div><ol class="cluster-next-list"><li>Assign this Spark a unique private cluster address.</li><li>Add a restricted Spark-to-Spark login key.</li><li>Verify the fabric without changing normal Internet access.</li></ol></div><div class="cluster-fingerprint">Security code for <b>${escapeHtml(p.peerName || w.host)}</b><code>${escapeHtml(p.fingerprint || 'Unavailable')}</code></div><label class="cluster-cable"><input type="checkbox" id="cluster-fingerprint-confirm"><span><b>Yes, this is the Spark I want to connect</b><span>The security code prevents CloudlessOS from connecting to a different computer by mistake.</span></span></label><div class="cluster-actions"><button class="btn" id="cluster-back" ${w.busy ? 'disabled' : ''}>${uiIcon('arrow-left')}Back</button><button class="btn primary ${w.busy ? 'cluster-busy' : ''}" id="cluster-create" ${w.busy ? 'disabled' : ''}>${uiIcon(w.busy ? 'reload' : 'network')}<span>${w.busy ? 'Adding Spark…' : (createFailed ? 'Try adding again' : 'Add Spark to cluster')}</span></button></div>`}</section>`;
     }
   }
   c.innerHTML = `<div class="cluster-page">${clusterHero()}${clusterStepHeader(w.step)}${body}</div>`; bindSparkClusterWizard(c);
@@ -4429,27 +4438,34 @@ function bindSparkClusterWizard(c) {
   const preflight = c.querySelector('#cluster-preflight'); if (preflight) preflight.onclick = () => runPreflight(true);
   [c.querySelector('#cluster-user'), c.querySelector('#cluster-password')].filter(Boolean).forEach(input => input.onkeydown = e => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); preflight?.click(); } });
   const recheck = c.querySelector('#cluster-recheck'); if (recheck) recheck.onclick = () => runPreflight(false);
-  const create = c.querySelector('#cluster-create'); if (create) create.onclick = async () => { if (!c.querySelector('#cluster-fingerprint-confirm').checked) { w.error = 'Confirm the peer identity before continuing.'; renderSparkClusterWizard(c); return; } w.busy = true; w.error = ''; renderSparkClusterWizard(c); let result; try { result = await api('/api/system/spark-cluster/create', {method:'POST', headers:{'Content-Type':'application/json','X-Cloudless-Action':'spark-cluster-create'}, body:JSON.stringify({host:w.host,username:w.username,password:w.password,fingerprint:w.preflight.fingerprint})}); } catch { result = {error:'The cluster could not be created.'}; } w.busy = false; if (result.error) { w.error = result.error; renderSparkClusterWizard(c); return; } clusterWizard = {step:1,peers:[],host:'',username:'',password:'',cable:false,preflight:null,busy:false,error:''}; renderSparkClusterStatus(c, result); toast('DGX Spark cluster is ready'); };
+  const create = c.querySelector('#cluster-create'); if (create) create.onclick = async () => { if (!c.querySelector('#cluster-fingerprint-confirm').checked) { w.error = 'Confirm the peer identity before continuing.'; renderSparkClusterWizard(c); return; } w.busy = true; w.error = ''; renderSparkClusterWizard(c); let result; try { result = await api('/api/system/spark-cluster/create', {method:'POST', headers:{'Content-Type':'application/json','X-Cloudless-Action':'spark-cluster-create'}, body:JSON.stringify({host:w.host,username:w.username,password:w.password,fingerprint:w.preflight.fingerprint})}); } catch { result = {error:'The Spark could not be added.'}; } w.busy = false; if (result.error) { w.error = result.error; renderSparkClusterWizard(c); return; } clusterWizard = {step:1,peers:[],host:'',username:'',password:'',cable:false,preflight:null,busy:false,error:'',adding:false,existingNodes:0}; renderSparkClusterStatus(c, result); toast(`${result.nodeCount || 2}-Spark cluster is ready`); };
 }
 function renderSparkClusterStatus(c, status) {
   const healthy = Boolean(status.healthy);
   const localIps = (status.localIps || []).join(' · ') || 'Private addresses unavailable';
-  const peerIps = (status.peerIps || []).join(' · ') || 'Private addresses unavailable';
-  c.innerHTML = `<div class="cluster-page">${clusterHero(healthy ? 'Connected' : 'Needs attention', healthy)}<section class="machine-card"><div class="cluster-connected-hero ${healthy ? '' : 'attention'}"><span class="cluster-connected-copy"><b>${healthy ? 'Your two Sparks are connected' : 'The private connection needs attention'}</b><span>${healthy ? 'The high-speed link is online and ready for software that supports distributed workloads.' : 'Your normal network is unaffected. Run a connection check to see what needs fixing.'}</span></span><span class="cluster-health-orb">${uiIcon(healthy ? 'check' : 'alert')}</span></div><div class="cluster-nodes"><div class="cluster-node"><b>${escapeHtml(status.localName || 'This Spark')}</b><span>This Spark · ${escapeHtml(localIps)}</span></div><div class="cluster-link" aria-label="Private high-speed connection">${healthy ? '<i class="cluster-link-flow"></i>' : ''}${uiIcon('network')}</div><div class="cluster-node"><b>${escapeHtml(status.peerName || status.peerHost || 'Other Spark')}</b><span>Other Spark · ${escapeHtml(peerIps)}</span></div></div>${!healthy ? clusterChecks(status.checks) : ''}<div class="cluster-status-grid"><div class="machine-fact"><div class="machine-fact-label">Private link</div><div class="machine-fact-value">Up to 200 Gbps</div></div><div class="machine-fact"><div class="machine-fact-label">Normal network</div><div class="machine-fact-value">Still connected</div></div><div class="machine-fact"><div class="machine-fact-label">Set up</div><div class="machine-fact-value">${escapeHtml(status.createdAt ? new Date(status.createdAt).toLocaleDateString() : 'Configured')}</div></div></div><div class="machine-driver-note">${uiIcon('alert')}<span>The cable connects the machines, but it does not automatically combine their memory. Choose software or models that support distributed inference.</span></div>${healthy ? `<details class="cluster-advanced"><summary>Technical details and connection checks</summary><div class="cluster-advanced-body">${clusterChecks(status.checks)}</div></details>` : ''}<div class="cluster-actions"><button class="btn primary" id="cluster-refresh">${uiIcon('reload')}<span>${healthy ? 'Check connection' : 'Run health check'}</span></button><button class="btn cluster-danger" id="cluster-disconnect">${uiIcon('trash')}Disconnect</button></div></section></div>`;
-  document.getElementById('cluster-refresh').onclick = () => renderSparkClusterPage(c); document.getElementById('cluster-disconnect').onclick = () => openSparkClusterDisconnect(c, status);
+  const workers = Array.isArray(status.nodes) ? status.nodes : [{name:status.peerName,host:status.peerHost,ips:status.peerIps,healthy}];
+  const nodeCount = status.nodeCount || (workers.length + 1);
+  const nodeCards = `<div class="cluster-peer-list spaced"><div class="cluster-peer cluster-node-card">${uiIcon('machine')}<span class="cluster-peer-copy"><b>${escapeHtml(status.localName || 'This Spark')}</b><span>Coordinator · ${escapeHtml(localIps)}</span></span><span class="inf-state-pill ready">HEAD</span></div>${workers.map((node, index) => `<div class="cluster-peer cluster-node-card">${uiIcon('machine')}<span class="cluster-peer-copy"><b>${escapeHtml(node.name || node.host || `Spark ${index + 2}`)}</b><span>Worker ${index + 1} · ${escapeHtml((node.ips || []).join(' · ') || node.host || 'Private address unavailable')}</span></span><span class="inf-state-pill ${node.healthy ? 'ready' : ''}">${node.healthy ? 'READY' : 'CHECK'}</span></div>`).join('')}</div>`;
+  const canAdd = nodeCount < 8;
+  c.innerHTML = `<div class="cluster-page">${clusterHero(healthy ? `${nodeCount} nodes ready` : 'Needs attention', healthy)}<section class="machine-card"><div class="cluster-connected-hero ${healthy ? '' : 'attention'}"><span class="cluster-connected-copy"><b>${healthy ? `Your ${nodeCount}-Spark cluster is connected` : 'The private fabric needs attention'}</b><span>${healthy ? 'Every enrolled Spark is reachable and ready for distributed workloads.' : 'Your management network is unaffected. Run a health check to identify the node or path that needs attention.'}</span></span><span class="cluster-health-orb">${uiIcon(healthy ? 'check' : 'alert')}</span></div>${nodeCards}${!healthy ? clusterChecks(status.checks) : ''}<div class="cluster-status-grid"><div class="machine-fact"><div class="machine-fact-label">Topology</div><div class="machine-fact-value">${status.topology === 'direct' ? 'Direct cable' : 'Managed RoCE switch'}</div></div><div class="machine-fact"><div class="machine-fact-label">Cluster size</div><div class="machine-fact-value">${nodeCount} of 8 Sparks</div></div><div class="machine-fact"><div class="machine-fact-label">Set up</div><div class="machine-fact-value">${escapeHtml(status.createdAt ? new Date(status.createdAt).toLocaleDateString() : 'Configured')}</div></div></div><div class="machine-driver-note">${uiIcon('alert')}<span>Cluster memory is aggregate, not one shared-memory computer. Distributed models are partitioned across all required nodes.</span></div>${healthy ? `<details class="cluster-advanced"><summary>Technical details and connection checks</summary><div class="cluster-advanced-body">${clusterChecks(status.checks)}</div></details>` : ''}<div class="cluster-actions">${canAdd ? `<button class="btn primary" id="cluster-add">${uiIcon('plus')}Add another Spark</button>` : ''}<button class="btn" id="cluster-refresh">${uiIcon('reload')}<span>${healthy ? 'Check all nodes' : 'Run health check'}</span></button><button class="btn cluster-danger" id="cluster-disconnect">${uiIcon('trash')}Disconnect cluster</button></div></section></div>`;
+  document.getElementById('cluster-refresh').onclick = () => renderSparkClusterPage(c);
+  document.getElementById('cluster-disconnect').onclick = () => openSparkClusterDisconnect(c, status);
+  const add = document.getElementById('cluster-add'); if (add) add.onclick = () => { clusterWizard = {step:1,peers:[],host:'',username:'',password:'',cable:false,preflight:null,busy:false,error:'',adding:true,existingNodes:nodeCount}; renderSparkClusterWizard(c); };
 }
 function openSparkClusterDisconnect(c, status) {
   const layer = document.getElementById('key-dialog-layer'), content = document.getElementById('key-dialog-content');
-  content.innerHTML = `<div class="key-dialog-head"><div class="key-dialog-heading"><div class="key-dialog-title" id="key-dialog-title">Disconnect Spark cluster?</div><div class="key-dialog-sub">CloudlessOS will safely return this Spark to independent operation.</div></div><button class="key-dialog-close" id="cluster-disconnect-close">${uiIcon('close')}</button></div><div class="key-dialog-body"><div class="machine-driver-note">${uiIcon('alert')}<span><b>The model running across both Sparks will stop.</b><br>Any response in progress will be interrupted. CloudlessOS will release the distributed model, remove the private connection on both machines, then start a compatible model on this Spark.</span></div><label class="cluster-field"><span class="fld-label">Peer administrator password</span><input class="fld-input" id="cluster-disconnect-password" type="password" autocomplete="current-password"></label><div class="key-dialog-help" id="cluster-disconnect-error">The password is used for this removal only and is never saved.</div><div class="key-dialog-actions"><button class="btn" id="cluster-disconnect-cancel">Cancel</button><button class="btn danger-solid" id="cluster-disconnect-confirm">${uiIcon('unlink')}<span>Disconnect and switch to local</span></button></div></div>`;
+  const workers = Array.isArray(status.nodes) && status.nodes.length ? status.nodes : [{name:status.peerName || 'Worker Spark',host:status.peerHost || '*'}];
+  const passwordFields = workers.map((node, index) => `<label class="cluster-field"><span class="fld-label">Password for ${escapeHtml(node.name || node.host || `Spark ${index + 2}`)}</span><input class="fld-input" data-cluster-disconnect-password="${escapeAttr(node.host || node.name)}" type="password" autocomplete="current-password"></label>`).join('');
+  content.innerHTML = `<div class="key-dialog-head"><div class="key-dialog-heading"><div class="key-dialog-title" id="key-dialog-title">Disconnect Spark cluster?</div><div class="key-dialog-sub">CloudlessOS will safely return every Spark to independent operation.</div></div><button class="key-dialog-close" id="cluster-disconnect-close">${uiIcon('close')}</button></div><div class="key-dialog-body"><div class="machine-driver-note">${uiIcon('alert')}<span><b>The distributed model running across ${status.nodeCount || 2} Sparks will stop.</b><br>CloudlessOS will stop every worker, remove the private configuration, then start a compatible local model on this Spark.</span></div><div class="cluster-fields">${passwordFields}</div><div class="key-dialog-help" id="cluster-disconnect-error">Passwords are used only for removal and are never saved.</div><div class="key-dialog-actions"><button class="btn" id="cluster-disconnect-cancel">Cancel</button><button class="btn danger-solid" id="cluster-disconnect-confirm">${uiIcon('unlink')}<span>Disconnect and switch to local</span></button></div></div>`;
   layer.classList.remove('hidden'); document.getElementById('cluster-disconnect-close').onclick = closeKeyDialog; document.getElementById('cluster-disconnect-cancel').onclick = closeKeyDialog;
   document.getElementById('cluster-disconnect-confirm').onclick = async e => {
-    const password = document.getElementById('cluster-disconnect-password').value;
-    if (!password) { document.getElementById('cluster-disconnect-error').textContent = 'Enter the peer administrator password.'; return; }
+    const passwords = {}; document.querySelectorAll('[data-cluster-disconnect-password]').forEach(input => { passwords[input.dataset.clusterDisconnectPassword] = input.value; });
+    if (Object.values(passwords).some(value => !value)) { document.getElementById('cluster-disconnect-error').textContent = 'Enter the administrator password for every worker Spark.'; return; }
     const button = e.currentTarget, body = content.querySelector('.key-dialog-body'), started = Date.now();
     button.disabled = true;
     document.getElementById('cluster-disconnect-cancel').disabled = true;
     document.getElementById('cluster-disconnect-close').disabled = true;
-    body.innerHTML = `<div class="cluster-connect-progress" role="status" aria-live="polite"><div class="cluster-connect-visual" aria-hidden="true"><span class="cluster-connect-device">${uiIcon('machine')}</span><i class="cluster-connect-line"></i><span class="cluster-connect-device">${uiIcon('machine')}</span></div><h3 id="cluster-disconnect-progress-title">Safely disconnecting both Sparks…</h3><p id="cluster-disconnect-progress-detail">Stopping the peer worker and removing the private high-speed network configuration.</p><div class="cluster-disconnect-meter"><div class="cluster-disconnect-meter-head"><span id="cluster-disconnect-percent">8%</span><span id="cluster-disconnect-eta">About 45 seconds remaining</span></div><div class="cluster-disconnect-meter-track" role="progressbar" aria-label="Disconnect progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="8"><i></i></div></div><div class="cluster-connect-stages cluster-disconnect-stages"><span class="cluster-connect-stage active" data-disconnect-stage="0"><i></i>Stop distributed AI</span><span class="cluster-connect-stage" data-disconnect-stage="1"><i></i>Remove private link</span><span class="cluster-connect-stage" data-disconnect-stage="2"><i></i>Start local AI</span></div></div>`;
+    body.innerHTML = `<div class="cluster-connect-progress" role="status" aria-live="polite"><div class="cluster-connect-visual" aria-hidden="true"><span class="cluster-connect-device">${uiIcon('machine')}</span><i class="cluster-connect-line"></i><span class="cluster-connect-device">${uiIcon('network')}</span></div><h3 id="cluster-disconnect-progress-title">Safely disconnecting ${status.nodeCount || 2} Sparks…</h3><p id="cluster-disconnect-progress-detail">Stopping all worker ranks and removing their private network configuration.</p><div class="cluster-disconnect-meter"><div class="cluster-disconnect-meter-head"><span id="cluster-disconnect-percent">8%</span><span id="cluster-disconnect-eta">About 45 seconds remaining</span></div><div class="cluster-disconnect-meter-track" role="progressbar" aria-label="Disconnect progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="8"><i></i></div></div><div class="cluster-connect-stages cluster-disconnect-stages"><span class="cluster-connect-stage active" data-disconnect-stage="0"><i></i>Stop distributed AI</span><span class="cluster-connect-stage" data-disconnect-stage="1"><i></i>Remove private fabric</span><span class="cluster-connect-stage" data-disconnect-stage="2"><i></i>Start local AI</span></div></div>`;
     const setProgress = (percent, title, detail, eta, stage) => {
       percent = Math.max(1, Math.min(100, Math.round(percent)));
       const track = body.querySelector('.cluster-disconnect-meter-track');
@@ -4465,7 +4481,7 @@ function openSparkClusterDisconnect(c, status) {
     const timer = setInterval(() => {
       if (!networkDone) {
         const elapsed = (Date.now() - started) / 1000;
-        setProgress(Math.min(39, 8 + elapsed * .55), 'Safely disconnecting both Sparks…', elapsed < 12 ? 'Stopping the peer worker and releasing the distributed session.' : 'Removing the private high-speed network configuration from both Sparks.', formatRemaining(Math.max(8, 45 - elapsed)), elapsed < 12 ? 0 : 1);
+        setProgress(Math.min(39, 8 + elapsed * .55), `Safely disconnecting ${status.nodeCount || 2} Sparks…`, elapsed < 12 ? 'Stopping all worker ranks and releasing the distributed session.' : 'Removing the private high-speed configuration from every Spark.', formatRemaining(Math.max(8, 45 - elapsed)), elapsed < 12 ? 0 : 1);
       } else if (lastUpdate && !lastUpdate.done) {
         const elapsed = (Date.now() - localStarted) / 1000, done = +(lastUpdate.layersDone || 0), total = +(lastUpdate.layersTotal || 0);
         const shardRatio = total > 0 ? Math.min(1, done / total) : 0;
@@ -4475,7 +4491,7 @@ function openSparkClusterDisconnect(c, status) {
       }
     }, 1000);
     let result;
-    try { result = await api('/api/system/spark-cluster/disconnect', {method:'POST',headers:{'Content-Type':'application/json','X-Cloudless-Action':'spark-cluster-disconnect'},body:JSON.stringify({password})}); }
+    try { result = await api('/api/system/spark-cluster/disconnect', {method:'POST',headers:{'Content-Type':'application/json','X-Cloudless-Action':'spark-cluster-disconnect'},body:JSON.stringify({passwords})}); }
     catch { result = {error:'The cluster could not be disconnected.'}; }
     if (result.error) {
       clearInterval(timer); body.innerHTML = `<div class="machine-driver-note" role="alert">${uiIcon('alert')}<span>${escapeHtml(result.error)}</span></div><div class="key-dialog-actions"><button class="btn primary" id="cluster-disconnect-done">Close</button></div>`;
@@ -4494,7 +4510,7 @@ function openSparkClusterDisconnect(c, status) {
     es.onmessage = event => { const update = JSON.parse(event.data); lastUpdate = update; if (update.phase === 'error') finish(false, update.error); else if (update.done) finish(true); };
     es.onerror = () => finish(false, 'CloudlessOS lost the progress connection. The cluster is disconnected; check Model Manager to confirm the local model.');
   };
-  setTimeout(() => document.getElementById('cluster-disconnect-password')?.focus(), 0);
+  setTimeout(() => document.querySelector('[data-cluster-disconnect-password]')?.focus(), 0);
 }
 // Country options for the profile region override (Auto-detect + a focused list).
 const REGION_OPTS = [['', 'Auto-detect'], ['FR', 'France'], ['BE', 'Belgium'], ['CH', 'Switzerland'], ['CA', 'Canada'],
@@ -4889,8 +4905,8 @@ async function renderApiPage(c) {
     <div class="inf-page-hero">
       <span class="inf-page-icon">${uiIcon('key')}</span>
       <div class="inf-page-copy"><div class="inf-page-eyebrow">OpenAI compatible</div><div class="inf-page-title">API access</div>
-      <div class="inf-page-desc">Connect clients either to raw model inference or to the full Hermes agent. ${distributed ? 'Model requests are automatically served by your connected Spark pair.' : 'Requests stay on this machine'} unless you enable network access.</div></div>
-      <span class="inf-state-pill ready">${distributed ? 'Two Sparks' : 'Local'}</span>
+      <div class="inf-page-desc">Connect clients either to raw model inference or to the full Hermes agent. ${distributed ? 'Model requests are automatically served by your Spark cluster.' : 'Requests stay on this machine'} unless you enable network access.</div></div>
+      <span class="inf-state-pill ready">${distributed ? 'Cluster' : 'Local'}</span>
     </div>
     <section class="api-section">
       <div class="api-section-head"><div><div class="api-section-title">Connect a client</div><div class="api-section-desc">Both endpoints use the OpenAI format but have different capabilities and key permissions.</div></div></div>
@@ -5025,6 +5041,7 @@ async function renderEnginePage(c) {
   let engine; try { engine = await api('/api/engine'); } catch { return; }
   syncEngineState(engine);
   const distributed = engine.executionMode === 'cluster';
+  const engineNodes = sparkCount(engine.cluster);
   const state = engineOperation === 'aborting' ? 'aborting…' : engineOperation === 'unloading' ? 'unloading…' : engineOperation === 'loading' ? 'loading…' : (engine.unloaded ? 'unloaded' : (engine.ready ? 'ready' : 'starting…'));
   const cards = (engine.engines || []).map(e => {
     const info = ENGINE_INFO[e.id] || { icon: 'machine', best: '', runs: '', traits: [] };
@@ -5037,7 +5054,7 @@ async function renderEnginePage(c) {
       : e.active && engineLoadIsAbortable()
       ? `<span class="ec-active">Loading model</span><button class="btn model-load-action abort" data-abort-engine type="button">${uiIcon('stop')}<span>Abort</span></button>`
       : e.active
-      ? `<span class="ec-active">${distributed ? 'Active across both Sparks' : 'Active engine'}</span><button class="btn" data-unload-engine type="button">${uiIcon('stop')}<span>Unload model</span></button>`
+      ? `<span class="ec-active">${distributed ? `Active across ${engineNodes} Sparks` : 'Active engine'}</span><button class="btn" data-unload-engine type="button">${uiIcon('stop')}<span>Unload model</span></button>`
       : selectedUnloaded
       ? `<span class="ec-active">Selected · unloaded</span><button class="btn primary model-load-action" data-load-engine type="button">${uiIcon('rocket')}<span>Load model</span></button>`
       : `<button class="btn" data-eng="${e.id}" ${engineOperation !== 'idle' ? 'disabled' : ''}>Use this engine</button>`;
@@ -5051,8 +5068,8 @@ async function renderEnginePage(c) {
   c.innerHTML = `<div class="inf-page">
     <div class="inf-page-hero">
       <span class="inf-page-icon">${uiIcon(distributed ? 'network' : 'machine')}</span>
-      <div class="inf-page-copy"><div class="inf-page-eyebrow">Runtime${distributed ? ' · Two-Spark compute' : ''}</div><div class="inf-page-title">Inference engine</div>
-      <div class="inf-page-desc">${engine.unloaded ? 'The selected model is downloaded but not using accelerator memory. Load it when you need local AI.' : (distributed ? 'The active model is split across both connected Sparks. Chat, apps, and API clients use the pair automatically.' : 'Choose the runtime that powers chat, apps, and the API.')} Switching reloads the current model and usually takes under a minute.</div></div>
+      <div class="inf-page-copy"><div class="inf-page-eyebrow">Runtime${distributed ? ` · ${engineNodes}-Spark compute` : ''}</div><div class="inf-page-title">Inference engine</div>
+      <div class="inf-page-desc">${engine.unloaded ? 'The selected model is downloaded but not using accelerator memory. Load it when you need local AI.' : (distributed ? `The active model is partitioned across ${engineNodes} connected Sparks. Chat, apps, and API clients use the cluster automatically.` : 'Choose the runtime that powers chat, apps, and the API.')} Switching reloads the current model and usually takes under a minute.</div></div>
       <span class="inf-state-pill ${engine.ready ? 'ready' : ''}">${state}</span>
     </div>
     <div class="ec-grid">${cards}</div>
@@ -5202,10 +5219,11 @@ function applyModel(id) { // advanced custom-id apply (explicit; no warning)
 }
 function modelCard(m) {
   const downloading = modelDownloads.get(m.id);
+  const clusterNodes = sparkCount((mmLM || {}).cluster);
   const caps = (m.recommended ? '<span class="mdl-cap rec">Recommended</span>' : '')
     + (m.vision ? '<span class="mdl-cap vis">Vision</span>' : '') + (m.toolCalling ? '<span class="mdl-cap">Tools</span>' : '')
     + (m.gated ? '<span class="mdl-cap gated">Gated</span>' : '') + (m.source === 'huggingface' ? '<span class="mdl-cap">Hugging Face</span>' : '')
-    + (m.clusterFit && m.fit === 'over' && m.clusterFit !== 'over' ? '<span class="mdl-cap cluster">Two-Spark model</span>' : '');
+    + (m.clusterFit && m.fit === 'over' && m.clusterFit !== 'over' ? `<span class="mdl-cap cluster">${clusterNodes}-Spark model</span>` : '');
   const tags = (m.tags || []).filter(t => !['vision', 'tools'].includes(String(t).toLowerCase())).slice(0, 2)
     .map(t => `<span class="mdl-t">${escapeHtml(t)}</span>`).join('');
   const status = downloading ? '<span class="mdl-status active"><i></i>Downloading</span>' : (m.active ? '<span class="mdl-status active"><i></i>Loaded</span>' : (m.downloaded ? '<span class="mdl-status">Installed</span>' : ''));
@@ -5219,7 +5237,7 @@ function modelCard(m) {
       <div class="mdl-tags">${caps}${tags}</div>
       ${downloading ? modelDownloadProgressHTML(downloading, true) : ''}
       ${modelCompatibility(m, (mmLM || {}).gpuVRAMGB || 0)}
-      ${m.clusterFit ? `<div class="mdl-cluster-fit"><span>Across both Sparks</span><b>${escapeHtml(FIT_LABEL[m.clusterFit] || FIT_LABEL.unknown)}</b></div>` : ''}
+      ${m.clusterFit ? `<div class="mdl-cluster-fit"><span>Across ${clusterNodes} Sparks</span><b>${escapeHtml(FIT_LABEL[m.clusterFit] || FIT_LABEL.unknown)}</b></div>` : ''}
       <div class="mdl-foot"><span class="mdl-meta">${escapeHtml(m.use || 'general')}</span><span class="mdl-use">View details ${uiIcon('arrow-right')}</span></div>
     </button>`;
 }
@@ -5250,7 +5268,7 @@ function activeModelCard(m, gpu, memoryType) {
   const meta = [m.params, m.quant, m.contextK ? `${m.contextK}K context` : '', m.minVramGB ? `~${m.minVramGB} GB ${memoryLabel(memoryType)}` : ''].filter(Boolean).join(' · ');
   return `<button class="mm-active-card" data-active-model="${escapeAttr(m.id)}">
     <span class="mm-active-icon">${uiIcon('models')}</span>
-    <span class="mm-active-copy"><span class="mm-active-kicker">${engineExecutionMode === 'cluster' ? 'Loaded across two Sparks' : 'Loaded now'}</span><span class="mm-active-name">${escapeHtml(m.name)}</span><span class="mm-active-meta">${escapeHtml(meta || m.id)}</span></span>
+    <span class="mm-active-copy"><span class="mm-active-kicker">${engineExecutionMode === 'cluster' ? `Loaded across ${sparkCount((mmLM || {}).cluster)} Sparks` : 'Loaded now'}</span><span class="mm-active-name">${escapeHtml(m.name)}</span><span class="mm-active-meta">${escapeHtml(meta || m.id)}</span></span>
     <span class="mm-active-action">Manage ${uiIcon('arrow-right')}</span>
   </button>`;
 }
@@ -5403,6 +5421,7 @@ function launchModel(m) {
   const gpu = (mmLM && mmLM.gpuVRAMGB) || 0;
   const memoryType = (mmLM && mmLM.memoryType) || 'dedicated';
   const cluster = (mmLM && mmLM.cluster) || {};
+  const clusterNodes = sparkCount(cluster);
   const clusterEligible = Boolean(!m.gated && cluster.distributedReady && m.clusterFit && m.clusterFit !== 'over' && m.clusterFit !== 'unknown');
   let selectedMode = clusterEligible && m.fit === 'over' ? 'cluster' : 'local';
   keyDialogBusy = false;
@@ -5421,7 +5440,7 @@ function launchModel(m) {
       </div>
       <div class="model-run-modes" role="radiogroup" aria-label="Where to run this model">
         <button class="model-run-mode" type="button" data-model-mode="local" role="radio"><span class="model-run-mode-icon">${uiIcon('machine')}</span><span class="model-run-mode-copy"><b>Run on this Spark</b><small>${gpu} GB ${memoryLabel(memoryType)} · fastest startup for models that fit locally</small></span><i class="model-run-mode-check"></i></button>
-        ${clusterEligible ? `<button class="model-run-mode cluster" type="button" data-model-mode="cluster" role="radio"><span class="model-run-mode-icon">${uiIcon('network')}</span><span class="model-run-mode-copy"><b>Use both Sparks</b><small>~${cluster.combinedMemoryGB} GB combined · Cloudless configures distributed inference automatically. The first launch may take longer while the other Spark downloads the model.</small></span><i class="model-run-mode-check"></i></button>` : ''}
+        ${clusterEligible ? `<button class="model-run-mode cluster" type="button" data-model-mode="cluster" role="radio"><span class="model-run-mode-icon">${uiIcon('network')}</span><span class="model-run-mode-copy"><b>Use all ${clusterNodes} Sparks</b><small>~${cluster.combinedMemoryGB} GB aggregate · Cloudless configures distributed inference automatically. First launch may take longer while workers download the model.</small></span><i class="model-run-mode-check"></i></button>` : ''}
       </div>
       ${m.fit === 'over' && !clusterEligible ? `<div class="model-confirm-warning">This model needs about ${m.minVramGB} GB of ${memoryLabel(memoryType)}, but this machine reports ${gpu || 'less available'} GB. Launching may fail.</div>` : ''}
       <div class="key-dialog-actions">
@@ -5604,13 +5623,14 @@ function paintModelList(c, data, kind) {
   const lm = kind === 'lm', gpu = data.gpuVRAMGB || 0;
   const memoryType = data.memoryType || 'dedicated', memory = memoryLabel(memoryType);
   const cluster = data.cluster || {};
+  const clusterNodes = sparkCount(cluster);
   const summary = cluster.distributedReady
-    ? `${uiIcon('network')}<span class="mm-machine-copy"><span class="mm-machine-label">Two-Spark compute ready</span><span class="mm-machine-value">~${cluster.combinedMemoryGB} GB combined ${memory}</span><span class="mm-machine-note">${gpu} GB on each Spark · distributed compatibility shown separately</span></span>`
+    ? `${uiIcon('network')}<span class="mm-machine-copy"><span class="mm-machine-label">${clusterNodes}-Spark compute ready</span><span class="mm-machine-value">~${cluster.combinedMemoryGB} GB aggregate ${memory}</span><span class="mm-machine-note">${gpu} GB per Spark · distributed compatibility shown separately</span></span>`
     : gpu > 0
     ? `${uiIcon('machine')}<span class="mm-machine-copy"><span class="mm-machine-label">Available accelerator memory</span><span class="mm-machine-value">${gpu} GB ${memory}</span><span class="mm-machine-note">Compatibility is estimated with runtime headroom</span></span>`
     : `${uiIcon('machine')}<span class="mm-machine-copy"><span class="mm-machine-label">Hardware</span><span class="mm-machine-value">No GPU detected</span><span class="mm-machine-note">Compatibility estimates are unavailable</span></span>`;
   const chip = (key, label) => `<button class="mm-chip ${mmFilter[key] ? 'on' : ''}" data-f="${key}" aria-pressed="${mmFilter[key]}">${label}</button>`;
-  const chips = chip('fits', 'Runs on this GPU') + (lm && cluster.distributedReady ? chip('cluster', 'Runs across both Sparks') : '') + chip('downloaded', 'Downloaded') + (lm ? chip('vision', 'Vision') + chip('tools', 'Tool calling') : '');
+  const chips = chip('fits', 'Runs on this GPU') + (lm && cluster.distributedReady ? chip('cluster', `Runs across ${clusterNodes} Sparks`) : '') + chip('downloaded', 'Downloaded') + (lm ? chip('vision', 'Vision') + chip('tools', 'Tool calling') : '');
   const sort = `<span class="mm-sort-wrap"><label for="mm-sort">Sort</label><select class="mm-sort" id="mm-sort">
     <option value="recommended" ${mmSort === 'recommended' ? 'selected' : ''}>Best match</option>
     <option value="memory-low" ${mmSort === 'memory-low' ? 'selected' : ''}>Lowest memory</option>
@@ -5861,10 +5881,11 @@ function renderModelDetail(c) {
       ${gpu && m.minVramGB ? `<span class="mdl-meter" aria-hidden="true"><i style="--meter:${modelMeter(m, gpu)}%"></i></span>` : ''}
     </div>`;
   const clusterInfo = modelData.cluster || {};
+  const clusterNodes = sparkCount(clusterInfo);
   const clusterFitClass = m.clusterFit || '';
   const clusterFit = lm && clusterInfo.distributedReady && clusterFitClass ? `<div class="md-compat-panel fit-${clusterFitClass}">
-      <div><div class="md-compat-title">${escapeHtml(FIT_LABEL[clusterFitClass] || FIT_LABEL.unknown)} across both Sparks</div><div class="md-compat-copy">CloudlessOS can split this model across the connected GB10 GPUs and keep the normal API endpoint unchanged.</div></div>
-      <div class="md-compat-numbers">${m.minVramGB ? `~${m.minVramGB} GB needed` : 'No estimate'} · ~${clusterInfo.combinedMemoryGB} GB combined</div>
+      <div><div class="md-compat-title">${escapeHtml(FIT_LABEL[clusterFitClass] || FIT_LABEL.unknown)} across ${clusterNodes} Sparks</div><div class="md-compat-copy">CloudlessOS can partition this model across the connected GB10 GPUs and keep the normal API endpoint unchanged.</div></div>
+      <div class="md-compat-numbers">${m.minVramGB ? `~${m.minVramGB} GB needed` : 'No estimate'} · ~${clusterInfo.combinedMemoryGB} GB aggregate</div>
       ${clusterInfo.combinedMemoryGB && m.minVramGB ? `<span class="mdl-meter" aria-hidden="true"><i style="--meter:${modelMeter(m, clusterInfo.combinedMemoryGB)}%"></i></span>` : ''}
     </div>` : '';
   const recNote = m.recommended ? `<div class="md-banner rec">${escapeHtml(m.recommendBy || 'Recommended for your region')}.</div>` : '';
@@ -6683,7 +6704,7 @@ function infHeadSet(engineId, model, ready) {
   if (model) infModel = model;
   if (!engineId) { h.className = 'inf-head'; h.innerHTML = ''; return; }
   h.className = 'inf-head' + (ready ? ' on' : '');
-  h.innerHTML = `<span class="inf-live"></span><b>${escapeHtml(engDisplay(engineId))}</b>${engineExecutionMode === 'cluster' ? `<span class="sep">·</span>${uiIcon('network')} two Sparks` : ''}${infModel ? `<span class="sep">·</span>${escapeHtml(infModel)}` : ''}<span class="ih-state">${ready ? 'live' : 'loading…'}</span>`;
+  h.innerHTML = `<span class="inf-live"></span><b>${escapeHtml(engDisplay(engineId))}</b>${engineExecutionMode === 'cluster' ? `<span class="sep">·</span>${uiIcon('network')} ${sparkCount(connectedSpark)} Sparks` : ''}${infModel ? `<span class="sep">·</span>${escapeHtml(infModel)}` : ''}<span class="ih-state">${ready ? 'live' : 'loading…'}</span>`;
 }
 function infReset() { infPrev = null; infPeak = 0; infBuf = { pTok: [], gTok: [], run: [], wait: [], kv: [], ttft: [], tpot: [], gutil: [], gpow: [], cpu: [] }; }
 function infStopPoll() {
@@ -7129,7 +7150,7 @@ async function infHwPoll() {
   if (nodeHost) nodeHost.innerHTML = gpus.map(g => {
     const memoryPct = g.memTotalMB > 0 ? Math.round(Math.max(0, g.memUsedMB) / g.memTotalMB * 100) : 0;
     return `<div class="inf-node-gpu ${g.remote ? 'peer' : ''}"><div class="inf-node-head">${uiIcon(g.remote ? 'network' : 'machine')}<b>${escapeHtml(g.node || (g.remote ? 'Connected Spark' : 'This Spark'))}</b><span>${g.remote ? 'Connected Spark' : 'This Spark'} · ${escapeHtml(g.name)}</span></div><div class="inf-node-stats"><span class="inf-node-stat"><small>Utilization</small><strong>${Math.max(0, g.utilPct)}%</strong></span><span class="inf-node-stat"><small>Memory</small><strong>${memoryPct}%</strong></span><span class="inf-node-stat"><small>Temperature</small><strong>${g.tempC >= 0 ? g.tempC + '°C' : '—'}</strong></span><span class="inf-node-stat"><small>Power</small><strong>${g.powerW >= 0 ? Math.round(g.powerW) + ' W' : '—'}</strong></span></div></div>`;
-  }).join('') + (gpu.peer && gpu.peer.connected && !gpu.peer.reachable ? `<div class="inf-node-gpu peer"><div class="inf-node-head">${uiIcon('alert')}<b>${escapeHtml(gpu.peer.name || 'Connected Spark')}</b><span>Telemetry unavailable</span></div><div class="im-sub">CloudlessOS will retry automatically.</div></div>` : '');
+  }).join('') + (gpu.peers || (gpu.peer ? [gpu.peer] : [])).filter(peer => peer.connected && !peer.reachable).map(peer => `<div class="inf-node-gpu peer"><div class="inf-node-head">${uiIcon('alert')}<b>${escapeHtml(peer.name || 'Connected Spark')}</b><span>Telemetry unavailable</span></div><div class="im-sub">CloudlessOS will retry automatically.</div></div>`).join('');
   if (n) {
     const util = Math.round(gpus.reduce((a, g) => a + Math.max(0, g.utilPct), 0) / n);
     const memUsed = gpus.reduce((a, g) => a + Math.max(0, g.memUsedMB), 0);
@@ -7280,7 +7301,7 @@ async function refreshActiveModel() {
     const unloaded = !!(e && e.unloaded);
     const loading = e && e.ready === false && !unloaded;
     el.textContent = name;
-    setK(unloaded ? 'Downloaded · not loaded' : (loading ? (engineExecutionMode === 'cluster' ? 'Loading on two Sparks…' : 'Loading…') : (engineExecutionMode === 'cluster' ? 'Running across two Sparks' : (engine ? 'Loaded in ' + engine : 'Active model'))));
+    setK(unloaded ? 'Downloaded · not loaded' : (loading ? (engineExecutionMode === 'cluster' ? `Loading on ${sparkCount(connectedSpark)} Sparks…` : 'Loading…') : (engineExecutionMode === 'cluster' ? `Running across ${sparkCount(connectedSpark)} Sparks` : (engine ? 'Loaded in ' + engine : 'Active model'))));
     setDot(unloaded ? '' : (loading ? 'load' : 'on'));
   } catch {}
 }

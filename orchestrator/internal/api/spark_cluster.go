@@ -91,7 +91,7 @@ func (s *Server) sparkClusterCreate(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid cluster request"})
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 75*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
 	defer cancel()
 	result, err := sparkcluster.Create(ctx, request)
 	if err != nil {
@@ -111,15 +111,19 @@ func (s *Server) sparkClusterDisconnect(w http.ResponseWriter, r *http.Request) 
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
 	var request struct {
-		Password string `json:"password"`
+		Password  string            `json:"password"`
+		Passwords map[string]string `json:"passwords"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid disconnect request"})
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 75*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
 	defer cancel()
-	if err := sparkcluster.Disconnect(ctx, request.Password); err != nil {
+	if request.Password != "" && len(request.Passwords) == 0 {
+		request.Passwords = map[string]string{"*": request.Password}
+	}
+	if err := sparkcluster.Disconnect(ctx, request.Passwords); err != nil {
 		writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
 		return
 	}

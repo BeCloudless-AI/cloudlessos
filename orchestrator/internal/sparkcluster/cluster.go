@@ -1,6 +1,7 @@
-// Package sparkcluster configures a direct, two-node DGX Spark ConnectX-7
-// fabric. It follows NVIDIA's supported one-cable/two-subnet layout while
-// keeping the normal Ethernet or Wi-Fi management connection untouched.
+// Package sparkcluster configures a DGX Spark ConnectX-7 fabric with one
+// coordinator and up to seven workers. Two nodes can use a direct cable;
+// larger clusters use a shared RoCE-capable switch while normal management
+// Ethernet or Wi-Fi remains untouched.
 package sparkcluster
 
 import (
@@ -30,7 +31,8 @@ const (
 	statePath            = "/var/lib/cloudless/cluster/state.json"
 	keyPath              = "/var/lib/cloudless/cluster/id_ed25519"
 	knownPath            = "/var/lib/cloudless/cluster/known_hosts"
-	remoteAddressCleanup = `for addr in 10.100.0.2/24 10.100.1.2/24; do dev=$(ip -o -4 addr show to "$addr" | head -n 1 | tr -s " " | cut -d " " -f 2); if [ -n "$dev" ]; then ip addr del "$addr" dev "$dev" || true; fi; done`
+	remoteAddressCleanup = `for n in 1 2 3 4 5 6 7 8; do for subnet in 0 1; do addr=10.100.$subnet.$n/24; dev=$(ip -o -4 addr show to "$addr" | head -n 1 | tr -s " " | cut -d " " -f 2); if [ -n "$dev" ]; then ip addr del "$addr" dev "$dev" || true; fi; done; done`
+	maxNodes             = 8
 	workerPath           = "/usr/lib/cloudless/cloudless-cluster-worker"
 	sudoersPath          = "/etc/sudoers.d/cloudless-cluster-worker"
 	workerScript         = `#!/bin/sh
@@ -96,7 +98,7 @@ var (
 	now            = time.Now
 	mutationMu     sync.Mutex
 	telemetryMu    sync.Mutex
-	telemetryCache PeerTelemetry
+	telemetryCache []PeerTelemetry
 	telemetryErr   error
 	telemetryAt    time.Time
 )
@@ -114,6 +116,8 @@ type PeerTelemetry struct {
 // read from the persistent Hugging Face cache; Incomplete identifies an active
 // Hub download, and WeightsLoaded comes from vLLM's Ray worker log.
 type ModelProgress struct {
+	Node          string
+	Host          string
 	Bytes         int64
 	Incomplete    int
 	WeightsLoaded bool
@@ -146,6 +150,8 @@ type Preflight struct {
 	Fingerprint string   `json:"fingerprint,omitempty"`
 	LocalLinks  []string `json:"localLinks,omitempty"`
 	PeerLinks   []string `json:"peerLinks,omitempty"`
+	NodeIndex   int      `json:"nodeIndex"`
+	NodeCount   int      `json:"nodeCount"`
 	Checks      []Check  `json:"checks"`
 }
 
@@ -154,6 +160,20 @@ type CreateRequest struct {
 	Username    string `json:"username"`
 	Password    string `json:"password"`
 	Fingerprint string `json:"fingerprint"`
+}
+
+// Node is one remote Spark enrolled into the coordinator's cluster. Passwords
+// are deliberately never persisted; the installed, restricted SSH identity is
+// used for normal operation.
+type Node struct {
+	Name        string   `json:"name"`
+	Host        string   `json:"host"`
+	Username    string   `json:"username"`
+	Fingerprint string   `json:"fingerprint,omitempty"`
+	Links       []string `json:"links,omitempty"`
+	IPs         []string `json:"ips,omitempty"`
+	WorkerReady bool     `json:"workerReady"`
+	Healthy     bool     `json:"healthy"`
 }
 
 type State struct {
@@ -170,9 +190,45 @@ type State struct {
 	PeerLinks   []string  `json:"peerLinks,omitempty"`
 	LocalIPs    []string  `json:"localIps,omitempty"`
 	PeerIPs     []string  `json:"peerIps,omitempty"`
+	Nodes       []Node    `json:"nodes,omitempty"`
+	NodeCount   int       `json:"nodeCount,omitempty"`
+	Topology    string    `json:"topology,omitempty"`
 	CreatedAt   time.Time `json:"createdAt,omitempty"`
 	Checks      []Check   `json:"checks,omitempty"`
 	Error       string    `json:"error,omitempty"`
+}
+
+func normalizeState(state State) State {
+	if len(state.Nodes) == 0 && strings.TrimSpace(state.PeerHost) != "" {
+		state.Nodes = []Node{{
+			Name: state.PeerName, Host: state.PeerHost, Username: state.Username,
+			Fingerprint: state.Fingerprint, Links: state.PeerLinks, IPs: state.PeerIPs,
+			WorkerReady: state.WorkerReady,
+		}}
+	}
+	state.NodeCount = 1 + len(state.Nodes)
+	if state.NodeCount < 2 && !state.Configured {
+		state.NodeCount = 1
+	}
+	if state.Topology == "" && state.Configured {
+		if state.NodeCount == 2 {
+			state.Topology = "direct"
+		} else {
+			state.Topology = "switch"
+		}
+	}
+	state.WorkerReady = len(state.Nodes) > 0
+	for _, node := range state.Nodes {
+		state.WorkerReady = state.WorkerReady && node.WorkerReady
+	}
+	// Legacy fields keep older clients compatible while all new code consumes
+	// Nodes. They represent the first worker only.
+	if len(state.Nodes) > 0 {
+		first := state.Nodes[0]
+		state.PeerName, state.PeerHost, state.Username = first.Name, first.Host, first.Username
+		state.Fingerprint, state.PeerLinks, state.PeerIPs = first.Fingerprint, first.Links, first.IPs
+	}
+	return state
 }
 
 func validateTarget(host, username string) error {
@@ -187,6 +243,19 @@ func validateTarget(host, username string) error {
 		return errors.New("enter a valid Linux username")
 	}
 	return nil
+}
+
+func enrollmentIndex(state State, host string) (int, error) {
+	state = normalizeState(state)
+	if len(state.Nodes) >= maxNodes-1 {
+		return 0, fmt.Errorf("this cluster already has the maximum of %d Sparks", maxNodes)
+	}
+	for _, node := range state.Nodes {
+		if strings.EqualFold(strings.TrimSpace(node.Host), strings.TrimSpace(host)) {
+			return 0, errors.New("this Spark is already part of the cluster")
+		}
+	}
+	return 2 + len(state.Nodes), nil
 }
 
 func run(ctx context.Context, env []string, stdin []byte, name string, args ...string) (string, error) {
@@ -216,6 +285,14 @@ func Discover(ctx context.Context) ([]Peer, error) {
 		return nil, fmt.Errorf("Spark discovery is unavailable: %w", err)
 	}
 	seen := map[string]Peer{}
+	state, _ := load()
+	enrolled := map[string]bool{}
+	for _, node := range state.Nodes {
+		enrolled[strings.ToLower(node.Host)] = true
+		for _, ip := range node.IPs {
+			enrolled[strings.ToLower(ip)] = true
+		}
+	}
 	for _, line := range strings.Split(out, "\n") {
 		parts := strings.Split(line, ";")
 		if len(parts) < 9 || parts[0] != "=" || parts[2] != "IPv4" {
@@ -224,6 +301,9 @@ func Discover(ctx context.Context) ([]Peer, error) {
 		host := strings.TrimSuffix(strings.TrimSpace(parts[6]), ".")
 		ip := strings.TrimSpace(parts[7])
 		if host == "" || net.ParseIP(ip) == nil {
+			continue
+		}
+		if enrolled[strings.ToLower(host)] || enrolled[strings.ToLower(ip)] {
 			continue
 		}
 		if local, _ := os.Hostname(); strings.EqualFold(strings.TrimSuffix(local, ".local"), strings.TrimSuffix(host, ".local")) {
@@ -286,7 +366,22 @@ func writeKnownHost(line string) error {
 	if err := os.MkdirAll(filepath.Dir(knownPath), 0o700); err != nil {
 		return err
 	}
-	return os.WriteFile(knownPath, []byte(strings.TrimSpace(line)+"\n"), 0o600)
+	line = strings.TrimSpace(line)
+	host := strings.Fields(line)
+	if len(host) == 0 {
+		return errors.New("empty SSH host identity")
+	}
+	var kept []string
+	if data, err := os.ReadFile(knownPath); err == nil {
+		for _, existing := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+			fields := strings.Fields(existing)
+			if len(fields) > 0 && fields[0] != host[0] && strings.TrimSpace(existing) != "" {
+				kept = append(kept, existing)
+			}
+		}
+	}
+	kept = append(kept, line)
+	return os.WriteFile(knownPath, []byte(strings.Join(kept, "\n")+"\n"), 0o600)
 }
 
 func sshCommand(host, username string, password bool) (string, []string) {
@@ -350,9 +445,9 @@ func localLinks(ctx context.Context) ([]string, error) {
 					return links, errors.New(diagnostic)
 				}
 			}
-			return links, errors.New("the high-speed network hardware is asleep; leave the cable connected, restart both Sparks, then try again")
+			return links, errors.New("the high-speed network hardware is asleep; leave the fabric connected, restart this Spark, then try again")
 		}
-		return links, fmt.Errorf("the cable is not fully ready yet (%d of 2 links active); check both plugs or restart both Sparks with the cable connected", len(links))
+		return links, fmt.Errorf("the high-speed fabric is not fully ready yet (%d of 2 links active); check the cable or switch port, then restart this Spark if needed", len(links))
 	}
 	return links, nil
 }
@@ -412,7 +507,15 @@ func reusableClusterAddresses(raw string, links []string, lastOctet int) bool {
 
 func PreflightCheck(ctx context.Context, request PreflightRequest) (Preflight, error) {
 	request.Host, request.Username = strings.TrimSpace(request.Host), strings.TrimSpace(request.Username)
-	result := Preflight{PeerHost: request.Host, Checks: []Check{}}
+	existing, loadErr := load()
+	if loadErr != nil {
+		return Preflight{}, loadErr
+	}
+	nodeIndex, err := enrollmentIndex(existing, request.Host)
+	if err != nil {
+		return Preflight{}, err
+	}
+	result := Preflight{PeerHost: request.Host, NodeIndex: nodeIndex, NodeCount: nodeIndex, Checks: []Check{}}
 	add := func(id, label string, ok bool, details string) {
 		result.Checks = append(result.Checks, Check{ID: id, Label: label, OK: ok, Details: details})
 	}
@@ -441,12 +544,17 @@ func PreflightCheck(ctx context.Context, request PreflightRequest) (Preflight, e
 	}
 	add("local-link", "High-speed connection on this Spark", localErr == nil, localLinkDetails)
 	_, localConfigErr := os.Stat(configPath)
-	localConfigMissing := errors.Is(localConfigErr, os.ErrNotExist)
-	add("local-config", "No previous Cloudless cluster configuration", localConfigMissing, configPath)
+	localConfigOK := errors.Is(localConfigErr, os.ErrNotExist)
+	localConfigLabel := "No previous Cloudless cluster configuration"
+	if existing.Configured {
+		localConfigOK = localConfigErr == nil
+		localConfigLabel = "Existing Cloudless cluster network is ready"
+	}
+	add("local-config", localConfigLabel, localConfigOK, configPath)
 	localRoutes, localRouteErr := run(ctx, nil, nil, "ip", "route", "show")
-	localAddressesOK := localRouteErr == nil && !routeConflict(localRoutes)
+	localAddressesOK := localRouteErr == nil && (!routeConflict(localRoutes) || existing.Configured)
 	localAddressDetails := "10.100.0.0/24 and 10.100.1.0/24"
-	if !localAddressesOK && localConfigMissing {
+	if !localAddressesOK && !existing.Configured && localConfigOK {
 		if localAddresses, addressErr := run(ctx, nil, nil, "ip", "-o", "-4", "addr", "show"); addressErr == nil && reusableClusterAddresses(localAddresses, local, 1) {
 			localAddressesOK = true
 			localAddressDetails = "Existing Cloudless addresses on the dedicated ports will be reused."
@@ -475,7 +583,7 @@ func PreflightCheck(ctx context.Context, request PreflightRequest) (Preflight, e
 		peerAddressesOK := peerRouteErr == nil && !routeConflict(peerRoutes)
 		peerAddressDetails := "10.100.0.0/24 and 10.100.1.0/24"
 		if !peerAddressesOK && peerConfigMissing {
-			if peerAddresses, addressErr := remote(ctx, request.Host, request.Username, request.Password, "ip -o -4 addr show", nil); addressErr == nil && reusableClusterAddresses(peerAddresses, peerLinks, 2) {
+			if peerAddresses, addressErr := remote(ctx, request.Host, request.Username, request.Password, "ip -o -4 addr show", nil); addressErr == nil && reusableClusterAddresses(peerAddresses, peerLinks, nodeIndex) {
 				peerAddressesOK = true
 				peerAddressDetails = "Existing Cloudless addresses on the dedicated ports will be reused."
 			}
@@ -577,10 +685,12 @@ func Create(ctx context.Context, request CreateRequest) (State, error) {
 	if err := validateTarget(request.Host, request.Username); err != nil {
 		return State{}, err
 	}
-	if existing, err := load(); err != nil {
+	existing, err := load()
+	if err != nil {
 		return State{}, err
-	} else if existing.Configured {
-		return State{}, errors.New("this Spark already belongs to a configured CloudlessOS cluster")
+	}
+	if _, err := enrollmentIndex(existing, request.Host); err != nil {
+		return State{}, err
 	}
 	if request.Password == "" || request.Fingerprint == "" {
 		return State{}, errors.New("peer authentication and fingerprint confirmation are required")
@@ -590,7 +700,7 @@ func Create(ctx context.Context, request CreateRequest) (State, error) {
 		return State{}, err
 	}
 	if !preflight.Ready {
-		return State{}, errors.New("both Sparks must pass every readiness check before the cluster can be created")
+		return State{}, errors.New("both the coordinator and the new Spark must pass every readiness check")
 	}
 	if preflight.Fingerprint != request.Fingerprint {
 		return State{}, errors.New("the peer SSH fingerprint changed; stop and verify the other Spark")
@@ -599,7 +709,7 @@ func Create(ctx context.Context, request CreateRequest) (State, error) {
 	if err != nil {
 		return State{}, fmt.Errorf("create cluster identity: %w", err)
 	}
-	remoteConfig := base64.StdEncoding.EncodeToString([]byte(netplan(preflight.PeerLinks, 2)))
+	remoteConfig := base64.StdEncoding.EncodeToString([]byte(netplan(preflight.PeerLinks, preflight.NodeIndex)))
 	remoteKey := base64.StdEncoding.EncodeToString([]byte(publicKey + "\n"))
 	remoteWorker := base64.StdEncoding.EncodeToString([]byte(workerScript))
 	remoteSudoers := base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s ALL=(root) NOPASSWD: %s *\n", request.Username, workerPath)))
@@ -608,13 +718,31 @@ func Create(ctx context.Context, request CreateRequest) (State, error) {
 		rollbackRemote(request.Host, request.Username, request.Password, publicKey)
 		return State{}, fmt.Errorf("configure the other Spark: %w", err)
 	}
-	if err := applyLocal(ctx, netplan(preflight.LocalLinks, 1)); err != nil {
-		rollbackRemote(request.Host, request.Username, request.Password, publicKey)
-		return State{}, fmt.Errorf("configure this Spark: %w", err)
+	if !existing.Configured {
+		if err := applyLocal(ctx, netplan(preflight.LocalLinks, 1)); err != nil {
+			rollbackRemote(request.Host, request.Username, request.Password, publicKey)
+			return State{}, fmt.Errorf("configure this Spark: %w", err)
+		}
 	}
-	state := State{Configured: true, WorkerReady: true, Role: "coordinator", LocalName: preflight.LocalName, PeerName: preflight.PeerName, PeerHost: request.Host, Username: request.Username, Fingerprint: request.Fingerprint, LocalLinks: preflight.LocalLinks, PeerLinks: preflight.PeerLinks, LocalIPs: []string{"10.100.0.1", "10.100.1.1"}, PeerIPs: []string{"10.100.0.2", "10.100.1.2"}, CreatedAt: now().UTC()}
+	state := existing
+	if !state.Configured {
+		state = State{Configured: true, Role: "coordinator", LocalName: preflight.LocalName, LocalLinks: preflight.LocalLinks, LocalIPs: []string{"10.100.0.1", "10.100.1.1"}, CreatedAt: now().UTC()}
+	}
+	workerIPs := []string{fmt.Sprintf("10.100.0.%d", preflight.NodeIndex), fmt.Sprintf("10.100.1.%d", preflight.NodeIndex)}
+	state.Nodes = append(state.Nodes, Node{
+		Name: preflight.PeerName, Host: request.Host, Username: request.Username,
+		Fingerprint: request.Fingerprint, Links: preflight.PeerLinks, IPs: workerIPs,
+		WorkerReady: true,
+	})
+	state.Topology = "switch"
+	if len(state.Nodes) == 1 {
+		state.Topology = "direct"
+	}
+	state = normalizeState(state)
 	if err := save(state); err != nil {
-		rollbackLocal()
+		if !existing.Configured {
+			rollbackLocal()
+		}
 		rollbackRemote(request.Host, request.Username, request.Password, publicKey)
 		return State{}, err
 	}
@@ -659,7 +787,7 @@ func save(state State) error {
 	if err := os.MkdirAll(filepath.Dir(statePath), 0o700); err != nil {
 		return err
 	}
-	data, err := json.MarshalIndent(state, "", "  ")
+	data, err := json.MarshalIndent(normalizeState(state), "", "  ")
 	if err != nil {
 		return err
 	}
@@ -678,8 +806,20 @@ func load() (State, error) {
 	if err := json.Unmarshal(data, &state); err != nil {
 		return State{}, err
 	}
-	return state, nil
+	return normalizeState(state), nil
 }
+
+// NodeCount returns the coordinator plus all enrolled workers. It is safe for
+// launch planning and falls back to one when no cluster exists.
+func NodeCount() int {
+	state, err := load()
+	if err != nil || !state.Configured {
+		return 1
+	}
+	return nodeCountForState(state)
+}
+
+func nodeCountForState(state State) int { return max(1, normalizeState(state).NodeCount) }
 
 func Status(ctx context.Context) (State, error) {
 	state, err := load()
@@ -704,18 +844,42 @@ func Status(ctx context.Context) (State, error) {
 		}
 	}
 	state.Checks = append(state.Checks, linkCheck)
-	for _, ip := range state.PeerIPs {
-		// Netplan can return before address discovery on the new fabric has
-		// completely settled. A short burst prevents that normal warm-up from
-		// being presented as packet loss immediately after cluster creation.
-		_, pingErr := run(ctx, nil, nil, "ping", fabricPingArguments(ip)...)
-		check := Check{ID: "ping-" + ip, Label: "ConnectX-7 path " + ip, OK: pingErr == nil}
-		if pingErr != nil {
-			check.Details = pingErr.Error()
-			state.Healthy = false
-		}
-		state.Checks = append(state.Checks, check)
+	nodeChecks := make([][]Check, len(state.Nodes))
+	var wg sync.WaitGroup
+	for nodeIndex, node := range state.Nodes {
+		wg.Add(1)
+		go func(nodeIndex int, node Node) {
+			defer wg.Done()
+			checks := make([]Check, 0, max(1, len(node.IPs)))
+			if len(node.IPs) != 2 {
+				checks = append(checks, Check{ID: "addresses-" + node.Host, Label: node.Name + " fabric addresses", OK: false, Details: "Reconnect this Spark to assign both private fabric paths."})
+			}
+			for _, ip := range node.IPs {
+				// Netplan can return before address discovery on the new fabric has
+				// completely settled. A short burst prevents that normal warm-up from
+				// being presented as packet loss immediately after cluster creation.
+				_, pingErr := run(ctx, nil, nil, "ping", fabricPingArguments(ip)...)
+				check := Check{ID: "ping-" + ip, Label: node.Name + " · ConnectX-7 path " + ip, OK: pingErr == nil}
+				if pingErr != nil {
+					check.Details = pingErr.Error()
+				}
+				checks = append(checks, check)
+			}
+			nodeChecks[nodeIndex] = checks
+		}(nodeIndex, node)
 	}
+	wg.Wait()
+	for nodeIndex, checks := range nodeChecks {
+		state.Nodes[nodeIndex].Healthy = true
+		for _, check := range checks {
+			if !check.OK {
+				state.Nodes[nodeIndex].Healthy = false
+				state.Healthy = false
+			}
+			state.Checks = append(state.Checks, check)
+		}
+	}
+	state = normalizeState(state)
 	return state, nil
 }
 
@@ -723,11 +887,10 @@ func fabricPingArguments(ip string) []string {
 	return []string{"-c", "3", "-i", "0.25", "-W", "1", ip}
 }
 
-// PeerGPUs returns live GB10 telemetry from the connected Spark. It uses the
-// cluster identity installed during pairing and never requires or stores the
-// peer administrator password. A short cache prevents dashboard pollers from
-// opening redundant SSH sessions.
-func PeerGPUs(ctx context.Context) (PeerTelemetry, error) {
+// ClusterGPUs returns live GB10 telemetry from every worker. It uses the
+// restricted cluster identity and probes nodes concurrently so dashboard
+// latency does not grow linearly with cluster size.
+func ClusterGPUs(ctx context.Context) ([]PeerTelemetry, error) {
 	telemetryMu.Lock()
 	defer telemetryMu.Unlock()
 	if time.Since(telemetryAt) < 2500*time.Millisecond {
@@ -735,82 +898,123 @@ func PeerGPUs(ctx context.Context) (PeerTelemetry, error) {
 	}
 	state, err := load()
 	if err != nil || !state.Configured {
-		result := PeerTelemetry{}
-		if err != nil {
-			result.Error = err.Error()
-		}
-		telemetryCache, telemetryErr, telemetryAt = result, err, time.Now()
-		return result, err
+		telemetryCache, telemetryErr, telemetryAt = nil, err, time.Now()
+		return nil, err
 	}
-	result := PeerTelemetry{Connected: true, Name: state.PeerName, Host: state.PeerHost}
-	command := `nvidia-smi --query-gpu=index,name,memory.used,memory.total,utilization.gpu,temperature.gpu,power.draw,power.limit,driver_version --format=csv,noheader,nounits; printf '\n__CLOUDLESS_MEM__\n'; awk '/MemTotal:/{t=$2}/MemAvailable:/{a=$2}END{printf "%d %d\n",t/1024,a/1024}' /proc/meminfo`
-	output, remoteErr := remote(ctx, state.PeerHost, state.Username, "", command, nil)
-	if remoteErr != nil {
-		result.Error = remoteErr.Error()
-		telemetryCache, telemetryErr, telemetryAt = result, remoteErr, time.Now()
-		return result, remoteErr
+	results := make([]PeerTelemetry, len(state.Nodes))
+	var wg sync.WaitGroup
+	for i, node := range state.Nodes {
+		wg.Add(1)
+		go func(i int, node Node) {
+			defer wg.Done()
+			result := PeerTelemetry{Connected: true, Name: node.Name, Host: node.Host}
+			command := `nvidia-smi --query-gpu=index,name,memory.used,memory.total,utilization.gpu,temperature.gpu,power.draw,power.limit,driver_version --format=csv,noheader,nounits; printf '\n__CLOUDLESS_MEM__\n'; awk '/MemTotal:/{t=$2}/MemAvailable:/{a=$2}END{printf "%d %d\n",t/1024,a/1024}' /proc/meminfo`
+			output, remoteErr := remote(ctx, node.Host, node.Username, "", command, nil)
+			if remoteErr != nil {
+				result.Error = remoteErr.Error()
+				results[i] = result
+				return
+			}
+			gpuText, memText, found := strings.Cut(output, "__CLOUDLESS_MEM__")
+			if !found {
+				remoteErr = errors.New("peer returned incomplete GPU telemetry")
+				result.Error = remoteErr.Error()
+				results[i] = result
+				return
+			}
+			gpus := hardware.ParseGPUsCSV(strings.TrimSpace(gpuText))
+			memFields := strings.Fields(memText)
+			if len(memFields) >= 2 {
+				totalMB, _ := strconv.Atoi(memFields[0])
+				availableMB, _ := strconv.Atoi(memFields[1])
+				hardware.ApplyUnifiedMemory(gpus, totalMB, availableMB)
+			}
+			for i := range gpus {
+				gpus[i].Node = node.Name
+				gpus[i].Remote = true
+			}
+			result.Reachable = true
+			result.GPUs = gpus
+			results[i] = result
+		}(i, node)
 	}
-	gpuText, memText, found := strings.Cut(output, "__CLOUDLESS_MEM__")
-	if !found {
-		remoteErr = errors.New("peer returned incomplete GPU telemetry")
-		result.Error = remoteErr.Error()
-		telemetryCache, telemetryErr, telemetryAt = result, remoteErr, time.Now()
-		return result, remoteErr
-	}
-	gpus := hardware.ParseGPUsCSV(strings.TrimSpace(gpuText))
-	memFields := strings.Fields(memText)
-	if len(memFields) >= 2 {
-		totalMB, _ := strconv.Atoi(memFields[0])
-		availableMB, _ := strconv.Atoi(memFields[1])
-		hardware.ApplyUnifiedMemory(gpus, totalMB, availableMB)
-	}
-	for i := range gpus {
-		gpus[i].Node = state.PeerName
-		gpus[i].Remote = true
-	}
-	result.Reachable = true
-	result.GPUs = gpus
-	telemetryCache, telemetryErr, telemetryAt = result, nil, time.Now()
-	return result, nil
+	wg.Wait()
+	telemetryCache, telemetryErr, telemetryAt = results, nil, time.Now()
+	return results, nil
 }
 
-// StartWorker launches the peer half of CloudlessOS distributed vLLM using the
-// passwordless, narrowly scoped helper installed during cluster creation.
+// PeerGPUs is retained for older API consumers and represents the first
+// worker. New callers should use ClusterGPUs.
+func PeerGPUs(ctx context.Context) (PeerTelemetry, error) {
+	peers, err := ClusterGPUs(ctx)
+	if err != nil || len(peers) == 0 {
+		return PeerTelemetry{}, err
+	}
+	return peers[0], nil
+}
+
+// StartWorker launches every remote Ray rank using the passwordless,
+// narrowly-scoped helper installed during enrollment.
 func StartWorker(ctx context.Context, image, model string) error {
 	state, err := Status(ctx)
 	if err != nil {
 		return err
 	}
 	if !state.Configured || !state.Healthy {
-		return errors.New("the two-Spark connection is not healthy")
+		return errors.New("the Spark cluster connection is not healthy")
 	}
 	if !state.WorkerReady {
-		return errors.New("reconnect the two Sparks once to enable distributed models after this CloudlessOS update")
+		return errors.New("reconnect any legacy Spark workers once to enable distributed models")
 	}
 	if strings.TrimSpace(image) == "" || strings.TrimSpace(model) == "" {
 		return errors.New("worker image and model are required")
 	}
-	image64 := base64.StdEncoding.EncodeToString([]byte(image))
-	upgrade64 := base64.StdEncoding.EncodeToString([]byte(workerScript))
-	upgrade := fmt.Sprintf("sudo -n %s upgrade %s", workerPath, upgrade64)
-	if _, err := remote(ctx, state.PeerHost, state.Username, "", upgrade, nil); err != nil {
-		return fmt.Errorf("update distributed worker on %s: reconnect the two Sparks once (%w)", state.PeerName, err)
-	}
-	_ = model // the Ray worker receives the selected model from rank 0
-	headIP, workerIP, iface := "10.100.0.1", "10.100.0.2", "enP2p1s0f1np1"
+	headIP := "10.100.0.1"
 	if len(state.LocalIPs) > 0 {
 		headIP = state.LocalIPs[0]
 	}
-	if len(state.PeerIPs) > 0 {
-		workerIP = state.PeerIPs[0]
-	}
-	if len(state.PeerLinks) > 0 {
-		iface = state.PeerLinks[0]
-	}
+	image64 := base64.StdEncoding.EncodeToString([]byte(image))
+	upgrade64 := base64.StdEncoding.EncodeToString([]byte(workerScript))
 	enc := func(value string) string { return base64.StdEncoding.EncodeToString([]byte(value)) }
-	command := fmt.Sprintf("sudo -n %s start %s %s %s %s", workerPath, image64, enc(headIP), enc(workerIP), enc(iface))
-	if _, err := remote(ctx, state.PeerHost, state.Username, "", command, nil); err != nil {
-		return fmt.Errorf("start distributed worker on %s: %w", state.PeerName, err)
+	errs := make(chan error, len(state.Nodes))
+	var wg sync.WaitGroup
+	for _, node := range state.Nodes {
+		wg.Add(1)
+		go func(node Node) {
+			defer wg.Done()
+			upgrade := fmt.Sprintf("sudo -n %s upgrade %s", workerPath, upgrade64)
+			if _, err := remote(ctx, node.Host, node.Username, "", upgrade, nil); err != nil {
+				errs <- fmt.Errorf("update distributed worker on %s: reconnect this Spark once (%w)", node.Name, err)
+				return
+			}
+			workerIP, iface := "", "enP2p1s0f1np1"
+			if len(node.IPs) > 0 {
+				workerIP = node.IPs[0]
+			}
+			if len(node.Links) > 0 {
+				iface = node.Links[0]
+			}
+			if workerIP == "" {
+				errs <- fmt.Errorf("start distributed worker on %s: missing fabric address", node.Name)
+				return
+			}
+			command := fmt.Sprintf("sudo -n %s start %s %s %s %s", workerPath, image64, enc(headIP), enc(workerIP), enc(iface))
+			if _, err := remote(ctx, node.Host, node.Username, "", command, nil); err != nil {
+				errs <- fmt.Errorf("start distributed worker on %s: %w", node.Name, err)
+			}
+		}(node)
+	}
+	wg.Wait()
+	close(errs)
+	var failures []string
+	for err := range errs {
+		failures = append(failures, err.Error())
+	}
+	if len(failures) > 0 {
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+		defer cancel()
+		_ = StopWorker(cleanupCtx)
+		return errors.New(strings.Join(failures, "; "))
 	}
 	return nil
 }
@@ -818,34 +1022,65 @@ func StartWorker(ctx context.Context, image, model string) error {
 // PeerModelProgress reports read-only preparation telemetry from the paired
 // Spark through the restricted worker helper installed during pairing.
 func PeerModelProgress(ctx context.Context, model string) (ModelProgress, error) {
-	state, err := load()
-	if err != nil {
+	all, err := ClusterModelProgress(ctx, model)
+	if err != nil || len(all) == 0 {
 		return ModelProgress{}, err
 	}
+	return all[0], nil
+}
+
+// ClusterModelProgress returns preparation state for every worker.
+func ClusterModelProgress(ctx context.Context, model string) ([]ModelProgress, error) {
+	state, err := load()
+	if err != nil {
+		return nil, err
+	}
 	if !state.Configured || !state.WorkerReady {
-		return ModelProgress{}, errors.New("the distributed worker is not configured")
+		return nil, errors.New("the distributed workers are not configured")
 	}
 	model = strings.TrimSpace(model)
 	if model == "" {
-		return ModelProgress{}, errors.New("model is required")
+		return nil, errors.New("model is required")
 	}
 	encoded := base64.StdEncoding.EncodeToString([]byte(model))
 	command := fmt.Sprintf("sudo -n %s model-progress %s", workerPath, encoded)
-	output, err := remote(ctx, state.PeerHost, state.Username, "", command, nil)
-	if err != nil {
-		return ModelProgress{}, fmt.Errorf("read model progress from %s: %w", state.PeerName, err)
+	results := make([]ModelProgress, len(state.Nodes))
+	errs := make(chan error, len(state.Nodes))
+	var wg sync.WaitGroup
+	for i, node := range state.Nodes {
+		wg.Add(1)
+		go func(i int, node Node) {
+			defer wg.Done()
+			output, err := remote(ctx, node.Host, node.Username, "", command, nil)
+			if err != nil {
+				errs <- fmt.Errorf("read model progress from %s: %w", node.Name, err)
+				return
+			}
+			fields := strings.Fields(output)
+			if len(fields) != 3 {
+				errs <- fmt.Errorf("read model progress from %s: invalid response", node.Name)
+				return
+			}
+			bytes, bytesErr := strconv.ParseInt(fields[0], 10, 64)
+			incomplete, incompleteErr := strconv.Atoi(fields[1])
+			loaded, loadedErr := strconv.Atoi(fields[2])
+			if bytesErr != nil || incompleteErr != nil || loadedErr != nil || bytes < 0 || incomplete < 0 || (loaded != 0 && loaded != 1) {
+				errs <- fmt.Errorf("read model progress from %s: invalid values", node.Name)
+				return
+			}
+			results[i] = ModelProgress{Node: node.Name, Host: node.Host, Bytes: bytes, Incomplete: incomplete, WeightsLoaded: loaded == 1}
+		}(i, node)
 	}
-	fields := strings.Fields(output)
-	if len(fields) != 3 {
-		return ModelProgress{}, fmt.Errorf("read model progress from %s: invalid response", state.PeerName)
+	wg.Wait()
+	close(errs)
+	var failures []string
+	for err := range errs {
+		failures = append(failures, err.Error())
 	}
-	bytes, bytesErr := strconv.ParseInt(fields[0], 10, 64)
-	incomplete, incompleteErr := strconv.Atoi(fields[1])
-	loaded, loadedErr := strconv.Atoi(fields[2])
-	if bytesErr != nil || incompleteErr != nil || loadedErr != nil || bytes < 0 || incomplete < 0 || (loaded != 0 && loaded != 1) {
-		return ModelProgress{}, fmt.Errorf("read model progress from %s: invalid values", state.PeerName)
+	if len(failures) > 0 {
+		return results, errors.New(strings.Join(failures, "; "))
 	}
-	return ModelProgress{Bytes: bytes, Incomplete: incomplete, WeightsLoaded: loaded == 1}, nil
+	return results, nil
 }
 
 // StopWorker removes the peer inference worker while leaving the Spark fabric
@@ -856,16 +1091,37 @@ func StopWorker(ctx context.Context) error {
 		return err
 	}
 	command := fmt.Sprintf("sudo -n %s stop", workerPath)
-	if _, err := remote(ctx, state.PeerHost, state.Username, "", command, nil); err != nil {
-		return fmt.Errorf("stop distributed worker on %s: %w", state.PeerName, err)
+	errs := make(chan error, len(state.Nodes))
+	var wg sync.WaitGroup
+	for _, node := range state.Nodes {
+		wg.Add(1)
+		go func(node Node) {
+			defer wg.Done()
+			if _, err := remote(ctx, node.Host, node.Username, "", command, nil); err != nil {
+				errs <- fmt.Errorf("%s: %w", node.Name, err)
+			}
+		}(node)
+	}
+	wg.Wait()
+	close(errs)
+	var failures []string
+	for err := range errs {
+		failures = append(failures, err.Error())
+	}
+	if len(failures) > 0 {
+		return fmt.Errorf("stop distributed workers: %s", strings.Join(failures, "; "))
 	}
 	return nil
 }
 
 // CoordinatorSpec converts the normal single-node vLLM container into rank 0
-// of the native two-node multiprocessing topology.
+// of the configured N-node Ray topology.
 func CoordinatorSpec(spec engine.RunSpec) engine.RunSpec {
 	state, _ := load()
+	return coordinatorSpec(spec, state)
+}
+
+func coordinatorSpec(spec engine.RunSpec, state State) engine.RunSpec {
 	headIP, iface := "10.100.0.1", "enP2p1s0f1np1"
 	if len(state.LocalIPs) > 0 {
 		headIP = state.LocalIPs[0]
@@ -887,7 +1143,8 @@ func CoordinatorSpec(spec engine.RunSpec) engine.RunSpec {
 	spec.Env["RAY_memory_monitor_refresh_ms"] = "0"
 	spec.EntryPoint = "/bin/bash"
 	serve := shellJoin(spec.Args)
-	spec.Args = []string{"-lc", `pip install -q --root-user-action=ignore 'ray[default]>=2.9' && ray start --head --port=6379 --node-ip-address="$VLLM_HOST_IP" --num-gpus=1 && touch /tmp/cloudless-ray-head && while [ ! -f /tmp/cloudless-ray-worker ]; do sleep 1; done; exec ` + serve + ` --distributed-executor-backend ray --tensor-parallel-size 2`}
+	nodes := max(2, nodeCountForState(state))
+	spec.Args = []string{"-lc", `pip install -q --root-user-action=ignore 'ray[default]>=2.9' && ray start --head --port=6379 --node-ip-address="$VLLM_HOST_IP" --num-gpus=1 && touch /tmp/cloudless-ray-head && while [ ! -f /tmp/cloudless-ray-worker ]; do sleep 1; done; exec ` + serve + fmt.Sprintf(" --distributed-executor-backend ray --tensor-parallel-size %d", nodes)}
 	return spec
 }
 
@@ -910,7 +1167,7 @@ func ProxySpec() engine.RunSpec {
 	}
 }
 
-func Disconnect(ctx context.Context, password string) error {
+func Disconnect(ctx context.Context, passwords map[string]string) error {
 	mutationMu.Lock()
 	defer mutationMu.Unlock()
 	state, err := load()
@@ -920,17 +1177,53 @@ func Disconnect(ctx context.Context, password string) error {
 	if !state.Configured {
 		return nil
 	}
-	if password == "" {
-		return errors.New("the peer administrator password is required to remove its network configuration")
-	}
 	publicKey := ""
 	if data, readErr := os.ReadFile(keyPath + ".pub"); readErr == nil {
 		publicKey = strings.TrimSpace(string(data))
 	}
 	encodedKey := base64.StdEncoding.EncodeToString([]byte(publicKey))
-	remoteCommand := fmt.Sprintf(`sudo -S -p '' sh -c 'set -eu; if [ -x %s ]; then %s stop; fi; rm -f %s %s %s; home=$(getent passwd "$1" | cut -d: -f6); if [ -n "$home" ] && [ -f "$home/.ssh/authorized_keys" ] && [ -n "$2" ]; then key=$(printf %%s "$2" | base64 -d); tmp=$(mktemp); grep -vxF "$key" "$home/.ssh/authorized_keys" >"$tmp" || true; install -m 600 -o "$1" "$tmp" "$home/.ssh/authorized_keys"; rm -f "$tmp"; fi; netplan generate; netplan apply; %s' sh %s %s`, workerPath, workerPath, configPath, workerPath, sudoersPath, remoteAddressCleanup, state.Username, encodedKey)
-	if _, err := remote(ctx, state.PeerHost, state.Username, password, remoteCommand, []byte(password+"\n")); err != nil {
-		return fmt.Errorf("disconnect the other Spark: %w", err)
+	type remoteRemoval struct {
+		node     Node
+		password string
+	}
+	removals := make([]remoteRemoval, 0, len(state.Nodes))
+	for _, node := range state.Nodes {
+		password := strings.TrimSpace(passwords[node.Host])
+		if password == "" {
+			password = strings.TrimSpace(passwords[node.Name])
+		}
+		if password == "" {
+			password = strings.TrimSpace(passwords["*"])
+		}
+		if password == "" {
+			return fmt.Errorf("administrator password is required for %s", node.Name)
+		}
+		if _, err := remote(ctx, node.Host, node.Username, password, "sudo -S -p '' true", []byte(password+"\n")); err != nil {
+			return fmt.Errorf("verify administrator access on %s before disconnecting: %w", node.Name, err)
+		}
+		removals = append(removals, remoteRemoval{node: node, password: password})
+	}
+	errs := make(chan error, len(removals))
+	var wg sync.WaitGroup
+	for _, removal := range removals {
+		wg.Add(1)
+		go func(removal remoteRemoval) {
+			defer wg.Done()
+			node, password := removal.node, removal.password
+			remoteCommand := fmt.Sprintf(`sudo -S -p '' sh -c 'set -eu; if [ -x %s ]; then %s stop; fi; rm -f %s %s %s; home=$(getent passwd "$1" | cut -d: -f6); if [ -n "$home" ] && [ -f "$home/.ssh/authorized_keys" ] && [ -n "$2" ]; then key=$(printf %%s "$2" | base64 -d); tmp=$(mktemp); grep -vxF "$key" "$home/.ssh/authorized_keys" >"$tmp" || true; install -m 600 -o "$1" "$tmp" "$home/.ssh/authorized_keys"; rm -f "$tmp"; fi; netplan generate; netplan apply; %s' sh %s %s`, workerPath, workerPath, configPath, workerPath, sudoersPath, remoteAddressCleanup, node.Username, encodedKey)
+			if _, err := remote(ctx, node.Host, node.Username, password, remoteCommand, []byte(password+"\n")); err != nil {
+				errs <- fmt.Errorf("disconnect %s: %w", node.Name, err)
+			}
+		}(removal)
+	}
+	wg.Wait()
+	close(errs)
+	var failures []string
+	for err := range errs {
+		failures = append(failures, err.Error())
+	}
+	if len(failures) > 0 {
+		return errors.New(strings.Join(failures, "; "))
 	}
 	if err := os.Remove(configPath); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err

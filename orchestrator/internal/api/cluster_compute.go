@@ -7,18 +7,18 @@ import (
 	"github.com/cloudless/orchestrator/internal/sparkcluster"
 )
 
-// clusterComputeView is the shared system-wide representation of a connected
-// Spark pair. UI surfaces, model fit calculations, and assistant grounding all
-// consume this contract instead of independently interpreting cluster state.
+// clusterComputeView is the shared representation of all enrolled Sparks.
 type clusterComputeView struct {
-	Configured       bool   `json:"configured"`
-	Healthy          bool   `json:"healthy"`
-	Nodes            int    `json:"nodes"`
-	PeerName         string `json:"peerName,omitempty"`
-	PeerHost         string `json:"peerHost,omitempty"`
-	LocalMemoryGB    int    `json:"localMemoryGB,omitempty"`
-	CombinedMemoryGB int    `json:"combinedMemoryGB,omitempty"`
-	DistributedReady bool   `json:"distributedReady"`
+	Configured       bool     `json:"configured"`
+	Healthy          bool     `json:"healthy"`
+	Nodes            int      `json:"nodes"`
+	PeerName         string   `json:"peerName,omitempty"`
+	PeerHost         string   `json:"peerHost,omitempty"`
+	NodeNames        []string `json:"nodeNames,omitempty"`
+	Topology         string   `json:"topology,omitempty"`
+	LocalMemoryGB    int      `json:"localMemoryGB,omitempty"`
+	CombinedMemoryGB int      `json:"combinedMemoryGB,omitempty"`
+	DistributedReady bool     `json:"distributedReady"`
 }
 
 func clusterCompute(ctx context.Context, localMemoryGB int) clusterComputeView {
@@ -29,12 +29,15 @@ func clusterCompute(ctx context.Context, localMemoryGB int) clusterComputeView {
 		return clusterComputeView{LocalMemoryGB: localMemoryGB}
 	}
 	view := clusterComputeView{
-		Configured: status.Configured, Healthy: status.Healthy, Nodes: 2,
+		Configured: status.Configured, Healthy: status.Healthy, Nodes: status.NodeCount,
 		PeerName: status.PeerName, PeerHost: status.PeerHost,
-		LocalMemoryGB: localMemoryGB,
+		LocalMemoryGB: localMemoryGB, Topology: status.Topology,
+	}
+	for _, node := range status.Nodes {
+		view.NodeNames = append(view.NodeNames, node.Name)
 	}
 	if status.Healthy && status.WorkerReady && localMemoryGB > 0 {
-		view.CombinedMemoryGB = localMemoryGB * 2
+		view.CombinedMemoryGB = localMemoryGB * status.NodeCount
 		view.DistributedReady = true
 	}
 	return view

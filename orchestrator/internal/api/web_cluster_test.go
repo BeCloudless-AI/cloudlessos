@@ -11,12 +11,12 @@ func TestEmbeddedWebIncludesSparkClusterWizard(t *testing.T) {
 		t.Fatal(err)
 	}
 	html := string(data)
-	for _, want := range []string{"id=\"dgx-cluster-card\"", "id=\"cluster-surface\"", "NOT CONFIGURED", "CONNECT NOW", "MANAGE", "function openSparkClusterSurface", "function renderSparkClusterPage", "Find my Spark", "Choose the other DGX Spark", "Plug in the high-speed cable", "One cable. The same port on both Sparks.", "Yes, the cable is plugged into both Sparks", "Check my connection", "Everything looks ready", "Connect both Sparks", "cluster-connect-progress", "waiting for both high-speed paths to come online", "Your two Sparks are connected", "clearSparkClusterSecrets", "X-Cloudless-Action':'spark-cluster-create'", "X-Cloudless-Action':'spark-cluster-disconnect'", "never saved"} {
+	for _, want := range []string{"id=\"dgx-cluster-card\"", "id=\"cluster-surface\"", "NOT CONFIGURED", "CONNECT NOW", "MANAGE", "function openSparkClusterSurface", "function renderSparkClusterPage", "Find a Spark", "Choose a DGX Spark", "Plug in the high-speed cable", "One cable. The same port on both Sparks.", "Yes, the cable is plugged into both Sparks", "Check my connection", "Spark ${p.nodeIndex", "Add Spark to cluster", "cluster-connect-progress", "Verify node", "cluster-add", "Add another Spark", "2–8 DGX Sparks", "Managed RoCE switch", "clearSparkClusterSecrets", "X-Cloudless-Action':'spark-cluster-create'", "X-Cloudless-Action':'spark-cluster-disconnect'", "never saved"} {
 		if !strings.Contains(html, want) {
 			t.Fatalf("embedded UI missing %q", want)
 		}
 	}
-	for _, want := range []string{"Disconnect and switch to local", "Stop distributed AI", "Remove private link", "Start local AI", "cluster-disconnect-eta", "formatRemaining", "engineExecutionMode = 'local'"} {
+	for _, want := range []string{"Disconnect and switch to local", "Stop distributed AI", "Remove private fabric", "Start local AI", "cluster-disconnect-eta", "formatRemaining", "engineExecutionMode = 'local'"} {
 		if !strings.Contains(html, want) {
 			t.Fatalf("embedded cluster UI missing safe local fallback progress %q", want)
 		}
@@ -26,12 +26,12 @@ func TestEmbeddedWebIncludesSparkClusterWizard(t *testing.T) {
 			t.Fatalf("embedded cluster UI missing stale-address guidance %q", want)
 		}
 	}
-	for _, want := range []string{"const createFailed = Boolean(p.ready && w.error && !w.busy)", "The Sparks were not connected", "Try connecting again"} {
+	for _, want := range []string{"const createFailed = Boolean(p.ready && w.error && !w.busy)", "The Spark was not added", "Try adding again"} {
 		if !strings.Contains(html, want) {
 			t.Fatalf("embedded cluster UI missing connection failure state %q", want)
 		}
 	}
-	for _, want := range []string{"id=\"home-cluster\"", "function renderHomeCluster", "Two-Spark compute is ready", "computeReady ? 'Manage'", "host.querySelector('button').onclick = openSparkClusterSurface", "Runs across both Sparks", "Use both Sparks", "mode: selectedMode", "distributed compatibility shown separately", "Powered by Hermes Agent", "Active across both Sparks", "Model requests are automatically served by your connected Spark pair", "Running across two Sparks", "executionMode === 'cluster'"} {
+	for _, want := range []string{"id=\"home-cluster\"", "function renderHomeCluster", "-Spark compute is ready", "computeReady ? 'Manage'", "host.querySelector('button').onclick = openSparkClusterSurface", "Runs across ${clusterNodes} Sparks", "Use all ${clusterNodes} Sparks", "mode: selectedMode", "distributed compatibility shown separately", "Powered by Hermes Agent", "Active across ${engineNodes} Sparks", "served by your Spark cluster", "Running across ${sparkCount(connectedSpark)} Sparks", "executionMode === 'cluster'"} {
 		if !strings.Contains(html, want) {
 			t.Fatalf("embedded UI missing system-wide cluster experience %q", want)
 		}
@@ -78,15 +78,18 @@ func TestSparkClusterLayoutKeepsDeliberateCardSpacing(t *testing.T) {
 	}
 }
 
-func TestEmbeddedWebShowsBothSparkGPUs(t *testing.T) {
+func TestEmbeddedWebShowsAllSparkGPUs(t *testing.T) {
 	data, err := webFS.ReadFile("web/index.html")
 	if err != nil {
 		t.Fatal(err)
 	}
 	html := string(data)
-	for _, want := range []string{"Connected Spark", "inf-node-gpus", "connected Sparks", "gpu.peer.connected", "Telemetry unavailable"} {
+	for _, want := range []string{"Connected Spark", "inf-node-gpus", "connected Sparks", "gpu.peers", "unavailablePeers", "Telemetry unavailable"} {
 		if !strings.Contains(html, want) {
 			t.Fatalf("embedded UI missing peer hardware visibility %q", want)
 		}
+	}
+	if strings.Contains(html, "peerMissing") {
+		t.Fatal("embedded UI still references the removed single-peer telemetry flag")
 	}
 }

@@ -223,7 +223,7 @@ func (s *Store) SetModel(model string) error {
 }
 
 // SetExecutionMode persists whether inference runs locally or across a healthy
-// two-Spark cluster. Unknown values safely fall back to local execution.
+// multi-Spark cluster. Unknown values safely fall back to local execution.
 func (s *Store) SetExecutionMode(mode string) error {
 	if mode != "cluster" {
 		mode = "local"

@@ -240,11 +240,17 @@ func (s *Server) gpu(w http.ResponseWriter, r *http.Request) {
 	for i := range gpus {
 		gpus[i].Node = hostname
 	}
-	peer, peerErr := sparkcluster.PeerGPUs(ctx)
-	if peerErr == nil && peer.Reachable {
-		gpus = append(gpus, peer.GPUs...)
+	peers, _ := sparkcluster.ClusterGPUs(ctx)
+	for _, peer := range peers {
+		if peer.Reachable {
+			gpus = append(gpus, peer.GPUs...)
+		}
 	}
-	resp := map[string]any{"available": len(gpus) > 0, "gpus": gpus, "peer": peer}
+	firstPeer := sparkcluster.PeerTelemetry{}
+	if len(peers) > 0 {
+		firstPeer = peers[0]
+	}
+	resp := map[string]any{"available": len(gpus) > 0, "gpus": gpus, "peers": peers, "peer": firstPeer}
 	if err != nil && len(gpus) == 0 {
 		resp["error"] = err.Error()
 	}
@@ -335,21 +341,36 @@ func (s *Server) engineState(w http.ResponseWriter, r *http.Request) {
 				if currentState.ExecutionMode == "cluster" {
 					modelID := resolveModel(currentState.Model)
 					probeCtx, probeCancel := context.WithTimeout(ctx, 3*time.Second)
-					peer, peerErr := sparkcluster.PeerModelProgress(probeCtx, modelID)
+					peers, peerErr := sparkcluster.ClusterModelProgress(probeCtx, modelID)
 					probeCancel()
-					if peerErr == nil && peer.Incomplete > 0 {
-						phase = "peer-downloading"
-						bytesDone = peer.Bytes
-						if mount, mountErr := s.eng.Output(ctx, "volume", "inspect", "cloudless-hf", "--format", "{{.Mountpoint}}"); mountErr == nil {
-							bytesTotal = s.modelRepoBytes(ctx, modelID, strings.TrimSpace(mount))
+					var peerBytes int64
+					var downloading, loading []string
+					allLoaded := len(peers) > 0
+					for _, peer := range peers {
+						peerBytes += peer.Bytes
+						if peer.Incomplete > 0 {
+							downloading = append(downloading, peer.Node)
 						}
-						message = peerDownloadStatus("The second Spark", modelID, bytesDone, bytesTotal, 0)
-					} else if peerErr == nil && !peer.WeightsLoaded {
+						if !peer.WeightsLoaded {
+							allLoaded = false
+							if peer.Incomplete == 0 {
+								loading = append(loading, peer.Node)
+							}
+						}
+					}
+					if peerErr == nil && len(downloading) > 0 {
+						phase = "peer-downloading"
+						bytesDone = peerBytes
+						if mount, mountErr := s.eng.Output(ctx, "volume", "inspect", "cloudless-hf", "--format", "{{.Mountpoint}}"); mountErr == nil {
+							bytesTotal = s.modelRepoBytes(ctx, modelID, strings.TrimSpace(mount)) * int64(len(peers))
+						}
+						message = peerDownloadStatus(strings.Join(downloading, ", "), modelID, bytesDone, bytesTotal, 0)
+					} else if peerErr == nil && !allLoaded {
 						phase = "peer-loading"
-						message = "The second Spark finished downloading. Loading its model weights …"
-					} else if peerErr == nil && peer.WeightsLoaded && total > 0 && done >= total {
+						message = strings.Join(loading, ", ") + " are loading model weights …"
+					} else if peerErr == nil && allLoaded && total > 0 && done >= total {
 						phase = "optimizing"
-						message = "Both Sparks loaded the model. Optimizing the distributed inference engine …"
+						message = fmt.Sprintf("All %d Sparks loaded the model. Optimizing distributed inference …", len(peers)+1)
 					}
 				}
 				if phase == "loading" && total > 0 && done < total {
@@ -372,6 +393,7 @@ func (s *Server) engineState(w http.ResponseWriter, r *http.Request) {
 		"operation":      operation,
 		"operationJobId": operationJobID,
 		"canAbort":       canAbort,
+		"cluster":        clusterCompute(ctx, totalVRAMGB(ctx)),
 		"executionMode": func() string {
 			if currentState.ExecutionMode == "cluster" {
 				return "cluster"
@@ -564,7 +586,7 @@ func (s *Server) applyEngine(job *jobs.Job, target catalog.App) {
 	st := s.state.Get()
 	model := st.Model
 	modelID := resolveModel(model)
-	peerName := "the second Spark"
+	clusterNodes := 2
 	localFallback := job.AppID == "engine:cluster-disconnect-fallback"
 	distributed := st.ExecutionMode == "cluster" && target.ID == "vllm"
 	timeout := 15 * time.Minute
@@ -606,12 +628,10 @@ func (s *Server) applyEngine(job *jobs.Job, target catalog.App) {
 	var runErr error
 	if distributed {
 		cluster := clusterCompute(ctx, totalVRAMGB(ctx))
-		if strings.TrimSpace(cluster.PeerName) != "" {
-			peerName = cluster.PeerName
-		}
+		clusterNodes = max(2, cluster.Nodes)
 		if !cluster.DistributedReady {
 			provision.EngineMu.Unlock()
-			job.Fail(errors.New("the two-Spark connection is not healthy enough for distributed inference"))
+			job.Fail(errors.New("the Spark cluster is not healthy enough for distributed inference"))
 			return
 		}
 		spec := sparkcluster.CoordinatorSpec(catalog.EngineSpec(target, model))
@@ -623,7 +643,7 @@ func (s *Server) applyEngine(job *jobs.Job, target catalog.App) {
 			return
 		}
 		started := time.Now()
-		job.Progress("cluster", "Preparing "+cluster.PeerName+". The first launch downloads a large NVIDIA runtime and can take several minutes …", -1, -1)
+		job.Progress("cluster", fmt.Sprintf("Preparing %d worker Sparks. First launch downloads may take several minutes …", clusterNodes-1), -1, -1)
 		workerDone := make(chan error, 1)
 		go func() { workerDone <- sparkcluster.StartWorker(ctx, spec.Image, modelID) }()
 		ticker := time.NewTicker(10 * time.Second)
@@ -635,7 +655,7 @@ func (s *Server) applyEngine(job *jobs.Job, target catalog.App) {
 				break workerWait
 			case <-ticker.C:
 				elapsed := time.Since(started).Round(time.Second)
-				job.Progress("cluster", "Preparing "+cluster.PeerName+" for distributed inference ("+elapsed.String()+" elapsed) …", -1, -1)
+				job.Progress("cluster", fmt.Sprintf("Preparing %d worker Sparks for distributed inference (%s elapsed) …", clusterNodes-1, elapsed), -1, -1)
 			case <-ctx.Done():
 				workerErr = ctx.Err()
 				break workerWait
@@ -647,16 +667,17 @@ func (s *Server) applyEngine(job *jobs.Job, target catalog.App) {
 			job.Fail(workerErr)
 			return
 		}
-		job.Progress("cluster", "Waiting for "+cluster.PeerName+" to join the inference cluster …", -1, -1)
-		if err := s.eng.Exec(ctx, target.ContainerName(), "/bin/bash", "-lc", `until ray status 2>/dev/null | grep -q '/2.0 GPU'; do sleep 2; done`); err != nil {
+		job.Progress("cluster", fmt.Sprintf("Waiting for all %d Sparks to join the inference cluster …", clusterNodes), -1, -1)
+		waitCommand := fmt.Sprintf("until ray status 2>/dev/null | grep -q '/%d.0 GPU'; do sleep 2; done", clusterNodes)
+		if err := s.eng.Exec(ctx, target.ContainerName(), "/bin/bash", "-lc", waitCommand); err != nil {
 			runErr = err
 		}
-		job.Progress("cluster", cluster.PeerName+" joined. Starting the model across both Sparks …", -1, -1)
+		job.Progress("cluster", fmt.Sprintf("All %d Sparks joined. Starting the distributed model …", clusterNodes), -1, -1)
 		if err := s.eng.Exec(ctx, target.ContainerName(), "touch", "/tmp/cloudless-ray-worker"); err != nil {
 			runErr = err
 		}
 		if runErr == nil {
-			job.Progress("cluster", "Connecting Cloudless apps to the two-Spark engine …", -1, -1)
+			job.Progress("cluster", fmt.Sprintf("Connecting Cloudless apps to the %d-Spark engine …", clusterNodes), -1, -1)
 			_ = s.eng.Pull(ctx, "alpine/socat:latest")
 			_, runErr = s.eng.Run(ctx, sparkcluster.ProxySpec())
 		}
@@ -702,27 +723,43 @@ func (s *Server) applyEngine(job *jobs.Job, target catalog.App) {
 		if distributed && !time.Now().Before(nextPeerProbe) {
 			nextPeerProbe = time.Now().Add(5 * time.Second)
 			probeCtx, probeCancel := context.WithTimeout(ctx, 4*time.Second)
-			peer, peerErr := sparkcluster.PeerModelProgress(probeCtx, modelID)
+			peers, peerErr := sparkcluster.ClusterModelProgress(probeCtx, modelID)
 			probeCancel()
-			if peerErr == nil {
+			if peerErr == nil && len(peers) > 0 {
+				var peerBytes int64
+				var downloading, loading []string
+				allLoaded := true
+				for _, peer := range peers {
+					peerBytes += peer.Bytes
+					if peer.Incomplete > 0 {
+						downloading = append(downloading, peer.Node)
+					}
+					if !peer.WeightsLoaded {
+						allLoaded = false
+						if peer.Incomplete == 0 {
+							loading = append(loading, peer.Node)
+						}
+					}
+				}
 				now := time.Now()
-				if !peerLastAt.IsZero() && peer.Bytes > peerLastBytes {
-					instant := float64(peer.Bytes-peerLastBytes) / now.Sub(peerLastAt).Seconds()
+				if !peerLastAt.IsZero() && peerBytes > peerLastBytes {
+					instant := float64(peerBytes-peerLastBytes) / now.Sub(peerLastAt).Seconds()
 					if peerBytesPerSecond == 0 {
 						peerBytesPerSecond = instant
 					} else {
 						peerBytesPerSecond = peerBytesPerSecond*0.7 + instant*0.3
 					}
 				}
-				peerLastBytes, peerLastAt = peer.Bytes, now
-				if peer.Incomplete > 0 {
-					message := peerDownloadStatus(peerName, modelID, peer.Bytes, peerTotal, peerBytesPerSecond)
-					job.ProgressBytes("peer-downloading", message, peer.Bytes, peerTotal)
+				peerLastBytes, peerLastAt = peerBytes, now
+				clusterTotal := peerTotal * int64(len(peers))
+				if len(downloading) > 0 {
+					message := peerDownloadStatus(strings.Join(downloading, ", "), modelID, peerBytes, clusterTotal, peerBytesPerSecond)
+					job.ProgressBytes("peer-downloading", message, peerBytes, clusterTotal)
 					time.Sleep(2 * time.Second)
 					continue
 				}
-				if !peer.WeightsLoaded {
-					job.ProgressBytes("peer-loading", peerName+" finished downloading. Loading model weights on the second Spark …", 0, 0)
+				if !allLoaded {
+					job.ProgressBytes("peer-loading", strings.Join(loading, ", ")+" finished downloading and are loading model weights …", 0, 0)
 					time.Sleep(2 * time.Second)
 					continue
 				}
@@ -733,7 +770,7 @@ func (s *Server) applyEngine(job *jobs.Job, target catalog.App) {
 			if total > 0 && done < total {
 				job.Progress("loading", fmt.Sprintf("Loading model weights — %d of %d checkpoint shards", done, total), done, total)
 			} else if total > 0 {
-				job.Progress("optimizing", "Both Sparks loaded the model. Optimizing the distributed inference engine …", done, total)
+				job.Progress("optimizing", fmt.Sprintf("All %d Sparks loaded the model. Optimizing distributed inference …", clusterNodes), done, total)
 			}
 		}
 		time.Sleep(2 * time.Second)
@@ -1398,7 +1435,7 @@ func (s *Server) settingsModel(w http.ResponseWriter, r *http.Request) {
 	if body.Mode == "cluster" {
 		cluster := clusterCompute(r.Context(), totalVRAMGB(r.Context()))
 		if !cluster.DistributedReady {
-			writeJSON(w, http.StatusConflict, map[string]string{"error": "the two-Spark connection is not healthy"})
+			writeJSON(w, http.StatusConflict, map[string]string{"error": "the Spark cluster is not healthy"})
 			return
 		}
 		mode = "cluster"

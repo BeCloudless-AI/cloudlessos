@@ -115,11 +115,11 @@ func TestModelGuidanceExplainsMissingGPUForCatalogModel(t *testing.T) {
 func TestModelGuidanceUsesHealthySparkClusterForLargeModel(t *testing.T) {
 	c := Context{
 		GPU: "GB10 (121 GB unified memory)", GPUVRAMGB: 121, GPUMemoryType: "unified",
-		ClusterReady: true, ClusterPeer: "spark-peer", ClusterMemory: 242,
+		ClusterReady: true, ClusterPeer: "spark-peer", ClusterNodes: 2, ClusterMemory: 242,
 		Models: []ModelOption{{ID: "example/large", Name: "Large 180B", MinVRAMGB: 180, Fit: "over", ClusterFit: "fits"}},
 	}
 	advice, handled := ModelGuidance("Can the Large 180B model run here?", c)
-	if !handled || !strings.Contains(advice.Reply, "two-Spark cluster") || !strings.Contains(advice.Reply, "distributed mode") {
+	if !handled || !strings.Contains(advice.Reply, "2-Spark cluster") || !strings.Contains(advice.Reply, "distributed mode") {
 		t.Fatalf("cluster model guidance = %#v", advice)
 	}
 }

@@ -189,6 +189,7 @@ func (s *Server) assistantContext(ctx context.Context) assistant.Context {
 		GPUMemoryType: memoryType,
 		ClusterReady:  cluster.DistributedReady,
 		ClusterPeer:   cluster.PeerName,
+		ClusterNodes:  cluster.Nodes,
 		ClusterMemory: cluster.CombinedMemoryGB,
 		Models:        modelOptions,
 	}

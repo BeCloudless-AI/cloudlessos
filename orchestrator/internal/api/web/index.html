@@ -406,7 +406,7 @@
 
   /* ---------- model manager ---------- */
   #models { background: rgba(20, 16, 36, 0.30); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
-  .mm { width: min(1280px, var(--ui-vw-96, 96vw)); height: min(var(--ui-vh-92, 92vh), 1040px); display: flex; flex-direction: column;
+  .mm { position: relative; width: min(1280px, var(--ui-vw-96, 96vw)); height: min(var(--ui-vh-92, 92vh), 1040px); display: flex; flex-direction: column;
     background: var(--card-strong); border: 1px solid var(--card-edge); border-radius: 26px; overflow: hidden;
     box-shadow: var(--shadow); animation: rise 0.32s ease; }
   .mm-body { flex: 1; overflow-y: auto; padding: 20px 32px 34px; }
@@ -2208,8 +2208,10 @@
   /* Engine readiness is state, not decoration: keep this indicator moving even
      when Spark's performance-friendly reduced-motion mode is active. */
   html.motion-disabled .eb-spin { animation: spin .9s linear infinite !important; }
+  html.motion-disabled .recipe-check-spinner::before { animation: recipe-check-spin .78s linear infinite !important; }
   @media (prefers-reduced-motion: reduce) {
     .eb-spin { animation: spin .9s linear infinite !important; }
+    .recipe-check-spinner::before { animation: recipe-check-spin .78s linear infinite !important; }
   }
   html.wall-motion-paused .wall::before,
   html.wall-motion-paused .wall::after,
@@ -2700,53 +2702,170 @@
     font: inherit; font-size: 10.5px; font-weight: 720; white-space: nowrap; cursor: pointer;
   }
   .mm-hf-button:hover { border-color: #e4a000; background: color-mix(in srgb, #ffcf45 22%, var(--card-strong)); }
-  .recipe-intro { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; align-items: center; padding: 18px;
-    border: 1px solid var(--hair); border-radius: 16px; background: var(--panel-2); margin-bottom: 18px; }
-  .recipe-intro h3 { margin: 0 0 5px; font-size: 15px; } .recipe-intro p { margin: 0; color: var(--muted); font-size: 11.5px; line-height: 1.55; }
-  .recipe-import { display: flex; align-items: stretch; gap: 8px; min-width: min(600px, 55vw); }
-  .recipe-github-field {
-    min-width: 0; min-height: 40px; flex: 1; display: flex; align-items: center; overflow: hidden;
-    border: 1px solid var(--line); border-radius: 10px; background: var(--control);
-    transition: border-color .15s, box-shadow .15s;
+  .recipe-intro {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 18px; align-items: center; padding: 17px 18px;
+    border: 1px solid var(--hair); border-radius: 16px 16px 0 0; background: var(--panel-2);
   }
-  .recipe-github-field:focus-within { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-soft); }
-  .recipe-github-prefix {
-    height: 100%; padding: 0 0 0 12px; display: inline-flex; align-items: center; flex: none;
-    color: var(--muted); font: 10.5px/1 'Roboto Mono', ui-monospace, SFMono-Regular, Consolas, monospace;
-    white-space: nowrap; user-select: none;
+  .recipe-intro-copy { min-width: 0; display: flex; align-items: center; gap: 12px; }
+  .recipe-section-icon { width: 38px; height: 38px; flex: none; display: grid; place-items: center; border-radius: 11px; color: var(--blue); background: var(--blue-soft); }
+  .recipe-section-icon .ui-icon { width: 18px; height: 18px; }
+  .recipe-heading-row { display: flex; align-items: center; gap: 8px; }
+  .recipe-intro h3 { margin: 0; font-size: 15px; }
+  .recipe-heading-row > span { min-width: 22px; padding: 3px 7px; border-radius: 999px; color: var(--blue); background: var(--blue-soft); font: 9px/1.4 'Roboto Mono',ui-monospace,monospace; text-align: center; }
+  .recipe-intro p { margin: 4px 0 0; color: var(--muted); font-size: 10.5px; line-height: 1.45; }
+  .recipe-toolbar { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+  .recipe-toolbar .btn { min-width: 116px; min-height: 40px; padding: 0 13px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; white-space: nowrap; line-height: 1; }
+  .recipe-toolbar .btn .ui-icon { width: 15px; height: 15px; flex: none; }
+  .recipe-controls {
+    margin-bottom: 16px; padding: 14px 16px; display: grid; grid-template-columns: minmax(220px, .9fr) minmax(440px, 1.55fr) auto; gap: 12px; align-items: end;
+    border: 1px solid var(--hair); border-top: 0; border-radius: 0 0 16px 16px; background: color-mix(in srgb,var(--panel-2) 58%,transparent);
   }
-  .recipe-import input { min-width: 110px; flex: 1; min-height: 38px; border: 0; padding: 0 12px 0 2px;
-    background: transparent; color: var(--ink); font: 11.5px/1.2 'Roboto Mono', ui-monospace, SFMono-Regular, Consolas, monospace; }
-  .recipe-import input:focus { outline: 0; }
-  .recipe-import input::placeholder { color: var(--faint); }
-  .recipe-import-error { min-height: 16px; margin-top: 5px; color: var(--err); font-size: 10px; }
-  .recipe-grid { display: grid; gap: 14px; }
-  .recipe-card { overflow: hidden; border: 1px solid var(--hair); border-radius: 16px; background: var(--card); }
-  .recipe-main { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 14px; align-items: start; padding: 18px; }
-  .recipe-icon { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 13px; color: var(--blue); background: var(--blue-soft); }
-  .recipe-icon .ui-icon { width: 20px; height: 20px; }
-  .recipe-copy { min-width: 0; } .recipe-title-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
-  .recipe-title { font-size: 14px; font-weight: 780; } .recipe-trust { color: #24985a; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .55px; }
-  .recipe-desc { margin-top: 6px; color: var(--muted); font-size: 11.5px; line-height: 1.5; }
-  .recipe-facts { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 11px; }
-  .recipe-fact { padding: 5px 8px; border: 1px solid var(--hair); border-radius: 8px; color: var(--muted); font-size: 9.5px; }
-  .recipe-source { margin-top: 10px; color: var(--faint); font: 9.5px/1.4 'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; }
-  .recipe-side { min-width: 190px; display: grid; gap: 8px; justify-items: stretch; }
-  .recipe-side select { min-height: 36px; border: 1px solid var(--line); border-radius: 9px; padding: 0 9px; background: var(--control); color: var(--ink); font: inherit; font-size: 10.5px; }
-  .recipe-actions { display: flex; gap: 7px; justify-content: flex-end; }
-  .recipe-import .btn, .recipe-actions .btn { min-height: 40px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; white-space: nowrap; line-height: 1; }
-  .recipe-import .btn { min-width: 126px; padding: 0 16px; }
-  .recipe-actions .btn { min-width: 88px; padding: 0 13px; }
-  .recipe-import .btn .ui-icon, .recipe-actions .btn .ui-icon { width: 15px; height: 15px; flex: 0 0 auto; }
-  .recipe-import .btn span, .recipe-actions .btn span { display: block; white-space: nowrap; }
+  .recipe-search { min-width: 0; height: 40px; padding: 0 11px; display: flex; align-items: center; gap: 9px; border: 1px solid var(--line); border-radius: 10px; background: var(--control); }
+  .recipe-search:focus-within { border-color: color-mix(in srgb,var(--blue) 55%,var(--line)); box-shadow: 0 0 0 3px color-mix(in srgb,var(--blue) 12%,transparent); }
+  .recipe-search .ui-icon { width: 15px; height: 15px; flex: none; color: var(--faint); }
+  .recipe-search input { min-width: 0; width: 100%; border: 0; outline: 0; color: var(--ink); background: transparent; font: inherit; font-size: 10.5px; }
+  .recipe-search input::placeholder { color: var(--faint); }
+  .recipe-filter-grid { min-width: 0; display: grid; grid-template-columns: repeat(4,minmax(96px,1fr)); gap: 8px; }
+  .recipe-select { min-width: 0; display: grid; gap: 5px; }
+  .recipe-select > span { color: var(--faint); font: 8px/1 'Roboto Mono',ui-monospace,monospace; letter-spacing: .5px; text-transform: uppercase; }
+  .recipe-select select, .recipe-per-page select {
+    min-width: 0; height: 29px; padding: 0 24px 0 8px; border: 1px solid var(--line); border-radius: 8px; color: var(--ink-2); background: var(--control); font: inherit; font-size: 9.5px;
+  }
+  .recipe-results { min-width: 76px; height: 40px; display: flex; flex-direction: column; align-items: flex-end; justify-content: center; gap: 2px; }
+  .recipe-results > span { color: var(--muted); font-size: 9.5px; white-space: nowrap; }
+  .recipe-results > span b { color: var(--ink); font-size: 11px; }
+  .recipe-results .lnk { font-size: 9px; }
+  .recipe-grid { display: grid; gap: 12px; }
+  .recipe-card { overflow: hidden; border: 1px solid var(--hair); border-radius: 16px; background: var(--card); transition: border-color .16s, box-shadow .16s; }
+  .recipe-card:hover { border-color: color-mix(in srgb,var(--blue) 22%,var(--line)); box-shadow: 0 18px 42px -36px color-mix(in srgb,var(--blue) 60%,transparent); }
+  .recipe-card.is-active { border-color: color-mix(in srgb,#2faa5b 38%,var(--line)); }
+  .recipe-card.needs-attention { border-color: color-mix(in srgb,#f7b731 25%,var(--line)); }
+  .recipe-card.insufficient-cluster {
+    border-color: color-mix(in srgb,var(--faint) 22%,var(--hair));
+    background: color-mix(in srgb,var(--card) 72%,var(--panel-2));
+  }
+  .recipe-card.insufficient-cluster:hover { border-color: color-mix(in srgb,var(--faint) 32%,var(--line)); box-shadow: none; }
+  .recipe-card.insufficient-cluster .recipe-icon,
+  .recipe-card.insufficient-cluster .recipe-copy,
+  .recipe-card.insufficient-cluster .recipe-actions .btn:not([data-recipe-edit]):not([data-recipe-delete]) {
+    opacity: .43; filter: grayscale(1) saturate(0);
+  }
+  .recipe-card.insufficient-cluster .recipe-actions [data-recipe-edit],
+  .recipe-card.insufficient-cluster .recipe-actions [data-recipe-delete] { opacity: 1; filter: none; }
+  .recipe-main { display: grid; grid-template-columns: auto minmax(0, 1fr) 208px; gap: 14px; align-items: start; padding: 17px; }
+  .recipe-icon { width: 42px; height: 42px; display: grid; place-items: center; border: 1px solid color-mix(in srgb,var(--blue) 17%,var(--hair)); border-radius: 12px; color: var(--blue); background: var(--blue-soft); }
+  .recipe-icon .ui-icon { width: 19px; height: 19px; }
+  .recipe-copy { min-width: 0; }
+  .recipe-eyebrow { margin-bottom: 5px; display: flex; align-items: center; gap: 8px; color: var(--faint); font: 8px/1.3 'Roboto Mono',ui-monospace,monospace; letter-spacing: .35px; text-transform: uppercase; }
+  .recipe-eyebrow span + span::before { content: "·"; margin-right: 8px; }
+  .recipe-title-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+  .recipe-title { font-size: 14px; font-weight: 780; }
+  .recipe-state { padding: 4px 7px; border-radius: 999px; font: 8px/1.2 'Roboto Mono',ui-monospace,monospace; font-weight: 750; letter-spacing: .35px; text-transform: uppercase; }
+  .recipe-state.ready { color: #24985a; background: color-mix(in srgb,#2faa5b 12%,transparent); }
+  .recipe-state.active { color: var(--blue); background: var(--blue-soft); }
+  .recipe-state.attention { color: #a56b08; background: color-mix(in srgb,#f7b731 14%,transparent); }
+  .recipe-desc { max-width: 760px; margin-top: 5px; color: var(--muted); font-size: 10.5px; line-height: 1.48; }
+  .recipe-specs { margin-top: 12px; display: grid; grid-template-columns: minmax(155px,1.5fr) repeat(3,minmax(90px,1fr)); gap: 7px; }
+  .recipe-specs > div { min-width: 0; padding: 8px 9px; border: 1px solid var(--hair); border-radius: 9px; background: color-mix(in srgb,var(--panel-2) 72%,transparent); }
+  .recipe-specs span, .recipe-specs b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .recipe-specs span { color: var(--faint); font: 7.5px/1.2 'Roboto Mono',ui-monospace,monospace; letter-spacing: .35px; text-transform: uppercase; }
+  .recipe-specs b { margin-top: 4px; color: var(--ink-2); font-size: 9.5px; font-weight: 700; }
+  .recipe-source { max-width: 100%; margin-top: 9px; color: var(--faint); font: 8.5px/1.4 'Roboto Mono',ui-monospace,SFMono-Regular,Menlo,monospace; overflow-wrap: anywhere; text-align: left; }
+  .recipe-side { min-width: 0; align-self: center; }
+  .recipe-actions { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 7px; }
+  .recipe-actions .btn { width: 100%; min-width: 0; min-height: 38px; padding: 0 10px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; white-space: nowrap; line-height: 1; }
+  .recipe-actions .recipe-primary-action { grid-column: 1 / -1; min-height: 42px; }
+  .recipe-actions .btn .ui-icon { width: 14px; height: 14px; flex: none; }
+  .recipe-actions .btn span { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .recipe-actions .recipe-remove:not(:disabled):hover { color: var(--err); border-color: color-mix(in srgb,var(--err) 32%,var(--line)); background: color-mix(in srgb,var(--err) 7%,transparent); }
   .recipe-progress { padding: 12px 18px 15px; border-top: 1px solid var(--hair); background: var(--panel-2); }
   .recipe-progress-row { display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 10px; }
   .recipe-progress .track { height: 5px; margin-top: 8px; }
   .recipe-warning { margin-top: 12px; padding: 10px 12px; border-radius: 10px; color: #a56b08; background: color-mix(in srgb, #f7b731 12%, transparent); font-size: 10px; line-height: 1.45; }
-  .recipe-toolbar { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
-  .recipe-toolbar .btn { min-height: 40px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; white-space: nowrap; }
-  .recipe-import-panel { margin: -4px 0 14px; padding: 14px; border: 1px solid var(--hair); border-radius: 13px; background: var(--panel-2); }
-  .recipe-import-panel.hidden { display: none; }
+  .recipe-empty { min-height: 230px; padding: 32px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; border: 1px dashed var(--line); border-radius: 16px; background: color-mix(in srgb,var(--panel-2) 48%,transparent); }
+  .recipe-empty-icon { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 13px; color: var(--blue); background: var(--blue-soft); }
+  .recipe-empty-icon .ui-icon { width: 20px; height: 20px; }
+  .recipe-empty h4 { margin: 13px 0 5px; color: var(--ink); font-size: 13px; }
+  .recipe-empty p { max-width: 420px; margin: 0 0 15px; color: var(--muted); font-size: 10.5px; line-height: 1.5; }
+  .recipe-empty .btn { min-height: 38px; display: inline-flex; align-items: center; gap: 7px; }
+  .recipe-pagination { margin-top: 14px; min-height: 50px; padding: 8px 10px 8px 14px; display: grid; grid-template-columns: minmax(130px,1fr) auto minmax(130px,1fr); gap: 12px; align-items: center; border: 1px solid var(--hair); border-radius: 13px; background: var(--panel-2); }
+  .recipe-pagination > div:first-child { display: flex; align-items: baseline; gap: 4px; color: var(--muted); font-size: 9.5px; }
+  .recipe-pagination > div:first-child b { color: var(--ink); font: 10px/1 'Roboto Mono',ui-monospace,monospace; }
+  .recipe-page-controls { display: flex; align-items: center; justify-content: center; gap: 4px; }
+  .recipe-page-arrow, .recipe-page-number { width: 30px; height: 30px; display: grid; place-items: center; border: 1px solid transparent; border-radius: 8px; color: var(--muted); background: transparent; font: inherit; font-size: 9.5px; }
+  .recipe-page-arrow:hover:not(:disabled), .recipe-page-number:hover { color: var(--ink); border-color: var(--hair); background: var(--control); }
+  .recipe-page-number.on { color: #fff; background: var(--blue); border-color: var(--blue); }
+  .recipe-page-arrow:disabled { opacity: .35; }
+  .recipe-page-gap { width: 20px; color: var(--faint); text-align: center; }
+  .recipe-per-page { justify-self: end; display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 9px; }
+  .recipe-per-page select { width: 48px; height: 30px; }
+  .recipe-check-overlay {
+    position: absolute; inset: 0; z-index: 24; padding: 24px; display: grid; place-items: center;
+    background: color-mix(in srgb,var(--card-solid) 72%,transparent);
+    -webkit-backdrop-filter: blur(3px) grayscale(.88) saturate(.38); backdrop-filter: blur(3px) grayscale(.88) saturate(.38);
+    animation: recipe-check-fade .16s ease-out both;
+  }
+  @keyframes recipe-check-fade { from { opacity: 0; } }
+  .recipe-check-card {
+    width: min(520px,100%); padding: 24px; overflow: hidden; border: 1px solid color-mix(in srgb,var(--blue) 28%,var(--line)); border-radius: 20px;
+    background: var(--card-solid); box-shadow: 0 34px 90px -38px rgba(0,0,0,.82), inset 0 1px 0 rgba(255,255,255,.35);
+  }
+  .recipe-check-card.error { border-color: color-mix(in srgb,var(--err) 42%,var(--line)); }
+  .recipe-check-head { display: flex; align-items: center; gap: 14px; }
+  .recipe-check-spinner { position: relative; width: 44px; height: 44px; flex: none; display: grid; place-items: center; border-radius: 14px; background: var(--blue-soft); }
+  .recipe-check-spinner::before { content: ""; width: 21px; height: 21px; border: 2px solid color-mix(in srgb,var(--blue) 22%,transparent); border-top-color: var(--blue); border-radius: 50%; animation: recipe-check-spin .78s linear infinite; }
+  @keyframes recipe-check-spin { to { transform: rotate(360deg); } }
+  .recipe-check-card.success .recipe-check-spinner::before, .recipe-check-card.error .recipe-check-spinner::before { display: none; }
+  .recipe-check-spinner .recipe-check-success, .recipe-check-spinner .recipe-check-failure { display: none; place-items: center; }
+  .recipe-check-spinner .ui-icon { width: 21px; height: 21px; }
+  .recipe-check-card.success .recipe-check-spinner { color: #24985a; background: color-mix(in srgb,#2faa5b 12%,transparent); }
+  .recipe-check-card.error .recipe-check-spinner { color: var(--err); background: color-mix(in srgb,var(--err) 10%,transparent); }
+  .recipe-check-card.success .recipe-check-success, .recipe-check-card.error .recipe-check-failure { display: grid; }
+  .recipe-check-copy { min-width: 0; }
+  .recipe-check-kicker { color: var(--blue); font: 8px/1.2 'Roboto Mono',ui-monospace,monospace; font-weight: 750; letter-spacing: .7px; text-transform: uppercase; }
+  .recipe-check-title { margin-top: 4px; overflow: hidden; color: var(--ink); font-size: 16px; font-weight: 790; text-overflow: ellipsis; white-space: nowrap; }
+  .recipe-check-sub { margin-top: 4px; color: var(--muted); font-size: 10px; line-height: 1.45; }
+  .recipe-check-progress { margin-top: 20px; padding: 14px; border: 1px solid var(--hair); border-radius: 13px; background: var(--panel-2); }
+  .recipe-check-progress-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+  .recipe-check-message { min-width: 0; color: var(--ink-2); font-size: 10.5px; line-height: 1.45; }
+  .recipe-check-percent { flex: none; color: var(--blue); font: 10px/1.4 'Roboto Mono',ui-monospace,monospace; font-weight: 750; }
+  .recipe-check-track { height: 6px; margin-top: 11px; overflow: hidden; border-radius: 999px; background: var(--track); }
+  .recipe-check-track i { display: block; width: 2%; height: 100%; border-radius: inherit; background: linear-gradient(90deg,var(--blue),color-mix(in srgb,var(--blue) 58%,white)); transition: width .3s ease; }
+  .recipe-check-steps { margin-top: 14px; display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 6px; }
+  .recipe-check-step { min-width: 0; padding: 9px 6px; display: grid; justify-items: center; gap: 6px; border: 1px solid var(--hair); border-radius: 10px; color: var(--faint); background: color-mix(in srgb,var(--panel-2) 58%,transparent); text-align: center; }
+  .recipe-check-step i { width: 19px; height: 19px; display: grid; place-items: center; border-radius: 50%; background: var(--control); font: 8px/1 'Roboto Mono',ui-monospace,monospace; font-style: normal; }
+  .recipe-check-step span { overflow: hidden; font-size: 8px; line-height: 1.3; text-overflow: ellipsis; }
+  .recipe-check-step.on { color: var(--blue); border-color: color-mix(in srgb,var(--blue) 32%,var(--hair)); background: var(--blue-soft); }
+  .recipe-check-step.on i { color: #fff; background: var(--blue); box-shadow: 0 0 0 4px color-mix(in srgb,var(--blue) 10%,transparent); }
+  .recipe-check-step.done { color: var(--ink-2); }
+  .recipe-check-step.done i { color: #fff; background: #2faa5b; }
+  .recipe-check-note { margin: 14px 2px 0; color: var(--faint); font-size: 9px; line-height: 1.45; text-align: center; }
+  .recipe-check-error { margin-top: 14px; padding: 11px 12px; border: 1px solid color-mix(in srgb,var(--err) 30%,var(--hair)); border-radius: 10px; color: var(--err); background: color-mix(in srgb,var(--err) 7%,transparent); font-size: 10px; line-height: 1.5; overflow-wrap: anywhere; }
+  .recipe-check-error.hidden { display: none; }
+  .recipe-check-dismiss { margin: 14px 0 0 auto; min-height: 38px; display: none; align-items: center; justify-content: center; }
+  .recipe-check-card.error .recipe-check-dismiss { display: flex; }
+  .key-dialog.recipe-import-dialog { width: min(820px, calc(100vw - 34px)); max-height: min(760px, calc(100vh - 34px)); overflow: hidden; }
+  .sparkrun-import-body { padding: 18px 20px 20px; overflow: auto; }
+  .sparkrun-import-fields { display: grid; gap: 12px; }
+  .sparkrun-import-fields textarea { min-height: 150px; resize: vertical; font: 10px/1.5 'Roboto Mono',ui-monospace,SFMono-Regular,Menlo,monospace; }
+  .sparkrun-import-or { display: flex; align-items: center; gap: 10px; color: var(--faint); font: 9px/1 'Roboto Mono',ui-monospace,monospace; text-transform: uppercase; letter-spacing: .6px; }
+  .sparkrun-import-or::before, .sparkrun-import-or::after { content: ""; height: 1px; flex: 1; background: var(--hair); }
+  .sparkrun-preview { margin-top: 14px; display: grid; gap: 10px; }
+  .sparkrun-preview-status { padding: 13px; display: flex; align-items: flex-start; gap: 10px; border: 1px solid color-mix(in srgb,#2faa5b 35%,var(--hair)); border-radius: 12px; background: color-mix(in srgb,#2faa5b 9%,var(--panel-2)); }
+  .sparkrun-preview-status.bad { border-color: color-mix(in srgb,var(--err) 40%,var(--hair)); background: color-mix(in srgb,var(--err) 8%,var(--panel-2)); }
+  .sparkrun-preview-status .ui-icon { width: 17px; height: 17px; flex: none; color: #2faa5b; }
+  .sparkrun-preview-status.bad .ui-icon { color: var(--err); }
+  .sparkrun-preview-status b, .sparkrun-preview-status span { display: block; }
+  .sparkrun-preview-status b { color: var(--ink); font-size: 11.5px; }
+  .sparkrun-preview-status span { margin-top: 3px; color: var(--muted); font-size: 10px; line-height: 1.45; }
+  .sparkrun-preview-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
+  .sparkrun-preview-fact { min-width: 0; padding: 11px; border: 1px solid var(--hair); border-radius: 10px; background: var(--panel-2); }
+  .sparkrun-preview-fact span, .sparkrun-preview-fact b { display: block; }
+  .sparkrun-preview-fact span { color: var(--faint); font: 8.5px/1.2 'Roboto Mono',ui-monospace,monospace; text-transform: uppercase; letter-spacing: .5px; }
+  .sparkrun-preview-fact b { margin-top: 5px; color: var(--ink); font-size: 10.5px; overflow-wrap: anywhere; }
+  .sparkrun-preview-list { margin: 0; padding: 11px 12px 11px 28px; border: 1px solid var(--hair); border-radius: 10px; color: var(--muted); background: var(--panel-2); font-size: 10px; line-height: 1.55; }
+  .sparkrun-import-actions { margin-top: 16px; display: flex; justify-content: flex-end; gap: 8px; }
+  .sparkrun-import-actions .btn { min-height: 40px; display: inline-flex; align-items: center; gap: 7px; }
   .key-dialog.recipe-builder-dialog { width: min(1080px, calc(100vw - 34px)); height: min(820px, calc(100vh - 34px)); max-height: none; overflow: hidden; }
   .key-dialog.recipe-builder-dialog #key-dialog-content { height: 100%; min-height: 0; }
   .recipe-builder-shell { height: 100%; min-height: 0; display: grid; grid-template-rows: auto minmax(0,1fr) auto; }
@@ -3072,9 +3191,24 @@
     .mm-bar { grid-template-columns: 1fr; gap: 12px; padding: 12px; }
     .mm-discovery { align-items: stretch; flex-direction: column; }
     .mm-hf-button { justify-content: center; }
-    .recipe-intro { grid-template-columns: 1fr; } .recipe-import { min-width: 0; width: 100%; }
-    .recipe-main { grid-template-columns: auto minmax(0, 1fr); } .recipe-side { grid-column: 1 / -1; min-width: 0; }
-    .recipe-toolbar { justify-content: stretch; flex-wrap: wrap; } .recipe-toolbar .btn { flex: 1; }
+    .recipe-intro { grid-template-columns: 1fr; padding: 14px; }
+    .recipe-intro-copy { align-items: flex-start; }
+    .recipe-toolbar { justify-content: stretch; flex-wrap: wrap; } .recipe-toolbar .btn { min-width: 0; flex: 1; }
+    .recipe-controls { grid-template-columns: 1fr; padding: 12px; }
+    .recipe-filter-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+    .recipe-results { height: auto; flex-direction: row; align-items: center; justify-content: space-between; }
+    .recipe-main { grid-template-columns: auto minmax(0, 1fr); padding: 14px; }
+    .recipe-side { grid-column: 1 / -1; min-width: 0; }
+    .recipe-specs { grid-template-columns: repeat(2,minmax(0,1fr)); }
+    .recipe-actions { grid-template-columns: repeat(2,minmax(0,1fr)); }
+    .recipe-pagination { grid-template-columns: 1fr auto; }
+    .recipe-pagination > div:first-child { grid-column: 1; grid-row: 1; }
+    .recipe-per-page { grid-column: 2; grid-row: 1; }
+    .recipe-page-controls { grid-column: 1 / -1; grid-row: 2; }
+    .recipe-check-overlay { padding: 10px; }
+    .recipe-check-card { padding: 18px 14px; border-radius: 16px; }
+    .recipe-check-steps { grid-template-columns: 1fr; }
+    .recipe-check-step { grid-template-columns: 22px minmax(0,1fr); justify-items: start; align-items: center; padding: 7px 9px; text-align: left; }
     .key-dialog.recipe-builder-dialog { width: calc(100vw - 18px); height: calc(100vh - 18px); }
     .recipe-builder-body { grid-template-columns: 1fr; grid-template-rows: auto minmax(0,1fr); }
     .recipe-builder-steps { padding: 8px 10px; flex-direction: row; border-right: 0; border-bottom: 1px solid var(--hair); overflow-x: auto; }
@@ -5145,7 +5279,7 @@ function closeKeyDialog() {
   if (layer.classList.contains('hidden')) return;
   layer.classList.add('hidden');
   document.getElementById('key-dialog-content').innerHTML = '';
-  document.getElementById('key-dialog').classList.remove('recipe-builder-dialog');
+  document.getElementById('key-dialog').classList.remove('recipe-builder-dialog', 'recipe-import-dialog');
   let focusTarget = keyDialogReturnFocus;
   if ((!focusTarget || !document.contains(focusTarget)) && keyDialogReturnFocusID) focusTarget = document.getElementById(keyDialogReturnFocusID);
   if (focusTarget && document.contains(focusTarget)) focusTarget.focus();
@@ -6091,6 +6225,8 @@ function openModelUninstallDialog(m, modelType = 'lm') {
 /* ---- Model Manager (standalone, opened from the dashboard) ---- */
 let mmTab = 'language', mmDetail = null, mmLM = null, mmDiff = null, mmRecipes = null, mmCustomPrefill = '', mmSort = 'recommended', mmHF = false, mmHFQuery = '', mmHFAccount = null;
 let mmFilter = { q: '', fits: false, cluster: false, vision: false, tools: false, downloaded: false };
+let mmRecipeView = { q: '', source: 'all', sparks: 'all', status: 'all', sort: 'updated', page: 1, perPage: 6 };
+let activeRecipeCheck = null;
 const mmCache = {};
 function modelsOpen() { return !document.getElementById('models').classList.contains('hidden'); }
 // True when a full-screen overlay covers the dashboard. Used to pause the WebGL
@@ -6118,7 +6254,11 @@ async function openModelManagerFor(id) {
   mmCustomPrefill = ''; mmHF = true; mmHFQuery = id;
   renderModelManager();
 }
-function closeModelManager() { mmCustomPrefill = ''; mmHF = false; document.getElementById('models').classList.add('hidden'); }
+function closeModelManager() {
+  if (activeRecipeCheck && !activeRecipeCheck.terminal) return;
+  if (activeRecipeCheck) closeRecipeCheckOverlay();
+  mmCustomPrefill = ''; mmHF = false; document.getElementById('models').classList.add('hidden');
+}
 function openModelDetail(type, id) { mmDetail = { type, id }; renderModelManager(); }
 function modelMatches(m, lm) {
   const f = mmFilter;
@@ -6178,13 +6318,117 @@ async function renderLocalRecipes(c) {
   if (mmTab === 'recipes' && !mmDetail && document.body.contains(c)) paintLocalRecipes(c, data);
 }
 function recipeJob(data, id) {
-  return (data.jobs || []).find(job => !job.done && (job.appId === `recipe:${id}` || job.appId === `recipe:${id}:stop`));
+  return (data.jobs || []).find(job => !job.done && (job.appId === `recipe:${id}` || job.appId === `recipe:${id}:check` || job.appId === `recipe:${id}:stop`));
 }
 function recipeProgressHTML(job) {
   if (!job) return '';
   const total = Number(job.layersTotal) || 0, done = Number(job.layersDone) || 0;
   const pct = total ? Math.max(2, Math.min(100, Math.round(done / total * 100))) : 8;
   return `<div class="recipe-progress"><div class="recipe-progress-row"><span>${escapeHtml(job.message || 'Working...')}</span><b>${total ? pct + '%' : 'Active'}</b></div><div class="track"><i style="width:${pct}%"></i></div></div>`;
+}
+function recipeReady(recipe, data) {
+  const nodes = Number(recipe.distributed && recipe.distributed.nodes || 1), cluster = data.cluster || {};
+  return nodes === 1 || (!!cluster.distributedReady && Number(cluster.nodes) === nodes);
+}
+function recipeConnectedSparks(data) {
+  return Math.max(1, Number(data.cluster && data.cluster.nodes || 0));
+}
+function recipeNeedsMoreSparks(recipe, data) {
+  return Number(recipe.distributed && recipe.distributed.nodes || 1) > recipeConnectedSparks(data);
+}
+function recipeSparkFilterOptions(recipes, data) {
+  const connected = recipeConnectedSparks(data);
+  const counts = [...new Set(recipes.map(recipe => Number(recipe.distributed && recipe.distributed.nodes || 1)).concat(connected))].filter(count => count > 0).sort((a,b) => a-b);
+  return [['all','Any number']].concat(counts.map(count => [String(count), count + ' DGX Spark' + (count === 1 ? '' : 's') + (count === connected ? ' · connected' : '')]));
+}
+function recipeSourceKind(recipe) {
+  if (recipe.runtime && recipe.runtime.sparkRun) return 'sparkrun';
+  return recipe.origin === 'github' ? 'github' : 'local';
+}
+function recipeMatchesView(recipe, data) {
+  const view = mmRecipeView, nodes = Number(recipe.distributed && recipe.distributed.nodes || 1);
+  const active = data.active === recipe.id, job = recipeJob(data, recipe.id), ready = recipeReady(recipe, data);
+  if (view.source !== 'all' && recipeSourceKind(recipe) !== view.source) return false;
+  if (view.sparks !== 'all' && nodes !== Number(view.sparks)) return false;
+  if (view.status === 'active' && !active && !job) return false;
+  if (view.status === 'ready' && (!ready || active || job)) return false;
+  if (view.status === 'attention' && ready) return false;
+  if (view.q) {
+    const sparkRun = recipe.runtime && recipe.runtime.sparkRun;
+    const haystack = [recipe.name, recipe.description, recipe.origin, recipe.trust, recipe.platform,
+      recipe.engine && recipe.engine.type, recipe.engine && recipe.engine.image,
+      recipe.model && recipe.model.id, recipe.source && recipe.source.url,
+      sparkRun && sparkRun.providerVersion, sparkRun && sparkRun.originalRuntime]
+      .filter(Boolean).join(' ').toLowerCase();
+    if (!haystack.includes(view.q.toLowerCase())) return false;
+  }
+  return true;
+}
+function recipeSortView(recipes) {
+  const result = recipes.slice();
+  result.sort((a, b) => {
+    if (mmRecipeView.sort === 'name') return String(a.name || '').localeCompare(String(b.name || ''));
+    if (mmRecipeView.sort === 'nodes') return Number(b.distributed && b.distributed.nodes || 1) - Number(a.distributed && a.distributed.nodes || 1) || String(a.name || '').localeCompare(String(b.name || ''));
+    if (mmRecipeView.sort === 'context') return Number(b.model && b.model.maxContext || 0) - Number(a.model && a.model.maxContext || 0) || String(a.name || '').localeCompare(String(b.name || ''));
+    return (Date.parse(b.updatedAt || b.importedAt || '') || 0) - (Date.parse(a.updatedAt || a.importedAt || '') || 0) || String(a.name || '').localeCompare(String(b.name || ''));
+  });
+  return result;
+}
+function recipeUpdatedLabel(recipe) {
+  const value = new Date(recipe.updatedAt || recipe.importedAt || '');
+  if (Number.isNaN(value.getTime())) return 'Saved locally';
+  return 'Updated ' + new Intl.DateTimeFormat(undefined, {day:'numeric', month:'short', year:'numeric'}).format(value);
+}
+function recipePageButtons(current, total) {
+  const pages = [...new Set([1, total, current - 1, current, current + 1].filter(page => page >= 1 && page <= total))].sort((a,b) => a-b);
+  let previous = 0;
+  return pages.map(page => {
+    const gap = previous && page - previous > 1 ? '<span class="recipe-page-gap" aria-hidden="true">&hellip;</span>' : '';
+    previous = page;
+    return gap + '<button class="recipe-page-number' + (page === current ? ' on' : '') + '" type="button" data-recipe-page="' + page + '" aria-label="Page ' + page + '" aria-current="' + (page === current ? 'page' : 'false') + '">' + page + '</button>';
+  }).join('');
+}
+function recipeCheckStepIndex(phase) {
+  return ({pending:0,'checking-cluster':0,'checking-topology':1,'checking-provider':2,'checking-runtime':3,validating:4,validated:5,running:5})[phase] ?? 0;
+}
+function openRecipeCheckOverlay(recipe, trigger) {
+  closeRecipeCheckOverlay();
+  const manager = document.querySelector('#models .mm'); if (!manager) return;
+  manager.insertAdjacentHTML('beforeend','<div class="recipe-check-overlay" role="dialog" aria-modal="true" aria-labelledby="recipe-check-title"><section class="recipe-check-card"><div class="recipe-check-head"><span class="recipe-check-spinner"><span class="recipe-check-success">' + uiIcon('check') + '</span><span class="recipe-check-failure">' + uiIcon('warning') + '</span></span><div class="recipe-check-copy"><div class="recipe-check-kicker">Recipe verification</div><div class="recipe-check-title" id="recipe-check-title">Checking ' + escapeHtml(recipe.name || 'recipe') + '</div><div class="recipe-check-sub">Cloudless is validating this recipe without launching or downloading the model.</div></div></div><div class="recipe-check-progress" aria-live="polite"><div class="recipe-check-progress-row"><span class="recipe-check-message">Starting the recipe check…</span><span class="recipe-check-percent">0%</span></div><div class="recipe-check-track" role="progressbar" aria-label="Recipe check progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i></i></div></div><div class="recipe-check-steps"><div class="recipe-check-step on"><i>1</i><span>Cluster</span></div><div class="recipe-check-step"><i>2</i><span>Topology</span></div><div class="recipe-check-step"><i>3</i><span>Provider</span></div><div class="recipe-check-step"><i>4</i><span>Environment</span></div><div class="recipe-check-step"><i>5</i><span>Dry run</span></div></div><div class="recipe-check-error hidden"></div><p class="recipe-check-note">This is a read-only check. The active model and running services are not changed.</p><button class="btn recipe-check-dismiss" type="button">Return to recipes</button></section></div>');
+  const root = manager.querySelector('.recipe-check-overlay');
+  activeRecipeCheck = {id:recipe.id, name:recipe.name || 'Recipe', root, trigger, terminal:false};
+  root.querySelector('.recipe-check-dismiss').onclick = closeRecipeCheckOverlay;
+}
+function updateRecipeCheckOverlay(update) {
+  if (!activeRecipeCheck || !activeRecipeCheck.root) return;
+  const root = activeRecipeCheck.root, total = Number(update.layersTotal) || 0, done = Number(update.layersDone) || 0;
+  const pct = total ? Math.max(0, Math.min(100, Math.round(done / total * 100))) : 0;
+  const step = recipeCheckStepIndex(update.phase);
+  root.querySelector('.recipe-check-message').textContent = update.message || 'Checking recipe…';
+  root.querySelector('.recipe-check-percent').textContent = total ? pct + '%' : 'Working';
+  const track = root.querySelector('.recipe-check-track'); track.setAttribute('aria-valuenow', String(pct)); track.querySelector('i').style.width = Math.max(2,pct) + '%';
+  root.querySelectorAll('.recipe-check-step').forEach((item,index) => { item.classList.toggle('done', step >= 5 || index < step); item.classList.toggle('on', step < 5 && index === step); });
+}
+function closeRecipeCheckOverlay() {
+  if (!activeRecipeCheck) return;
+  activeRecipeCheck.root?.remove();
+  if (activeRecipeCheck.trigger && document.body.contains(activeRecipeCheck.trigger)) activeRecipeCheck.trigger.disabled = false;
+  activeRecipeCheck = null;
+}
+function finishRecipeCheckOverlay(ok, message) {
+  if (!activeRecipeCheck || !activeRecipeCheck.root) return;
+  const check = activeRecipeCheck, card = check.root.querySelector('.recipe-check-card'); check.terminal = true;
+  card.classList.add(ok ? 'success' : 'error');
+  check.root.querySelector('.recipe-check-title').textContent = ok ? 'Recipe check passed' : 'Recipe check failed';
+  check.root.querySelector('.recipe-check-message').textContent = ok ? 'The recipe is compatible with the selected hardware and cluster.' : 'Cloudless could not validate this recipe.';
+  if (ok) {
+    check.root.querySelector('.recipe-check-percent').textContent = '100%';
+    const track=check.root.querySelector('.recipe-check-track');track.setAttribute('aria-valuenow','100');track.querySelector('i').style.width='100%';
+    check.root.querySelectorAll('.recipe-check-step').forEach(item=>{item.classList.add('done');item.classList.remove('on');});
+    window.setTimeout(()=>{if(activeRecipeCheck===check){closeRecipeCheckOverlay();toast('Recipe check passed');}},850);
+  } else {
+    const error=check.root.querySelector('.recipe-check-error');error.textContent=message||'The recipe check failed.';error.classList.remove('hidden');
+  }
 }
 let recipeBuilder = null;
 const RECIPE_BUILDER_STEPS = [
@@ -6218,11 +6462,11 @@ function recipeParseMap(value, label) {
   return result;
 }
 function recipeField(id, label, value, options) {
-  const opts = options || {}, full = opts.full ? ' full' : '', hint = opts.hint ? '<small>' + escapeHtml(opts.hint) + '</small>' : '';
+  const opts = options || {}, full = opts.full ? ' full' : '', hint = opts.hint ? '<small>' + escapeHtml(opts.hint) + '</small>' : '', locked = opts.readonly ? ' readonly' : (opts.disabled ? ' disabled' : '');
   let control;
-  if (opts.type === 'textarea') control = '<textarea class="key-dialog-input ' + (opts.tall ? 'tall' : '') + '" id="' + id + '" placeholder="' + escapeAttr(opts.placeholder || '') + '">' + escapeHtml(value || '') + '</textarea>';
-  else if (opts.type === 'select') control = '<select class="key-dialog-input" id="' + id + '">' + opts.choices.map(choice => '<option value="' + escapeAttr(choice[0]) + '"' + (String(value) === String(choice[0]) ? ' selected' : '') + '>' + escapeHtml(choice[1]) + '</option>').join('') + '</select>';
-  else control = '<input class="key-dialog-input" id="' + id + '" type="' + (opts.type || 'text') + '" value="' + escapeAttr(value === undefined ? '' : String(value)) + '"' + (opts.min !== undefined ? ' min="' + opts.min + '"' : '') + (opts.max !== undefined ? ' max="' + opts.max + '"' : '') + (opts.step !== undefined ? ' step="' + opts.step + '"' : '') + ' placeholder="' + escapeAttr(opts.placeholder || '') + '">';
+  if (opts.type === 'textarea') control = '<textarea class="key-dialog-input ' + (opts.tall ? 'tall' : '') + '" id="' + id + '" placeholder="' + escapeAttr(opts.placeholder || '') + '"' + locked + '>' + escapeHtml(value || '') + '</textarea>';
+  else if (opts.type === 'select') control = '<select class="key-dialog-input" id="' + id + '"' + locked + '>' + opts.choices.map(choice => '<option value="' + escapeAttr(choice[0]) + '"' + (String(value) === String(choice[0]) ? ' selected' : '') + '>' + escapeHtml(choice[1]) + '</option>').join('') + '</select>';
+  else control = '<input class="key-dialog-input" id="' + id + '" type="' + (opts.type || 'text') + '" value="' + escapeAttr(value === undefined ? '' : String(value)) + '"' + (opts.min !== undefined ? ' min="' + opts.min + '"' : '') + (opts.max !== undefined ? ' max="' + opts.max + '"' : '') + (opts.step !== undefined ? ' step="' + opts.step + '"' : '') + ' placeholder="' + escapeAttr(opts.placeholder || '') + '"' + locked + '>';
   return '<div class="recipe-builder-field' + full + '"><label for="' + id + '"><span>' + escapeHtml(label) + '</span>' + hint + '</label>' + control + (opts.help ? '<div class="key-dialog-help">' + escapeHtml(opts.help) + '</div>' : '') + '</div>';
 }
 function recipeSection(title, subtitle, body) {
@@ -6298,15 +6542,19 @@ function recipeBuilderContent() {
     '<div class="recipe-builder-note">' + uiIcon('info') + '<span>Use auto for the interface and HCA when Cloudless should select the connected cluster fabric. Exact values are useful for advanced multi-network systems.</span></div>');
   if (step === 5) return recipePage('Runtime and lifecycle', 'Define exactly how Cloudless prepares, starts and stops this recipe.',
     recipeSection('Runtime behavior', 'The source-scripts adapter runs each program directly without adding shell interpretation.', '<div class="recipe-builder-fields cols-3">' +
-      recipeField('rb-runtime-adapter','Runtime adapter',d.runtime.adapter,{placeholder:'source-scripts-v1 or your adapter label'}) +
+      recipeField('rb-runtime-adapter','Runtime adapter',d.runtime.adapter,{placeholder:'source-scripts-v1 or your adapter label',readonly:!!d.runtime.sparkRun}) +
       recipeField('rb-runtime-dir','Working directory',d.runtime.workingDir,{placeholder:'.'}) +
       recipeField('rb-runtime-timeout','Overall timeout (minutes)',d.runtime.timeoutMinutes,{type:'number',min:1,max:10080}) +
       recipeField('rb-runtime-prereq','Required programs',recipeLines(d.runtime.prerequisites),{type:'textarea',full:true,placeholder:'git\nbash\ndocker',help:'One executable name per line.'}) +
       recipeField('rb-runtime-env','Environment variables',recipeMapLines(d.runtime.environment),{type:'textarea',full:true,tall:true,placeholder:'HF_TOKEN=...\nCUSTOM_SETTING=value',help:'One KEY=value entry per line. These override generated engine values.'}) + '</div>') +
-    recipeCommandFields('build','Build step',d.runtime.lifecycle.build) +
-    recipeCommandFields('download','Download / prepare model step',d.runtime.lifecycle.download) +
-    recipeCommandFields('start','Start inference step',d.runtime.lifecycle.start) +
-    recipeCommandFields('stop','Stop inference step',d.runtime.lifecycle.stop) +
+    (d.runtime.sparkRun ? recipeSection('SparkRun compatibility source', 'Cloudless owns the lifecycle. This original command template is preserved for traceability and rendered per node.', '<div class="recipe-builder-fields">' +
+      recipeField('rb-sparkrun-runtime','Original runtime',d.runtime.sparkRun.originalRuntime,{readonly:true}) +
+      recipeField('rb-sparkrun-digest','YAML SHA-256',d.runtime.sparkRun.sourceDigest,{readonly:true}) +
+      recipeField('rb-sparkrun-command','Original command template',d.runtime.sparkRun.commandTemplate,{type:'textarea',full:true,tall:true,readonly:true}) + '</div>') :
+      recipeCommandFields('build','Build step',d.runtime.lifecycle.build) +
+      recipeCommandFields('download','Download / prepare model step',d.runtime.lifecycle.download) +
+      recipeCommandFields('start','Start inference step',d.runtime.lifecycle.start) +
+      recipeCommandFields('stop','Stop inference step',d.runtime.lifecycle.stop)) +
     '<div class="recipe-builder-note warn">' + uiIcon('warning') + '<span>Lifecycle commands run with Cloudless service permissions. Review commands and repositories before saving or running a recipe.</span></div>');
   if (step === 6) return recipePage('Health and API connection', 'Tell Cloudless how to verify readiness and where the engine listens.',
     recipeSection('Readiness probe', 'The recipe is only marked ready after this endpoint responds.', '<div class="recipe-builder-fields cols-3">' +
@@ -6327,7 +6575,7 @@ function recipeBuilderContent() {
       '<div class="recipe-review-card"><span>Context</span><b>' + Number(d.model.maxContext).toLocaleString() + ' tokens</b></div>' +
       '<div class="recipe-review-card"><span>Memory target</span><b>' + Math.round(Number(d.model.gpuMemoryUtilization) * 100) + '%</b></div>' +
       '<div class="recipe-review-card wide"><span>Source</span><b>' + escapeHtml(sourceLabel) + '</b></div>' +
-      '<div class="recipe-review-card"><span>Start command</span><b>' + escapeHtml(d.runtime.lifecycle.start.program + ' ' + (d.runtime.lifecycle.start.args || []).join(' ')) + '</b></div>' +
+      '<div class="recipe-review-card"><span>Start command</span><b>' + escapeHtml(d.runtime.sparkRun ? d.runtime.sparkRun.commandTemplate : d.runtime.lifecycle.start.program + ' ' + (d.runtime.lifecycle.start.args || []).join(' ')) + '</b></div>' +
       '<div class="recipe-review-card"><span>Health check</span><b>' + escapeHtml(d.health.scheme + '://' + d.health.host + ':' + d.health.port + d.health.path) + '</b></div>' +
     '</div><div class="recipe-builder-note warn">' + uiIcon('warning') + '<span>This is a user-authored execution recipe. Cloudless validates its structure, but you are choosing the commands, source and runtime permissions.</span></div>');
 }
@@ -6359,7 +6607,7 @@ function recipePersistPage() {
       d.runtime.adapter = recipeRead('rb-runtime-adapter'); d.runtime.workingDir = recipeRead('rb-runtime-dir'); d.runtime.timeoutMinutes = recipeNumber('rb-runtime-timeout');
       d.runtime.prerequisites = recipeParseLines(recipeRead('rb-runtime-prereq')); d.runtime.environment = recipeParseMap(recipeRead('rb-runtime-env'),'Environment variables');
       ['build','download','start','stop'].forEach(name => { d.runtime.lifecycle[name] = {program:recipeRead('rb-' + name + '-program'),args:recipeParseLines(recipeRead('rb-' + name + '-args'))}; });
-      if (!d.runtime.lifecycle.start.program) throw new Error('A start command is required.');
+      if (!d.runtime.lifecycle.start.program && !d.runtime.sparkRun) throw new Error('A start command is required.');
     } else if (step === 6) {
       d.health.scheme = recipeRead('rb-health-scheme'); d.health.host = recipeRead('rb-health-host'); d.health.port = recipeNumber('rb-health-port');
       d.health.path = recipeRead('rb-health-path'); d.health.timeoutSeconds = recipeNumber('rb-health-timeout'); d.health.intervalSeconds = recipeNumber('rb-health-interval');
@@ -6391,69 +6639,150 @@ function renderRecipeBuilderDialog() {
   });
 }
 function recipeCard(recipe, data) {
-  const cluster = data.cluster || {}, active = data.active === recipe.id, job = recipeJob(data, recipe.id), nodes = Number(recipe.distributed && recipe.distributed.nodes || 1);
-  const ready = nodes === 1 || (cluster.distributedReady && Number(cluster.nodes) === nodes);
+  const active = data.active === recipe.id, job = recipeJob(data, recipe.id), nodes = Number(recipe.distributed && recipe.distributed.nodes || 1);
+  const ready = recipeReady(recipe, data), connected = recipeConnectedSparks(data), needsMoreSparks = recipeNeedsMoreSparks(recipe, data);
   const action = active
-    ? '<button class="btn danger" type="button" data-recipe-stop="' + escapeAttr(recipe.id) + '"' + (job ? ' disabled' : '') + '>' + uiIcon('stop') + '<span>Stop recipe</span></button>'
-    : '<button class="btn primary" type="button" data-recipe-run="' + escapeAttr(recipe.id) + '"' + (!ready || job ? ' disabled' : '') + '>' + uiIcon('rocket') + '<span>' + (job ? 'Preparing…' : 'Run recipe') + '</span></button>';
-  const engine = recipe.engine || {}, model = recipe.model || {}, source = recipe.source || {};
-  return '<article class="recipe-card" data-recipe-id="' + escapeAttr(recipe.id) + '"><div class="recipe-main"><span class="recipe-icon">' + uiIcon('recipes') + '</span><div class="recipe-copy">' +
-    '<div class="recipe-title-row"><span class="recipe-title">' + escapeHtml(recipe.name) + '</span><span class="recipe-trust">' + (active ? 'Running' : 'Custom recipe') + '</span></div>' +
-    '<div class="recipe-desc">' + escapeHtml(recipe.description || '') + '</div><div class="recipe-facts"><span class="recipe-fact">' + escapeHtml(engine.type || 'custom') + '</span><span class="recipe-fact">' + nodes + ' node' + (nodes === 1 ? '' : 's') + '</span><span class="recipe-fact">TP ' + Number(model.tensorParallel || 1) + '</span><span class="recipe-fact">' + Number(model.maxContext || 0).toLocaleString() + ' context</span><span class="recipe-fact">' + Math.round(Number(model.gpuMemoryUtilization || 0) * 100) + '% memory</span></div>' +
-    (source.url ? '<button class="lnk recipe-source" type="button" data-recipe-source="' + escapeAttr(source.url) + '">' + escapeHtml(source.url + ' @ ' + source.revision) + '</button>' : '<div class="recipe-source">Local commands · no repository</div>') +
-    (ready ? '' : '<div class="recipe-warning">Connect exactly ' + nodes + ' healthy nodes before running this recipe.</div>') +
-    '</div><div class="recipe-side"><div class="recipe-actions">' + action + '<button class="btn" type="button" data-recipe-edit="' + escapeAttr(recipe.id) + '"' + (active || job ? ' disabled' : '') + '>' + uiIcon('settings') + '<span>Edit all</span></button><button class="btn" type="button" data-recipe-delete="' + escapeAttr(recipe.id) + '"' + (active || job ? ' disabled' : '') + '>Remove</button></div></div></div>' + recipeProgressHTML(job) + '</article>';
+    ? '<button class="btn danger recipe-primary-action" type="button" data-recipe-stop="' + escapeAttr(recipe.id) + '"' + (job ? ' disabled' : '') + '>' + uiIcon('stop') + '<span>Stop recipe</span></button>'
+    : job ? '<button class="btn danger recipe-primary-action" type="button" data-recipe-abort="' + escapeAttr(recipe.id) + '">' + uiIcon('stop') + '<span>Abort</span></button>'
+    : '<button class="btn primary recipe-primary-action" type="button" data-recipe-run="' + escapeAttr(recipe.id) + '"' + (!ready ? ' disabled' : '') + '>' + uiIcon('rocket') + '<span>Run recipe</span></button>';
+  const engine = recipe.engine || {}, model = recipe.model || {}, source = recipe.source || {}, sparkRun = recipe.runtime && recipe.runtime.sparkRun;
+  const state = active ? 'Running' : job ? 'Working' : ready ? 'Ready' : needsMoreSparks ? 'Needs ' + nodes + ' Sparks' : 'Needs attention';
+  const sourceLabel = sparkRun ? 'SparkRun ' + escapeHtml(sparkRun.providerVersion || '') : recipe.origin === 'github' ? 'GitHub import' : 'Local recipe';
+  return '<article class="recipe-card' + (active || job ? ' is-active' : !ready ? ' needs-attention' : '') + (needsMoreSparks ? ' insufficient-cluster' : '') + '" data-recipe-id="' + escapeAttr(recipe.id) + '"><div class="recipe-main"><span class="recipe-icon">' + uiIcon('recipes') + '</span><div class="recipe-copy">' +
+    '<div class="recipe-eyebrow"><span>' + sourceLabel + '</span><span>' + escapeHtml(recipeUpdatedLabel(recipe)) + '</span></div>' +
+    '<div class="recipe-title-row"><span class="recipe-title">' + escapeHtml(recipe.name) + '</span><span class="recipe-state ' + (active || job ? 'active' : ready ? 'ready' : 'attention') + '">' + state + '</span></div>' +
+    '<div class="recipe-desc">' + escapeHtml(recipe.description || 'No description has been added yet.') + '</div><div class="recipe-specs"><div><span>Model</span><b>' + escapeHtml(model.id || 'Not specified') + '</b></div><div><span>Runtime</span><b>' + escapeHtml(sparkRun && sparkRun.originalRuntime || engine.type || 'Custom') + '</b></div><div><span>Topology</span><b>' + nodes + ' node' + (nodes === 1 ? '' : 's') + ' · TP ' + Number(model.tensorParallel || 1) + '</b></div><div><span>Context</span><b>' + Number(model.maxContext || 0).toLocaleString() + ' tokens</b></div></div>' +
+    (sparkRun ? '<button class="lnk recipe-source" type="button" data-recipe-source="sparkrun">Executed by pinned SparkRun ' + escapeHtml(sparkRun.providerVersion || '') + ' · source ' + escapeHtml(String(sparkRun.sourceDigest || '').slice(0,12)) + '</button>' : (source.url ? '<button class="lnk recipe-source" type="button" data-recipe-source="' + escapeAttr(source.url) + '">' + escapeHtml(source.url + ' @ ' + source.revision) + '</button>' : '<div class="recipe-source">Local commands · no repository</div>')) +
+    (ready ? '' : '<div class="recipe-warning">' + (needsMoreSparks ? 'Requires ' + nodes + ' DGX Sparks. ' + connected + (connected === 1 ? ' is' : ' are') + ' connected.' : 'This recipe needs exactly ' + nodes + ' healthy DGX Spark' + (nodes === 1 ? '' : 's') + ' before it can run.') + '</div>') +
+    '</div><div class="recipe-side"><div class="recipe-actions">' + action + (sparkRun ? '<button class="btn" type="button" data-recipe-check="' + escapeAttr(recipe.id) + '"' + (active || job || !ready ? ' disabled' : '') + '>' + uiIcon('search') + '<span>Check</span></button>' : '<button class="btn" type="button" data-recipe-edit="' + escapeAttr(recipe.id) + '"' + (active || job ? ' disabled' : '') + '>' + uiIcon('settings') + '<span>Edit</span></button>') + '<button class="btn recipe-remove" type="button" data-recipe-delete="' + escapeAttr(recipe.id) + '"' + (active || job ? ' disabled' : '') + '>' + uiIcon('trash') + '<span>Remove</span></button></div></div></div>' + recipeProgressHTML(job) + '</article>';
 }
 function recipeGitHubURL(value) {
   let path = String(value || '').trim().replace(/^(?:https?:\/\/)?(?:www\.)?github\.com\//i, '');
   path = path.replace(/^\/+|\/+$/g, '').replace(/\.git$/i, '');
   return /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(path) ? `https://github.com/${path}` : '';
 }
+function recipeImportRequest(sourceValue, yamlValue) {
+  const source = String(sourceValue || '').trim(), yaml = String(yamlValue || '').trim();
+  if (yaml) return {kind:'sparkrun', body:{yaml, sourceUrl:/^https:\/\//i.test(source) ? source : ''}};
+  const repository = recipeGitHubURL(source);
+  if (repository) return {kind:'cloudless', body:{sourceUrl:repository}};
+  return {kind:'sparkrun', body:{sourceUrl:source}};
+}
+function cloudlessImportPreviewHTML(preview) {
+  const recipe = preview.recipe || {}, engine = recipe.engine || {}, model = recipe.model || {}, dist = recipe.distributed || {};
+  return '<div class="sparkrun-preview-status">' + uiIcon('check') + '<div><b>Reviewed Cloudless recipe</b><span>This GitHub repository has a Cloudless import profile. You can review and edit every setting before running it.</span></div></div>' +
+    '<div class="sparkrun-preview-grid"><div class="sparkrun-preview-fact"><span>Format</span><b>Cloudless profile</b></div><div class="sparkrun-preview-fact"><span>Nodes</span><b>' + Number(dist.nodes || 1) + '</b></div><div class="sparkrun-preview-fact"><span>Model</span><b>' + escapeHtml(model.id || 'Unknown') + '</b></div><div class="sparkrun-preview-fact"><span>Engine</span><b>' + escapeHtml(engine.type || 'Custom') + '</b></div></div>';
+}
+function sparkRunPreviewHTML(preview) {
+  const d = preview.draft || {}, engine = d.engine || {}, model = d.model || {}, dist = d.distributed || {};
+  const compatible = !!preview.compatible;
+  const details = compatible ? 'The pinned SparkRun provider validated the original recipe without translating or dropping fields.' : (preview.providerMessage || 'The pinned SparkRun provider rejected this recipe.');
+  const notices = compatible ? [].concat(preview.risks || [], preview.warnings || []) : (preview.unsupported || []);
+  return '<div class="sparkrun-preview-status' + (compatible ? '' : ' bad') + '">' + uiIcon(compatible ? 'check' : 'warning') + '<div><b>' + (compatible ? 'Compatible with Cloudless' : 'Not compatible yet') + '</b><span>' + escapeHtml(details) + '</span></div></div>' +
+    '<div class="sparkrun-preview-grid"><div class="sparkrun-preview-fact"><span>Provider</span><b>SparkRun ' + escapeHtml(preview.provider || 'Unavailable') + '</b></div><div class="sparkrun-preview-fact"><span>Nodes</span><b>' + Number(dist.nodes || 1) + '</b></div><div class="sparkrun-preview-fact"><span>Model</span><b>' + escapeHtml(model.id || 'Unknown') + '</b></div><div class="sparkrun-preview-fact"><span>Container</span><b>' + escapeHtml(engine.image || 'Unknown') + '</b></div></div>' +
+    (notices.length ? '<ul class="sparkrun-preview-list">' + notices.map(item => '<li>' + escapeHtml(item) + '</li>').join('') + '</ul>' : '');
+}
+function openRecipeImport() {
+  keyDialogBusy = false; keyDialogReturnFocus = document.activeElement;
+  const dialog = document.getElementById('key-dialog'), layer = document.getElementById('key-dialog-layer'), content = document.getElementById('key-dialog-content');
+  dialog.classList.add('recipe-import-dialog');
+  content.innerHTML = '<div class="key-dialog-head"><span class="key-dialog-icon">' + uiIcon('recipes') + '</span><div class="key-dialog-heading"><div class="key-dialog-title" id="key-dialog-title">Import a recipe</div><div class="key-dialog-sub">One place for GitHub repositories, SparkRun registries, recipe links, and YAML.</div></div><button class="key-dialog-close" id="recipe-import-close" type="button" aria-label="Close">' + uiIcon('close') + '</button></div><div class="sparkrun-import-body"><div class="sparkrun-import-fields">' +
+    recipeField('recipe-import-source','Recipe source','',{full:true,placeholder:'owner/repository, @official/recipe-name, or https://…',help:'Use a GitHub owner/repository, SparkRun registry reference, Spark Arena reference, GitHub YAML link, or public HTTPS recipe URL.'}) +
+    '<div class="sparkrun-import-or">or paste SparkRun YAML</div>' + recipeField('recipe-import-yaml','Recipe YAML','',{type:'textarea',full:true,placeholder:'model: organization/model\nruntime: vllm\ncontainer: …',help:'When YAML is provided it becomes the recipe source; an optional HTTPS address above is retained as provenance.'}) + '</div><div class="key-dialog-error" id="recipe-import-error" role="alert"></div><div class="sparkrun-preview" id="recipe-import-preview"></div><div class="sparkrun-import-actions"><button class="btn" id="recipe-import-cancel" type="button">Cancel</button><button class="btn" id="recipe-import-preview-button" type="button">' + uiIcon('search') + '<span>Preview recipe</span></button><button class="btn primary" id="recipe-import-confirm" type="button" disabled>' + uiIcon('download') + '<span>Import recipe</span></button></div></div>';
+  layer.classList.remove('hidden');
+  document.getElementById('recipe-import-close').onclick = closeKeyDialog; document.getElementById('recipe-import-cancel').onclick = closeKeyDialog;
+  const source = document.getElementById('recipe-import-source'), yaml = document.getElementById('recipe-import-yaml'), error = document.getElementById('recipe-import-error'), previewHost = document.getElementById('recipe-import-preview'), check = document.getElementById('recipe-import-preview-button'), confirm = document.getElementById('recipe-import-confirm');
+  let request = null;
+  const reset = () => { request = null; confirm.disabled = true; previewHost.innerHTML = ''; error.textContent = ''; };
+  source.oninput = reset; yaml.oninput = reset;
+  check.onclick = async () => {
+    const next = recipeImportRequest(source.value, yaml.value); if (!next.body.yaml && !next.body.sourceUrl) { error.textContent = 'Enter a recipe source or paste SparkRun YAML.'; return; }
+    check.disabled = true; check.innerHTML = '<span class="key-dialog-spinner"></span><span>Checking…</span>'; error.textContent = '';
+    const endpoint = next.kind === 'cloudless' ? '/api/recipes/import/preview' : '/api/recipes/sparkrun/preview';
+    const result = await api(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(next.body)}).catch(()=>({error:'Cloudless could not inspect this recipe.'}));
+    check.disabled = false; check.innerHTML = uiIcon('search') + '<span>Preview recipe</span>';
+    if (result.error) { error.textContent = result.error; return; }
+    request = next; previewHost.innerHTML = next.kind === 'cloudless' ? cloudlessImportPreviewHTML(result) : sparkRunPreviewHTML(result); confirm.disabled = next.kind === 'sparkrun' && !result.compatible;
+    confirm.querySelector('span').textContent = next.kind === 'cloudless' ? 'Import and edit' : 'Import recipe';
+  };
+  confirm.onclick = async () => {
+    if (!request) return; confirm.disabled = true; confirm.innerHTML = '<span class="key-dialog-spinner"></span><span>Importing…</span>';
+    const endpoint = request.kind === 'cloudless' ? '/api/recipes/import' : '/api/recipes/sparkrun/import';
+    const result = await api(endpoint,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(request.body)}).catch(()=>({error:'Cloudless could not import this recipe.'}));
+    if (result.error) { error.textContent = result.error; confirm.disabled = false; confirm.innerHTML = uiIcon('download') + '<span>' + (request.kind === 'cloudless' ? 'Import and edit' : 'Import recipe') + '</span>'; return; }
+    const kind = request.kind; closeKeyDialog(); mmRecipes = null;
+    if (kind === 'cloudless') { const latest = await api('/api/recipes'); mmRecipes = latest; const imported = (latest.recipes || []).find(item => item.id === result.id); toast('GitHub recipe imported'); if (imported) openRecipeBuilder(imported); else renderModelManager(); }
+    else { toast('SparkRun recipe imported'); renderModelManager(); }
+  };
+  source.onkeydown = event => { if (event.key === 'Enter') { event.preventDefault(); check.click(); } };
+  requestAnimationFrame(() => source.focus());
+}
 function paintLocalRecipes(c, data) {
   const recipes = data.recipes || [];
-  c.innerHTML = '<section class="recipe-intro"><div><h3>Your Recipes</h3><p>Build complete, repeatable inference configurations. Every engine, model, cluster, runtime and health parameter is editable.</p></div><div class="recipe-toolbar"><button class="btn" id="recipe-import-toggle" type="button">' + uiIcon('download') + '<span>Prefill from GitHub</span></button><button class="btn primary" id="recipe-create" type="button">' + uiIcon('plus') + '<span>New recipe</span></button></div></section><div class="recipe-import-panel hidden" id="recipe-import-panel"><div class="recipe-builder-section-title">Prefill from a known GitHub repository</div><div class="recipe-import"><label class="recipe-github-field"><span class="recipe-github-prefix">https://github.com/</span><input id="recipe-url" type="text" inputmode="url" aria-label="GitHub repository owner and name" placeholder="owner/repository" autocomplete="off" autocapitalize="none" spellcheck="false"></label><button class="btn primary" id="recipe-import" type="button">' + uiIcon('download') + '<span>Import and edit</span></button></div><div class="recipe-import-error" id="recipe-import-error" aria-live="polite"></div><div class="key-dialog-help">Enter only the GitHub owner and repository name. Importing fills the editor; every engine, model, cluster, runtime, and health setting remains editable.</div></div><div class="recipe-grid">' + (recipes.length ? recipes.map(recipe => recipeCard(recipe,data)).join('') : '<div class="mm-empty">No recipes yet. Create one from scratch or prefill one from a known GitHub repository.</div>') + '</div>';
+  const filtered = recipeSortView(recipes.filter(recipe => recipeMatchesView(recipe, data)));
+  const total = filtered.length, pages = Math.max(1, Math.ceil(total / mmRecipeView.perPage));
+  mmRecipeView.page = Math.max(1, Math.min(mmRecipeView.page, pages));
+  const start = (mmRecipeView.page - 1) * mmRecipeView.perPage, visible = filtered.slice(start, start + mmRecipeView.perPage);
+  const filterActive = mmRecipeView.q || mmRecipeView.source !== 'all' || mmRecipeView.sparks !== 'all' || mmRecipeView.status !== 'all';
+  const select = (id, label, value, options) => '<label class="recipe-select"><span>' + label + '</span><select id="' + id + '">' + options.map(option => '<option value="' + option[0] + '"' + (option[0] === value ? ' selected' : '') + '>' + option[1] + '</option>').join('') + '</select></label>';
+  const empty = recipes.length === 0
+    ? '<div class="recipe-empty"><span class="recipe-empty-icon">' + uiIcon('recipes') + '</span><h4>No recipes yet</h4><p>Import a recipe from GitHub or SparkRun, or build your own configuration.</p><button class="btn primary" id="recipe-empty-import" type="button">' + uiIcon('download') + '<span>Import your first recipe</span></button></div>'
+    : '<div class="recipe-empty"><span class="recipe-empty-icon">' + uiIcon('search') + '</span><h4>No matching recipes</h4><p>Try a different search or clear the current filters.</p><button class="btn" id="recipe-clear-empty" type="button">Clear filters</button></div>';
+  const pagination = total ? '<footer class="recipe-pagination"><div><b>' + (start + 1) + '–' + Math.min(start + mmRecipeView.perPage, total) + '</b><span>of ' + total + ' recipe' + (total === 1 ? '' : 's') + '</span></div><div class="recipe-page-controls"><button class="recipe-page-arrow" type="button" data-recipe-page="' + (mmRecipeView.page - 1) + '" aria-label="Previous page"' + (mmRecipeView.page === 1 ? ' disabled' : '') + '>←</button>' + recipePageButtons(mmRecipeView.page, pages) + '<button class="recipe-page-arrow" type="button" data-recipe-page="' + (mmRecipeView.page + 1) + '" aria-label="Next page"' + (mmRecipeView.page === pages ? ' disabled' : '') + '>→</button></div><label class="recipe-per-page"><span>Show</span><select id="recipe-per-page"><option value="6"' + (mmRecipeView.perPage === 6 ? ' selected' : '') + '>6</option><option value="12"' + (mmRecipeView.perPage === 12 ? ' selected' : '') + '>12</option><option value="24"' + (mmRecipeView.perPage === 24 ? ' selected' : '') + '>24</option></select></label></footer>' : '';
+  c.innerHTML = '<section class="recipe-intro"><div class="recipe-intro-copy"><span class="recipe-section-icon">' + uiIcon('recipes') + '</span><div><div class="recipe-heading-row"><h3>Recipe Library</h3><span>' + recipes.length + '</span></div><p>Search, validate, and run reusable inference configurations.</p></div></div><div class="recipe-toolbar"><button class="btn" id="recipe-import-open" type="button">' + uiIcon('download') + '<span>Import recipe</span></button><button class="btn primary" id="recipe-create" type="button">' + uiIcon('plus') + '<span>New recipe</span></button></div></section>' +
+    (recipes.length ? '<section class="recipe-controls"><label class="recipe-search">' + uiIcon('search') + '<input id="recipe-query" type="search" aria-label="Search recipes" placeholder="Search by recipe, model, engine…" value="' + escapeAttr(mmRecipeView.q) + '"></label><div class="recipe-filter-grid">' +
+      select('recipe-source-filter','Source',mmRecipeView.source,[['all','All sources'],['github','GitHub'],['sparkrun','SparkRun'],['local','Local']]) +
+      select('recipe-sparks-filter','Sparks needed',mmRecipeView.sparks,recipeSparkFilterOptions(recipes,data)) +
+      select('recipe-status-filter','Status',mmRecipeView.status,[['all','Any status'],['ready','Ready'],['attention','Needs attention'],['active','Active']]) +
+      select('recipe-sort','Sort',mmRecipeView.sort,[['updated','Recently updated'],['name','Name A–Z'],['nodes','Most nodes'],['context','Largest context']]) + '</div><div class="recipe-results"><span><b>' + total + '</b> result' + (total === 1 ? '' : 's') + '</span>' + (filterActive ? '<button class="lnk" id="recipe-clear-filters" type="button">Clear filters</button>' : '') + '</div></section>' : '') +
+    '<div class="recipe-grid">' + (visible.length ? visible.map(recipe => recipeCard(recipe,data)).join('') : empty) + '</div>' + pagination;
   document.getElementById('recipe-create').onclick = () => openRecipeBuilder();
-  document.getElementById('recipe-import-toggle').onclick = () => document.getElementById('recipe-import-panel').classList.toggle('hidden');
-  const importButton = document.getElementById('recipe-import'), input = document.getElementById('recipe-url'), importError = document.getElementById('recipe-import-error');
-  const importRecipe = async () => {
-    const sourceUrl = recipeGitHubURL(input.value);
-    if (!sourceUrl) { importError.textContent = 'Enter a repository as owner/repository.'; input.setAttribute('aria-invalid', 'true'); input.focus(); return; }
-    importError.textContent = ''; input.removeAttribute('aria-invalid');
-    importButton.disabled = true; importButton.querySelector('span').textContent = 'Reading…';
-    const result = await api('/api/recipes/import',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sourceUrl})}).catch(() => ({error:'Could not import this recipe.'}));
-    if (result.error) { importError.textContent = result.error; importButton.disabled = false; importButton.querySelector('span').textContent = 'Import and edit'; return; }
-    mmRecipes = null; const latest = await api('/api/recipes'); mmRecipes = latest; const imported = (latest.recipes || []).find(item => item.id === result.id); if (imported) openRecipeBuilder(imported);
-  };
-  importButton.onclick = importRecipe;
-  input.oninput = () => { importError.textContent = ''; input.removeAttribute('aria-invalid'); };
-  input.onkeydown = event => { if (event.key === 'Enter') { event.preventDefault(); importRecipe(); } };
+  document.getElementById('recipe-import-open').onclick = openRecipeImport;
+  document.getElementById('recipe-empty-import')?.addEventListener('click', openRecipeImport);
+  const clearFilters = () => { mmRecipeView = {...mmRecipeView, q:'', source:'all', sparks:'all', status:'all', page:1}; paintLocalRecipes(c, data); };
+  document.getElementById('recipe-clear-filters')?.addEventListener('click', clearFilters);
+  document.getElementById('recipe-clear-empty')?.addEventListener('click', clearFilters);
+  const query = document.getElementById('recipe-query');
+  if (query) query.oninput = () => { mmRecipeView.q = query.value; mmRecipeView.page = 1; paintLocalRecipes(c, data); const next=document.getElementById('recipe-query'); if(next){next.focus();next.setSelectionRange(next.value.length,next.value.length);} };
+  [['recipe-source-filter','source'],['recipe-sparks-filter','sparks'],['recipe-status-filter','status'],['recipe-sort','sort']].forEach(([id,key]) => { const control=document.getElementById(id); if(control) control.onchange=()=>{mmRecipeView[key]=control.value;mmRecipeView.page=1;paintLocalRecipes(c,data);}; });
+  document.getElementById('recipe-per-page')?.addEventListener('change', event => { mmRecipeView.perPage=Number(event.currentTarget.value)||6;mmRecipeView.page=1;paintLocalRecipes(c,data); });
+  c.querySelectorAll('[data-recipe-page]').forEach(button => button.onclick=()=>{const page=Number(button.dataset.recipePage);if(page>=1&&page<=pages&&page!==mmRecipeView.page){mmRecipeView.page=page;paintLocalRecipes(c,data);c.closest('.mm-body')?.scrollTo({top:0,behavior:'smooth'});}});
   c.querySelectorAll('[data-recipe-source]').forEach(button => button.onclick = () => { const card=button.closest('[data-recipe-id]'); if(card) openAppSurface('Recipe source','/api/recipes/' + encodeURIComponent(card.dataset.recipeId) + '/source','📖'); });
   c.querySelectorAll('[data-recipe-edit]').forEach(button => button.onclick = () => { const recipe=recipes.find(item=>item.id===button.dataset.recipeEdit); if(recipe) openRecipeBuilder(recipe); });
   c.querySelectorAll('[data-recipe-run]').forEach(button => button.onclick = async () => {
     button.disabled = true; const id=button.dataset.recipeRun; const result=await api('/api/recipes/' + encodeURIComponent(id) + '/run',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}).catch(()=>({error:'Could not start this recipe.'}));
     if(result.error){toast(result.error,true);button.disabled=false;return;} trackLocalRecipeJob(result.jobId);mmRecipes=null;renderLocalRecipes(c);
   });
+  c.querySelectorAll('[data-recipe-check]').forEach(button => button.onclick = async () => {
+    button.disabled = true; const id=button.dataset.recipeCheck, recipe=recipes.find(item=>item.id===id); if(recipe) openRecipeCheckOverlay(recipe,button);
+    const result=await api('/api/recipes/' + encodeURIComponent(id) + '/check',{method:'POST'}).catch(()=>({error:'Could not check this recipe.'}));
+    if(result.error){if(activeRecipeCheck)finishRecipeCheckOverlay(false,result.error);else{toast(result.error,true);button.disabled=false;}return;} trackLocalRecipeJob(result.jobId, 'check');
+  });
+  c.querySelectorAll('[data-recipe-abort]').forEach(button => button.onclick = async () => {
+    button.disabled = true; const id=button.dataset.recipeAbort; const result=await api('/api/recipes/' + encodeURIComponent(id) + '/abort',{method:'POST'}).catch(()=>({error:'Could not abort this recipe.'}));
+    if(result.error){toast(result.error,true);button.disabled=false;return;} toast('Stopping recipe launch');
+  });
   c.querySelectorAll('[data-recipe-stop]').forEach(button => button.onclick = async () => {
     button.disabled=true;const id=button.dataset.recipeStop;const result=await api('/api/recipes/' + encodeURIComponent(id) + '/stop',{method:'POST'}).catch(()=>({error:'Could not stop this recipe.'}));
-    if(result.error){toast(result.error,true);button.disabled=false;return;}trackLocalRecipeJob(result.jobId);mmRecipes=null;renderLocalRecipes(c);
+    if(result.error){toast(result.error,true);button.disabled=false;return;}trackLocalRecipeJob(result.jobId, 'stop');mmRecipes=null;renderLocalRecipes(c);
   });
   c.querySelectorAll('[data-recipe-delete]').forEach(button => button.onclick = async () => {
     button.disabled=true;const result=await fetch('/api/recipes/' + encodeURIComponent(button.dataset.recipeDelete),{method:'DELETE'});
     if(!result.ok){const body=await result.json().catch(()=>({}));toast(body.error||'Could not remove recipe',true);button.disabled=false;return;}toast('Local recipe removed');mmRecipes=null;renderLocalRecipes(c);
   });
 }
-function trackLocalRecipeJob(jobId) {
-  const stream = new EventSource(`/api/jobs/${jobId}/events`); let ended = false, refreshTimer = 0;
+function trackLocalRecipeJob(jobId, operation = 'run') {
+  const checking = operation === 'check', stream = new EventSource(`/api/jobs/${jobId}/events`); let ended = false, refreshTimer = 0;
   const refresh = () => {
-    if (refreshTimer || ended) return;
+    if (checking || refreshTimer || ended) return;
     refreshTimer = window.setTimeout(() => {
       refreshTimer = 0; mmRecipes = null;
       const body = document.getElementById('mm-tab-body');
       if (modelsOpen() && mmTab === 'recipes' && body) renderLocalRecipes(body);
     }, 500);
   };
-  const finish = (ok, message) => { if (ended) return; ended = true; stream.close(); if (refreshTimer) clearTimeout(refreshTimer); toast(ok ? 'Recipe ready' : (message || 'Recipe failed'), !ok); mmRecipes = null; if (modelsOpen() && mmTab === 'recipes') renderModelManager(); refreshActiveModel(); };
-  stream.onmessage = event => { const update = JSON.parse(event.data); refresh(); if (update.phase === 'error') finish(false, update.error); else if (update.done) finish(true); };
+  const finish = (ok, message) => { if (ended) return; ended = true; stream.close(); if (refreshTimer) clearTimeout(refreshTimer); if(checking){finishRecipeCheckOverlay(ok,message);return;} toast(ok ? (operation === 'stop' ? 'Recipe stopped' : 'Recipe ready') : (message || 'Recipe failed'), !ok); mmRecipes = null; if (modelsOpen() && mmTab === 'recipes') renderModelManager(); refreshActiveModel(); };
+  stream.onmessage = event => { const update = JSON.parse(event.data); if(checking)updateRecipeCheckOverlay(update);else refresh(); if (update.phase === 'error') finish(false, update.error); else if (update.done) finish(true); };
   stream.onerror = async () => { const update = await api(`/api/jobs/${jobId}`).catch(() => null); if (update && update.done) finish(update.phase !== 'error', update.error); };
 }
 // Shared list renderer for both tabs: summary + search + filter chips + filtered sections.

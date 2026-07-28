@@ -20,6 +20,7 @@ venv/
 node_modules/
 dist/
 build/
+.wrangler/
 *.log
 npm-debug.log*
 

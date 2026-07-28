@@ -3,3 +3,7 @@ set -e
 install -d -m 0750 /var/lib/cloudless
 systemctl daemon-reload >/dev/null 2>&1 || true
 systemctl enable cloudlessd.service >/dev/null 2>&1 || true
+if [ "$(dpkg --print-architecture 2>/dev/null || true)" = arm64 ]; then
+  systemctl enable cloudless-sparkrun.service >/dev/null 2>&1 || true
+  systemctl start --no-block cloudless-sparkrun.service >/dev/null 2>&1 || true
+fi

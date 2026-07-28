@@ -5,12 +5,14 @@ package localrecipes
 
 import (
 	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -22,6 +24,8 @@ const (
 	DeepSeekDSparkSource   = "https://github.com/tonyd2wild/DeepSeek-v4-Flash-DSpark-60-tok-s-900K-ctx-2x-DGX-Spark"
 	DeepSeekDSparkRevision = "51261f419a4a35a02966405ea9774b41735ec412"
 )
+
+var containerImagePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/:@-]{0,511}$`)
 
 type Command struct {
 	Program string   `json:"program"`
@@ -78,11 +82,30 @@ type Lifecycle struct {
 
 type Runtime struct {
 	Adapter        string            `json:"adapter"`
+	SparkRun       *SparkRunRuntime  `json:"sparkRun,omitempty"`
 	WorkingDir     string            `json:"workingDir"`
 	TimeoutMinutes int               `json:"timeoutMinutes"`
 	Prerequisites  []string          `json:"prerequisites,omitempty"`
 	Environment    map[string]string `json:"environment,omitempty"`
 	Lifecycle      Lifecycle         `json:"lifecycle"`
+}
+
+// SparkRunRuntime preserves the authoritative SparkRun document. Cloudless
+// deliberately does not translate operational fields: the pinned SparkRun
+// provider validates and executes this exact document.
+type SparkRunRuntime struct {
+	Schema          int               `json:"schema"`
+	SourceURL       string            `json:"sourceUrl,omitempty"`
+	SourceDigest    string            `json:"sourceDigest"`
+	Document        string            `json:"document"`
+	ProviderVersion string            `json:"providerVersion"`
+	OriginalRuntime string            `json:"originalRuntime"`
+	CommandTemplate string            `json:"commandTemplate"`
+	Defaults        map[string]string `json:"defaults,omitempty"`
+	MinNodes        int               `json:"minNodes"`
+	MaxNodes        int               `json:"maxNodes"`
+	Warnings        []string          `json:"warnings,omitempty"`
+	Risks           []string          `json:"risks,omitempty"`
 }
 
 type Health struct {
@@ -370,6 +393,9 @@ func validateDraft(d Draft) (Draft, error) {
 	if d.Engine.Type == "" || len(d.Engine.Type) > 64 {
 		return Draft{}, errors.New("choose an inference engine")
 	}
+	if !containerImagePattern.MatchString(d.Engine.Image) {
+		return Draft{}, errors.New("engine image is invalid")
+	}
 	if d.Engine.ContainerPort < 1 || d.Engine.ContainerPort > 65535 {
 		return Draft{}, errors.New("engine port must be between 1 and 65535")
 	}
@@ -414,6 +440,43 @@ func validateDraft(d Draft) (Draft, error) {
 	if d.Runtime.Adapter == "" || len(d.Runtime.Adapter) > 64 {
 		return Draft{}, errors.New("choose a runtime adapter")
 	}
+	if d.Runtime.Adapter == SparkRunAdapter {
+		if d.Runtime.SparkRun == nil || d.Runtime.SparkRun.Schema != 1 {
+			return Draft{}, errors.New("the SparkRun provider record is missing or unsupported")
+		}
+		compat := d.Runtime.SparkRun
+		compat.CommandTemplate, compat.SourceURL = strings.TrimSpace(compat.CommandTemplate), strings.TrimSpace(compat.SourceURL)
+		compat.Document, compat.ProviderVersion = strings.TrimSpace(compat.Document), strings.TrimSpace(compat.ProviderVersion)
+		if compat.Document == "" || len(compat.Document) > 2<<20 {
+			return Draft{}, errors.New("the original SparkRun recipe is missing or larger than 2 MB")
+		}
+		if compat.ProviderVersion == "" || len(compat.ProviderVersion) > 64 {
+			return Draft{}, errors.New("the pinned SparkRun provider version is missing")
+		}
+		if compat.CommandTemplate == "" || len(compat.CommandTemplate) > 64*1024 {
+			return Draft{}, errors.New("the SparkRun command template is missing or too large")
+		}
+		if len(compat.SourceDigest) != 64 {
+			return Draft{}, errors.New("the SparkRun source digest must be SHA-256")
+		}
+		if _, err := hex.DecodeString(compat.SourceDigest); err != nil {
+			return Draft{}, errors.New("the SparkRun source digest must be SHA-256")
+		}
+		if compat.SourceURL != "" {
+			u, err := url.Parse(compat.SourceURL)
+			if err != nil || u.Scheme != "https" || u.Host == "" {
+				return Draft{}, errors.New("the SparkRun source URL must use public HTTPS")
+			}
+		}
+		if len(compat.Defaults) > 256 {
+			return Draft{}, errors.New("the SparkRun recipe has too many defaults")
+		}
+		if d.Distributed.Nodes < compat.MinNodes || d.Distributed.Nodes > compat.MaxNodes {
+			return Draft{}, fmt.Errorf("this SparkRun recipe supports between %d and %d nodes", compat.MinNodes, compat.MaxNodes)
+		}
+	} else if d.Runtime.SparkRun != nil {
+		return Draft{}, errors.New("SparkRun provider data requires the SparkRun YAML adapter")
+	}
 	if d.Runtime.TimeoutMinutes < 1 || d.Runtime.TimeoutMinutes > 10080 {
 		return Draft{}, errors.New("runtime timeout must be between 1 minute and 7 days")
 	}
@@ -435,7 +498,7 @@ func validateDraft(d Draft) (Draft, error) {
 		}
 		*value = validated
 	}
-	if d.Runtime.Lifecycle.Start.Program == "" {
+	if d.Runtime.Adapter != SparkRunAdapter && d.Runtime.Lifecycle.Start.Program == "" {
 		return Draft{}, errors.New("a start command is required")
 	}
 	if d.Health.Scheme != "http" && d.Health.Scheme != "https" {
@@ -555,7 +618,27 @@ func (s *Store) Import(source string) (Recipe, error) {
 	return recipe, nil
 }
 
+// PreviewImport resolves a reviewed GitHub profile without changing the local
+// recipe store. The unified importer uses this before asking the user to
+// confirm the import.
+func (s *Store) PreviewImport(source string) (Recipe, error) {
+	return recognized(source)
+}
+
 func (s *Store) Create(draft Draft) (Recipe, error) {
+	return s.create(draft, "local", "local-custom")
+}
+
+// CreateImported persists a parsed external format after the caller has
+// fetched and previewed it. Imported recipes remain editable Cloudless data.
+func (s *Store) CreateImported(draft Draft, origin string) (Recipe, error) {
+	if origin != "sparkrun" {
+		return Recipe{}, errors.New("unsupported imported recipe origin")
+	}
+	return s.create(draft, origin, "external-unreviewed")
+}
+
+func (s *Store) create(draft Draft, origin, trust string) (Recipe, error) {
 	draft, err := validateDraft(draft)
 	if err != nil {
 		return Recipe{}, err
@@ -565,7 +648,7 @@ func (s *Store) Create(draft Draft) (Recipe, error) {
 		return Recipe{}, err
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
-	recipe := recipeFromDraft(id, "local", "local-custom", now, draft)
+	recipe := recipeFromDraft(id, origin, trust, now, draft)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	doc, err := s.load()

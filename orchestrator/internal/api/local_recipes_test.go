@@ -1,6 +1,9 @@
 package api
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,6 +12,39 @@ import (
 	"github.com/cloudless/orchestrator/internal/localrecipes"
 	"github.com/cloudless/orchestrator/internal/sparkcluster"
 )
+
+func TestLocalRecipeAbortCancelsRegisteredLaunch(t *testing.T) {
+	server := &Server{}
+	ctx, cancel := context.WithCancel(context.Background())
+	server.registerRecipeJob("local-0123456789abcdef", cancel)
+	request := httptest.NewRequest(http.MethodPost, "/api/recipes/local-0123456789abcdef/abort", nil)
+	request.SetPathValue("id", "local-0123456789abcdef")
+	recorder := httptest.NewRecorder()
+	server.localRecipeAbort(recorder, request)
+	if recorder.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+	select {
+	case <-ctx.Done():
+	default:
+		t.Fatal("recipe context was not cancelled")
+	}
+}
+
+func TestGitHubRecipePreviewDoesNotPersist(t *testing.T) {
+	store := localrecipes.New(t.TempDir())
+	server := &Server{recipes: store}
+	request := httptest.NewRequest(http.MethodPost, "/api/recipes/import/preview", strings.NewReader(`{"sourceUrl":"`+localrecipes.DeepSeekDSparkSource+`"}`))
+	recorder := httptest.NewRecorder()
+	server.localRecipeImportPreview(recorder, request)
+	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"kind":"cloudless"`) {
+		t.Fatalf("preview = %d: %s", recorder.Code, recorder.Body.String())
+	}
+	recipes, err := store.List()
+	if err != nil || len(recipes) != 0 {
+		t.Fatalf("preview persisted recipes: %#v, %v", recipes, err)
+	}
+}
 
 func TestPrepareRecipeComposeAddsRestartPolicy(t *testing.T) {
 	dir := t.TempDir()
@@ -55,7 +91,7 @@ func TestRecipeRuntimeUsesEditableEngineModelClusterAndEnvironment(t *testing.T)
 		t.Fatal(err)
 	}
 	checkout := t.TempDir()
-	env, workdir, err := writeRecipeRuntime(recipe, checkout, sparkcluster.State{})
+	env, workdir, err := writeRecipeRuntime(recipe, checkout, sparkcluster.State{}, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,13 +173,36 @@ func TestRecipeUIUsesRecipesIconAndCloudlessSourceViewer(t *testing.T) {
 	for _, want := range []string{
 		`id="ui-recipes"`,
 		`${uiIcon('recipes')}<span>Recipes</span>`,
-		`<h3>Your Recipes</h3>`,
-		`.recipe-import .btn, .recipe-actions .btn`,
-		`<span class="recipe-github-prefix">https://github.com/</span>`,
-		`placeholder="owner/repository"`,
+		`<h3>Recipe Library</h3>`,
+		`.recipe-actions .btn`,
 		`function recipeGitHubURL(value)`,
+		`function recipeImportRequest(sourceValue, yamlValue)`,
+		`function openRecipeImport()`,
+		`let mmRecipeView = { q: '', source: 'all', sparks: 'all', status: 'all', sort: 'updated', page: 1, perPage: 6 }`,
+		`function recipeMatchesView(recipe, data)`,
+		`function recipeConnectedSparks(data)`,
+		`function recipeNeedsMoreSparks(recipe, data)`,
+		`function recipeSparkFilterOptions(recipes, data)`,
+		`function recipeSortView(recipes)`,
+		`function recipePageButtons(current, total)`,
+		`aria-label="Search recipes"`,
+		`'recipe-source-filter'`,
+		`'recipe-sparks-filter'`,
+		`'recipe-status-filter'`,
+		`'recipe-sort'`,
+		`id="recipe-per-page"`,
+		`data-recipe-page=`,
+		`.recipe-pagination`,
+		`.recipe-specs`,
+		`.recipe-primary-action`,
+		`/api/recipes/import/preview`,
+		`/api/recipes/sparkrun/preview`,
+		`<span>Import recipe</span>`,
+		`sourceLabel = sparkRun ? 'SparkRun '`,
+		`<span>Check</span>`,
+		`'/api/recipes/' + encodeURIComponent(id) + '/check'`,
 		"`https://github.com/${path}`",
-		`input.onkeydown = event => { if (event.key === 'Enter')`,
+		`source.onkeydown = event => { if (event.key === 'Enter')`,
 		`'/api/recipes/' + encodeURIComponent(card.dataset.recipeId) + '/source'`,
 		`['Engine', 'Inference server and container']`,
 		`['Model', 'Model, memory and parallelism']`,
@@ -164,5 +223,73 @@ func TestRecipeUIUsesRecipesIconAndCloudlessSourceViewer(t *testing.T) {
 	}
 	if strings.Contains(page, `placeholder="https://github.com/owner/repository"`) {
 		t.Fatal("recipe import still asks users to type the fixed GitHub prefix")
+	}
+	for _, removed := range []string{`<span>Import SparkRun</span>`, `<span>Prefill from GitHub</span>`, `function openSparkRunImport()`, `id="recipe-import-toggle"`} {
+		if strings.Contains(page, removed) {
+			t.Fatalf("duplicate recipe import UI still contains %q", removed)
+		}
+	}
+}
+
+func TestRecipeUIFiltersSortsAndPaginatesRenderedCollection(t *testing.T) {
+	content, err := webFS.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(content)
+	for _, want := range []string{
+		`const filtered = recipeSortView(recipes.filter(recipe => recipeMatchesView(recipe, data)))`,
+		`Math.ceil(total / mmRecipeView.perPage)`,
+		`filtered.slice(start, start + mmRecipeView.perPage)`,
+		`view.source !== 'all'`,
+		`view.sparks !== 'all' && nodes !== Number(view.sparks)`,
+		`recipeNeedsMoreSparks(recipe, data)`,
+		`recipeSparkFilterOptions(recipes,data)`,
+		`class="recipe-card'`,
+		`' insufficient-cluster'`,
+		`Requires ' + nodes + ' DGX Sparks. ' + connected`,
+		`.recipe-card.insufficient-cluster .recipe-actions [data-recipe-edit]`,
+		`.recipe-card.insufficient-cluster .recipe-actions [data-recipe-delete]`,
+		`view.status === 'active'`,
+		`view.status === 'ready'`,
+		`view.status === 'attention'`,
+		`mmRecipeView.sort === 'name'`,
+		`mmRecipeView.sort === 'nodes'`,
+		`mmRecipeView.sort === 'context'`,
+		`recipePageButtons(mmRecipeView.page, pages)`,
+		`mmRecipeView.perPage=Number(event.currentTarget.value)||6`,
+		`c.closest('.mm-body')?.scrollTo({top:0,behavior:'smooth'})`,
+	} {
+		if !strings.Contains(page, want) {
+			t.Fatalf("recipe collection UI is missing %q", want)
+		}
+	}
+}
+
+func TestRecipeCheckUsesStableProgressOverlay(t *testing.T) {
+	content, err := webFS.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(content)
+	for _, want := range []string{
+		`function openRecipeCheckOverlay(recipe, trigger)`,
+		`function updateRecipeCheckOverlay(update)`,
+		`function finishRecipeCheckOverlay(ok, message)`,
+		`class="recipe-check-overlay"`,
+		`aria-label="Recipe check progress"`,
+		`Cloudless is validating this recipe without launching or downloading the model.`,
+		`This is a read-only check. The active model and running services are not changed.`,
+		`trackLocalRecipeJob(result.jobId, 'check');`,
+		`if(checking)updateRecipeCheckOverlay(update);else refresh()`,
+		`html.motion-disabled .recipe-check-spinner::before`,
+		`.recipe-check-error.hidden { display: none; }`,
+	} {
+		if !strings.Contains(page, want) {
+			t.Fatalf("recipe check UI is missing %q", want)
+		}
+	}
+	if strings.Contains(page, `trackLocalRecipeJob(result.jobId, 'check');mmRecipes=null;renderLocalRecipes(c)`) {
+		t.Fatal("recipe check still repaints the entire manager after starting")
 	}
 }

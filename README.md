@@ -75,6 +75,7 @@ Plymouth branding, and USB instructions live in [`distro/`](./distro). Start wit
 
 - Start here: [`CLAUDE.md`](./CLAUDE.md) — project context overview.
 - The working prototype: [`orchestrator/`](./orchestrator) — the `cloudlessd` daemon + web UI.
+- Recipe discovery and signed catalog service: [`services/recipe-indexer/`](./services/recipe-indexer)
 - Detailed docs: [`docs/`](./docs)
   - [Vision](./docs/VISION.md)
   - [Architecture](./docs/ARCHITECTURE.md)

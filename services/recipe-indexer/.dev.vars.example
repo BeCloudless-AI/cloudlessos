@@ -1,0 +1,8 @@
+ENVIRONMENT=development
+PUBLIC_BASE_URL=http://127.0.0.1:8787
+AUTOPUBLISH_DISCOVERED=true
+GITHUB_TOKEN=github-app-installation-token
+ADMIN_TOKEN=replace-with-a-long-random-value
+CATALOG_KEY_ID=cloudless-recipes-development
+CATALOG_SIGNING_PRIVATE_KEY=base64-pkcs8-ed25519-private-key
+CATALOG_SIGNING_PUBLIC_KEY=base64-spki-ed25519-public-key

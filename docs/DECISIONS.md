@@ -1259,6 +1259,61 @@ Ubuntu or baking the application directly into a monolithic filesystem image.
 
 ---
 
+## D44 - SparkRun recipes use a pinned execution provider behind Cloudless
+
+**Decision:** CloudlessOS preserves imported SparkRun YAML exactly and delegates
+recipe-specific validation and execution to a version-pinned SparkRun CLI.
+Cloudless remains the user-facing control plane for trust disclosure, cluster
+selection, jobs, cancellation, active-model state, health, and the API gateway.
+
+- **Pinned provider, not a second UI.** The arm64 package installs the exact
+  tested SparkRun release in an isolated virtual environment. The binary and
+  version are checked before preview, dry-run, launch, or stop.
+- **Preview before persistence.** Cloudless resolves a public HTTPS URL, a
+  built-in registry reference, a Spark Arena identifier, or pasted YAML and
+  displays its model, image, runtime, node count, warnings, and security risks
+  before enabling Import. The pinned provider performs the definitive schema
+  validation.
+- **No lossy translation.** Builder, distribution, executor, pre/post hooks,
+  Ray, and tuning fields remain in the exact source document passed to SparkRun.
+- **Fail closed.** Provider absence, version drift, validation failure, unhealthy
+  nodes, or an exact node-count mismatch prevents launch.
+- **Cloudless lifecycle.** A provider dry-run is available before launch. Run,
+  progress, Abort, Stop, health checks, active-model state, and stable API proxy
+  remain part of the existing Cloudless workflow.
+- **Traceable and immutable source.** The exact YAML, SHA-256, normalized source
+  URL, provider version, node range, warnings, and disclosed execution risks are
+  stored. A changed external recipe must be imported as a new local recipe.
+
+This exposes the useful SparkRun recipe ecosystem without maintaining a fragile
+parallel implementation of every SparkRun runtime feature.
+
+---
+
+## D45 - Recipe discovery remains a trusted indexer beneath future social features
+
+**Decision:** Run recipe discovery, executable validation and signed catalog publication as a
+separate Cloudflare service. A future Cloudless account/community service may add authorship,
+ratings, comments, moderation signals and submissions, but it does not replace the indexer.
+
+- **Automatic discovery.** Known registries and GitHub search seed queue jobs; manifests are pinned
+  to immutable commits rather than copied into a manually curated JSON list.
+- **One executable identity.** The preserved source bytes and SHA-256 digest define what will run.
+  Social posts and ratings refer to that indexed identity, so changing a recipe creates a new
+  artifact rather than silently changing an existing listing.
+- **Trust boundary.** Static safety checks and manual-review states are authoritative in the
+  indexer. Popularity cannot promote blocked executable content into the public catalog.
+- **Signed distribution.** CloudlessOS consumes a canonical Ed25519-signed, sequence-numbered
+  catalog and immutable artifacts. Clients can reject tampering and rollback independently of the
+  future website or social API.
+- **Independent evolution.** Search ranking may combine compatibility, validation, community and
+  editorial signals later, while the executable ingestion contract stays stable.
+
+This avoids rebuilding discovery when community accounts arrive and keeps social compromise from
+becoming code-execution compromise.
+
+---
+
 ## Open questions (not yet decided)
 
 - **Open-source CloudlessOS?** Leaning yes (trust/community for a privacy brand, like

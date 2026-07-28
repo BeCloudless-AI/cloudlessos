@@ -2703,9 +2703,23 @@
   .recipe-intro { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; align-items: center; padding: 18px;
     border: 1px solid var(--hair); border-radius: 16px; background: var(--panel-2); margin-bottom: 18px; }
   .recipe-intro h3 { margin: 0 0 5px; font-size: 15px; } .recipe-intro p { margin: 0; color: var(--muted); font-size: 11.5px; line-height: 1.55; }
-  .recipe-import { display: flex; align-items: stretch; gap: 8px; min-width: min(520px, 48vw); }
-  .recipe-import input { min-width: 0; flex: 1; min-height: 40px; border: 1px solid var(--line); border-radius: 10px; padding: 0 12px;
-    background: var(--control); color: var(--ink); font: inherit; font-size: 11.5px; }
+  .recipe-import { display: flex; align-items: stretch; gap: 8px; min-width: min(600px, 55vw); }
+  .recipe-github-field {
+    min-width: 0; min-height: 40px; flex: 1; display: flex; align-items: center; overflow: hidden;
+    border: 1px solid var(--line); border-radius: 10px; background: var(--control);
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .recipe-github-field:focus-within { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-soft); }
+  .recipe-github-prefix {
+    height: 100%; padding: 0 0 0 12px; display: inline-flex; align-items: center; flex: none;
+    color: var(--muted); font: 10.5px/1 'Roboto Mono', ui-monospace, SFMono-Regular, Consolas, monospace;
+    white-space: nowrap; user-select: none;
+  }
+  .recipe-import input { min-width: 110px; flex: 1; min-height: 38px; border: 0; padding: 0 12px 0 2px;
+    background: transparent; color: var(--ink); font: 11.5px/1.2 'Roboto Mono', ui-monospace, SFMono-Regular, Consolas, monospace; }
+  .recipe-import input:focus { outline: 0; }
+  .recipe-import input::placeholder { color: var(--faint); }
+  .recipe-import-error { min-height: 16px; margin-top: 5px; color: var(--err); font-size: 10px; }
   .recipe-grid { display: grid; gap: 14px; }
   .recipe-card { overflow: hidden; border: 1px solid var(--hair); border-radius: 16px; background: var(--card); }
   .recipe-main { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 14px; align-items: start; padding: 18px; }
@@ -6390,19 +6404,29 @@ function recipeCard(recipe, data) {
     (ready ? '' : '<div class="recipe-warning">Connect exactly ' + nodes + ' healthy nodes before running this recipe.</div>') +
     '</div><div class="recipe-side"><div class="recipe-actions">' + action + '<button class="btn" type="button" data-recipe-edit="' + escapeAttr(recipe.id) + '"' + (active || job ? ' disabled' : '') + '>' + uiIcon('settings') + '<span>Edit all</span></button><button class="btn" type="button" data-recipe-delete="' + escapeAttr(recipe.id) + '"' + (active || job ? ' disabled' : '') + '>Remove</button></div></div></div>' + recipeProgressHTML(job) + '</article>';
 }
+function recipeGitHubURL(value) {
+  let path = String(value || '').trim().replace(/^(?:https?:\/\/)?(?:www\.)?github\.com\//i, '');
+  path = path.replace(/^\/+|\/+$/g, '').replace(/\.git$/i, '');
+  return /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(path) ? `https://github.com/${path}` : '';
+}
 function paintLocalRecipes(c, data) {
   const recipes = data.recipes || [];
-  c.innerHTML = '<section class="recipe-intro"><div><h3>Your Recipes</h3><p>Build complete, repeatable inference configurations. Every engine, model, cluster, runtime and health parameter is editable.</p></div><div class="recipe-toolbar"><button class="btn" id="recipe-import-toggle" type="button">' + uiIcon('download') + '<span>Prefill from GitHub</span></button><button class="btn primary" id="recipe-create" type="button">' + uiIcon('plus') + '<span>New recipe</span></button></div></section><div class="recipe-import-panel hidden" id="recipe-import-panel"><div class="recipe-builder-section-title">Prefill from a known repository</div><div class="recipe-import"><input id="recipe-url" type="url" placeholder="https://github.com/owner/repository" spellcheck="false"><button class="btn primary" id="recipe-import" type="button">' + uiIcon('download') + '<span>Import and edit</span></button></div><div class="key-dialog-help">Importing only fills the editor. Afterwards every value—including engine, commands and model settings—can be changed.</div></div><div class="recipe-grid">' + (recipes.length ? recipes.map(recipe => recipeCard(recipe,data)).join('') : '<div class="mm-empty">No recipes yet. Create one from scratch or prefill one from a known GitHub repository.</div>') + '</div>';
+  c.innerHTML = '<section class="recipe-intro"><div><h3>Your Recipes</h3><p>Build complete, repeatable inference configurations. Every engine, model, cluster, runtime and health parameter is editable.</p></div><div class="recipe-toolbar"><button class="btn" id="recipe-import-toggle" type="button">' + uiIcon('download') + '<span>Prefill from GitHub</span></button><button class="btn primary" id="recipe-create" type="button">' + uiIcon('plus') + '<span>New recipe</span></button></div></section><div class="recipe-import-panel hidden" id="recipe-import-panel"><div class="recipe-builder-section-title">Prefill from a known GitHub repository</div><div class="recipe-import"><label class="recipe-github-field"><span class="recipe-github-prefix">https://github.com/</span><input id="recipe-url" type="text" inputmode="url" aria-label="GitHub repository owner and name" placeholder="owner/repository" autocomplete="off" autocapitalize="none" spellcheck="false"></label><button class="btn primary" id="recipe-import" type="button">' + uiIcon('download') + '<span>Import and edit</span></button></div><div class="recipe-import-error" id="recipe-import-error" aria-live="polite"></div><div class="key-dialog-help">Enter only the GitHub owner and repository name. Importing fills the editor; every engine, model, cluster, runtime, and health setting remains editable.</div></div><div class="recipe-grid">' + (recipes.length ? recipes.map(recipe => recipeCard(recipe,data)).join('') : '<div class="mm-empty">No recipes yet. Create one from scratch or prefill one from a known GitHub repository.</div>') + '</div>';
   document.getElementById('recipe-create').onclick = () => openRecipeBuilder();
   document.getElementById('recipe-import-toggle').onclick = () => document.getElementById('recipe-import-panel').classList.toggle('hidden');
-  const importButton = document.getElementById('recipe-import'), input = document.getElementById('recipe-url');
-  importButton.onclick = async () => {
-    const sourceUrl = String(input.value || '').trim(); if (!sourceUrl) { input.focus(); return; }
+  const importButton = document.getElementById('recipe-import'), input = document.getElementById('recipe-url'), importError = document.getElementById('recipe-import-error');
+  const importRecipe = async () => {
+    const sourceUrl = recipeGitHubURL(input.value);
+    if (!sourceUrl) { importError.textContent = 'Enter a repository as owner/repository.'; input.setAttribute('aria-invalid', 'true'); input.focus(); return; }
+    importError.textContent = ''; input.removeAttribute('aria-invalid');
     importButton.disabled = true; importButton.querySelector('span').textContent = 'Reading…';
     const result = await api('/api/recipes/import',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sourceUrl})}).catch(() => ({error:'Could not import this recipe.'}));
-    if (result.error) { toast(result.error,true); importButton.disabled = false; importButton.querySelector('span').textContent = 'Import and edit'; return; }
+    if (result.error) { importError.textContent = result.error; importButton.disabled = false; importButton.querySelector('span').textContent = 'Import and edit'; return; }
     mmRecipes = null; const latest = await api('/api/recipes'); mmRecipes = latest; const imported = (latest.recipes || []).find(item => item.id === result.id); if (imported) openRecipeBuilder(imported);
   };
+  importButton.onclick = importRecipe;
+  input.oninput = () => { importError.textContent = ''; input.removeAttribute('aria-invalid'); };
+  input.onkeydown = event => { if (event.key === 'Enter') { event.preventDefault(); importRecipe(); } };
   c.querySelectorAll('[data-recipe-source]').forEach(button => button.onclick = () => { const card=button.closest('[data-recipe-id]'); if(card) openAppSurface('Recipe source','/api/recipes/' + encodeURIComponent(card.dataset.recipeId) + '/source','📖'); });
   c.querySelectorAll('[data-recipe-edit]').forEach(button => button.onclick = () => { const recipe=recipes.find(item=>item.id===button.dataset.recipeEdit); if(recipe) openRecipeBuilder(recipe); });
   c.querySelectorAll('[data-recipe-run]').forEach(button => button.onclick = async () => {

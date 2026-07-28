@@ -139,6 +139,11 @@ func TestRecipeUIUsesRecipesIconAndCloudlessSourceViewer(t *testing.T) {
 		`${uiIcon('recipes')}<span>Recipes</span>`,
 		`<h3>Your Recipes</h3>`,
 		`.recipe-import .btn, .recipe-actions .btn`,
+		`<span class="recipe-github-prefix">https://github.com/</span>`,
+		`placeholder="owner/repository"`,
+		`function recipeGitHubURL(value)`,
+		"`https://github.com/${path}`",
+		`input.onkeydown = event => { if (event.key === 'Enter')`,
 		`'/api/recipes/' + encodeURIComponent(card.dataset.recipeId) + '/source'`,
 		`['Engine', 'Inference server and container']`,
 		`['Model', 'Model, memory and parallelism']`,
@@ -156,5 +161,8 @@ func TestRecipeUIUsesRecipesIconAndCloudlessSourceViewer(t *testing.T) {
 	}
 	if strings.Contains(page, "Recipe templates") || strings.Contains(page, "Built-in template") {
 		t.Fatal("recipe editor still exposes the removed template workflow")
+	}
+	if strings.Contains(page, `placeholder="https://github.com/owner/repository"`) {
+		t.Fatal("recipe import still asks users to type the fixed GitHub prefix")
 	}
 }

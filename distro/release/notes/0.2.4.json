@@ -9,6 +9,7 @@
     "Align the Ask Cloudless control, active-model capsule, hardware, and desktop spacing into a more consistent responsive grid.",
     "Adopt locally bundled Roboto and Roboto Mono typography and the official vector Cloudless wordmark across the desktop and first-launch experience.",
     "Adapt hardware, model, app-install, download, update, driver, recipe, cluster, and welcome-tour progress bars to each appearance theme.",
+    "Simplify GitHub recipe prefilling with a fixed repository prefix, owner/repository input, and inline validation.",
     "Expand Profile from a small hard-coded list to 68 alphabetized regions, including United Arab Emirates.",
     "Synchronize single-timezone region choices such as United Arab Emirates with the host timezone and render the Cloudless clock explicitly in that timezone.",
     "Prefer Ubuntu's active timezone link over stale legacy timezone metadata so Settings and the desktop clock remain accurate after a change."

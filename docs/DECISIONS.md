@@ -1259,6 +1259,37 @@ Ubuntu or baking the application directly into a monolithic filesystem image.
 
 ---
 
+## D44 - SparkRun recipes use a pinned execution provider behind Cloudless
+
+**Decision:** CloudlessOS preserves imported SparkRun YAML exactly and delegates
+recipe-specific validation and execution to a version-pinned SparkRun CLI.
+Cloudless remains the user-facing control plane for trust disclosure, cluster
+selection, jobs, cancellation, active-model state, health, and the API gateway.
+
+- **Pinned provider, not a second UI.** The arm64 package installs the exact
+  tested SparkRun release in an isolated virtual environment. The binary and
+  version are checked before preview, dry-run, launch, or stop.
+- **Preview before persistence.** Cloudless resolves a public HTTPS URL, a
+  built-in registry reference, a Spark Arena identifier, or pasted YAML and
+  displays its model, image, runtime, node count, warnings, and security risks
+  before enabling Import. The pinned provider performs the definitive schema
+  validation.
+- **No lossy translation.** Builder, distribution, executor, pre/post hooks,
+  Ray, and tuning fields remain in the exact source document passed to SparkRun.
+- **Fail closed.** Provider absence, version drift, validation failure, unhealthy
+  nodes, or an exact node-count mismatch prevents launch.
+- **Cloudless lifecycle.** A provider dry-run is available before launch. Run,
+  progress, Abort, Stop, health checks, active-model state, and stable API proxy
+  remain part of the existing Cloudless workflow.
+- **Traceable and immutable source.** The exact YAML, SHA-256, normalized source
+  URL, provider version, node range, warnings, and disclosed execution risks are
+  stored. A changed external recipe must be imported as a new local recipe.
+
+This exposes the useful SparkRun recipe ecosystem without maintaining a fragile
+parallel implementation of every SparkRun runtime feature.
+
+---
+
 ## Open questions (not yet decided)
 
 - **Open-source CloudlessOS?** Leaning yes (trust/community for a privacy brand, like

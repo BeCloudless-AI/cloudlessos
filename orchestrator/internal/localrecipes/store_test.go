@@ -4,6 +4,16 @@ import "testing"
 
 func TestImportPrefillsEditableDeepSeekRecipe(t *testing.T) {
 	store := New(t.TempDir())
+	preview, err := store.PreviewImport(DeepSeekDSparkSource + ".git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if all, listErr := store.List(); listErr != nil || len(all) != 0 {
+		t.Fatalf("preview changed the store: %#v, %v", all, listErr)
+	}
+	if preview.ID != DeepSeekDSparkID || preview.Source.Revision != DeepSeekDSparkRevision {
+		t.Fatalf("preview = %#v", preview)
+	}
 	recipe, err := store.Import(DeepSeekDSparkSource + ".git")
 	if err != nil {
 		t.Fatal(err)

@@ -45,11 +45,15 @@ finish_package() {
 }
 
 PKG="$WORK/cloudless-orchestrator"
-make_control "$PKG" cloudless-orchestrator "CloudlessOS local AI orchestrator" "docker.io | docker-ce, ca-certificates, gpgv, openssh-client, sshpass, avahi-utils, netplan.io, iputils-ping, xdotool"
+ORCHESTRATOR_DEPS="docker.io | docker-ce, ca-certificates, gpgv, openssh-client, sshpass, avahi-utils, netplan.io, iputils-ping, xdotool"
+if [ "$ARCH" = arm64 ]; then ORCHESTRATOR_DEPS="$ORCHESTRATOR_DEPS, python3 (>= 3.12), python3-venv"; fi
+make_control "$PKG" cloudless-orchestrator "CloudlessOS local AI orchestrator" "$ORCHESTRATOR_DEPS"
 install -Dm0755 "$WORK/cloudlessd" "$PKG/usr/lib/cloudless/cloudlessd"
 install -Dm0644 "$DISTRO/release/keys/cloudless-archive-keyring.pgp" \
     "$PKG/usr/share/cloudless/cloudless-archive-keyring.pgp"
 install -Dm0644 "$DISTRO/packages/cloudless-orchestrator/cloudlessd.service" "$PKG/lib/systemd/system/cloudlessd.service"
+install -Dm0755 "$DISTRO/packages/cloudless-orchestrator/cloudless-sparkrun-install" "$PKG/usr/lib/cloudless/cloudless-sparkrun-install"
+install -Dm0644 "$DISTRO/packages/cloudless-orchestrator/cloudless-sparkrun.service" "$PKG/lib/systemd/system/cloudless-sparkrun.service"
 install -Dm0644 "$DISTRO/packages/cloudless-orchestrator/cloudless.env" "$PKG/etc/cloudless/cloudless.env"
 install -Dm0755 "$DISTRO/packages/cloudless-orchestrator/postinst" "$PKG/DEBIAN/postinst"
 install -Dm0755 "$DISTRO/packages/cloudless-orchestrator/prerm" "$PKG/DEBIAN/prerm"

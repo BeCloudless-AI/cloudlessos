@@ -65,6 +65,9 @@ type Server struct {
 
 	engineJobsMu sync.Mutex
 	engineJobs   map[string]context.CancelFunc
+	recipeJobsMu sync.Mutex
+	recipeJobs   map[string]context.CancelFunc
+	sparkRunPath string
 
 	installMu sync.Mutex // one catalog/pack transaction may change containers at a time
 	recipes   *localrecipes.Store
@@ -155,11 +158,16 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/models/uninstall", s.modelUninstall)
 	mux.HandleFunc("GET /api/recipes", s.localRecipesList)
 	mux.HandleFunc("POST /api/recipes", s.localRecipeCreate)
+	mux.HandleFunc("POST /api/recipes/import/preview", s.localRecipeImportPreview)
 	mux.HandleFunc("POST /api/recipes/import", s.localRecipeImport)
+	mux.HandleFunc("POST /api/recipes/sparkrun/preview", s.sparkRunRecipePreview)
+	mux.HandleFunc("POST /api/recipes/sparkrun/import", s.sparkRunRecipeImport)
 	mux.HandleFunc("DELETE /api/recipes/{id}", s.localRecipeDelete)
 	mux.HandleFunc("PUT /api/recipes/{id}", s.localRecipeUpdate)
 	mux.HandleFunc("GET /api/recipes/{id}/source", s.localRecipeSource)
+	mux.HandleFunc("POST /api/recipes/{id}/check", s.localRecipeCheck)
 	mux.HandleFunc("POST /api/recipes/{id}/run", s.localRecipeRun)
+	mux.HandleFunc("POST /api/recipes/{id}/abort", s.localRecipeAbort)
 	mux.HandleFunc("POST /api/recipes/{id}/stop", s.localRecipeStop)
 	mux.HandleFunc("GET /api/diffusion", s.diffusionList)
 	mux.HandleFunc("GET /api/diffusion/downloads", s.diffusionDownloads)
@@ -302,7 +310,7 @@ func (s *Server) activeEngine(ctx context.Context) string {
 		}
 	}
 	if current := s.state.Get(); current.LocalRecipeID != "" && !current.EngineUnloaded && running["cloudless-cluster-engine-proxy"] {
-		return "vllm"
+		return current.Engine
 	}
 	return ""
 }
@@ -525,6 +533,7 @@ func (s *Server) runEngineUnload(job *jobs.Job) {
 	defer cancel()
 	provision.EngineMu.Lock()
 	defer provision.EngineMu.Unlock()
+	s.stopActiveLocalRecipeRuntime(context.Background(), job)
 
 	job.Progress("stopping", "Stopping inference and releasing accelerator memory …", -1, -1)
 	if s.state.Get().ExecutionMode == "cluster" {
@@ -624,6 +633,7 @@ func (s *Server) applyEngine(job *jobs.Job, target catalog.App) {
 	defer s.unregisterEngineJob(job.ID)
 	// Serialize with the startup provisioner so neither clobbers the other (D15).
 	provision.EngineMu.Lock()
+	s.stopActiveLocalRecipeRuntime(context.Background(), job)
 	_ = s.state.SetEngine(target.ID) // remember the choice across restarts
 	_ = s.state.SetEngineUnloaded(false)
 	if target.ID != "vllm" && st.ExecutionMode == "cluster" {

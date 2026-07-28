@@ -1,0 +1,13 @@
+[Unit]
+Description=Install the pinned CloudlessOS SparkRun provider
+After=network-online.target
+Wants=network-online.target
+ConditionArchitecture=arm64
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/cloudless/cloudless-sparkrun-install
+TimeoutStartSec=900
+
+[Install]
+WantedBy=multi-user.target

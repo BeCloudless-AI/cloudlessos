@@ -1,0 +1,55 @@
+#!/bin/sh
+set -eu
+
+VERSION=0.2.40
+ROOT=/opt/cloudless
+TARGET=$ROOT/sparkrun
+PYTHON=${PYTHON:-python3}
+STATE=/var/lib/cloudless/sparkrun
+
+case "$(dpkg --print-architecture 2>/dev/null || true)" in
+  arm64) ;;
+  *) exit 0 ;;
+esac
+
+install -d -m 0700 "$STATE"
+if [ ! -s "$STATE/id_ed25519" ]; then
+  ssh-keygen -q -t ed25519 -N '' -C cloudless-sparkrun-local -f "$STATE/id_ed25519"
+fi
+chmod 0600 "$STATE/id_ed25519"
+chmod 0644 "$STATE/id_ed25519.pub"
+
+# SparkRun connects to every target over SSH, including this Spark. Authorize a
+# dedicated local-only Cloudless identity outside cloudlessd's read-only-home
+# sandbox; remote cluster nodes continue to use Cloudless's cluster identity.
+OWNER=$(getent passwd | awk -F: '$3 >= 1000 && $3 < 65534 && $1 != "cloudless" { if (uid == "" || $3 < uid) { uid=$3; name=$1; home=$6 } } END { if (name != "") print name ":" home }')
+if [ -n "$OWNER" ]; then
+  USERNAME=${OWNER%%:*}
+  USERHOME=${OWNER#*:}
+  USERGROUP=$(id -gn "$USERNAME")
+  install -d -m 0700 -o "$USERNAME" -g "$USERGROUP" "$USERHOME/.ssh"
+  touch "$USERHOME/.ssh/authorized_keys"
+  chown "$USERNAME:$USERGROUP" "$USERHOME/.ssh/authorized_keys"
+  chmod 0600 "$USERHOME/.ssh/authorized_keys"
+  KEY=$(cat "$STATE/id_ed25519.pub")
+  grep -qxF "$KEY" "$USERHOME/.ssh/authorized_keys" || printf '%s\n' "$KEY" >> "$USERHOME/.ssh/authorized_keys"
+fi
+
+if [ -x "$TARGET/bin/sparkrun" ] && "$TARGET/bin/sparkrun" --version 2>/dev/null | grep -Fq "$VERSION"; then
+  exit 0
+fi
+
+install -d -m 0755 "$ROOT"
+OLD="$ROOT/.sparkrun-previous"
+rm -rf "$OLD"
+if [ -e "$TARGET" ]; then mv "$TARGET" "$OLD"; fi
+rollback() {
+  rm -rf "$TARGET"
+  if [ -e "$OLD" ]; then mv "$OLD" "$TARGET"; fi
+}
+trap rollback INT TERM HUP EXIT
+"$PYTHON" -m venv "$TARGET"
+"$TARGET/bin/python" -m pip install --disable-pip-version-check --no-input --no-cache-dir "sparkrun==$VERSION"
+"$TARGET/bin/sparkrun" --version | grep -Fq "$VERSION"
+trap - INT TERM HUP EXIT
+rm -rf "$OLD"

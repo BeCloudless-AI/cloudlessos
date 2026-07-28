@@ -141,3 +141,25 @@ First-boot validation is written to
 
 The UI reports GB10 memory as unified system/accelerator memory rather than
 pretending it is dedicated VRAM. Model fit estimates use that same capacity.
+
+## SparkRun recipe compatibility
+
+Model Manager's **Recipes** page can preview and import portable SparkRun YAML.
+Accepted sources are pasted YAML, a public HTTPS YAML URL, a GitHub recipe URL,
+`@spark-arena/<id>`, and SparkRun's built-in `@official`, `@experimental`,
+`@community`, `@eugr`, `@atlas`, `@sparkrun-transitional`, and
+`@sparkrun-testing` registries.
+
+On arm64 DGX Spark installations, `cloudless-sparkrun.service` installs the
+exact provider version pinned by Cloudless into `/opt/cloudless/sparkrun` and
+prepares a dedicated local SSH identity. The orchestrator verifies that version,
+asks SparkRun to validate the original YAML, and only enables Import when that
+validation succeeds. The YAML is stored and executed unchanged; Cloudless does
+not silently drop builder, distribution, executor, hook, Ray, or tuning fields.
+
+Imported recipes are marked **SparkRun compatible**. **Check recipe** runs a
+real provider dry-run against the selected Cloudless cluster without launching
+the model. Run, progress, Abort, Stop, health, active-model state, and the stable
+API gateway remain Cloudless-owned. Exact node-count requirements fail closed,
+so (for example) a three-Spark recipe can be imported on a two-Spark appliance
+but cannot be launched until a third healthy node is connected.

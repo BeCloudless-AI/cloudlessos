@@ -3,7 +3,7 @@
 > The cold-start anchor. If resuming work, read this first (after `CLAUDE.md`).
 > Keep it current — update the date and sections whenever state changes.
 
-**Last updated:** 2026-07-21
+**Last updated:** 2026-07-28
 
 ## Where we are
 
@@ -15,6 +15,12 @@ removed via the API.
 
 ## Done
 
+- **Automated Recipe Indexer** (`services/recipe-indexer`, D45): Cloudflare Worker + Queue +
+  D1 + R2 service discovers known registries and GitHub recipe repositories, resolves immutable
+  revisions, preserves content-addressed source artifacts, normalizes Cloudless/SparkRun metadata,
+  quarantines unsafe recipes, and publishes a sequence-numbered Ed25519-signed catalog. Public
+  search supports platform, architecture, engine and exact/compatible Spark counts. Tests and a
+  Wrangler production dry-run pass; cloud provisioning/deployment remains an operator step.
 - **First CloudlessOS development ISO pipeline** (`distro/`, D43): five Debian packages
   (orchestrator, kiosk shell, branding, hardware setup, first-boot validation), guided
   Ubuntu 24.04.4 Subiquity autoinstall, Chromium snap, Docker/NVIDIA provisioning,

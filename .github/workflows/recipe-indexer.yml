@@ -1,0 +1,32 @@
+name: Recipe Indexer
+
+on:
+  pull_request:
+    paths:
+      - "services/recipe-indexer/**"
+      - ".github/workflows/recipe-indexer.yml"
+  push:
+    branches: [main]
+    paths:
+      - "services/recipe-indexer/**"
+      - ".github/workflows/recipe-indexer.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/recipe-indexer
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: services/recipe-indexer/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run check

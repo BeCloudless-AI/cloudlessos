@@ -1,6 +1,6 @@
 {
-  "title": "A clearer desktop and region-aware system clock",
-  "summary": "CloudlessOS 0.2.4 refines the desktop around active AI work, improves multi-Spark hardware visibility, and makes profile regions correctly influence the system timezone where it is safe to do so.",
+  "title": "Native recipes, developer tooling, and a clearer desktop",
+  "summary": "CloudlessOS 0.2.4 makes advanced inference recipes understandable and repeatable, adds first-class terminal and custom-engine workflows, improves multi-Spark preparation, and further refines the desktop around active AI work.",
   "changes": [
     "Unify the active model and live metrics into one aligned desktop control while hiding unavailable metrics during model loading.",
     "Keep the desktop shelf visible during AI startup and clearly dim pinned applications until the engine is ready.",
@@ -12,6 +12,13 @@
     "Simplify GitHub recipe prefilling with a fixed repository prefix, owner/repository input, and inline validation.",
     "Expand Profile from a small hard-coded list to 68 alphabetized regions, including United Arab Emirates.",
     "Synchronize single-timezone region choices such as United Arab Emirates with the host timezone and render the Cloudless clock explicitly in that timezone.",
-    "Prefer Ubuntu's active timezone link over stale legacy timezone metadata so Settings and the desktop clock remain accurate after a change."
+    "Prefer Ubuntu's active timezone link over stale legacy timezone metadata so Settings and the desktop clock remain accurate after a change.",
+    "Replace the experimental SparkRun dependency with Cloudless-native, pinned recipe manifests and lifecycle commands that remain inspectable and reproducible.",
+    "Prepare custom recipe runtimes and model caches once on the coordinator, then transfer the resulting runtime image and cache to peer Sparks over the direct cluster link instead of rebuilding or downloading twice.",
+    "Warn before a recipe needs a specialized inference runtime, explain why the standard Cloudless vLLM engine is insufficient, and show runtime size, cache state, cluster work, API routing, and every launch step.",
+    "Report recipe preparation with stable in-place updates, byte progress, percentage, an estimated time remaining, an eight-stage timeline, and an immediate Abort action.",
+    "Add an unrestricted integrated terminal for advanced users and optional developer tooling for CUDA, source builds, and architecture-specific experimentation.",
+    "Introduce a managed custom-engine registry so locally compiled inference engines can be selected by recipes without replacing the system engine.",
+    "Remove the dormant public recipe indexer and discovery UI while retaining local recipe import, editing, checking, and execution."
   ]
 }

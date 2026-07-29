@@ -22,6 +22,7 @@ import (
 	"github.com/cloudless/orchestrator/internal/apps"
 	"github.com/cloudless/orchestrator/internal/capabilities"
 	"github.com/cloudless/orchestrator/internal/catalog"
+	"github.com/cloudless/orchestrator/internal/customengine"
 	"github.com/cloudless/orchestrator/internal/engine"
 	"github.com/cloudless/orchestrator/internal/hardware"
 	"github.com/cloudless/orchestrator/internal/jobs"
@@ -66,8 +67,7 @@ type Server struct {
 	engineJobsMu sync.Mutex
 	engineJobs   map[string]context.CancelFunc
 	recipeJobsMu sync.Mutex
-	recipeJobs   map[string]context.CancelFunc
-	sparkRunPath string
+	recipeJobs   map[string]recipeJobControl
 
 	installMu sync.Mutex // one catalog/pack transaction may change containers at a time
 	recipes   *localrecipes.Store
@@ -103,6 +103,7 @@ func (s *Server) infraImage(ctx context.Context, key, fallback string) string {
 func (s *Server) Routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", s.health)
+	mux.Handle("GET /terminal/", cloudlessTerminalProxy())
 	mux.HandleFunc("GET /api/gpu", s.gpu)
 	mux.HandleFunc("GET /api/system", s.system)
 	mux.HandleFunc("GET /api/system/input", s.systemInput)
@@ -160,8 +161,6 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/recipes", s.localRecipeCreate)
 	mux.HandleFunc("POST /api/recipes/import/preview", s.localRecipeImportPreview)
 	mux.HandleFunc("POST /api/recipes/import", s.localRecipeImport)
-	mux.HandleFunc("POST /api/recipes/sparkrun/preview", s.sparkRunRecipePreview)
-	mux.HandleFunc("POST /api/recipes/sparkrun/import", s.sparkRunRecipeImport)
 	mux.HandleFunc("DELETE /api/recipes/{id}", s.localRecipeDelete)
 	mux.HandleFunc("PUT /api/recipes/{id}", s.localRecipeUpdate)
 	mux.HandleFunc("GET /api/recipes/{id}/source", s.localRecipeSource)
@@ -181,6 +180,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/folders", s.folders)
 	mux.HandleFunc("POST /api/folders/{id}/open", s.openFolder)
 	mux.HandleFunc("GET /api/engine", s.engineState)
+	mux.HandleFunc("POST /api/engines/custom", s.customEngineCreate)
+	mux.HandleFunc("DELETE /api/engines/custom/{id}", s.customEngineDelete)
 	mux.HandleFunc("POST /api/engine/load", s.engineLoad)
 	mux.HandleFunc("POST /api/engine/unload", s.engineUnload)
 	mux.HandleFunc("POST /api/engine/abort", s.engineAbort)
@@ -304,7 +305,7 @@ func (s *Server) activeEngine(ctx context.Context) string {
 			running[c.Name] = true
 		}
 	}
-	for _, e := range catalog.Engines() {
+	for _, e := range customengine.All(s.state) {
 		if running[e.ContainerName()] {
 			return e.ID
 		}
@@ -341,14 +342,27 @@ func (s *Server) engineState(w http.ResponseWriter, r *http.Request) {
 		Name     string `json:"name"`
 		Active   bool   `json:"active"`
 		Selected bool   `json:"selected"`
+		Custom   bool   `json:"custom,omitempty"`
+		Image    string `json:"image,omitempty"`
+		Base     string `json:"base,omitempty"`
 	}
 	selected := currentState.Engine
 	if selected == "" {
 		selected = catalog.DefaultEngine()
 	}
 	list := []eng{}
-	for _, e := range catalog.Engines() {
-		list = append(list, eng{ID: e.ID, Name: e.Name, Active: e.ID == active, Selected: e.ID == selected})
+	for _, e := range customengine.All(s.state) {
+		item := eng{ID: e.ID, Name: e.Name, Active: e.ID == active, Selected: e.ID == selected, Custom: customengine.IsCustom(e.ID)}
+		if item.Custom {
+			item.Image = e.Image
+			for _, def := range currentState.CustomEngines {
+				if def.ID == e.ID {
+					item.Base = def.Base
+					break
+				}
+			}
+		}
+		list = append(list, item)
 	}
 	var startup *jobs.Snapshot
 	startupSequence := -1
@@ -364,7 +378,7 @@ func (s *Server) engineState(w http.ResponseWriter, r *http.Request) {
 	}
 	ready := active != "" && engineReady(ctx)
 	if startup == nil && active != "" && !ready {
-		if app, ok := catalog.Get(active); ok {
+		if app, ok := customengine.Get(s.state, active); ok {
 			if logs, err := s.eng.Logs(ctx, app.ContainerName()); err == nil {
 				done, total := modelCheckpointProgress(logs)
 				message := "Loading the model across the available hardware …"
@@ -472,7 +486,7 @@ func (s *Server) engineLoad(w http.ResponseWriter, _ *http.Request) {
 	if id == "" {
 		id = catalog.DefaultEngine()
 	}
-	target, ok := catalog.Get(id)
+	target, ok := customengine.Get(s.state, id)
 	if !ok || !target.Engine {
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "the selected inference engine is unavailable"})
 		return
@@ -549,7 +563,7 @@ func (s *Server) runEngineUnload(job *jobs.Job) {
 			return
 		}
 	}
-	for _, candidate := range catalog.Engines() {
+	for _, candidate := range customengine.All(s.state) {
 		container, err := s.eng.Find(ctx, candidate.ContainerName())
 		if err != nil {
 			job.Fail(err)
@@ -573,7 +587,7 @@ func (s *Server) runEngineUnload(job *jobs.Job) {
 // engineSwitch stops the current engine and starts the chosen one, which inherits
 // the stable `cloudless-ai` alias — so every client follows automatically.
 func (s *Server) engineSwitch(w http.ResponseWriter, r *http.Request) {
-	app, ok := catalog.Get(r.PathValue("id"))
+	app, ok := customengine.Get(s.state, r.PathValue("id"))
 	if !ok || !app.Engine {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "unknown engine"})
 		return
@@ -592,7 +606,7 @@ func (s *Server) engineRestart(w http.ResponseWriter, r *http.Request) {
 	if active == "" {
 		active = catalog.DefaultEngine()
 	}
-	app, ok := catalog.Get(active)
+	app, ok := customengine.Get(s.state, active)
 	if !ok || !app.Engine {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no engine"})
 		return
@@ -640,7 +654,7 @@ func (s *Server) applyEngine(job *jobs.Job, target catalog.App) {
 		distributed = false
 		_ = s.state.SetExecutionMode("local")
 	}
-	for _, e := range catalog.Engines() {
+	for _, e := range customengine.All(s.state) {
 		if e.ID != target.ID {
 			message := "Stopping " + e.Name + " …"
 			job.Progress("switching", message, -1, -1)
@@ -1561,7 +1575,11 @@ func (s *Server) settingsModel(w http.ResponseWriter, r *http.Request) {
 	if active == "" {
 		active = catalog.DefaultEngine()
 	}
-	app, _ := catalog.Get(active)
+	app, ok := customengine.Get(s.state, active)
+	if !ok {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "the selected inference engine is unavailable"})
+		return
+	}
 	job := s.jobs.Create("model:" + app.ID)
 	go s.applyEngine(job, app)
 	writeJSON(w, http.StatusAccepted, map[string]string{"jobId": job.ID, "mode": mode})

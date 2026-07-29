@@ -46,23 +46,23 @@ finish_package() {
 
 PKG="$WORK/cloudless-orchestrator"
 ORCHESTRATOR_DEPS="docker.io | docker-ce, ca-certificates, gpgv, openssh-client, sshpass, avahi-utils, netplan.io, iputils-ping, xdotool"
-if [ "$ARCH" = arm64 ]; then ORCHESTRATOR_DEPS="$ORCHESTRATOR_DEPS, python3 (>= 3.12), python3-venv"; fi
 make_control "$PKG" cloudless-orchestrator "CloudlessOS local AI orchestrator" "$ORCHESTRATOR_DEPS"
 install -Dm0755 "$WORK/cloudlessd" "$PKG/usr/lib/cloudless/cloudlessd"
 install -Dm0644 "$DISTRO/release/keys/cloudless-archive-keyring.pgp" \
     "$PKG/usr/share/cloudless/cloudless-archive-keyring.pgp"
 install -Dm0644 "$DISTRO/packages/cloudless-orchestrator/cloudlessd.service" "$PKG/lib/systemd/system/cloudlessd.service"
-install -Dm0755 "$DISTRO/packages/cloudless-orchestrator/cloudless-sparkrun-install" "$PKG/usr/lib/cloudless/cloudless-sparkrun-install"
-install -Dm0644 "$DISTRO/packages/cloudless-orchestrator/cloudless-sparkrun.service" "$PKG/lib/systemd/system/cloudless-sparkrun.service"
 install -Dm0644 "$DISTRO/packages/cloudless-orchestrator/cloudless.env" "$PKG/etc/cloudless/cloudless.env"
 install -Dm0755 "$DISTRO/packages/cloudless-orchestrator/postinst" "$PKG/DEBIAN/postinst"
 install -Dm0755 "$DISTRO/packages/cloudless-orchestrator/prerm" "$PKG/DEBIAN/prerm"
 finish_package "$PKG" cloudless-orchestrator
 
 PKG="$WORK/cloudless-shell"
-make_control "$PKG" cloudless-shell "CloudlessOS fullscreen web shell" "lightdm, lightdm-gtk-greeter, openbox, pcmanfm, xorg, curl, feh, unclutter, x11-xserver-utils"
+make_control "$PKG" cloudless-shell "CloudlessOS fullscreen web shell" "lightdm, lightdm-gtk-greeter, openbox, pcmanfm, xorg, curl, feh, unclutter, x11-xserver-utils, ttyd"
 install -Dm0755 "$DISTRO/packages/cloudless-shell/cloudless-kiosk" "$PKG/usr/bin/cloudless-kiosk"
 install -Dm0755 "$DISTRO/packages/cloudless-shell/cloudless-dgx-desktop-mode" "$PKG/usr/sbin/cloudless-dgx-desktop-mode"
+install -Dm0755 "$DISTRO/packages/cloudless-shell/cloudless-developer-tools" "$PKG/usr/sbin/cloudless-developer-tools"
+install -Dm0644 "$DISTRO/packages/cloudless-shell/cloudless-terminal.service" "$PKG/lib/systemd/system/cloudless-terminal.service"
+install -Dm0644 "$DISTRO/packages/cloudless-shell/cloudless-cuda.sh" "$PKG/etc/profile.d/cloudless-cuda.sh"
 install -Dm0644 "$DISTRO/packages/cloudless-shell/openbox-autostart" "$PKG/usr/share/cloudless/openbox-autostart"
 install -Dm0644 "$DISTRO/packages/cloudless-shell/lightdm.conf" "$PKG/etc/lightdm/lightdm.conf.d/60-cloudless.conf"
 mkdir -p "$PKG/usr/share/backgrounds/cloudless"

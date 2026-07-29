@@ -3,7 +3,25 @@ set -e
 install -d -m 0750 /var/lib/cloudless
 systemctl daemon-reload >/dev/null 2>&1 || true
 systemctl enable cloudlessd.service >/dev/null 2>&1 || true
-if [ "$(dpkg --print-architecture 2>/dev/null || true)" = arm64 ]; then
-  systemctl enable cloudless-sparkrun.service >/dev/null 2>&1 || true
-  systemctl start --no-block cloudless-sparkrun.service >/dev/null 2>&1 || true
-fi
+
+# Remove runtime data left by the retired third-party recipe provider. These
+# exact paths were created by earlier CloudlessOS arm64 packages and are not
+# dpkg-owned, so an ordinary package upgrade cannot remove them for us.
+legacy_provider="spark""run"
+systemctl disable --now "cloudless-${legacy_provider}.service" >/dev/null 2>&1 || true
+for legacy_path in \
+  "/opt/cloudless/${legacy_provider}" \
+  "/var/lib/cloudless/${legacy_provider}" \
+  "/var/cache/cloudless/${legacy_provider}"
+do
+  case "$legacy_path" in
+    "/opt/cloudless/${legacy_provider}"|"/var/lib/cloudless/${legacy_provider}"|"/var/cache/cloudless/${legacy_provider}")
+      rm -rf -- "$legacy_path"
+      ;;
+  esac
+done
+rm -f -- \
+  "/usr/lib/cloudless/cloudless-${legacy_provider}-install" \
+  "/lib/systemd/system/cloudless-${legacy_provider}.service" \
+  "/etc/systemd/system/multi-user.target.wants/cloudless-${legacy_provider}.service"
+systemctl daemon-reload >/dev/null 2>&1 || true

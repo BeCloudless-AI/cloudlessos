@@ -1,86 +1,145 @@
-# Development Environment
+# Development environment
 
-## Machines
+This runbook covers orchestrator and interface development. Distribution builds, releases and
+physical installation use the additional gates in [`../distro/README.md`](../distro/README.md).
 
-### Primary dev box (this machine) — Phase 0 happens here
-- **OS:** Windows 11 Pro
-- **GPU:** NVIDIA GeForce RTX 5090, 32 GB VRAM
-- **Driver:** 595.79 · **CUDA (driver-reported):** 13.2
-- **WSL2:** enabled, v2 default. Distro: **Ubuntu 24.04 installed**, systemd active,
-  kernel 6.6 WSL2, Linux user `ledomaine` (sudo requires password). `nvidia-smi` works
-  inside WSL (sees the RTX 5090).
-- Project repo lives at `D:\Cloudless` (Windows side).
+## Supported development setup
 
-### Secondary box — reserved for later (multi-GPU / native testing)
-- **OS:** native Ubuntu
-- **GPU:** 3× NVIDIA GPUs
-- **Status:** all GPUs currently saturated with other workloads → leave alone for now.
-  (GPUs can time-share later via `CUDA_VISIBLE_DEVICES` if VRAM allows.)
+- Ubuntu 24.04 native or under WSL2.
+- Docker Engine with NVIDIA Container Toolkit when testing GPU workloads.
+- Go 1.26 or newer.
+- Node.js for embedded-interface JavaScript validation.
+- Git and at least 20 GB of free storage; model and engine images require substantially more.
 
-## WSL2 + GPU setup steps
+The primary repository checkout may live on the Windows filesystem under WSL. Disable Go VCS
+stamping there if Git reports mismatched ownership:
 
-Key fact: in WSL2 you do **NOT** install a Linux NVIDIA driver. WSL uses the **Windows**
-driver; you only install the CUDA toolkit / container toolkit inside Ubuntu.
+```bash
+export GOFLAGS=-buildvcs=false
+```
 
-1. **Install Ubuntu into WSL2** (interactive — run yourself, sets up Linux user):
-   ```
-   wsl --install -d Ubuntu-24.04
-   ```
-2. **Verify GPU passthrough** inside Ubuntu:
-   ```
-   nvidia-smi          # should show the RTX 5090
-   ```
-3. **Install Docker + NVIDIA Container Toolkit** — use the repo script (reproducible
-   runbook). Run inside the WSL Ubuntu shell; it prompts for your sudo password:
-   ```
-   bash /mnt/d/Cloudless/scripts/setup-wsl-docker.sh
-   ```
-   Then apply docker-group membership: run `wsl --shutdown` from Windows and reopen Ubuntu.
-   (Decision D1: Docker Engine for Phase 0; Podman remains a later candidate.)
-4. **Verify container GPU access:**
-   ```
-   docker run --rm --gpus all nvidia/cuda:12.4.0-base-ubuntu22.04 nvidia-smi
-   ```
-5. **Manual ComfyUI baseline** — run ComfyUI in a GPU container by hand. This is the
-   thing the orchestrator will automate.
+## WSL2 GPU setup
 
-## Setup status (update as you go)
+WSL uses the Windows NVIDIA driver. Do not install a second Linux kernel driver inside WSL.
 
-- [x] WSL2 enabled (v2 default) on Windows
-- [x] Windows NVIDIA driver present (595.79, RTX 5090 visible via `nvidia-smi`)
-- [x] Ubuntu 24.04 installed in WSL2 (systemd active)
-- [x] `nvidia-smi` verified inside WSL2 (sees RTX 5090)
-- [x] Docker Engine (29.6.0) + NVIDIA Container Toolkit (1.19.1) installed via `scripts/setup-wsl-docker.sh`
-- [x] Container GPU access verified (`docker run --gpus all ... nvidia-smi` sees the RTX 5090)
-- [x] Go 1.26.4 installed (`scripts/install-go.sh`)
-- [x] Orchestrator builds + vets clean (`scripts/build-orchestrator.sh`)
-- [x] End-to-end smoke test passed (`scripts/smoke-test.sh`): Ollama install/run/stop/remove on GPU
+```bash
+# Windows, first setup only
+wsl --install -d Ubuntu-24.04
 
-## Notes / gotchas
+# Ubuntu/WSL
+nvidia-smi
+bash scripts/setup-wsl-docker.sh
+bash scripts/install-go.sh
+```
 
-- WSL2 networking and systemd differ from bare metal; don't bake kernel/init assumptions
-  into the orchestrator (see decision D4).
-- Never commit model weights — `.gitignore` excludes common weight formats and `models/`.
-- **Running WSL commands from the Windows side:** put scripts in files and invoke as
-  `wsl.exe -d Ubuntu-24.04 -- bash -lc 'bash /mnt/d/Cloudless/scripts/<x>.sh'`. Complex
-  inline scripts get mangled by the Git Bash ↔ wsl.exe layer (breaks on `://`, nested
-  quotes, and `Program Files (x86)` in the inherited PATH); bare `/mnt/...` args get
-  path-converted unless kept inside the `-lc '…'` string.
-- **Go on /mnt/d:** export `GOFLAGS=-buildvcs=false` (git reports "dubious ownership" on
-  the Windows filesystem, which breaks VCS stamping).
-- **docker without sudo:** `ledomaine` is in the `docker` group but the session needs a
-  refresh. Either `wsl --shutdown` + reopen, or run via `sg docker -c '…'` for now.
-- Go is on PATH for interactive shells via `~/.bashrc`; non-interactive `bash -lc` needs
-  `export PATH=/usr/local/go/bin:$PATH` (the build/smoke scripts do this).
-- **Stale daemon / image after recipe changes:** the orchestrator embeds app Dockerfiles
-  and bakes engine flags into the compiled binary, so changing a recipe requires
-  rebuilding **and restarting** the daemon (`scripts/build-orchestrator.sh` + run the new
-  binary), then **reinstalling** the affected app so its image rebuilds. A long-running old
-  daemon keeps serving the old image. `scripts/openclaw-reinstall.sh` force-rebuilds OpenClaw
-  (rm image + container, reinstall) when in doubt.
+Restart WSL after Docker group membership changes:
 
-## See also
+```powershell
+wsl --shutdown
+```
 
-- [[ROADMAP]] — Phase 0 milestones this environment supports
-- [[STATUS]] — living state: what's done, in progress, and next
-- [[DECISIONS]] — decision log (ADR-style); see D1 (Docker), D4 (WSL2 assumptions)
+Then verify container GPU access:
+
+```bash
+docker run --rm --gpus all nvidia/cuda:13.0.0-base-ubuntu24.04 nvidia-smi
+```
+
+## Run Cloudless locally
+
+```bash
+cd orchestrator
+go run ./cmd/cloudlessd
+```
+
+Open `http://127.0.0.1:8765`.
+
+For interface work that must not pull or start the managed application set:
+
+```bash
+cd orchestrator
+CLOUDLESS_NO_PROVISION=1 go run ./cmd/cloudlessd
+```
+
+The development state location follows `CLOUDLESS_STATE_DIR`, then
+`$XDG_STATE_HOME/cloudless`, then `~/.local/state/cloudless`. Production packages explicitly
+use `/var/lib/cloudless`.
+
+## Validate orchestrator and interface changes
+
+```bash
+cd orchestrator
+go test ./...
+go vet ./...
+go build ./...
+cd ..
+node distro/scripts/test-web-js.js
+```
+
+The repository helper performs the build and vet steps with the WSL-specific environment:
+
+```bash
+bash scripts/build-orchestrator.sh
+```
+
+Changes to embedded interface assets, catalog contracts or application Dockerfiles require a
+new daemon build. Restart the running daemon after rebuilding; an old process continues serving
+its embedded copy.
+
+## Develop on the physical DGX Spark
+
+DGX Spark is ARM64 and retains NVIDIA's qualified driver, CUDA and DGX OS components. Do not
+replace those with the generic Ubuntu hardware installer.
+
+Use the signed DGX installer for persistent systems. For a short development iteration, cross-build
+the daemon and deploy it without publishing packages:
+
+```bash
+cd orchestrator
+CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o /tmp/cloudlessd-arm64 ./cmd/cloudlessd
+```
+
+After copying it to the Spark, stop `cloudlessd`, install it at
+`/usr/lib/cloudless/cloudlessd`, restart the service, verify `/api/health`, and refresh the kiosk.
+This direct deployment is temporary: the next signed package update replaces the binary with the
+published version.
+
+Use [`../distro/DGX-SPARK.md`](../distro/DGX-SPARK.md) for supported installation, diagnostics,
+desktop switching and cluster operations.
+
+## Compile custom inference engines
+
+Installed CloudlessOS systems expose an authenticated full host terminal. The optional build
+toolchain is installed with:
+
+```bash
+sudo cloudless-developer-tools
+```
+
+On CUDA systems, new terminal sessions receive `CUDA_HOME=/usr/local/cuda` and add `nvcc` to
+`PATH` when that toolkit exists.
+
+Custom engine builds must be tagged as local Docker images before Cloudless can register them.
+See [`CUSTOM_ENGINES.md`](./CUSTOM_ENGINES.md) for the complete source-build, registration,
+readiness, rollback and troubleshooting workflow.
+
+## Common gotchas
+
+- Never commit model weights, Hugging Face caches, custom engine images or build output.
+- A driver-reported CUDA version is not proof that the CUDA compiler is installed; verify
+  `nvcc --version` before a native source build.
+- WSL shell quoting is fragile across PowerShell, `wsl.exe` and Bash. Put complex operations in
+  repository scripts rather than nested one-line commands.
+- Refresh the Linux session after adding a user to the Docker group.
+- Custom engine images are trusted local code with GPU and model-cache access.
+- Reusing a mutable `latest` tag makes custom-engine rollback and bug reproduction ambiguous.
+- Generic AMD64 and DGX Spark ARM64 features share one source tree; use backend capabilities and
+  architecture-specific contracts rather than branching the frontend.
+
+## Related documentation
+
+- [Project README](../README.md)
+- [Architecture](./ARCHITECTURE.md)
+- [Custom engines](./CUSTOM_ENGINES.md)
+- [DGX Spark](../distro/DGX-SPARK.md)
+- [Distribution builds](../distro/README.md)
+- [Live status](./STATUS.md)

@@ -5,7 +5,6 @@ package localrecipes
 
 import (
 	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -28,93 +27,81 @@ const (
 var containerImagePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/:@-]{0,511}$`)
 
 type Command struct {
-	Program string   `json:"program"`
-	Args    []string `json:"args"`
+	Program string   `json:"program" yaml:"program"`
+	Args    []string `json:"args" yaml:"args"`
 }
 
 type Source struct {
-	URL      string            `json:"url"`
-	Revision string            `json:"revision"`
-	Files    map[string]string `json:"files,omitempty"`
+	URL      string            `json:"url" yaml:"url"`
+	Revision string            `json:"revision" yaml:"revision"`
+	Files    map[string]string `json:"files,omitempty" yaml:"files,omitempty"`
 }
 
 type Engine struct {
-	Type            string   `json:"type"`
-	Image           string   `json:"image"`
-	ServedModelName string   `json:"servedModelName"`
-	ContainerPort   int      `json:"containerPort"`
-	APIPath         string   `json:"apiPath"`
-	ProxyHost       string   `json:"proxyHost"`
-	RestartPolicy   string   `json:"restartPolicy"`
-	Arguments       []string `json:"arguments,omitempty"`
+	Type            string   `json:"type" yaml:"type"`
+	Image           string   `json:"image" yaml:"image"`
+	ServedModelName string   `json:"servedModelName" yaml:"servedModelName"`
+	ContainerPort   int      `json:"containerPort" yaml:"containerPort"`
+	APIPath         string   `json:"apiPath" yaml:"apiPath"`
+	ProxyHost       string   `json:"proxyHost" yaml:"proxyHost"`
+	RestartPolicy   string   `json:"restartPolicy" yaml:"restartPolicy"`
+	Arguments       []string `json:"arguments,omitempty" yaml:"arguments,omitempty"`
 }
 
 type Model struct {
-	ID                   string  `json:"id"`
-	Revision             string  `json:"revision"`
-	Quantization         string  `json:"quantization"`
-	DType                string  `json:"dtype"`
-	KVCacheDType         string  `json:"kvCacheDtype"`
-	MaxContext           int     `json:"maxContext"`
-	MaxSequences         int     `json:"maxSequences"`
-	GPUMemoryUtilization float64 `json:"gpuMemoryUtilization"`
-	TensorParallel       int     `json:"tensorParallel"`
-	PipelineParallel     int     `json:"pipelineParallel"`
-	TrustRemoteCode      bool    `json:"trustRemoteCode"`
+	ID                   string  `json:"id" yaml:"id"`
+	Revision             string  `json:"revision" yaml:"revision"`
+	Quantization         string  `json:"quantization" yaml:"quantization"`
+	DType                string  `json:"dtype" yaml:"dtype"`
+	KVCacheDType         string  `json:"kvCacheDtype" yaml:"kvCacheDtype"`
+	MaxContext           int     `json:"maxContext" yaml:"maxContext"`
+	MaxSequences         int     `json:"maxSequences" yaml:"maxSequences"`
+	GPUMemoryUtilization float64 `json:"gpuMemoryUtilization" yaml:"gpuMemoryUtilization"`
+	TensorParallel       int     `json:"tensorParallel" yaml:"tensorParallel"`
+	PipelineParallel     int     `json:"pipelineParallel" yaml:"pipelineParallel"`
+	TrustRemoteCode      bool    `json:"trustRemoteCode" yaml:"trustRemoteCode"`
 }
 
 type Distributed struct {
-	Nodes       int    `json:"nodes"`
-	Backend     string `json:"backend"`
-	MasterPort  int    `json:"masterPort"`
-	Interface   string `json:"interface"`
-	HCA         string `json:"hca"`
-	IBGIDIndex  int    `json:"ibGidIndex"`
-	WorkerAlias string `json:"workerAlias"`
+	Nodes       int    `json:"nodes" yaml:"nodes"`
+	Backend     string `json:"backend" yaml:"backend"`
+	MasterPort  int    `json:"masterPort" yaml:"masterPort"`
+	Interface   string `json:"interface" yaml:"interface"`
+	HCA         string `json:"hca" yaml:"hca"`
+	IBGIDIndex  int    `json:"ibGidIndex" yaml:"ibGidIndex"`
+	WorkerAlias string `json:"workerAlias" yaml:"workerAlias"`
 }
 
 type Lifecycle struct {
-	Build    Command `json:"build"`
-	Download Command `json:"download"`
-	Start    Command `json:"start"`
-	Stop     Command `json:"stop"`
+	Build    Command `json:"build" yaml:"build"`
+	Download Command `json:"download" yaml:"download"`
+	Start    Command `json:"start" yaml:"start"`
+	Stop     Command `json:"stop" yaml:"stop"`
 }
 
 type Runtime struct {
-	Adapter        string            `json:"adapter"`
-	SparkRun       *SparkRunRuntime  `json:"sparkRun,omitempty"`
-	WorkingDir     string            `json:"workingDir"`
-	TimeoutMinutes int               `json:"timeoutMinutes"`
-	Prerequisites  []string          `json:"prerequisites,omitempty"`
-	Environment    map[string]string `json:"environment,omitempty"`
-	Lifecycle      Lifecycle         `json:"lifecycle"`
-}
-
-// SparkRunRuntime preserves the authoritative SparkRun document. Cloudless
-// deliberately does not translate operational fields: the pinned SparkRun
-// provider validates and executes this exact document.
-type SparkRunRuntime struct {
-	Schema          int               `json:"schema"`
-	SourceURL       string            `json:"sourceUrl,omitempty"`
-	SourceDigest    string            `json:"sourceDigest"`
-	Document        string            `json:"document"`
-	ProviderVersion string            `json:"providerVersion"`
-	OriginalRuntime string            `json:"originalRuntime"`
-	CommandTemplate string            `json:"commandTemplate"`
-	Defaults        map[string]string `json:"defaults,omitempty"`
-	MinNodes        int               `json:"minNodes"`
-	MaxNodes        int               `json:"maxNodes"`
-	Warnings        []string          `json:"warnings,omitempty"`
-	Risks           []string          `json:"risks,omitempty"`
+	Adapter        string `json:"adapter" yaml:"adapter"`
+	ArtifactDigest string `json:"artifactDigest,omitempty" yaml:"-"`
+	// BuildOnce and DownloadOnce let Cloudless own distribution for a
+	// multi-node recipe. The runtime is built/downloaded on the coordinator,
+	// then copied over the configured Spark fabric instead of asking every
+	// node to repeat the same Internet transfer.
+	BuildOnce      bool              `json:"buildOnce,omitempty" yaml:"buildOnce,omitempty"`
+	DownloadOnce   bool              `json:"downloadOnce,omitempty" yaml:"downloadOnce,omitempty"`
+	WorkingDir     string            `json:"workingDir" yaml:"workingDir"`
+	TimeoutMinutes int               `json:"timeoutMinutes" yaml:"timeoutMinutes"`
+	Prerequisites  []string          `json:"prerequisites,omitempty" yaml:"prerequisites,omitempty"`
+	Environment    map[string]string `json:"environment,omitempty" yaml:"environment,omitempty"`
+	Lifecycle      Lifecycle         `json:"lifecycle" yaml:"lifecycle"`
 }
 
 type Health struct {
-	Scheme          string `json:"scheme"`
-	Host            string `json:"host"`
-	Port            int    `json:"port"`
-	Path            string `json:"path"`
-	TimeoutSeconds  int    `json:"timeoutSeconds"`
-	IntervalSeconds int    `json:"intervalSeconds"`
+	Scheme          string `json:"scheme" yaml:"scheme"`
+	Host            string `json:"host" yaml:"host"`
+	Port            int    `json:"port" yaml:"port"`
+	Path            string `json:"path" yaml:"path"`
+	TimeoutSeconds  int    `json:"timeoutSeconds" yaml:"timeoutSeconds"`
+	IntervalSeconds int    `json:"intervalSeconds" yaml:"intervalSeconds"`
 }
 
 type legacyPreset struct {
@@ -123,15 +110,15 @@ type legacyPreset struct {
 }
 
 type Draft struct {
-	Name        string      `json:"name"`
-	Description string      `json:"description"`
-	Platform    string      `json:"platform"`
-	Source      Source      `json:"source"`
-	Engine      Engine      `json:"engine"`
-	Model       Model       `json:"model"`
-	Distributed Distributed `json:"distributed"`
-	Runtime     Runtime     `json:"runtime"`
-	Health      Health      `json:"health"`
+	Name        string      `json:"name" yaml:"name"`
+	Description string      `json:"description" yaml:"description"`
+	Platform    string      `json:"platform" yaml:"platform"`
+	Source      Source      `json:"source" yaml:"source"`
+	Engine      Engine      `json:"engine" yaml:"engine"`
+	Model       Model       `json:"model" yaml:"model"`
+	Distributed Distributed `json:"distributed" yaml:"distributed"`
+	Runtime     Runtime     `json:"runtime" yaml:"runtime"`
+	Health      Health      `json:"health" yaml:"health"`
 }
 
 // Recipe retains several top-level compatibility fields so an installed
@@ -177,6 +164,38 @@ func New(dir string) *Store { return &Store{path: filepath.Join(dir, "recipes", 
 
 func command(program string, args ...string) Command { return Command{Program: program, Args: args} }
 
+func deepSeekCanonicalFiles() map[string]string {
+	return map[string]string{
+		"build-dspark-vllm-runtime.sh":      "f563d82aaea11d48999fe485f12614cc54d8cac49bcaba4fe80b81596f7eb72e",
+		"prepare-dspark-model-cache.sh":     "a75249711a9900f10eb5d148e5ecdbcb53ea879841a8d6944ea2b27238d0183e",
+		"start-deepseek-v4-flash-dspark.sh": "5de0da3c5f5151a80465bc823e8f6b5908d65070e36652ea282ceaeff6c460a6",
+		"stop-deepseek-v4-flash-dspark.sh":  "b8b252e129c22ca7984fae71d2efdf92f2a23a76009ab1f9ba3d6276e940b1aa",
+		"docker-compose.dspark.yml":         "9c3e6cf6fd9895fd304bad2357f9c03a486b97da6d1c73b4237487e9fe56da79",
+	}
+}
+
+func deepSeekWindowsCheckoutFiles() map[string]string {
+	return map[string]string{
+		"build-dspark-vllm-runtime.sh":      "82d6c7e386ba16c59590a95a1e37d0f63e980bc6f6ccb6772cdcda96b9fb95f4",
+		"prepare-dspark-model-cache.sh":     "0c5da4efdd8a9196985ac7cef833f57123021200e773e2ee7374747bf5ec2f16",
+		"start-deepseek-v4-flash-dspark.sh": "32790858c9d1fb6914ef5e8b0ba0f5219cf4aae1dd30eb8dfc094027088c8fef",
+		"stop-deepseek-v4-flash-dspark.sh":  "fb14350f96652063abad44a3791e2bb84fa20101083ba8c302d0a6b91850ee0a",
+		"docker-compose.dspark.yml":         "06865a3e0e1392bb2e3ccd5200fa9389df19d6ef411b012175f44fb0a1fce9ba",
+	}
+}
+
+func sameFiles(left, right map[string]string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for name, sum := range left {
+		if right[name] != sum {
+			return false
+		}
+	}
+	return true
+}
+
 // NewDraft is a useful, runnable starting point—not a locked template. Every
 // value returned here is sent to the editor and may be changed by the user.
 func NewDraft() Draft {
@@ -196,13 +215,11 @@ func deepSeekDraft() Draft {
 	d := NewDraft()
 	d.Name = "DeepSeek V4 Flash DSpark"
 	d.Description = "A two-DGX-Spark vLLM runtime using tensor parallelism, FP8 KV cache, and DSpark speculative decoding."
-	d.Source = Source{URL: DeepSeekDSparkSource, Revision: DeepSeekDSparkRevision, Files: map[string]string{
-		"build-dspark-vllm-runtime.sh":      "82d6c7e386ba16c59590a95a1e37d0f63e980bc6f6ccb6772cdcda96b9fb95f4",
-		"prepare-dspark-model-cache.sh":     "0c5da4efdd8a9196985ac7cef833f57123021200e773e2ee7374747bf5ec2f16",
-		"start-deepseek-v4-flash-dspark.sh": "32790858c9d1fb6914ef5e8b0ba0f5219cf4aae1dd30eb8dfc094027088c8fef",
-		"stop-deepseek-v4-flash-dspark.sh":  "fb14350f96652063abad44a3791e2bb84fa20101083ba8c302d0a6b91850ee0a",
-		"docker-compose.dspark.yml":         "06865a3e0e1392bb2e3ccd5200fa9389df19d6ef411b012175f44fb0a1fce9ba",
-	}}
+	// These hashes cover the canonical Git blob bytes at DeepSeekDSparkRevision
+	// (LF line endings), not a Windows working tree. Using checkout bytes here
+	// makes core.autocrlf silently produce fingerprints that can never verify on
+	// the Linux appliance where recipes run.
+	d.Source = Source{URL: DeepSeekDSparkSource, Revision: DeepSeekDSparkRevision, Files: deepSeekCanonicalFiles()}
 	d.Engine.Image = "cloudless/dspark-vllm:" + DeepSeekDSparkRevision[:12]
 	d.Engine.ServedModelName = "deepseek-v4-flash-dspark"
 	d.Model.ID = "deepseek-ai/DeepSeek-V4-Flash-DSpark"
@@ -210,6 +227,8 @@ func deepSeekDraft() Draft {
 	d.Model.KVCacheDType = "fp8"
 	d.Model.MaxContext = 262144
 	d.Runtime.Environment["GPU_MEMORY_UTILIZATION"] = "0.80"
+	d.Runtime.BuildOnce = true
+	d.Runtime.DownloadOnce = true
 	return d
 }
 
@@ -300,6 +319,19 @@ func normalize(recipe Recipe) Recipe {
 		migrated := recipeFromDraft(recipe.ID, recipe.Origin, recipe.Trust, recipe.ImportedAt, d)
 		migrated.UpdatedAt = recipe.UpdatedAt
 		recipe = migrated
+	}
+	// Repair the original built-in profile, whose fingerprints were generated
+	// from a CRLF-converted Windows checkout. Only the exact known-bad set is
+	// migrated, so fingerprints edited by a user remain untouched.
+	if recipe.Source.URL == DeepSeekDSparkSource && recipe.Source.Revision == DeepSeekDSparkRevision && sameFiles(recipe.Source.Files, deepSeekWindowsCheckoutFiles()) {
+		recipe.Source.Files = deepSeekCanonicalFiles()
+	}
+	// Existing installations already have this reviewed recipe persisted.
+	// Upgrade it in place to the coordinator-once distribution contract so an
+	// update does not require removing and importing the recipe again.
+	if recipe.Source.URL == DeepSeekDSparkSource && recipe.Source.Revision == DeepSeekDSparkRevision {
+		recipe.Runtime.BuildOnce = true
+		recipe.Runtime.DownloadOnce = true
 	}
 	if recipe.Origin == "" {
 		recipe.Origin = "local"
@@ -440,42 +472,8 @@ func validateDraft(d Draft) (Draft, error) {
 	if d.Runtime.Adapter == "" || len(d.Runtime.Adapter) > 64 {
 		return Draft{}, errors.New("choose a runtime adapter")
 	}
-	if d.Runtime.Adapter == SparkRunAdapter {
-		if d.Runtime.SparkRun == nil || d.Runtime.SparkRun.Schema != 1 {
-			return Draft{}, errors.New("the SparkRun provider record is missing or unsupported")
-		}
-		compat := d.Runtime.SparkRun
-		compat.CommandTemplate, compat.SourceURL = strings.TrimSpace(compat.CommandTemplate), strings.TrimSpace(compat.SourceURL)
-		compat.Document, compat.ProviderVersion = strings.TrimSpace(compat.Document), strings.TrimSpace(compat.ProviderVersion)
-		if compat.Document == "" || len(compat.Document) > 2<<20 {
-			return Draft{}, errors.New("the original SparkRun recipe is missing or larger than 2 MB")
-		}
-		if compat.ProviderVersion == "" || len(compat.ProviderVersion) > 64 {
-			return Draft{}, errors.New("the pinned SparkRun provider version is missing")
-		}
-		if compat.CommandTemplate == "" || len(compat.CommandTemplate) > 64*1024 {
-			return Draft{}, errors.New("the SparkRun command template is missing or too large")
-		}
-		if len(compat.SourceDigest) != 64 {
-			return Draft{}, errors.New("the SparkRun source digest must be SHA-256")
-		}
-		if _, err := hex.DecodeString(compat.SourceDigest); err != nil {
-			return Draft{}, errors.New("the SparkRun source digest must be SHA-256")
-		}
-		if compat.SourceURL != "" {
-			u, err := url.Parse(compat.SourceURL)
-			if err != nil || u.Scheme != "https" || u.Host == "" {
-				return Draft{}, errors.New("the SparkRun source URL must use public HTTPS")
-			}
-		}
-		if len(compat.Defaults) > 256 {
-			return Draft{}, errors.New("the SparkRun recipe has too many defaults")
-		}
-		if d.Distributed.Nodes < compat.MinNodes || d.Distributed.Nodes > compat.MaxNodes {
-			return Draft{}, fmt.Errorf("this SparkRun recipe supports between %d and %d nodes", compat.MinNodes, compat.MaxNodes)
-		}
-	} else if d.Runtime.SparkRun != nil {
-		return Draft{}, errors.New("SparkRun provider data requires the SparkRun YAML adapter")
+	if d.Runtime.ArtifactDigest != "" && !regexp.MustCompile(`^[0-9a-fA-F]{64}$`).MatchString(d.Runtime.ArtifactDigest) {
+		return Draft{}, errors.New("catalog artifact digest must be SHA-256")
 	}
 	if d.Runtime.TimeoutMinutes < 1 || d.Runtime.TimeoutMinutes > 10080 {
 		return Draft{}, errors.New("runtime timeout must be between 1 minute and 7 days")
@@ -498,7 +496,7 @@ func validateDraft(d Draft) (Draft, error) {
 		}
 		*value = validated
 	}
-	if d.Runtime.Adapter != SparkRunAdapter && d.Runtime.Lifecycle.Start.Program == "" {
+	if d.Runtime.Lifecycle.Start.Program == "" {
 		return Draft{}, errors.New("a start command is required")
 	}
 	if d.Health.Scheme != "http" && d.Health.Scheme != "https" {
@@ -629,13 +627,16 @@ func (s *Store) Create(draft Draft) (Recipe, error) {
 	return s.create(draft, "local", "local-custom")
 }
 
-// CreateImported persists a parsed external format after the caller has
-// fetched and previewed it. Imported recipes remain editable Cloudless data.
-func (s *Store) CreateImported(draft Draft, origin string) (Recipe, error) {
-	if origin != "sparkrun" {
-		return Recipe{}, errors.New("unsupported imported recipe origin")
+// CreateIndexed persists a recipe whose source artifact and catalog entry were
+// verified by Cloudless before its native manifest was parsed.
+func (s *Store) CreateIndexed(draft Draft, trust, digest string) (Recipe, error) {
+	switch trust {
+	case "upstream-official", "community", "discovered":
+	default:
+		trust = "discovered"
 	}
-	return s.create(draft, origin, "external-unreviewed")
+	draft.Runtime.ArtifactDigest = strings.ToLower(strings.TrimSpace(digest))
+	return s.create(draft, "catalog", trust)
 }
 
 func (s *Store) create(draft Draft, origin, trust string) (Recipe, error) {

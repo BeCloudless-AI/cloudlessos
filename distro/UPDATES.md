@@ -148,3 +148,12 @@ the sole owner of the kernel, firmware, GPU driver, CUDA and container toolkit.
 The Cloudless updater recognizes the platform and never substitutes Ubuntu's
 generic driver path. Release signing and publication validate both `amd64` and
 `arm64` indexes before the signed `InRelease` file is promoted.
+
+## Local custom-engine ownership
+
+Source-built inference images registered through Settings are machine-local operator assets. The
+Cloudless updater does not upload, sign, pull, replace or delete them. Their registrations persist
+across Cloudless package updates, while the managed engine remains available as a recovery path.
+Operators are responsible for rebuilding and retagging a custom image when its source, CUDA stack
+or dependencies change. See [Custom inference engines](../docs/CUSTOM_ENGINES.md) for the supported
+build, registration and rollback workflow.

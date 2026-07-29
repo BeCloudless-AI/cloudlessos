@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"html"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -18,9 +19,11 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/cloudless/orchestrator/internal/catalog"
+	"github.com/cloudless/orchestrator/internal/customengine"
 	"github.com/cloudless/orchestrator/internal/jobs"
 	"github.com/cloudless/orchestrator/internal/localrecipes"
 	"github.com/cloudless/orchestrator/internal/provision"
@@ -29,6 +32,11 @@ import (
 
 var recipeInterfacePattern = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,64}$`)
 var localRecipeIDPattern = regexp.MustCompile(`^(?:deepseek-v4-flash-dspark-2x|local-[0-9a-f]{16})$`)
+
+type recipeJobControl struct {
+	cancel context.CancelFunc
+	job    *jobs.Job
+}
 
 func (s *Server) localRecipesList(w http.ResponseWriter, r *http.Request) {
 	recipes, err := s.recipes.List()
@@ -40,10 +48,15 @@ func (s *Server) localRecipesList(w http.ResponseWriter, r *http.Request) {
 	if st := s.state.Get(); st.LocalRecipeID != "" && !st.EngineUnloaded {
 		active = st.LocalRecipeID
 	}
+	plans := make(map[string]recipeLaunchPlan, len(recipes))
+	for _, recipe := range recipes {
+		plans[recipe.ID] = buildRecipeLaunchPlan(r.Context(), recipe)
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"recipes": recipes, "active": active, "jobs": s.jobs.List("recipe:"),
 		"defaults": localrecipes.NewDraft(),
 		"cluster":  clusterCompute(r.Context(), totalVRAMGB(r.Context())),
+		"plans":    plans,
 	})
 }
 
@@ -65,10 +78,6 @@ func (s *Server) localRecipeUpdate(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if st := s.state.Get(); st.LocalRecipeID == id && !st.EngineUnloaded {
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "stop this recipe before changing its operating profile"})
-		return
-	}
-	if existing, ok, err := s.recipes.Get(id); err == nil && ok && existing.Runtime.Adapter == localrecipes.SparkRunAdapter {
-		writeJSON(w, http.StatusConflict, map[string]string{"error": "SparkRun recipes are immutable; import changed YAML as a new recipe"})
 		return
 	}
 	var draft localrecipes.Draft
@@ -145,13 +154,6 @@ func (s *Server) localRecipeSource(w http.ResponseWriter, r *http.Request) {
 	}
 	if !ok {
 		http.NotFound(w, r)
-		return
-	}
-	if recipe.Runtime.Adapter == localrecipes.SparkRunAdapter && recipe.Runtime.SparkRun != nil {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'")
-		w.Header().Set("X-Content-Type-Options", "nosniff")
-		_, _ = io.WriteString(w, recipeSourceDocument(recipe, "Original SparkRun recipe (executed unchanged by provider "+recipe.Runtime.SparkRun.ProviderVersion+")\n\n"+recipe.Runtime.SparkRun.Document))
 		return
 	}
 	if recipe.Source.URL != localrecipes.DeepSeekDSparkSource || recipe.Source.Revision != localrecipes.DeepSeekDSparkRevision {
@@ -241,10 +243,6 @@ func (s *Server) localRecipeCheck(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "local recipe not found"})
 		return
 	}
-	if recipe.Runtime.Adapter != localrecipes.SparkRunAdapter {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "cluster dry-run checks are available for SparkRun recipes"})
-		return
-	}
 	for _, snapshot := range s.jobs.List("recipe:") {
 		if !snapshot.Done {
 			writeJSON(w, http.StatusConflict, map[string]string{"error": "another recipe operation is already running", "jobId": snapshot.ID})
@@ -252,30 +250,35 @@ func (s *Server) localRecipeCheck(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	job := s.jobs.Create("recipe:" + recipe.ID + ":check")
-	go s.checkSparkRunRecipe(job, recipe)
+	go s.checkLocalRecipe(job, recipe)
 	writeJSON(w, http.StatusAccepted, map[string]string{"jobId": job.ID, "recipe": recipe.ID})
 }
 
 func (s *Server) localRecipeAbort(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	s.recipeJobsMu.Lock()
-	cancel := s.recipeJobs[id]
+	control := s.recipeJobs[id]
 	s.recipeJobsMu.Unlock()
-	if cancel == nil {
+	if control.cancel == nil {
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "this recipe is not currently starting"})
 		return
 	}
-	cancel()
+	if control.job.Snapshot().Done {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "this recipe operation has already finished"})
+		return
+	}
+	control.job.Progress("stopping", "Stopping the recipe operation and its child processes...", -1, -1)
+	control.cancel()
 	writeJSON(w, http.StatusAccepted, map[string]string{"recipe": id})
 }
 
-func (s *Server) registerRecipeJob(id string, cancel context.CancelFunc) {
+func (s *Server) registerRecipeJob(id string, cancel context.CancelFunc, job *jobs.Job) {
 	s.recipeJobsMu.Lock()
 	defer s.recipeJobsMu.Unlock()
 	if s.recipeJobs == nil {
-		s.recipeJobs = make(map[string]context.CancelFunc)
+		s.recipeJobs = make(map[string]recipeJobControl)
 	}
-	s.recipeJobs[id] = cancel
+	s.recipeJobs[id] = recipeJobControl{cancel: cancel, job: job}
 }
 
 func (s *Server) unregisterRecipeJob(id string) {
@@ -312,9 +315,16 @@ func commandEnv(extra map[string]string) []string {
 }
 
 func runRecipeCommand(ctx context.Context, job *jobs.Job, phase, label, dir string, env map[string]string, name string, args ...string) error {
-	cmd := exec.CommandContext(ctx, name, args...)
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	cmd := exec.Command(name, args...)
 	cmd.Dir = dir
 	cmd.Env = commandEnv(env)
+	// Every recipe command owns a process group. Canceling only the wrapper
+	// shell leaves docker/buildx and other descendants running with the output
+	// pipe open, which made Abort appear to do nothing.
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	reader, writer := io.Pipe()
 	cmd.Stdout, cmd.Stderr = writer, writer
 	if err := cmd.Start(); err != nil {
@@ -323,13 +333,30 @@ func runRecipeCommand(ctx context.Context, job *jobs.Job, phase, label, dir stri
 		return err
 	}
 	done := make(chan error, 1)
+	processDone := make(chan struct{})
 	go func() {
 		err := cmd.Wait()
 		_ = writer.CloseWithError(err)
 		done <- err
+		close(processDone)
+	}()
+	go func() {
+		select {
+		case <-ctx.Done():
+			// Ask the complete command tree to stop cleanly, then force it down
+			// if a container client ignores termination.
+			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
+			select {
+			case <-processDone:
+			case <-time.After(2 * time.Second):
+				_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+			}
+		case <-processDone:
+		}
 	}()
 	scanner := bufio.NewScanner(reader)
 	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
+	progress := newRecipeCommandProgress(phase, label)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" {
@@ -338,9 +365,16 @@ func runRecipeCommand(ctx context.Context, job *jobs.Job, phase, label, dir stri
 		if len(line) > 220 {
 			line = line[:217] + "..."
 		}
-		job.Progress(phase, label+": "+line, -1, -1)
+		if message, doneBytes, totalBytes, ok := progress.parse(line); ok {
+			job.ProgressBytes(phase, message, doneBytes, totalBytes)
+		} else {
+			job.Progress(phase, label+": "+line, -1, -1)
+		}
 	}
 	err := <-done
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return ctxErr
+	}
 	if err != nil {
 		return fmt.Errorf("%s: %w", label, err)
 	}
@@ -508,7 +542,20 @@ func writeRecipeRuntime(recipe localrecipes.Recipe, checkout string, cluster spa
 			alias += "-" + strconv.Itoa(index+1)
 		}
 		aliases = append(aliases, alias)
-		fmt.Fprintf(&config, "Host %s\n  HostName %s\n  User %s\n  IdentityFile %s\n  UserKnownHostsFile %s\n  IdentitiesOnly yes\n  BatchMode yes\n  StrictHostKeyChecking yes\n", alias, node.Host, node.Username, key, known)
+		// Recipe artifacts are large. Once the fabric is configured, carry SSH,
+		// image and model-cache traffic over ConnectX instead of management
+		// Wi-Fi/Ethernet. HostKeyAlias preserves the key pinned during enrollment.
+		host := node.Host
+		hostKeyAlias := ""
+		if len(node.IPs) > 0 && net.ParseIP(node.IPs[0]) != nil {
+			host = node.IPs[0]
+			hostKeyAlias = node.Host
+		}
+		fmt.Fprintf(&config, "Host %s\n  HostName %s\n  User %s\n", alias, host, node.Username)
+		if hostKeyAlias != "" {
+			fmt.Fprintf(&config, "  HostKeyAlias %s\n", hostKeyAlias)
+		}
+		fmt.Fprintf(&config, "  IdentityFile %s\n  UserKnownHostsFile %s\n  IdentitiesOnly yes\n  BatchMode yes\n  StrictHostKeyChecking yes\n", key, known)
 	}
 	if err := os.WriteFile(filepath.Join(sshDir, "config"), []byte(config.String()), 0o600); err != nil {
 		return nil, "", err
@@ -546,6 +593,12 @@ func writeRecipeRuntime(recipe localrecipes.Recipe, checkout string, cluster spa
 	for key, value := range recipe.Runtime.Environment {
 		values[key] = value
 	}
+	if recipe.Runtime.BuildOnce && nodes > 1 {
+		values["WORKER_BUILD"] = "0"
+	}
+	if recipe.Runtime.DownloadOnce && nodes > 1 {
+		values["PREPARE_WORKER"] = "0"
+	}
 	keys := make([]string, 0, len(values))
 	for key := range values {
 		keys = append(keys, key)
@@ -580,7 +633,7 @@ func writeRecipeRuntime(recipe localrecipes.Recipe, checkout string, cluster spa
 func (s *Server) stopManagedEngines(ctx context.Context) error {
 	_ = sparkcluster.StopWorker(ctx)
 	_ = s.eng.Remove(ctx, "cloudless-cluster-engine-proxy")
-	for _, candidate := range catalog.Engines() {
+	for _, candidate := range customengine.All(s.state) {
 		if err := s.eng.Remove(ctx, candidate.ContainerName()); err != nil {
 			if found, _ := s.eng.Find(ctx, candidate.ContainerName()); found != nil {
 				return err
@@ -615,11 +668,7 @@ func (s *Server) stopActiveLocalRecipeRuntime(parent context.Context, job *jobs.
 	job.Progress("stopping", "Stopping the active recipe runtime...", -1, -1)
 	checkout := recipeCheckout(recipe)
 	cluster, _ := sparkcluster.Status(ctx)
-	if recipe.Runtime.Adapter == localrecipes.SparkRunAdapter {
-		if path, environment, runtimeErr := prepareSparkRunProviderRecipe(recipe, checkout); runtimeErr == nil {
-			_ = s.stopSparkRunProvider(ctx, job, recipe, cluster, path, checkout, environment)
-		}
-	} else if env, workdir, runtimeErr := writeRecipeRuntime(recipe, checkout, cluster, false); runtimeErr == nil {
+	if env, workdir, runtimeErr := writeRecipeRuntime(recipe, checkout, cluster, false); runtimeErr == nil {
 		_ = runConfiguredRecipeCommand(ctx, job, "stopping", "Stop inference", workdir, env, recipe.Runtime.Lifecycle.Stop)
 	}
 	_ = s.eng.Remove(ctx, "cloudless-cluster-engine-proxy")
@@ -655,24 +704,10 @@ func waitRecipeHealth(ctx context.Context, job *jobs.Job, recipe localrecipes.Re
 func (s *Server) runLocalRecipe(job *jobs.Job, recipe localrecipes.Recipe) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(recipe.Runtime.TimeoutMinutes)*time.Minute)
 	defer cancel()
-	s.registerRecipeJob(recipe.ID, cancel)
+	s.registerRecipeJob(recipe.ID, cancel, job)
 	defer s.unregisterRecipeJob(recipe.ID)
 	provision.EngineMu.Lock()
 	defer provision.EngineMu.Unlock()
-	providerStarted, committed := false, false
-	defer func() {
-		if !providerStarted || committed {
-			return
-		}
-		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 2*time.Minute)
-		defer cleanupCancel()
-		checkout := recipeCheckout(recipe)
-		cluster, _ := sparkcluster.Status(cleanupCtx)
-		if path, environment, runtimeErr := prepareSparkRunProviderRecipe(recipe, checkout); runtimeErr == nil {
-			_ = s.stopSparkRunProvider(cleanupCtx, job, recipe, cluster, path, checkout, environment)
-		}
-		_ = s.eng.Remove(cleanupCtx, "cloudless-cluster-engine-proxy")
-	}()
 	for _, command := range recipe.Runtime.Prerequisites {
 		if _, err := exec.LookPath(command); err != nil {
 			job.Fail(fmt.Errorf("recipe prerequisite %q is not installed", command))
@@ -681,92 +716,107 @@ func (s *Server) runLocalRecipe(job *jobs.Job, recipe localrecipes.Recipe) {
 	}
 	cluster, err := sparkcluster.Status(ctx)
 	if err != nil && recipe.Distributed.Nodes > 1 {
-		job.Fail(err)
+		finishRecipeJob(job, err)
 		return
 	}
-	job.Progress("source", "Preparing the recipe source and runtime...", 0, 8)
+	totalSteps := 8
+	if recipe.Distributed.Nodes > 1 && recipe.Runtime.BuildOnce {
+		totalSteps++
+	}
+	if recipe.Distributed.Nodes > 1 && recipe.Runtime.DownloadOnce {
+		totalSteps++
+	}
+	step := 0
+	job.Progress("source", "Preparing the recipe source and runtime...", step, totalSteps)
 	checkout, err := prepareRecipeCheckout(ctx, job, recipe)
 	if err != nil {
-		job.Fail(err)
+		finishRecipeJob(job, err)
 		return
 	}
-	provider := recipe.Runtime.Adapter == localrecipes.SparkRunAdapter
-	var env map[string]string
-	workdir := checkout
-	providerPath := ""
-	if provider {
-		providerPath, env, err = prepareSparkRunProviderRecipe(recipe, checkout)
+	env, workdir, err := writeRecipeRuntime(recipe, checkout, cluster, true)
+	if err != nil {
+		finishRecipeJob(job, err)
+		return
+	}
+	var peers []recipePeer
+	if recipe.Distributed.Nodes > 1 && (recipe.Runtime.BuildOnce || recipe.Runtime.DownloadOnce) {
+		peers, err = recipeDistributionPeers(recipe, cluster, env)
 		if err != nil {
-			job.Fail(err)
+			finishRecipeJob(job, err)
 			return
 		}
-		if err := s.dryRunSparkRunProvider(ctx, job, recipe, cluster, providerPath, checkout, env, 1, 8); err != nil {
-			job.Fail(err)
+	}
+	step++
+	job.Progress("building", "Building the inference runtime once on this Spark...", step, totalSteps)
+	if err := runConfiguredRecipeCommand(ctx, job, "building", "Build", workdir, env, recipe.Runtime.Lifecycle.Build); err != nil {
+		finishRecipeJob(job, err)
+		return
+	}
+	step++
+	if recipe.Distributed.Nodes > 1 && recipe.Runtime.BuildOnce {
+		job.Progress("syncing-image", "Preparing to send the completed runtime over the Spark fabric...", step, totalSteps)
+		if err := syncRecipeCheckout(ctx, job, checkout, env, peers); err != nil {
+			finishRecipeJob(job, err)
 			return
 		}
-		job.Progress("validated", "SparkRun accepted the exact recipe and selected cluster.", 2, 8)
-	} else {
-		env, workdir, err = writeRecipeRuntime(recipe, checkout, cluster, true)
-		if err != nil {
-			job.Fail(err)
+		if err := distributeRecipeImage(ctx, job, recipe, workdir, env, peers); err != nil {
+			finishRecipeJob(job, err)
 			return
 		}
-		job.Progress("building", "Running the configured build step...", 1, 8)
-		if err := runConfiguredRecipeCommand(ctx, job, "building", "Build", workdir, env, recipe.Runtime.Lifecycle.Build); err != nil {
-			job.Fail(err)
+		step++
+	}
+	job.ProgressBytes("downloading", "Downloading the model once on this Spark...", 0, 0)
+	job.Progress("downloading", "Downloading and verifying the model once on this Spark...", step, totalSteps)
+	if err := runConfiguredRecipeCommand(ctx, job, "downloading", "Model preparation", workdir, env, recipe.Runtime.Lifecycle.Download); err != nil {
+		finishRecipeJob(job, err)
+		return
+	}
+	step++
+	if recipe.Distributed.Nodes > 1 && recipe.Runtime.DownloadOnce {
+		job.Progress("syncing-model", "Preparing to send the model over the Spark fabric...", step, totalSteps)
+		if err := distributeRecipeModel(ctx, job, recipe, workdir, env, peers); err != nil {
+			finishRecipeJob(job, err)
 			return
 		}
-		job.Progress("downloading", "Running the configured model preparation step...", 2, 8)
-		if err := runConfiguredRecipeCommand(ctx, job, "downloading", "Model preparation", workdir, env, recipe.Runtime.Lifecycle.Download); err != nil {
-			job.Fail(err)
-			return
-		}
+		step++
 	}
 	// Keep the current model available during the long image build and model
 	// download. Only release it when the reviewed runtime is ready to start.
-	job.Progress("stopping", "Switching from the current Cloudless model...", 3, 8)
+	job.ProgressBytes("stopping", "Switching from the current Cloudless model...", 0, 0)
+	job.Progress("stopping", "Switching from the current Cloudless model...", step, totalSteps)
 	if err := s.stopManagedEngines(ctx); err != nil {
-		job.Fail(err)
+		finishRecipeJob(job, err)
 		return
 	}
 	_ = s.state.SetEngineUnloaded(true)
-	job.Progress("starting", "Starting the inference recipe...", 4, 8)
-	var startErr error
-	if provider {
-		startErr = s.startSparkRunProvider(ctx, job, recipe, cluster, providerPath, checkout, env)
-		providerStarted = true
-	} else {
-		startErr = runConfiguredRecipeCommand(ctx, job, "starting", "Start inference", workdir, env, recipe.Runtime.Lifecycle.Start)
-	}
+	step++
+	job.Progress("starting", "Starting the inference recipe...", step, totalSteps)
+	startErr := runConfiguredRecipeCommand(ctx, job, "starting", "Start inference", workdir, env, recipe.Runtime.Lifecycle.Start)
 	if startErr != nil {
-		if provider {
-			_ = s.stopSparkRunProvider(context.Background(), job, recipe, cluster, providerPath, checkout, env)
-		}
-		job.Fail(startErr)
+		finishRecipeJob(job, startErr)
 		return
 	}
-	job.Progress("health", "Checking that the configured engine is ready...", 6, 8)
+	step++
+	job.Progress("health", "Checking that the configured engine is ready...", step, totalSteps)
 	if err := waitRecipeHealth(ctx, job, recipe); err != nil {
-		if provider {
-			_ = s.stopSparkRunProvider(context.Background(), job, recipe, cluster, providerPath, checkout, env)
-		}
-		job.Fail(err)
+		finishRecipeJob(job, err)
 		return
 	}
-	job.Progress("connecting", "Connecting Cloudless apps to the recipe runtime...", 7, 8)
+	step++
+	job.Progress("connecting", "Connecting Cloudless apps to the recipe runtime...", step, totalSteps)
 	proxyImage := s.infraImage(ctx, "socat", catalog.SocatImage)
 	if err := s.eng.Pull(ctx, proxyImage); err != nil {
-		job.Fail(err)
+		finishRecipeJob(job, err)
 		return
 	}
 	spec := sparkcluster.ProxySpecTarget(recipe.Engine.ProxyHost, recipe.Engine.ContainerPort)
 	spec.Image = proxyImage
 	if _, err := s.eng.Run(ctx, spec); err != nil {
-		job.Fail(err)
+		finishRecipeJob(job, err)
 		return
 	}
 	if err := s.state.SetModel(recipe.Model.ID); err != nil {
-		job.Fail(err)
+		finishRecipeJob(job, err)
 		return
 	}
 	_ = s.state.SetEngine(recipe.Engine.Type)
@@ -777,35 +827,45 @@ func (s *Server) runLocalRecipe(job *jobs.Job, recipe localrecipes.Recipe) {
 	_ = s.state.SetExecutionMode(mode)
 	_ = s.state.SetLocalRecipe(recipe.ID)
 	_ = s.state.SetEngineUnloaded(false)
-	committed = true
-	job.Progress("ready", "Recipe is running through the normal Cloudless API.", 8, 8)
+	job.Progress("ready", "Recipe is running through the normal Cloudless API.", totalSteps, totalSteps)
 	job.Succeed(recipe.Engine.ServedModelName)
 }
 
-func (s *Server) checkSparkRunRecipe(job *jobs.Job, recipe localrecipes.Recipe) {
+func finishRecipeJob(job *jobs.Job, err error) {
+	if errors.Is(err, context.Canceled) {
+		job.Cancel()
+		return
+	}
+	job.Fail(err)
+}
+
+func (s *Server) checkLocalRecipe(job *jobs.Job, recipe localrecipes.Recipe) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
-	job.Progress("checking-cluster", "Reading the connected cluster topology and accelerator availability...", 0, 5)
+	job.Progress("checking-cluster", "Reading the connected cluster topology and accelerator availability...", 0, 4)
 	cluster, err := sparkcluster.Status(ctx)
 	if err != nil && recipe.Distributed.Nodes > 1 {
 		job.Fail(err)
 		return
 	}
-	job.Progress("checking-topology", "Comparing the recipe's node requirements with this cluster...", 1, 5)
-	checkout := recipeCheckout(recipe) + "-check"
-	defer os.RemoveAll(checkout)
-	job.Progress("checking-provider", "Verifying the pinned SparkRun provider and recipe source...", 2, 5)
-	path, environment, err := prepareSparkRunProviderRecipe(recipe, checkout)
-	if err != nil {
+	job.Progress("checking-topology", "Comparing the recipe's node requirements with this cluster...", 1, 4)
+	if _, _, err := writeRecipeRuntime(recipe, recipeCheckout(recipe)+"-check", cluster, true); err != nil {
 		job.Fail(err)
 		return
 	}
-	job.Progress("checking-runtime", "Preparing the isolated dry-run environment...", 3, 5)
-	if err := s.dryRunSparkRunProvider(ctx, job, recipe, cluster, path, checkout, environment, 4, 5); err != nil {
-		job.Fail(err)
+	job.Progress("checking-tools", "Checking required commands without launching the model...", 2, 4)
+	for _, command := range recipe.Runtime.Prerequisites {
+		if _, err := exec.LookPath(command); err != nil {
+			job.Fail(fmt.Errorf("recipe prerequisite %q is not installed", command))
+			return
+		}
+	}
+	job.Progress("checking-source", "Validating the pinned source and runtime configuration...", 3, 4)
+	if recipe.Source.URL != "" && recipe.Source.Revision == "" {
+		job.Fail(errors.New("a pinned source revision is required"))
 		return
 	}
-	job.Progress("validated", "SparkRun validated this recipe against the selected hardware without launching it.", 5, 5)
+	job.Progress("validated", "Cloudless validated this recipe without launching it.", 4, 4)
 	job.Succeed("validated")
 }
 
@@ -818,11 +878,7 @@ func (s *Server) stopLocalRecipe(job *jobs.Job, recipe localrecipes.Recipe) {
 	job.Progress("stopping", "Running the configured stop step...", 0, 1)
 	cluster, err := sparkcluster.Status(ctx)
 	if err == nil || recipe.Distributed.Nodes == 1 {
-		if recipe.Runtime.Adapter == localrecipes.SparkRunAdapter {
-			if path, environment, providerErr := prepareSparkRunProviderRecipe(recipe, checkout); providerErr == nil {
-				_ = s.stopSparkRunProvider(ctx, job, recipe, cluster, path, checkout, environment)
-			}
-		} else if env, workdir, envErr := writeRecipeRuntime(recipe, checkout, cluster, false); envErr == nil {
+		if env, workdir, envErr := writeRecipeRuntime(recipe, checkout, cluster, false); envErr == nil {
 			_ = runConfiguredRecipeCommand(ctx, job, "stopping", "Stop inference", workdir, env, recipe.Runtime.Lifecycle.Stop)
 		}
 	}

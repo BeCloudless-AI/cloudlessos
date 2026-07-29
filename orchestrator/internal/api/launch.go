@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/cloudless/orchestrator/internal/catalog"
+	"github.com/cloudless/orchestrator/internal/customengine"
 	"github.com/cloudless/orchestrator/internal/engine"
 )
 
@@ -29,7 +30,7 @@ func (s *Server) engineForLaunch(ctx context.Context) (catalog.App, bool) {
 	if id == "" {
 		id = catalog.DefaultEngine()
 	}
-	return catalog.Get(id)
+	return customengine.Get(s.state, id)
 }
 
 // launchInfo is the editable launch command for a model on the active engine.
@@ -57,7 +58,7 @@ func (s *Server) launchInfoFor(ctx context.Context, model string) (launchInfo, b
 	prefix, command := engine.PreviewParts(eff)
 	_, defCommand := engine.PreviewParts(def)
 	info := launchInfo{
-		Engine: app.ID, EngineName: engineDisplayName(app.ID),
+		Engine: app.ID, EngineName: s.engineDisplayName(app.ID),
 		Model: resolved, Image: eff.Image,
 		Prefix: prefix, Command: command, DefaultCommand: defCommand, Overridden: has,
 	}

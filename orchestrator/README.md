@@ -1,137 +1,119 @@
-# cloudlessd — Cloudless orchestrator (Phase 0)
+# cloudlessd — CloudlessOS orchestrator
 
-The local daemon that installs, runs, and manages local-AI apps as GPU containers,
-and serves the web UI that drives them. This is the Phase 0 prototype (see
-`../docs/ROADMAP.md`).
+`cloudlessd` is the local Go daemon behind CloudlessOS. It manages inference engines,
+models, AI applications, Spark clusters, system services and the embedded web interface.
 
 ## Layout
 
-```
-cmd/cloudlessd/      entrypoint (HTTP server + graceful shutdown)
-internal/engine/     container runtime abstraction + Docker (CLI) implementation
-internal/catalog/    curated app recipes (engines, Open WebUI, ComfyUI, trainers, agents)
-internal/jobs/       async install jobs + progress fan-out (SSE)
-internal/hardware/   host GPU stats via nvidia-smi
-internal/places/     well-known folders + open-in-file-manager
-internal/provision/  pre-install bundled apps on startup (shared network + default model)
-internal/apps/       embedded Dockerfiles for locally-built apps (OpenClaw, Hermes)
-internal/assistant/  built-in guide: system prompt from live state + catalog, engine chat
-internal/state/      per-user persisted state (first-run/onboarding)
-internal/api/        local HTTP API + embedded web UI (internal/api/web/)
-                     web/vendor/ holds offline-vendored Three.js + Red Hat Mono
+```text
+cmd/cloudlessd/       daemon entrypoint
+cmd/cloudless-updater/ signed package updater
+internal/api/         local API, gateway and embedded interface
+internal/engine/      Docker runtime abstraction
+internal/catalog/     signed, architecture-aware app and engine contracts
+internal/customengine/ locally-built engine registration adapter
+internal/provision/   startup and engine lifecycle
+internal/models/      curated model metadata
+internal/localrecipes/ machine-local native recipes
+internal/sparkcluster/ DGX Spark discovery, setup and distributed inference
+internal/assistant/   Hermes-backed Cloudless Assistant integration
+internal/state/       install-wide persisted state and registrations
+internal/hardware/    GPU and system telemetry
+internal/jobs/        asynchronous operations and SSE progress
 ```
 
-Module path `github.com/cloudless/orchestrator` is a placeholder until we pick the
-real repo home. Stdlib-only — no external dependencies, builds offline.
+## Run from source
 
-## Run (in WSL Ubuntu)
+From Ubuntu or WSL2:
 
-```
-cd /mnt/d/Cloudless/orchestrator
+```bash
+cd orchestrator
 go run ./cmd/cloudlessd
-# then open http://localhost:8765
 ```
 
-Requires Docker + the NVIDIA Container Toolkit (see `../scripts/setup-wsl-docker.sh`).
-The daemon binds `127.0.0.1:8765` by default (override with `CLOUDLESS_ADDR`). A second
-listener — the **Cloudless Proxy** (OpenAI-compatible API gateway, key-authenticated) —
-binds `127.0.0.1:8766` (`CLOUDLESS_GATEWAY_ADDR`); manage keys in Settings → API access (D36).
-`CLOUDLESS_MANIFEST_URL` points at the Cloudless validated-versions manifest (pins each
-app/infra image to a tested digest + the default model revision); unset/unreachable → catalog
-tags. `CLOUDLESS_NO_PROVISION=1` skips startup provisioning (for a side-by-side test daemon).
+Open `http://127.0.0.1:8765`.
 
-Image pins are architecture-aware. New manifests should use a `digests` object with
-`amd64` and/or `arm64` keys. A shared OCI index digest may instead use `digest` together
-with an explicit `architectures` array. For safety, a legacy single `digest` without an
-architecture declaration is treated as AMD64-only.
+Requirements are Docker, NVIDIA Container Toolkit for GPU use, and Go 1.26 or newer.
+`CLOUDLESS_NO_PROVISION=1` disables automatic app/engine provisioning for UI-focused
+development.
 
-## API
+The primary listeners are:
 
-| Method | Path                      | Purpose                                  |
-|--------|---------------------------|------------------------------------------|
-| GET    | /api/health               | daemon + docker reachability             |
-| GET    | /api/gpu                  | `{available, gpus[]}` (per-GPU stats)    |
-| GET    | /api/catalog              | available app recipes                    |
-| GET    | /api/apps                 | orchestrator-managed containers          |
-| POST   | /api/apps/{id}/start      | start async install job; returns `jobId` |
-| POST   | /api/apps/{id}/stop       | stop container                           |
-| POST   | /api/apps/{id}/remove     | force-remove container                   |
-| GET    | /api/jobs/{id}            | install job state snapshot               |
-| GET    | /api/jobs/{id}/events     | install job progress (Server-Sent Events)|
-| GET    | /api/onboarding           | first-run state (`completed`,`firstLaunch`)|
-| POST   | /api/onboarding/complete  | mark first-run onboarding done           |
-| GET    | /api/folders              | well-known folders (Models/Outputs/…)    |
-| POST   | /api/folders/{id}/open    | create if needed + open in file manager  |
-| GET    | /api/engine               | active inference engine + readiness      |
-| POST   | /api/engine/{id}          | switch engine (vllm/sglang); async job   |
-| GET    | /api/pins                 | dashboard "fast launch" app ids          |
-| POST   | /api/apps/{id}/pin        | pin/unpin an app on the dashboard        |
-| GET    | /api/apps/{id}/tunnel     | share-online status (`supported`,`url`)  |
-| POST   | /api/apps/{id}/tunnel     | enable/disable a Cloudflare quick tunnel |
-| GET    | /api/apps/{id}/lan        | local-network status (`ip`,`port`,`url`) |
-| POST   | /api/apps/{id}/lan        | enable/disable LAN serving (socat sidecar)|
-| GET    | /api/network/local        | machine-wide LAN preference (default on)  |
-| POST   | /api/network/local        | set LAN preference + apply to all web apps|
-| GET    | /api/network/status       | connectivity: internet / local / offline  |
-| GET    | /api/apps/{id}/update     | update check (local vs remote image digest)|
-| POST   | /api/apps/{id}/update     | pull latest + recreate on same volumes; async|
-| POST   | /api/assistant/chat       | grounded assistant reply (SSE stream)    |
-| GET    | /api/gateway              | Cloudless Proxy status: keys, served model, LAN/tunnel |
-| POST   | /api/keys                 | generate an API key (full secret returned once) |
-| DELETE | /api/keys/{id}            | revoke an API key                        |
-| POST   | /api/gateway/lan          | expose the gateway on the LAN (socat)    |
-| POST   | /api/gateway/tunnel       | expose the gateway online (cloudflared)  |
-| GET    | /api/settings             | current model + default                  |
-| POST   | /api/settings/model       | set model + restart engine; async job    |
-| POST   | /api/apps/{id}/reset      | remove + (rebuild) + reinstall; async    |
-| POST   | /api/apps/{id}/uninstall  | remove container + image                 |
-| GET    | /api/apps/{id}/settings   | form-field schema + current values       |
-| POST   | /api/apps/{id}/settings   | write field values + restart app; async  |
-| GET    | /api/apps/{id}/config     | raw config files + content (Advanced)    |
-| POST   | /api/apps/{id}/config     | write raw config + restart app; async    |
-| POST   | /api/apps/{id}/config/reset | restore default config + restart       |
-| POST   | /api/onboarding/reset     | replay the welcome tour                  |
+- `127.0.0.1:8765`: CloudlessOS UI and local control API.
+- `127.0.0.1:8766`: key-authenticated OpenAI-compatible model and agent gateway.
+- `127.0.0.1:7681`: authenticated ttyd terminal, proxied through `/terminal/`.
 
-First-run state is owned by the daemon (`internal/state`), persisted to a per-user JSON
-file (`CLOUDLESS_STATE_DIR` → `$XDG_STATE_HOME/cloudless` → `~/.local/state/cloudless`).
-"First launch" = no prior state file at startup. See docs/DECISIONS.md D8.
+Production values are configured in `distro/packages/cloudless-orchestrator/cloudless.env`.
 
-Install is asynchronous: `start` returns a `jobId` immediately and the daemon pulls +
-runs in the background, streaming progress (per-layer pull counts, then start/running) to
-`/api/jobs/{id}/events`. The web UI consumes this via `EventSource`.
+## Validate changes
 
-## Pre-installed apps (D11)
+```bash
+cd orchestrator
+go test ./...
+go vet ./...
+go build ./...
+cd ..
+node distro/scripts/test-web-js.js
+```
 
-On startup the daemon provisions the bundled apps onto a shared `cloudless` docker network:
+Package, architecture, ISO and release gates live under `distro/scripts/` and are explained
+in [`../distro/README.md`](../distro/README.md).
 
-- **vLLM** (`cloudless-vllm`) — the default inference engine (D12), OpenAI-compatible on
-  `:8000`, serving the model named `cloudless`. Standard systems default to
-  `Qwen/Qwen2.5-1.5B-Instruct`; DGX Spark defaults to
-  `Qwen/Qwen3.6-35B-A3B`. Override either with `CLOUDLESS_DEFAULT_MODEL`
-  (any Hugging Face id). Validated on Blackwell.
-- **Open WebUI** (`cloudless-open-webui`) — branded "Cloudless AI", no login wall, wired to
-  vLLM via the OpenAI API (`http://cloudless-vllm:8000/v1`). The hero "Chat with your
-  Cloudless AI" button opens it.
-- **ComfyUI** (`cloudless-comfyui`) — image pinned but not yet validated on Blackwell.
+## Engine lifecycle
 
-- **SGLang** — alternative engine, **pre-fetched** (image pulled, ~41.6 GB) but not run by
-  default; switch to it instead of vLLM. (`Prefetch` apps are pulled, not started.)
+Exactly one inference engine owns the stable internal endpoint
+`http://cloudless-ai:8000/v1`. Managed vLLM, SGLang and llama.cpp engines and registered
+custom builds all use the same switch, load, readiness, metrics, unload and abort paths.
+The Cloudless gateway and Hermes therefore do not need to change endpoints when the engine
+changes.
 
-**Engine switching (D15):** all clients use one stable endpoint `http://cloudless-ai:8000/v1`.
-The active engine owns the `cloudless-ai` alias on fixed port 8000 and serves model id
-`cloudless`, so switching engines is transparent to Open WebUI and the agents. Switch via
-`POST /api/engine/{vllm|sglang}` or the engine pills in the UI; the choice persists and
-exactly one engine runs at a time.
+The active model comes from Model Manager. vLLM and SGLang receive Hugging Face model IDs;
+llama.cpp follows its GGUF command contract. DGX Spark may use the distributed managed-vLLM
+path when a healthy cluster is configured.
 
-**OpenClaw** and **Hermes** are AI agents with no upstream image, so they're **built locally**
-from embedded Dockerfiles (`internal/apps/`) on first install and pre-wired to Cloudless AI
-(D14). Reset
-everything with `../scripts/reset-apps.sh`.
+## Custom source-built engines
 
-## Known Phase 0 limitations (intentional)
+Advanced users can compile vLLM or SGLang source into a local Docker image and register it
+in **Settings -> Engine -> Custom engine builds**. The custom image inherits one managed
+base contract, including GPU flags, model-cache volumes, the selected model, private
+networking and `/v1/models` health validation.
 
-- Pull progress is layer-level (N/total layers), not byte-level percentages — docker's
-  non-TTY output reports discrete per-layer status, not continuous bytes.
-- Job + app state is in-memory / derived from `docker ps`; no persistence across restarts.
-- ComfyUI recipe is a placeholder (`Image: ""`) pending a validated image.
-- Containers are managed by name (`cloudless-<id>`); one instance per app.
+Custom images are not part of the signed catalog, are never automatically pulled or updated,
+and currently run on one machine rather than being copied to Spark peers.
+
+The complete developer workflow is in
+[`../docs/CUSTOM_ENGINES.md`](../docs/CUSTOM_ENGINES.md).
+
+## Selected API routes
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/api/health` | daemon and Docker health |
+| GET | `/api/catalog` | supported app catalog |
+| GET | `/api/apps` | managed container state |
+| GET | `/api/models` | model catalog and local state |
+| GET | `/api/engine` | selected/active engines, readiness and operation |
+| POST | `/api/engine/{id}` | activate a managed or custom engine |
+| POST | `/api/engine/load` | load the selected engine/model |
+| POST | `/api/engine/unload` | release inference memory |
+| POST | `/api/engine/abort` | cancel an engine launch |
+| POST | `/api/engines/custom` | register a local vLLM/SGLang image |
+| DELETE | `/api/engines/custom/{id}` | remove an inactive registration |
+| GET | `/api/engine/metrics` | normalized engine metrics |
+| GET | `/api/gateway` | API keys and gateway exposure state |
+| POST | `/api/assistant/chat` | streamed Cloudless Assistant response |
+| GET | `/api/jobs/{id}` | asynchronous job snapshot |
+| GET | `/api/jobs/{id}/events` | SSE job progress |
+| GET | `/api/system/spark-cluster` | DGX Spark cluster state |
+
+The browser UI is the primary client. API behavior must remain loopback-safe, asynchronous
+for long operations, and consistent across managed and custom engines.
+
+## State and update boundaries
+
+Production state is stored under `/var/lib/cloudless`. Custom engine registrations persist
+there but reference user-owned Docker images. Signed Cloudless package updates can update
+the orchestration contract without overwriting a custom image or source checkout.
+
+Image and model pins are architecture-aware. Do not add browser-only platform locks; use the
+capability contract documented in [`../distro/CAPABILITIES.md`](../distro/CAPABILITIES.md).

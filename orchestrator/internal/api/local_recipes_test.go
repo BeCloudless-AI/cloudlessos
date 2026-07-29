@@ -2,13 +2,18 @@ package api
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 
+	"github.com/cloudless/orchestrator/internal/jobs"
 	"github.com/cloudless/orchestrator/internal/localrecipes"
 	"github.com/cloudless/orchestrator/internal/sparkcluster"
 )
@@ -16,7 +21,8 @@ import (
 func TestLocalRecipeAbortCancelsRegisteredLaunch(t *testing.T) {
 	server := &Server{}
 	ctx, cancel := context.WithCancel(context.Background())
-	server.registerRecipeJob("local-0123456789abcdef", cancel)
+	job := jobs.NewManager().Create("recipe:local-0123456789abcdef")
+	server.registerRecipeJob("local-0123456789abcdef", cancel, job)
 	request := httptest.NewRequest(http.MethodPost, "/api/recipes/local-0123456789abcdef/abort", nil)
 	request.SetPathValue("id", "local-0123456789abcdef")
 	recorder := httptest.NewRecorder()
@@ -28,6 +34,43 @@ func TestLocalRecipeAbortCancelsRegisteredLaunch(t *testing.T) {
 	case <-ctx.Done():
 	default:
 		t.Fatal("recipe context was not cancelled")
+	}
+	if state := job.Snapshot(); state.Phase != "stopping" {
+		t.Fatalf("job phase = %q, want stopping", state.Phase)
+	}
+}
+
+func TestRunRecipeCommandCancelTerminatesProcessGroup(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	pidFile := filepath.Join(t.TempDir(), "child.pid")
+	job := jobs.NewManager().Create("recipe:test")
+	done := make(chan error, 1)
+	go func() {
+		done <- runRecipeCommand(ctx, job, "building", "Build", t.TempDir(), nil, "bash", "-c", "sleep 60 & child=$!; echo $child > '"+pidFile+"'; wait")
+	}()
+	var childPID int
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		if data, err := os.ReadFile(pidFile); err == nil {
+			childPID, _ = strconv.Atoi(strings.TrimSpace(string(data)))
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if childPID == 0 {
+		t.Fatal("child process did not start")
+	}
+	cancel()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("run error = %v, want context canceled", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("canceled command did not stop")
+	}
+	if err := syscall.Kill(childPID, 0); err == nil {
+		t.Fatalf("child process %d survived cancellation", childPID)
 	}
 }
 
@@ -117,6 +160,49 @@ func TestRecipeRuntimeUsesEditableEngineModelClusterAndEnvironment(t *testing.T)
 	}
 }
 
+func TestRecipeRuntimeUsesFabricSSHAndDisablesDuplicatePeerWork(t *testing.T) {
+	draft := localrecipes.NewDraft()
+	draft.Runtime.BuildOnce = true
+	draft.Runtime.DownloadOnce = true
+	store := localrecipes.New(t.TempDir())
+	recipe, err := store.Create(draft)
+	if err != nil {
+		t.Fatal(err)
+	}
+	checkout := t.TempDir()
+	cluster := sparkcluster.State{
+		NodeCount: 2, LocalIPs: []string{"10.100.0.1"}, LocalLinks: []string{"enp1s0f0np0"},
+		Nodes: []sparkcluster.Node{{Name: "peer", Host: "192.168.50.94", Username: "ledomaine", IPs: []string{"10.100.0.2"}}},
+	}
+	env, _, err := writeRecipeRuntime(recipe, checkout, cluster, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if env["WORKER_BUILD"] != "0" || env["PREPARE_WORKER"] != "0" {
+		t.Fatalf("peer work was not disabled: WORKER_BUILD=%q PREPARE_WORKER=%q", env["WORKER_BUILD"], env["PREPARE_WORKER"])
+	}
+	config, err := os.ReadFile(filepath.Join(env["HOME"], ".ssh", "config"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(config)
+	for _, want := range []string{"HostName 10.100.0.2", "HostKeyAlias 192.168.50.94"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("SSH config is missing %q:\n%s", want, text)
+		}
+	}
+}
+
+func TestRecipeSSHCommandPreservesRemoteArguments(t *testing.T) {
+	env := map[string]string{"HOME": "/tmp/cloudless home", "PATH": "/usr/bin"}
+	cmd := recipeSSHCommand(context.Background(), t.TempDir(), env, recipePeer{Alias: "worker"},
+		"docker", "run", "-c", `test -d "$1"`, "argument with spaces", "it's-literal")
+	want := `'docker' 'run' '-c' 'test -d "$1"' 'argument with spaces' 'it'"'"'s-literal'`
+	if got := cmd.Args[len(cmd.Args)-1]; got != want {
+		t.Fatalf("remote command = %q, want %q", got, want)
+	}
+}
+
 func TestPrepareRecipeModelPinMakesBothDownloadsImmutable(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "prepare-dspark-model-cache.sh")
@@ -175,8 +261,9 @@ func TestRecipeUIUsesRecipesIconAndCloudlessSourceViewer(t *testing.T) {
 		`${uiIcon('recipes')}<span>Recipes</span>`,
 		`<h3>Recipe Library</h3>`,
 		`.recipe-actions .btn`,
+		`.recipe-actions { display: grid; grid-template-columns: repeat(3,minmax(0,1fr));`,
 		`function recipeGitHubURL(value)`,
-		`function recipeImportRequest(sourceValue, yamlValue)`,
+		`function recipeImportRequest(sourceValue)`,
 		`function openRecipeImport()`,
 		`let mmRecipeView = { q: '', source: 'all', sparks: 'all', status: 'all', sort: 'updated', page: 1, perPage: 6 }`,
 		`function recipeMatchesView(recipe, data)`,
@@ -196,9 +283,7 @@ func TestRecipeUIUsesRecipesIconAndCloudlessSourceViewer(t *testing.T) {
 		`.recipe-specs`,
 		`.recipe-primary-action`,
 		`/api/recipes/import/preview`,
-		`/api/recipes/sparkrun/preview`,
 		`<span>Import recipe</span>`,
-		`sourceLabel = sparkRun ? 'SparkRun '`,
 		`<span>Check</span>`,
 		`'/api/recipes/' + encodeURIComponent(id) + '/check'`,
 		"`https://github.com/${path}`",
@@ -224,7 +309,7 @@ func TestRecipeUIUsesRecipesIconAndCloudlessSourceViewer(t *testing.T) {
 	if strings.Contains(page, `placeholder="https://github.com/owner/repository"`) {
 		t.Fatal("recipe import still asks users to type the fixed GitHub prefix")
 	}
-	for _, removed := range []string{`<span>Import SparkRun</span>`, `<span>Prefill from GitHub</span>`, `function openSparkRunImport()`, `id="recipe-import-toggle"`} {
+	for _, removed := range []string{`<span>Prefill from GitHub</span>`, `id="recipe-import-toggle"`} {
 		if strings.Contains(page, removed) {
 			t.Fatalf("duplicate recipe import UI still contains %q", removed)
 		}
@@ -281,7 +366,7 @@ func TestRecipeCheckUsesStableProgressOverlay(t *testing.T) {
 		`Cloudless is validating this recipe without launching or downloading the model.`,
 		`This is a read-only check. The active model and running services are not changed.`,
 		`trackLocalRecipeJob(result.jobId, 'check');`,
-		`if(checking)updateRecipeCheckOverlay(update);else refresh()`,
+		`if(checking)updateRecipeCheckOverlay(update);else if(recipeId)updateRecipeRunCard(recipeId,jobId,update)`,
 		`html.motion-disabled .recipe-check-spinner::before`,
 		`.recipe-check-error.hidden { display: none; }`,
 	} {
@@ -291,5 +376,60 @@ func TestRecipeCheckUsesStableProgressOverlay(t *testing.T) {
 	}
 	if strings.Contains(page, `trackLocalRecipeJob(result.jobId, 'check');mmRecipes=null;renderLocalRecipes(c)`) {
 		t.Fatal("recipe check still repaints the entire manager after starting")
+	}
+}
+
+func TestRecipeRunProgressUpdatesWithoutRepaintingManager(t *testing.T) {
+	content, err := webFS.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(content)
+	for _, want := range []string{
+		`function updateRecipeRunCard(recipeId, jobId, update = {})`,
+		`function markRecipeAbortPending(button)`,
+		`function openRecipeLaunchDialog(recipe, plan, trigger)`,
+		`Specialized inference runtime required`,
+		`standard Cloudless inference engine`,
+		`Completed runtime images and model weights remain cached.`,
+		`const RECIPE_RUN_STAGES = [`,
+		`function recipeRunPhaseLabel(phase)`,
+		`class="recipe-progress-stages"`,
+		`aria-label="Current recipe operation"`,
+		`data.plans&&data.plans[id]`,
+		`trackLocalRecipeJob(result.jobId,'run',id)`,
+		`action.dataset.liveRecipeAbort = recipeId`,
+		`update.phase === 'canceled'`,
+		`message.textContent = update.message || 'Starting recipe…'`,
+	} {
+		if !strings.Contains(page, want) {
+			t.Fatalf("stable recipe run UI is missing %q", want)
+		}
+	}
+	if strings.Contains(page, `refreshTimer = window.setTimeout`) {
+		t.Fatal("recipe runs still poll by repainting the whole manager")
+	}
+}
+
+func TestRecipeManagerOnlyShowsLocalLibrary(t *testing.T) {
+	content, err := webFS.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(content)
+	for _, want := range []string{
+		`function recipeLibraryHeaderHTML(local)`,
+		`<h3>Recipe Library</h3>`,
+		`Manage inference recipes saved on this machine.`,
+		`paintLocalRecipes(c, mmRecipes)`,
+	} {
+		if !strings.Contains(page, want) {
+			t.Fatalf("local recipe UI is missing %q", want)
+		}
+	}
+	for _, removed := range []string{"Discover recipes", "/api/recipe-catalog", "mmRecipeCatalog", "paintCatalogRecipes", "data-catalog-install"} {
+		if strings.Contains(page, removed) {
+			t.Fatalf("recipe discovery UI still contains %q", removed)
+		}
 	}
 }

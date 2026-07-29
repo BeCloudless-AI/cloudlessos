@@ -1,6 +1,18 @@
 package localrecipes
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
+
+func TestNormalizeRepairsWindowsCheckoutFingerprints(t *testing.T) {
+	recipe := recipeFromDraft(DeepSeekDSparkID, "github", "reviewed-import", "now", deepSeekDraft())
+	recipe.Source.Files = deepSeekWindowsCheckoutFiles()
+	recipe = normalize(recipe)
+	if !reflect.DeepEqual(recipe.Source.Files, deepSeekCanonicalFiles()) {
+		t.Fatalf("fingerprints were not migrated: %#v", recipe.Source.Files)
+	}
+}
 
 func TestImportPrefillsEditableDeepSeekRecipe(t *testing.T) {
 	store := New(t.TempDir())
@@ -20,6 +32,9 @@ func TestImportPrefillsEditableDeepSeekRecipe(t *testing.T) {
 	}
 	if recipe.Source.Revision != DeepSeekDSparkRevision || recipe.Engine.Type != "vllm" || recipe.Model.TensorParallel != 2 {
 		t.Fatalf("recipe = %#v", recipe)
+	}
+	if !recipe.Runtime.BuildOnce || !recipe.Runtime.DownloadOnce {
+		t.Fatalf("DeepSeek recipe does not use coordinator-once distribution: %#v", recipe.Runtime)
 	}
 	if _, err := store.Import("https://github.com/example/unreviewed"); err == nil {
 		t.Fatal("unknown repository was imported without an import profile")
@@ -96,5 +111,15 @@ func TestVersionOneRecipeMigratesToCompleteSpecification(t *testing.T) {
 	recipe := normalize(Recipe{ID: "legacy", Name: "Legacy", SourceURL: DeepSeekDSparkSource, Revision: DeepSeekDSparkRevision, Adapter: "dspark-vllm-mp-v1", ModelID: "legacy/model", ModelRevision: "abc", Nodes: 2})
 	if recipe.Engine.Type != "vllm" || recipe.Model.ID != "legacy/model" || recipe.Distributed.Nodes != 2 || recipe.Runtime.Lifecycle.Start.Program == "" {
 		t.Fatalf("migration incomplete: %#v", recipe)
+	}
+}
+
+func TestNormalizeUpgradesPersistedDeepSeekRecipeToCoordinatorOnce(t *testing.T) {
+	recipe := recipeFromDraft(DeepSeekDSparkID, "github", "reviewed-import", "now", deepSeekDraft())
+	recipe.Runtime.BuildOnce = false
+	recipe.Runtime.DownloadOnce = false
+	recipe = normalize(recipe)
+	if !recipe.Runtime.BuildOnce || !recipe.Runtime.DownloadOnce {
+		t.Fatalf("persisted recipe was not upgraded: %#v", recipe.Runtime)
 	}
 }

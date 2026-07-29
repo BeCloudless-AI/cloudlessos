@@ -1,0 +1,28 @@
+#!/bin/sh
+set -eu
+
+if [ "$(id -u)" -ne 0 ]; then
+    echo "Run this command with sudo: sudo cloudless-developer-tools" >&2
+    exit 1
+fi
+export DEBIAN_FRONTEND=noninteractive
+apt-get update
+apt-get install -y --no-install-recommends \
+    build-essential \
+    ccache \
+    cmake \
+    git \
+    libnuma-dev \
+    ninja-build \
+    pkg-config \
+    python3-dev \
+    python3-pip \
+    python3-venv
+
+echo
+echo "Cloudless developer tools are ready."
+if [ -x /usr/local/cuda/bin/nvcc ]; then
+    /usr/local/cuda/bin/nvcc --version | tail -n 1
+else
+    echo "CUDA compiler not found. GPU source builds require a CUDA toolkit."
+fi

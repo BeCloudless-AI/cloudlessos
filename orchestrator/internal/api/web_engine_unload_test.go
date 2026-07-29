@@ -54,3 +54,23 @@ func TestEmbeddedWebIncludesPersistentModelUnloadExperience(t *testing.T) {
 		t.Fatal("a ready model must resolve to Unload before considering a cancellable loading action")
 	}
 }
+
+func TestMetricsEntryPointsOnlyAppearForReadyModel(t *testing.T) {
+	content, err := webFS.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(content)
+	for _, want := range []string{
+		`class="hero-metrics hidden" id="open-inference-2"`,
+		`class="dock-item" id="dock-inference"`,
+		`.hero-metrics.hidden { display: none; }`,
+		`document.getElementById('open-inference-2')?.classList.toggle('hidden', !engineReady);`,
+		`di.classList.toggle('running', engineReady)`,
+		`document.querySelector('.hero-context')?.classList.toggle('engine-hidden', unavailable);`,
+	} {
+		if !strings.Contains(page, want) {
+			t.Fatalf("metrics readiness gate is missing %q", want)
+		}
+	}
+}

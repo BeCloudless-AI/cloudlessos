@@ -1,93 +1,151 @@
-# Architecture
+# CloudlessOS architecture
 
-> The kiosk/browser is a thin shell. The product is the three layers beneath it.
+CloudlessOS is a local control plane for private AI workloads. The fullscreen browser is a
+thin presentation shell; the Go daemon, signed contracts and host/container runtime own the
+system behavior.
 
-```
-                 ┌─────────────────────────────────────────────┐
-   Presentation  │  Kiosk Chromium (on PC)  /  user's browser   │
-                 │            → loads local web UI               │
-                 └───────────────────────┬─────────────────────┘
-                                          │ HTTP/WebSocket (localhost)
-                 ┌───────────────────────▼─────────────────────┐
-   Web UI        │  Frontend app (catalog, install buttons,     │
-                 │  model manager, app dashboards, settings)    │
-                 └───────────────────────┬─────────────────────┘
-                                          │ local API
-                 ┌───────────────────────▼─────────────────────┐
-   LAYER 1       │  Orchestrator daemon                          │
-   (the brains)  │  - install/run/update/uninstall AI apps       │
-                 │  - container lifecycle + GPU allocation       │
-                 │  - model download/storage management          │
-                 │  - reverse proxy / port & network management  │
-                 └───────────────────────┬─────────────────────┘
-                                          │
-            ┌─────────────────────────────┼─────────────────────────────┐
-            ▼                             ▼                             ▼
-   LAYER 3                        LAYER 2                       Runtime
-   App/model catalog       Hardware enablement          Container engine
-   (vetted recipes:        (drivers, CUDA/ROCm,         (Docker/Podman +
-   ComfyUI, vLLM,          kernel, VRAM detection,      NVIDIA Container
-   Ollama, Open WebUI…)    model-fit recommendations)   Toolkit, GPU passthrough)
+```text
+Fullscreen Chromium or local browser
+                |
+                | loopback HTTP / SSE / WebSocket
+                v
+Embedded Cloudless web interface
+                |
+                | local control API
+                v
+cloudlessd orchestrator + OpenAI-compatible gateway
+       |                 |                    |
+       v                 v                    v
+Engine lifecycle   Models and apps     Hardware / OS control
+       |                 |                    |
+       +---------- Docker + NVIDIA -----------+
+                         |
+           managed or registered custom engine
+                         |
+               stable cloudless-ai:8000/v1
+                         |
+          Hermes, applications and API clients
 ```
 
-## Layer 1 — Orchestrator daemon (the product's brain)
+## Presentation and local access
 
-A local background service. Responsibilities:
-- **App lifecycle:** install, start, stop, update, uninstall AI apps as containers.
-- **GPU allocation:** assign GPUs/VRAM to apps; on multi-GPU, pin with
-  `CUDA_VISIBLE_DEVICES` / `--gpus`.
-- **Model management:** download (Hugging Face, etc.), store, dedupe, track disk usage,
-  recommend models that fit detected VRAM.
-- **Networking:** reverse proxy each app to a clean local URL; manage ports; keep
-  services off the open network unless the user opts in.
-- **State & API:** expose a local API the web UI drives; persist installed-app state.
+- The installed appliance uses Chromium, Openbox and LightDM to show the local interface.
+- The same interface can be opened from a normal browser during development.
+- The UI/API listens on `127.0.0.1:8765` by default.
+- The key-authenticated model and agent gateway listens on `127.0.0.1:8766`.
+- The web terminal is a separate loopback-only ttyd service running `/bin/login`, proxied
+  through the Cloudless origin at `/terminal/`.
 
-Why a daemon (not just scripts): apps must keep running and be managed independently of
-whether the UI is open.
+The terminal requires normal OS authentication. It deliberately provides the authenticated
+user's real host permissions rather than a Cloudless-specific restricted shell.
 
-## Layer 2 — Hardware enablement
+## Orchestrator
 
-What makes a box "ready for local AI." Detect GPU(s), VRAM, driver/CUDA/ROCm versions;
-ensure the right stack is present; surface "your machine can comfortably run X" guidance.
-On Cloudless PCs this is pre-tuned; on standalone installs it must self-configure.
+`cloudlessd` is responsible for:
 
-## Layer 3 — App/model catalog
+- asynchronous install, start, stop, reset, update and uninstall operations;
+- inference-engine selection and exactly-one-engine enforcement;
+- model selection, downloads, cache reuse and fit guidance;
+- the stable OpenAI-compatible endpoint used by Hermes and installed applications;
+- API keys and opt-in LAN/public exposure;
+- hardware telemetry and DGX Spark cluster management;
+- OS update, driver, display, power and diagnostic integrations;
+- durable install state under `/var/lib/cloudless`.
 
-A curated, versioned set of **container recipes** + metadata (VRAM needs, default models,
-ports, health checks). Curated (not "install anything") is the defensibility: reliability
-over breadth. Initial targets: ComfyUI, Ollama and/or vLLM, Open WebUI.
+Long operations use job IDs and Server-Sent Events rather than blocking requests.
 
-## Why containers over Pinokio's approach
+## Inference engine contract
 
-Pinokio clones repos and juggles conda/venv — clever but fragile, messy to uninstall.
-Containers give us: reproducible installs, dependency isolation (no CUDA/Python conflicts
-between apps), clean uninstall, and straightforward GPU passthrough via the NVIDIA
-Container Toolkit. The catalog = vetted container recipes.
+Exactly one engine serves the selected model. Consumers do not connect to a container name;
+they use the stable internal alias `cloudless-ai` on port `8000`, or the authenticated
+Cloudless gateway on port `8766`.
 
-## Presentation shell
+Every engine contract defines:
 
-- **Cloudless PC:** headless/kiosk Chromium pointed at the local web UI — appliance feel.
-- **Standalone:** the daemon serves the same UI; user opens it in their normal browser.
+- image and architecture/platform availability;
+- GPU, IPC, network, port and volume settings;
+- model substitution and launch arguments;
+- OpenAI-compatible health and metrics expectations;
+- memory, disk and accelerator guidance.
 
-## Distro layer (Phase 1+)
+Managed vLLM, SGLang and llama.cpp definitions come from the signed embedded catalog.
 
-The shipped OS. Leaning toward an **immutable/atomic image** (bootc / Universal Blue /
-Fedora, à la Bazzite) for atomic updates, automatic rollback, and a system users can't
-easily corrupt. Ubuntu/Debian is the easier-to-start alternative; NixOS is the most
-reproducible but steepest. Not finalized — see [[DECISIONS]].
+## Custom inference engines
 
-## Open technical questions
+A registered custom engine is a locally built Docker image adapted to an existing managed
+vLLM or SGLang contract. This deliberately reuses the production lifecycle instead of
+adding a second custom-process manager.
 
-- Daemon implementation language (Go vs Python vs Rust) — undecided.
-- Web UI framework — undecided.
-- Container engine: Docker vs Podman (Podman is rootless/daemonless, appealing for an
-  appliance; Docker is more familiar) — undecided.
-- Final distro base (immutable Fedora-family vs Ubuntu) — undecided.
+The registration persists only its generated ID, display name, local image tag, compatibility
+base, entrypoint mode and creation time. At activation Cloudless:
 
-These are intentionally open; revisit during Phase 0 once the prototype reveals constraints.
+1. stops the active engine;
+2. applies the base contract with the custom image;
+3. substitutes the current Model Manager selection;
+4. attaches the shared model cache and private network alias;
+5. waits for `/v1/models` before declaring the engine ready.
+
+An upstream vLLM image may already define `vllm serve` as its entrypoint. Registration
+inspects the local image and removes the duplicate command prefix when required.
+
+Custom images are never signed, pulled, upgraded or deleted by Cloudless updates. They are
+trusted local code with GPU and model-cache access. The managed engine remains available as
+rollback. See [CUSTOM_ENGINES.md](./CUSTOM_ENGINES.md).
+
+## Containers and isolation
+
+Docker plus NVIDIA Container Toolkit is the supported runtime. Containers make CUDA/Python
+dependencies reproducible, keep applications independently removable, and allow custom
+source builds without modifying the signed OS engine environment.
+
+The `cloudless` Docker network is private. Engine containers receive the stable
+`cloudless-ai` alias. Host ports are bound to loopback unless a signed exposure contract and
+explicit user action permit LAN or public access.
+
+## Models and applications
+
+- Model metadata is curated and architecture-aware; users may also import Hugging Face models.
+- The selected model is independent from the selected compatible engine.
+- Hermes Agent is a core system integration and follows the stable Cloudless engine endpoint.
+- Optional applications are described through signed catalog contracts and installed on demand.
+- Local native recipes remain machine-owned and separate from the custom generic-engine path.
+
+## Hardware and DGX Spark
+
+Hardware detection reports GPU/accelerator, unified memory, storage, driver and platform
+capabilities. Standard AMD64 and DGX Spark ARM64 use the same interface and orchestrator,
+with architecture-specific images and signed capability gates.
+
+DGX Spark is installed as a reversible package layer over NVIDIA's qualified DGX OS. Managed
+vLLM can use the Spark cluster lifecycle for two to eight connected systems. Custom engines
+currently run on one machine; Cloudless does not distribute an arbitrary local image to peers.
+
+## Packaging and updates
+
+CloudlessOS uses Ubuntu 24.04 and separately versioned Debian packages for the orchestrator,
+shell, branding, hardware setup, first boot and updater. AMD64 installations use the guided
+installer ISO. DGX Spark uses the signed ARM64 installer layer.
+
+Updates come from the signed APT repository at `updates.becloudless.ai`. The pipeline validates
+both architectures as one release generation. Platform-specific behavior uses server-side
+capabilities, not a forked frontend.
+
+## Security invariants
+
+- Control surfaces default to loopback.
+- Public and LAN exposure is explicit and contract-gated.
+- API secrets are not sent to inference containers.
+- Only one inference engine owns the stable alias at a time.
+- Managed artifacts remain pinned and signed.
+- Custom engine images are visibly unverified and never enter the signed update channel.
+- Removing a custom registration does not delete user source or image data.
+- Terminal is authenticated; it is not anonymous root access.
 
 ## See also
 
-- [[VISION]] — the company & product vision this architecture serves
-- [[DECISIONS]] — decision log (ADR-style) & open questions behind these choices
-- [[ROADMAP]] — the phased plan that builds these layers
+- [Custom engine developer guide](./CUSTOM_ENGINES.md)
+- [Hardware strategy](./HARDWARE.md)
+- [Capability and platform locks](../distro/CAPABILITIES.md)
+- [DGX Spark installation and operations](../distro/DGX-SPARK.md)
+- [Decision log](./DECISIONS.md)
+- [Live status](./STATUS.md)

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/cloudless/orchestrator/internal/catalog"
+	"github.com/cloudless/orchestrator/internal/customengine"
 	"github.com/cloudless/orchestrator/internal/usage"
 )
 
@@ -91,7 +92,7 @@ func (s *Server) engineMetricsHandler(w http.ResponseWriter, r *http.Request) {
 	// which an engine restart applies.
 	active := s.activeEngine(ctx)
 	ready := active != "" && engineReady(ctx)
-	name := engineDisplayName(active)
+	name := s.engineDisplayName(active)
 	res := engineMetrics{Available: false, Engine: active, Ready: ready, Model: model}
 	switch {
 	case active == "":
@@ -106,11 +107,11 @@ func (s *Server) engineMetricsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // engineDisplayName turns an engine id into its short display name ("vLLM", "SGLang").
-func engineDisplayName(id string) string {
+func (s *Server) engineDisplayName(id string) string {
 	if id == "" {
 		return "The engine"
 	}
-	if a, ok := catalog.Get(id); ok {
+	if a, ok := customengine.Get(s.state, id); ok {
 		return strings.TrimSuffix(a.Name, " Engine")
 	}
 	return id

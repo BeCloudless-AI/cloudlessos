@@ -1,89 +1,146 @@
-# Cloudless
+# CloudlessOS
 
-**PCs that are ready for local AI — and the OS that makes it effortless.**
+**A local-AI operating-system layer built with web technologies on Ubuntu 24.04.**
 
-Cloudless builds local-AI-ready PCs and **CloudlessOS**, a Linux distro that turns
-installing and running local AI (ComfyUI, vLLM, Ollama, Open WebUI, …) into a
-one-click, friendly experience. CloudlessOS ships on Cloudless PCs and is a free
-standalone download for anyone who wants easy local AI on their own machine.
+CloudlessOS turns an NVIDIA-powered computer into a private AI appliance. Its local Go
+daemon manages inference engines, models, agentic applications, GPU resources, networking,
+updates and the fullscreen browser interface. The same interface works directly on a
+CloudlessOS display or from a browser on the machine.
 
-## Status
+CloudlessOS supports standard AMD64 NVIDIA computers and NVIDIA DGX Spark ARM64 systems.
+DGX Spark installations preserve NVIDIA's qualified DGX OS stack and add Cloudless as a
+signed, reversible layer.
 
-Early development — **Phase 0: orchestrator prototype**. The daemon + web UI already
-work: install and run AI apps as GPU containers, browse and switch models, and chat with
-your local AI. The bootable CloudlessOS **ISO isn't built yet** — for now you run it
-straight from this repo (see below).
+## Current capabilities
 
-## Try it now (before the ISO) — the ELI5 version
+- Guided CloudlessOS installer pipeline for Ubuntu 24.04 AMD64.
+- Signed AMD64 and ARM64 Debian-package update channel.
+- DGX Spark appliance and side-by-side installation modes.
+- One active OpenAI-compatible inference engine with managed vLLM, SGLang and llama.cpp
+  choices.
+- Model Manager with curated models, Hugging Face account support and fit guidance.
+- Hermes Agent-powered Cloudless Assistant using the selected local model.
+- Optional AI applications and native local recipes.
+- Two-to-eight-Spark cluster setup, validation, monitoring and distributed inference.
+- Local, LAN and user-approved public API access.
+- Authenticated full host terminal and optional source-build toolchain.
+- Locally compiled vLLM/SGLang images selectable as first-class custom engines.
 
-CloudlessOS is really two things: a small background program (`cloudlessd`) and a web
-page it serves. Until the bootable ISO exists, **you start that program yourself and open
-the page in your browser** — that page *is* CloudlessOS.
+The project is under active development. Read [Live Status](./docs/STATUS.md) for validated
+behavior and current limitations rather than relying on old release assumptions.
 
-**What you need**
+## Developer quick start
 
-- An **NVIDIA GPU**.
-- **Linux** (Ubuntu 22.04 / 24.04) — or **Windows 11 with WSL2** Ubuntu.
-- **Docker** + the **NVIDIA Container Toolkit** (lets containers use your GPU).
-- **Go 1.26+** (to build it).
+### Requirements
 
-**Steps**
+- Ubuntu 24.04, or Ubuntu 24.04 under WSL2 for interface/orchestrator development.
+- Docker and NVIDIA Container Toolkit for GPU containers.
+- Go 1.26 or newer.
+- Node.js for the embedded-interface syntax check.
 
-1. **Get the code**
-   ```bash
-   git clone https://github.com/samuelcardillo/cloudlessos.git
-   cd cloudlessos
-   ```
-2. **First time only — install the prerequisites.** On Ubuntu/WSL2 the helper scripts do
-   it for you (they install system packages, so they'll ask for your password). Already
-   have Docker + NVIDIA Container Toolkit + Go? Skip this step.
-   ```bash
-   bash scripts/setup-wsl-docker.sh   # Docker + NVIDIA Container Toolkit
-   bash scripts/install-go.sh         # Go 1.26 toolchain
-   ```
-3. **Start it**
-   ```bash
-   cd orchestrator
-   go run ./cmd/cloudlessd
-   ```
-   The first launch pulls a few container images and a small default model, so give it a
-   couple of minutes the first time.
-4. **Open it** — go to **http://localhost:8765** in your browser.
+### Run the orchestrator from source
 
-That's it. The dashboard you see *is* CloudlessOS: click an app to install and run it on
-your GPU, pick a model, or just chat with your local AI.
-
-**Want to reach it from your phone or another laptop on the same Wi-Fi?** Start it on all
-network interfaces instead:
 ```bash
-CLOUDLESS_ADDR=0.0.0.0:8765 go run ./cmd/cloudlessd
+git clone https://github.com/samuelcardillo/cloudlessos.git
+cd cloudlessos
+
+# Ubuntu/WSL helpers, only when the dependencies are not installed yet
+bash scripts/setup-wsl-docker.sh
+bash scripts/install-go.sh
+
+cd orchestrator
+go run ./cmd/cloudlessd
 ```
-then open `http://<this-machine-ip>:8765` from the other device. Only do this on a network
-you trust — it exposes the dashboard to everyone on that network.
 
-Stuck, or on Windows? The full setup, requirements and known gotchas are in
-[`docs/DEV_ENVIRONMENT.md`](./docs/DEV_ENVIRONMENT.md), and the daemon's own notes are in
-[`orchestrator/README.md`](./orchestrator/README.md).
+Open [http://127.0.0.1:8765](http://127.0.0.1:8765). The first provisioning run may pull
+large engine images and model files.
 
-## Build the development ISO
+For UI-only development without automatic container provisioning:
 
-The Ubuntu 24.04 installer pipeline, Debian packages, systemd services, kiosk session,
-Plymouth branding, and USB instructions live in [`distro/`](./distro). Start with
-[`distro/README.md`](./distro/README.md).
+```bash
+cd orchestrator
+CLOUDLESS_NO_PROVISION=1 go run ./cmd/cloudlessd
+```
 
-## Repository
+### Validate a change
 
-- Start here: [`CLAUDE.md`](./CLAUDE.md) — project context overview.
-- The working prototype: [`orchestrator/`](./orchestrator) — the `cloudlessd` daemon + web UI.
-- Recipe discovery and signed catalog service: [`services/recipe-indexer/`](./services/recipe-indexer)
-- Detailed docs: [`docs/`](./docs)
-  - [Vision](./docs/VISION.md)
-  - [Architecture](./docs/ARCHITECTURE.md)
-  - [Roadmap](./docs/ROADMAP.md)
-  - [Decisions](./docs/DECISIONS.md)
-  - [Dev environment](./docs/DEV_ENVIRONMENT.md)
-  - [Live status](./docs/STATUS.md)
+```bash
+cd orchestrator
+go test ./...
+go vet ./...
+go build ./...
+cd ..
+node distro/scripts/test-web-js.js
+```
+
+The broader distro, package, architecture and release gates are documented in
+[Building CloudlessOS](./distro/README.md).
+
+## Compile and use a custom inference engine
+
+Advanced users can compile vLLM or SGLang from source, tag the result as a local Docker
+image, and register it from **Settings -> Engine -> Custom engine builds**. The custom
+engine then uses Cloudless's Model Manager selection, model cache, API gateway, Hermes
+integration, metrics and lifecycle controls. Managed vLLM remains available for rollback.
+
+Start with the complete developer runbook:
+
+**[Build and register a custom inference engine](./docs/CUSTOM_ENGINES.md)**
+
+The short version on an installed CloudlessOS machine is:
+
+```bash
+# Open Cloudless Terminal first
+sudo cloudless-developer-tools
+
+# Build a trusted, pinned vLLM source revision as a uniquely tagged image.
+# Then register that exact image tag in Settings -> Engine.
+```
+
+Cloudless registers container images rather than arbitrary host executables. This keeps
+experimental CUDA/Python dependencies isolated and makes returning to the signed engine
+predictable.
+
+## Build or install CloudlessOS
+
+- [Build the AMD64 installer ISO and Debian packages](./distro/README.md)
+- [Install on NVIDIA DGX Spark](./distro/DGX-SPARK.md)
+- [Publish signed updates](./distro/UPDATES.md)
+- [Platform and architecture capability rules](./distro/CAPABILITIES.md)
+
+The generic installer and the DGX Spark layer share the same orchestrator and interface,
+while architecture-specific images, hardware setup and capability gates remain explicit.
+
+## Repository map
+
+| Path | Purpose |
+|---|---|
+| [`orchestrator/`](./orchestrator) | Go daemon, APIs, engine lifecycle and embedded web interface |
+| [`distro/`](./distro) | Debian packages, ISO tooling, DGX Spark installer and release pipeline |
+| [`docs/`](./docs) | Architecture, decisions, hardware, developer and product documentation |
+| [`scripts/`](./scripts) | Development environment, build and validation helpers |
+
+Important documentation:
+
+- [Architecture](./docs/ARCHITECTURE.md)
+- [Custom engines](./docs/CUSTOM_ENGINES.md)
+- [Development environment](./docs/DEV_ENVIRONMENT.md)
+- [Hardware and multi-GPU strategy](./docs/HARDWARE.md)
+- [Hermes integration](./docs/HERMES_INTEGRATION.md)
+- [Decision log](./docs/DECISIONS.md)
+- [Roadmap](./docs/ROADMAP.md)
+- [Live status](./docs/STATUS.md)
+
+## Security model for developer features
+
+- The Cloudless interface and terminal proxy listen on loopback by default.
+- Terminal starts `/bin/login`; it does not provide anonymous root access.
+- The authenticated OS user receives exactly their normal host permissions, including
+  `sudo` only when their Linux account is authorized for it.
+- A custom engine runs trusted user-supplied code with GPU and model-cache access. Register
+  only code and images you trust.
+- Custom images are never silently promoted into the signed Cloudless update channel.
 
 ## License
 
-TBD — see open question on open-sourcing the OS in [`docs/DECISIONS.md`](./docs/DECISIONS.md).
+License selection is still pending. Track the decision in [DECISIONS.md](./docs/DECISIONS.md).

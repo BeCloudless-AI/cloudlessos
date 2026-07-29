@@ -1259,58 +1259,37 @@ Ubuntu or baking the application directly into a monolithic filesystem image.
 
 ---
 
-## D44 - SparkRun recipes use a pinned execution provider behind Cloudless
+## D45 - Retire the interim recipe indexer in favor of a native community service
 
-**Decision:** CloudlessOS preserves imported SparkRun YAML exactly and delegates
-recipe-specific validation and execution to a version-pinned SparkRun CLI.
-Cloudless remains the user-facing control plane for trust disclosure, cluster
-selection, jobs, cancellation, active-model state, health, and the API gateway.
+**Decision:** Remove the standalone Cloudflare recipe indexer and hide Discover Recipes until the
+native Cloudless community product is designed. CloudlessOS continues to support machine-local
+recipes and the portable `cloudless.recipe/v1` format.
 
-- **Pinned provider, not a second UI.** The arm64 package installs the exact
-  tested SparkRun release in an isolated virtual environment. The binary and
-  version are checked before preview, dry-run, launch, or stop.
-- **Preview before persistence.** Cloudless resolves a public HTTPS URL, a
-  built-in registry reference, a Spark Arena identifier, or pasted YAML and
-  displays its model, image, runtime, node count, warnings, and security risks
-  before enabling Import. The pinned provider performs the definitive schema
-  validation.
-- **No lossy translation.** Builder, distribution, executor, pre/post hooks,
-  Ray, and tuning fields remain in the exact source document passed to SparkRun.
-- **Fail closed.** Provider absence, version drift, validation failure, unhealthy
-  nodes, or an exact node-count mismatch prevents launch.
-- **Cloudless lifecycle.** A provider dry-run is available before launch. Run,
-  progress, Abort, Stop, health checks, active-model state, and stable API proxy
-  remain part of the existing Cloudless workflow.
-- **Traceable and immutable source.** The exact YAML, SHA-256, normalized source
-  URL, provider version, node range, warnings, and disclosed execution risks are
-  stored. A changed external recipe must be imported as a new local recipe.
-
-This exposes the useful SparkRun recipe ecosystem without maintaining a fragile
-parallel implementation of every SparkRun runtime feature.
+- The indexer had no useful catalog after third-party SparkRun ingestion was removed.
+- A separate discovery pipeline would duplicate identity, publishing, moderation and search work
+  planned for community accounts, ratings, comments and recipe ownership.
+- The current UI exposes only recipes saved locally, including manual and reviewed GitHub imports.
+- The future community backend must still pin executable revisions, validate manifests and sign
+  published artifacts; those security requirements remain, but their implementation belongs to
+  the unified service.
 
 ---
 
-## D45 - Recipe discovery remains a trusted indexer beneath future social features
+## D46 - Custom inference builds extend, rather than replace, managed engines
 
-**Decision:** Run recipe discovery, executable validation and signed catalog publication as a
-separate Cloudflare service. A future Cloudless account/community service may add authorship,
-ratings, comments, moderation signals and submissions, but it does not replace the indexer.
+**Decision:** Advanced users may register a locally built vLLM or SGLang container as an inference
+engine. A custom build inherits a signed Cloudless runtime contract and remains separate from the
+managed package/image selected by the stable channel.
 
-- **Automatic discovery.** Known registries and GitHub search seed queue jobs; manifests are pinned
-  to immutable commits rather than copied into a manually curated JSON list.
-- **One executable identity.** The preserved source bytes and SHA-256 digest define what will run.
-  Social posts and ratings refer to that indexed identity, so changing a recipe creates a new
-  artifact rather than silently changing an existing listing.
-- **Trust boundary.** Static safety checks and manual-review states are authoritative in the
-  indexer. Popularity cannot promote blocked executable content into the public catalog.
-- **Signed distribution.** CloudlessOS consumes a canonical Ed25519-signed, sequence-numbered
-  catalog and immutable artifacts. Clients can reject tampering and rollback independently of the
-  future website or social API.
-- **Independent evolution.** Search ranking may combine compatibility, validation, community and
-  editorial signals later, while the executable ingestion contract stays stable.
-
-This avoids rebuilding discovery when community accounts arrive and keeps social compromise from
-becoming code-execution compromise.
+- Registration requires an image already present in the local Docker store; Cloudless does not
+  upload source code or custom binaries.
+- The inherited contract owns GPU access, cache mounts, port 8000, the private `cloudless-ai`
+  network alias, selected-model substitution, and the OpenAI `/v1/models` readiness check.
+- The active custom build uses the same gateway, Hermes integration, metrics, unload and abort
+  lifecycle as a managed engine.
+- Removing a registration never deletes the image, source checkout, model cache, or workspace.
+- Managed vLLM remains visible and selectable as the recovery path. Custom builds are never marked
+  Cloudless-verified and are not pulled or overwritten by normal OS updates.
 
 ---
 
@@ -1326,8 +1305,8 @@ becoming code-execution compromise.
 
 ## See also
 
-- [[VISION]] — the vision & strategy these decisions support
-- [[ARCHITECTURE]] — the technical design these decisions shape
-- [[ROADMAP]] — the phased plan these decisions feed into
-- [[STATUS]] — living state, including which decisions are pending input
-- [[DEV_ENVIRONMENT]] — hardware & WSL2 runbook (referenced by D1, D4, D8, …)
+- [Vision](./VISION.md) — the vision and strategy these decisions support
+- [Architecture](./ARCHITECTURE.md) — the current technical design
+- [Roadmap](./ROADMAP.md) — current milestones and release gates
+- [Status](./STATUS.md) — current validated state and limitations
+- [Development environment](./DEV_ENVIRONMENT.md) — local and physical-device runbook

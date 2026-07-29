@@ -1,55 +1,52 @@
-# Roadmap
+# CloudlessOS roadmap
 
-Principle: **software first, distro second, hardware last.** Prove the magic moment on
-commodity hardware before committing to an OS image or building PCs.
+The original orchestrator and installer prototypes are complete enough to test on real AMD64
+hardware, VirtualBox and DGX Spark. The roadmap now focuses on reliability, extensibility and a
+production-ready distribution rather than proving that a local web control plane can work.
 
-## Phase 0 — Orchestrator prototype (CURRENT)
+## Current — pre-release hardening
 
-**Goal:** the magic moment. In a web UI, click "ComfyUI" → it installs into a GPU
-container, downloads a sensible default model, and opens — with a working uninstall.
+- Keep the AMD64 installer and DGX Spark ARM64 package layer on one signed release generation.
+- Validate updates, rollback, first boot, display/kiosk recovery and NVIDIA driver behavior on a
+  wider hardware matrix.
+- Finish the managed application catalog and remove placeholder or unqualified recipes.
+- Improve model compatibility data, load progress, diagnostics and failure recovery.
+- Harden two-to-eight-Spark configuration, monitoring and distributed inference.
+- Validate Hermes Agent permissions, persistence, integrations and scoped API access.
+- Exercise custom source-built vLLM/SGLang registration, readiness and managed-engine rollback.
+- Complete licensing, security review and public installation/support documentation.
 
-Milestones:
-1. Dev env ready: Ubuntu 24.04 in WSL2, `nvidia-smi` works inside WSL, container engine
-   sees the GPU. (See [[DEV_ENVIRONMENT]].)
-2. Manual baseline: run ComfyUI in a GPU container by hand (the thing we'll automate).
-3. Orchestrator daemon v0: install/run/stop/uninstall one app via a local API.
-4. Minimal web UI: catalog list + install/launch buttons + status.
-5. Catalog of 3–4 apps: ComfyUI, Ollama and/or vLLM, Open WebUI.
-6. Model manager v0: download + hardware-aware "fits your VRAM" recommendation.
+## Next — extensibility without fragility
 
-**Exit criterion:** a non-technical person could install and open ComfyUI from the UI
-without touching a terminal.
+- Signed native recipe publishing and a unified Cloudless community identity service.
+- Recipe ownership, ratings, comments, moderation and reproducible revision pins.
+- More inference compatibility bases where they add real value.
+- Controlled custom-engine support for Spark clusters, including image distribution and
+  per-node compatibility checks.
+- Better developer diagnostics, benchmark comparisons and exportable engine profiles.
+- Recovery media and offline/factory installation options.
 
-## Phase 1 — CloudlessOS image
+## Later — Cloudless hardware
 
-Package the daemon + web UI + kiosk shell + drivers into a bootable distro image.
+- Reference Cloudless PC configurations validated against the same public CloudlessOS build.
+- Multi-accelerator tuning, acoustics, power and thermal profiles.
+- Factory provisioning, recovery and support lifecycle.
+- Hardware-specific capability packages only where a shared signed contract is insufficient.
 
-Milestones:
-- Choose the distro base (immutable Fedora-family vs Ubuntu) — see [[DECISIONS]].
-- Build a branded image (bootc / Universal Blue approach if immutable).
-- Kiosk boot flow: boot → daemon up → Chromium kiosk → web UI.
-- First-run / onboarding experience.
-- Bootable ISO; test installs in a VM (VM is fine here — no GPU needed for image work).
-- Standalone download published = top-of-funnel for hardware.
+## Engineering principles
 
-## Phase 2 — Cloudless PC (hardware)
-
-Only once the software is the reason people want the machine.
-
-Milestones:
-- Reference hardware spec(s) tuned for local AI.
-- CloudlessOS preinstalled and hardware-tuned.
-- Support / update story for shipped units.
-
-## Testing-hardware progression
-
-Windows + WSL2 (RTX 5090) for Phase 0 → 3-GPU Ubuntu box for multi-GPU/native testing
-→ VM for distro-image iteration → real Cloudless PC reference units in Phase 2.
+- Software and update reliability precede hardware expansion.
+- One source tree and release identity cover supported architectures.
+- Platform differences are backend capabilities, not frontend forks.
+- Exactly one inference engine owns the stable API endpoint at a time.
+- Managed paths remain recoverable even when advanced users experiment with custom code.
+- Public discovery must include provenance, revisions, validation and moderation rather than
+  becoming an unreviewed script index.
 
 ## See also
 
-- [[VISION]] — why we're building this and for whom
-- [[ARCHITECTURE]] — the three-layer technical design being built out
-- [[DECISIONS]] — decision log (ADR-style) & open questions (distro base, engine, …)
-- [[STATUS]] — living state: what's done, in progress, and next
-- [[DEV_ENVIRONMENT]] — hardware, WSL2 setup & runbook for Phase 0
+- [Live status](./STATUS.md)
+- [Architecture](./ARCHITECTURE.md)
+- [Custom engine guide](./CUSTOM_ENGINES.md)
+- [Decision log](./DECISIONS.md)
+- [DGX Spark operations](../distro/DGX-SPARK.md)

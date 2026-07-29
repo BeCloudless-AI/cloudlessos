@@ -31,3 +31,13 @@ func TestCancelIsTerminalWithoutError(t *testing.T) {
 		t.Fatalf("canceled snapshot = %#v", got)
 	}
 }
+
+func TestChangingPhaseClearsStaleByteProgress(t *testing.T) {
+	job := NewManager().Create("recipe:test")
+	job.ProgressBytes("building", "Downloading runtime", 50, 100)
+	job.Progress("syncing-image", "Preparing transfer", 2, 8)
+	got := job.Snapshot()
+	if got.BytesDone != 0 || got.BytesTotal != 0 || got.Phase != "syncing-image" {
+		t.Fatalf("stale byte progress survived phase change: %#v", got)
+	}
+}

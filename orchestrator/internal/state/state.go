@@ -31,6 +31,18 @@ type DisplayPreference struct {
 	Height int    `json:"height,omitempty"`
 }
 
+// CustomEngine is a locally-built, OpenAI-compatible inference image registered
+// by an advanced user. Base selects the signed Cloudless launch contract whose
+// command, volumes, ports and safety defaults the custom image inherits.
+type CustomEngine struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Image       string `json:"image"`
+	Base        string `json:"base"`
+	CommandMode string `json:"commandMode,omitempty"`
+	Created     string `json:"created"`
+}
+
 // ModelPromotion records the durable bootstrap-to-target model transition. It
 // intentionally lives in the install state (rather than only in process memory)
 // so an interrupted download or verification can be resumed safely after boot.
@@ -105,11 +117,48 @@ type State struct {
 	CustomModels   map[string]models.Model `json:"customModels,omitempty"`   // user-imported Hugging Face repositories
 	ModelPromotion ModelPromotion          `json:"modelPromotion,omitempty"` // verified bootstrap/full-model lifecycle
 	InstalledPacks []string                `json:"installedPacks,omitempty"` // optional capability packs installed by Cloudless
+	CustomEngines  []CustomEngine          `json:"customEngines,omitempty"`  // user-built inference images
 
 	// EngineCmds holds user-edited launch commands, keyed "engineID\x00modelID".
 	// The value is the container command (args after the image) to use when that
 	// model is launched on that engine, overriding the catalog default.
 	EngineCmds map[string][]string `json:"engineCmds,omitempty"`
+}
+
+// CustomEngineList returns a detached snapshot of registered local builds.
+func (s *Store) CustomEngineList() []CustomEngine {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]CustomEngine(nil), s.st.CustomEngines...)
+}
+
+// UpsertCustomEngine persists a validated custom engine definition.
+func (s *Store) UpsertCustomEngine(def CustomEngine) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.st.CustomEngines {
+		if s.st.CustomEngines[i].ID == def.ID {
+			s.st.CustomEngines[i] = def
+			return s.save()
+		}
+	}
+	s.st.CustomEngines = append(s.st.CustomEngines, def)
+	return s.save()
+}
+
+// DeleteCustomEngine removes a registered build without deleting its Docker
+// image, source checkout, model cache, or any other user-owned artifact.
+func (s *Store) DeleteCustomEngine(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	next := s.st.CustomEngines[:0]
+	for _, def := range s.st.CustomEngines {
+		if def.ID != id {
+			next = append(next, def)
+		}
+	}
+	s.st.CustomEngines = next
+	return s.save()
 }
 
 // Store is a file-backed state store, safe for concurrent use.

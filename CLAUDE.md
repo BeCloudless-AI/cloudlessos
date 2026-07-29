@@ -1,87 +1,65 @@
-# Cloudless — Project Context (read this first)
+# CloudlessOS project context
 
-> This file is auto-loaded into Claude Code's context every session. It is the
-> canonical "what is going on" anchor. If you are picking this project up cold,
-> read this file top to bottom, then read `docs/STATUS.md` for the live state.
+Read this file first, then [`docs/STATUS.md`](./docs/STATUS.md) for current validated state and
+[`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) for the current system design. Historical choices
+and superseded approaches remain in [`docs/DECISIONS.md`](./docs/DECISIONS.md).
 
-## What we're building
+## Product
 
-**Cloudless** is a company building **PCs that are ready for local AI**, plus
-**CloudlessOS**, a Linux-based distro that ships on those PCs and is also a free
-standalone download. CloudlessOS makes installing and running local AI apps
-(ComfyUI, vLLM, Ollama, Open WebUI, etc.) effortless — think "Pinokio, but done
-properly," with a friendly web UI.
+CloudlessOS is a local-AI operating-system layer built on Ubuntu 24.04. A Go daemon manages
+inference engines, models, applications, Hermes Agent, GPU resources, networking, updates and a
+fullscreen web interface. Standard AMD64 NVIDIA systems and NVIDIA DGX Spark ARM64 systems share
+one source tree and signed release pipeline.
 
-Two products, one software core:
-1. **Cloudless PC** — hardware (later phase).
-2. **CloudlessOS** — the distro. Ships on the PC (boots into a kiosk web UI) and
-   downloads standalone (opens in the user's normal browser). Same backend both ways.
+The kiosk browser is a thin shell. Product authority belongs to backend capabilities, signed
+catalog contracts and the orchestrator—not browser-only state.
 
-The free OS download is also the marketing engine / top-of-funnel for the hardware.
+## Current invariants
 
-## The one big reframe (don't lose this)
+- Docker and NVIDIA Container Toolkit provide the supported GPU application runtime.
+- Exactly one inference engine owns `cloudless-ai:8000/v1` at a time.
+- Hermes, applications and API clients follow that stable endpoint.
+- Managed vLLM is the default; SGLang and llama.cpp are alternative contracts.
+- DGX Spark preserves NVIDIA's qualified DGX OS and uses signed ARM64 Cloudless packages.
+- Platform differences use backend capability gates, not frontend forks.
+- Production updates come from the signed repository at `updates.becloudless.ai`.
+- The terminal is loopback-only, authenticated and launches a normal `/bin/login`.
+- Custom vLLM/SGLang source builds are registered as local Docker images, inherit a managed
+  engine contract, and never enter the signed update channel.
 
-The product is NOT "a headless Chromium showing a web page." That kiosk browser is
-a thin shell. The real product — and all the hard engineering — is three layers
-underneath it:
+## Development
 
-1. **Orchestrator daemon** — local service that installs/runs/updates AI apps,
-   manages models, allocates GPU, handles networking. (This is the Pinokio-equivalent.)
-2. **Hardware enablement** — correct drivers, CUDA/ROCm, kernel, VRAM detection,
-   "recommend models that fit your machine." This is what "ready for local AI" means
-   and is the hardest differentiator.
-3. **Curated app/model catalog** — vetted recipes that make one-click installs reliable.
+The primary checkout is `D:\Cloudless`; WSL maps it at `/mnt/d/Cloudless`. Go builds on the
+Windows filesystem use `GOFLAGS=-buildvcs=false`. Use repository scripts for complex WSL commands
+rather than deeply nested PowerShell/Bash quoting.
 
-## Key decisions so far
+Core validation:
 
-See `docs/DECISIONS.md` for full rationale. Summary:
-- **Apps run as GPU containers** (Docker/Podman + NVIDIA Container Toolkit), NOT
-  Pinokio-style git-clone + conda/venv. Reproducible, isolated, clean uninstall.
-- **Shipped distro will likely be immutable/atomic** (bootc / Universal Blue / Fedora,
-  à la Bazzite). Not final. Ubuntu/Debian is the easier alternative.
-- **Build software first** on commodity hardware → distro image second → hardware last.
-- **Phase 0 dev happens on Windows + WSL2** (RTX 5090). The 3-GPU Ubuntu box is
-  reserved for multi-GPU / real-hardware testing later.
+```bash
+cd orchestrator
+go test ./...
+go vet ./...
+go build ./...
+cd ..
+node distro/scripts/test-web-js.js
+```
 
-## Current phase
+Do not commit model weights, caches, custom images, credentials or generated release output.
 
-**Phase 0 — Orchestrator prototype.** Goal: the "magic moment" — click an app in a web
-UI, it installs and runs on the GPU, with working uninstall. See `docs/ROADMAP.md`.
+## Documentation map
 
-A working thin slice exists: the `orchestrator/` Go daemon installs/runs/stops AI apps as
-GPU containers and serves a web UI. End-to-end verified with Ollama (pull → GPU container
-→ stop → remove). See `orchestrator/README.md`.
-
-## Dev environment
-
-- **Primary dev box (this machine):** Windows 11, RTX 5090 (32 GB), driver 595.79,
-  CUDA 13.2. WSL2 + Ubuntu 24.04, Docker + NVIDIA Container Toolkit, Go 1.26.4 — all
-  verified (a GPU container runs and Ollama launched through the orchestrator).
-- **Secondary box:** native Ubuntu, 3× NVIDIA GPUs, currently saturated — leave alone for now.
-- Full setup + live status: `docs/DEV_ENVIRONMENT.md`.
-
-## Doc map
-
-- `docs/VISION.md` — company & product vision, target users, competitive analogs.
-- `docs/ARCHITECTURE.md` — the technical architecture (the 3 layers, in detail).
-- `docs/ROADMAP.md` — phased plan with concrete milestones.
-- `docs/DECISIONS.md` — decision log (ADR-style) with rationale and open questions.
-- `docs/DEV_ENVIRONMENT.md` — hardware, WSL2 setup steps, and current setup status.
-- `docs/HARDWARE.md` — Cloudless PC reference builds (SKU specs, component lists, pricing).
-- `docs/STATUS.md` — **living** state: what's done, what's in progress, what's next.
-- `orchestrator/README.md` — the Go daemon: layout, how to run, API, known limitations.
-
-## WSL dev gotchas (learned the hard way)
-
-- Run scripts from FILES via `wsl ... bash -lc 'bash /mnt/d/.../foo.sh'`, not complex
-  inline commands — Git Bash↔wsl.exe mangles `://`, quotes, and `Program Files (x86)`
-  in inherited PATH. Bare `/mnt/...` args get path-converted, so keep them inside `-lc '…'`.
-- Go builds on /mnt/d need `GOFLAGS=-buildvcs=false` (git "dubious ownership" on the
-  Windows FS). `docker` needs the `docker` group — use `sg docker -c '…'` until a
-  `wsl --shutdown` refreshes the login session.
+- [`README.md`](./README.md): project and developer entry point.
+- [`docs/README.md`](./docs/README.md): documentation index.
+- [`docs/CUSTOM_ENGINES.md`](./docs/CUSTOM_ENGINES.md): source-build and registration runbook.
+- [`distro/README.md`](./distro/README.md): packages and ISO.
+- [`distro/DGX-SPARK.md`](./distro/DGX-SPARK.md): DGX Spark installation and operation.
+- [`distro/UPDATES.md`](./distro/UPDATES.md): signing and publication.
 
 ## Working agreement
 
-- Keep `docs/STATUS.md` current as work progresses — it's the cold-start anchor.
-- Record meaningful technical choices in `docs/DECISIONS.md` so rationale survives.
-- Dates in docs are absolute (YYYY-MM-DD), never "today"/"last week".
+- Preserve unrelated work in a dirty tree.
+- Use `apply_patch` for source edits.
+- Keep Status, Architecture and developer guides consistent with implementation.
+- Record meaningful technical policy in Decisions.
+- Dates are absolute `YYYY-MM-DD`.
+- Never embed credentials in source, documentation or committed environment files.

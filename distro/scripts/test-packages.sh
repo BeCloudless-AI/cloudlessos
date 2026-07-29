@@ -28,6 +28,10 @@ sh -n "$DISTRO/packages/cloudless-branding/os-release"
 # background visible.
 grep -Fq '$HOME/snap/chromium/common/cloudless-browser' \
     "$DISTRO/packages/cloudless-shell/cloudless-kiosk"
+grep -Fq '/usr/bin/ttyd' "$DISTRO/packages/cloudless-shell/cloudless-terminal.service"
+grep -Fq 'disable --now ttyd.service' "$DISTRO/packages/cloudless-shell/postinst"
+grep -Fq 'export CUDA_HOME=/usr/local/cuda' "$DISTRO/packages/cloudless-shell/cloudless-cuda.sh"
+grep -Fq 'ninja-build' "$DISTRO/packages/cloudless-shell/cloudless-developer-tools"
 grep -Fq 'startup.png' "$DISTRO/packages/cloudless-shell/openbox-autostart"
 grep -Fq 'pcmanfm' "$DISTRO/scripts/build-packages.sh"
 grep -Fq 'CLOUDLESS_HOME=/home/cloudless/Cloudless' \

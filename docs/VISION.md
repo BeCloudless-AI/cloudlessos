@@ -16,7 +16,7 @@ to the hardware. (Later phase — software comes first.)
 active* inference engine — bigger models / higher throughput via tensor parallelism
 across the cards — **not** to run multiple engines at once. Exactly one engine runs at a
 time (one port, one endpoint) on every machine; engine switching keeps its model-reload
-downtime by design (see [[DECISIONS]] D15).
+downtime by design (see [Decisions](./DECISIONS.md), D15).
 
 ### CloudlessOS (software)
 A Linux-based distro whose job is to make local AI **effortless**:
@@ -33,6 +33,8 @@ Same backend in both cases; only the presentation shell differs.
   Python venv/conda breakage, "which model fits my VRAM?", exposing services safely).
 - Privacy/sovereignty-minded users and small teams.
 - Creators (image/video/audio gen via ComfyUI etc.) and developers (local LLMs/agents).
+- Advanced developers who need to compile and compare optimized inference engines without
+  sacrificing a managed, recoverable default.
 
 ## Why now
 
@@ -46,7 +48,9 @@ Same backend in both cases; only the presentation shell differs.
 - The **free OS download is the top-of-funnel** for the hardware. Make it excellent
   and standalone-viable; it earns trust and demand for Cloudless PCs.
 - Strongly consider **open-sourcing CloudlessOS** — trust and community are core to a
-  privacy-focused local-AI brand. (Open question; see [[DECISIONS]].)
+  privacy-focused local-AI brand. (Open question; see [Decisions](./DECISIONS.md).)
+- Preserve an explicit expert path: authenticated host access and locally built engines should
+  coexist with, not weaken, the one-click managed experience.
 
 ## Analogs to study
 
@@ -63,6 +67,6 @@ Same backend in both cases; only the presentation shell differs.
 
 ## See also
 
-- [[ARCHITECTURE]] — the three-layer technical design that delivers this vision
-- [[ROADMAP]] — the phased plan & milestones to get there
-- [[DECISIONS]] — decision log (ADR-style) & open questions (incl. open-sourcing)
+- [Architecture](./ARCHITECTURE.md) — the technical design that delivers this vision
+- [Roadmap](./ROADMAP.md) — current milestones and release gates
+- [Decisions](./DECISIONS.md) — historical decision log and open questions

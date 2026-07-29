@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/cloudless/orchestrator/internal/catalog"
+	"github.com/cloudless/orchestrator/internal/customengine"
 	"github.com/cloudless/orchestrator/internal/engine"
 	"github.com/cloudless/orchestrator/internal/manifest"
 	"github.com/cloudless/orchestrator/internal/state"
@@ -91,6 +92,9 @@ func PromoteDefault(ctx context.Context, eng engine.Engine, st *state.Store, mf 
 	selected := current.Engine
 	if selected == "" {
 		selected = catalog.DefaultEngine()
+	}
+	if customengine.IsCustom(selected) {
+		return
 	}
 	app, ok := catalog.Get(selected)
 	if !ok || !app.Engine || selected == "llamacpp" {

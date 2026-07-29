@@ -142,24 +142,30 @@ First-boot validation is written to
 The UI reports GB10 memory as unified system/accelerator memory rather than
 pretending it is dedicated VRAM. Model fit estimates use that same capacity.
 
-## SparkRun recipe compatibility
+## Custom vLLM and SGLang builds
 
-Model Manager's **Recipes** page can preview and import portable SparkRun YAML.
-Accepted sources are pasted YAML, a public HTTPS YAML URL, a GitHub recipe URL,
-`@spark-arena/<id>`, and SparkRun's built-in `@official`, `@experimental`,
-`@community`, `@eugr`, `@atlas`, `@sparkrun-transitional`, and
-`@sparkrun-testing` registries.
+DGX Spark developers can compile a trusted upstream revision for GB10 and register the resulting
+local Docker image in **Settings -> Engine -> Custom engine builds**. The Cloudless terminal is a
+full authenticated host shell; install the optional build dependencies with:
 
-On arm64 DGX Spark installations, `cloudless-sparkrun.service` installs the
-exact provider version pinned by Cloudless into `/opt/cloudless/sparkrun` and
-prepares a dedicated local SSH identity. The orchestrator verifies that version,
-asks SparkRun to validate the original YAML, and only enables Import when that
-validation succeeds. The YAML is stored and executed unchanged; Cloudless does
-not silently drop builder, distribution, executor, hook, Ray, or tuning fields.
+```bash
+sudo cloudless-developer-tools
+```
 
-Imported recipes are marked **SparkRun compatible**. **Check recipe** runs a
-real provider dry-run against the selected Cloudless cluster without launching
-the model. Run, progress, Abort, Stop, health, active-model state, and the stable
-API gateway remain Cloudless-owned. Exact node-count requirements fail closed,
-so (for example) a three-Spark recipe can be imported on a two-Spark appliance
-but cannot be launched until a third healthy node is connected.
+New terminal sessions expose the DGX OS CUDA toolkit from `/usr/local/cuda` when installed.
+Custom images inherit the managed engine's GPU, cache, selected-model, gateway and readiness
+contract, while NVIDIA's managed vLLM image remains selectable for recovery.
+
+Custom images currently run on the local Spark only. Cloudless does not copy an arbitrary local
+image to cluster workers, so use the managed distributed vLLM path for multi-Spark inference.
+The complete build and rollback runbook is
+[`../docs/CUSTOM_ENGINES.md`](../docs/CUSTOM_ENGINES.md).
+
+## Cloudless-native recipes
+
+Model Manager's **Recipes** page manages editable Cloudless recipe profiles and
+can import and run native `cloudless.recipe/v1` manifests without a third-party runtime.
+Recipes use the same native lifecycle model as the local editor, with pinned
+sources, explicit commands, cluster requirements, progress, abort, stop, health,
+active-model state, and the stable Cloudless API gateway. No external recipe
+runtime is installed or required.

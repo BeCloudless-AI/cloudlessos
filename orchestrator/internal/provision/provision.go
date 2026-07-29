@@ -14,6 +14,7 @@ import (
 
 	"github.com/cloudless/orchestrator/internal/apps"
 	"github.com/cloudless/orchestrator/internal/catalog"
+	"github.com/cloudless/orchestrator/internal/customengine"
 	"github.com/cloudless/orchestrator/internal/engine"
 	"github.com/cloudless/orchestrator/internal/manifest"
 	"github.com/cloudless/orchestrator/internal/platform"
@@ -84,7 +85,7 @@ func Run(ctx context.Context, eng engine.Engine, st *state.Store, mf *manifest.S
 		desired = catalog.DefaultEngine()
 	}
 	model := currentState.Model
-	bootstrapMode := ShouldBootstrap(currentState, st.FirstRun())
+	bootstrapMode := ShouldBootstrap(currentState, st.FirstRun()) && !customengine.IsCustom(desired)
 	if bootstrapMode {
 		model = BootstrapModel()
 		promotion := promotionSnapshot(currentState.ModelPromotion, "bootstrap", model, catalog.DefaultModel(), model, "Starting a lightweight model so Cloudless AI becomes available quickly.")
@@ -98,7 +99,7 @@ func Run(ctx context.Context, eng engine.Engine, st *state.Store, mf *manifest.S
 		_ = eng.Remove(ctx, "cloudless-cluster-engine-proxy")
 	}
 	// Stop any non-selected engine first, so the shared port/alias is free.
-	for _, e := range catalog.Engines() {
+	for _, e := range customengine.All(st) {
 		if e.ID == desired {
 			continue
 		}
@@ -117,7 +118,7 @@ func Run(ctx context.Context, eng engine.Engine, st *state.Store, mf *manifest.S
 		}
 		logf("model remains unloaded; selected weights stay cached")
 	} else {
-		for _, e := range catalog.Engines() {
+		for _, e := range customengine.All(st) {
 			if e.ID != desired {
 				continue
 			}

@@ -107,12 +107,31 @@ On the installed system:
   for the detected NVIDIA GPU. Installation is user-confirmed, reports progress, warns
   about Secure Boot, and requires a restart before the new kernel driver becomes active.
 - `cloudlessd.service` serves the OS on loopback ports 8765 and 8766.
+- `cloudless-terminal.service` serves an authenticated `/bin/login` terminal on loopback port
+  7681; `cloudlessd` proxies it at `/terminal/` so it stays inside the Cloudless interface.
 - LightDM signs into an unprivileged `cloudless` account and launches the browser in kiosk
   mode through Openbox.
 - `cloudless-firstboot.service` writes `/var/lib/cloudless/validation-report.txt`.
 
 The first hardware setup requires internet access and may take several minutes. A driver
 installation may require an additional reboot before `nvidia-smi` becomes available.
+
+## Developer terminal and custom engines
+
+The installed Terminal is a normal authenticated host login. It is not an anonymous root shell
+and does not invent a second Cloudless permission model: users retain their normal Linux groups
+and may use `sudo` only when their account is authorized.
+
+Compiler packages remain optional to keep the base image small:
+
+```bash
+sudo cloudless-developer-tools
+```
+
+When `/usr/local/cuda/bin/nvcc` is present, `/etc/profile.d/cloudless-cuda.sh` exposes the CUDA
+SDK in new terminal sessions. A source-built vLLM or SGLang Docker image can then be registered
+from Settings -> Engine without replacing the signed managed engine. See
+[`../docs/CUSTOM_ENGINES.md`](../docs/CUSTOM_ENGINES.md).
 
 ## Write the ISO to USB
 

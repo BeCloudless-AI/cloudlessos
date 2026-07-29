@@ -132,6 +132,10 @@ func (j *Job) apply(fn func(*Update)) {
 // Progress reports pull/start progress. Pass done/total < 0 to leave them unchanged.
 func (j *Job) Progress(phase, msg string, done, total int) {
 	j.apply(func(u *Update) {
+		if u.Phase != phase {
+			u.BytesDone = 0
+			u.BytesTotal = 0
+		}
 		u.Phase = phase
 		u.Message = msg
 		if done >= 0 {

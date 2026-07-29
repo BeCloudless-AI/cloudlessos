@@ -84,3 +84,14 @@ capability so package presence alone never grants access accidentally.
 Do not create a separate GUI branch or reuse the CloudlessOS version number to
 mean different source on different platforms. The signed release records one
 Git commit and builds both architectures together.
+
+## Custom engine boundary
+
+Locally registered vLLM/SGLang images are not signed catalog applications and are never treated
+as Cloudless-verified. They inherit a supported base engine contract but remain user-supplied
+code. Registration verifies that the Docker image exists locally; activation still must pass the
+normal OpenAI readiness contract.
+
+Do not use custom registration to bypass a platform-locked product feature. Custom engines are
+currently local-only, receive no cluster distribution capability, and do not enter the signed
+update pipeline. See [`../docs/CUSTOM_ENGINES.md`](../docs/CUSTOM_ENGINES.md).

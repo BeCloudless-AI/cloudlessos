@@ -43,6 +43,16 @@ func TestShellJoinSplitRoundTrip(t *testing.T) {
 	}
 }
 
+func TestExplicitImageDigestPreservesRequestedManifest(t *testing.T) {
+	const digest = "sha256:d4a984cdeb9846ef0d433d80e8fff55d527fa84f91c0eec2c62d9dea7ab26426"
+	if got := explicitImageDigest("lmsysorg/sglang@" + digest); got != digest {
+		t.Fatalf("explicit digest=%q, want %q", got, digest)
+	}
+	if got := explicitImageDigest("lmsysorg/sglang:latest-cu130"); got != "" {
+		t.Fatalf("tag-only reference returned digest %q", got)
+	}
+}
+
 func TestPreviewPartsSplitsCommandFromScaffold(t *testing.T) {
 	spec := RunSpec{
 		Name:         "cloudless-vllm",

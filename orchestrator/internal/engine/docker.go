@@ -370,11 +370,25 @@ func (d *Docker) ImageDigest(ctx context.Context, image string) (string, error) 
 	if err != nil {
 		return "", nil // not pulled
 	}
+	// Inspecting an explicit repo@sha256 reference proves that exact manifest
+	// is present. RepoDigests may contain several aliases and Docker does not
+	// guarantee the requested digest is index 0, so preserve the identity the
+	// caller actually inspected instead of returning an unrelated older alias.
+	if digest := explicitImageDigest(image); digest != "" {
+		return digest, nil
+	}
 	s := strings.TrimSpace(out)
 	if i := strings.LastIndex(s, "@"); i >= 0 {
 		return s[i+1:], nil // "repo@sha256:…" -> "sha256:…"
 	}
 	return "", nil
+}
+
+func explicitImageDigest(image string) string {
+	if at := strings.LastIndex(image, "@sha256:"); at >= 0 {
+		return image[at+1:]
+	}
+	return ""
 }
 
 // RemoteDigest returns the digest the registry currently serves for image's tag,

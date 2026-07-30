@@ -1,7 +1,7 @@
 {
   "manifestVersion": 2,
   "channel": "stable",
-  "updated": "2026-07-25",
+  "updated": "2026-07-30",
   "description": "Version-controlled Cloudless container pins. Architecture-specific repositories and digests keep AMD64 and DGX Spark ARM64 on their validated CUDA images.",
   "apps": {
     "vllm": {
@@ -9,13 +9,13 @@
       "images": {
         "arm64": "nvcr.io/nvidia/vllm"
       },
-      "tag": "latest / 26.05.post1-py3 (arm64)",
+      "tag": "latest / 26.07-py3 (arm64)",
       "digests": {
         "amd64": "sha256:6d8429e38e3747723ca07ee1b17972e09bb9c51c4032b266f24fb1cc3b22ed8f",
-        "arm64": "sha256:9204569b17ee4c0eff75194b8e6e458479c8aee18953b5ab9cf359fcdac659e2"
+        "arm64": "sha256:1de8e6bfdb4c81c1f31a806cc9b13b5c6352714a7cec87f4d24964bcc91159b2"
       },
-      "verified": true,
-      "notes": "AMD64 Blackwell and NVIDIA Grace Blackwell ARM64 inference images.",
+      "verified": false,
+      "notes": "AMD64 upstream image and NVIDIA-signed 26.07 Grace Blackwell ARM64 image. Runtime validation is pending.",
       "rollback": ""
     },
     "sglang": {

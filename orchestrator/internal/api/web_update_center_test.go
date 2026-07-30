@@ -27,6 +27,10 @@ func TestUpdateCenterIsFirstClassReconnectableSurface(t *testing.T) {
 		`X-Cloudless-Action': 'update-apps'`,
 		`activeOperationForApp(app.id)`,
 		`Applications keep running while images download`,
+		`class="btn uc-check-button`,
+		`uc-grid uc-system-grid`,
+		`filter(app => app.hasUpdate || !!activeOperationForApp(app.id))`,
+		`visibleApps.map(updateCenterAppCard)`,
 	} {
 		if !strings.Contains(html, required) {
 			t.Fatalf("Update Center UI is missing %q", required)
@@ -34,9 +38,36 @@ func TestUpdateCenterIsFirstClassReconnectableSurface(t *testing.T) {
 	}
 }
 
+func TestUpdateCenterOnlyRendersActionableApplications(t *testing.T) {
+	html := readUpdateCenterWeb(t)
+	if strings.Contains(html, `(updateCenterData.apps || []).map(updateCenterAppCard)`) {
+		t.Fatal("Update Center still renders every installed application")
+	}
+	if !strings.Contains(html, `visibleApps.length ?`) {
+		t.Fatal("application section is not hidden when no app update is actionable")
+	}
+}
+
+func TestUpdateCenterOnlyRendersActionableManagedEngines(t *testing.T) {
+	html := readUpdateCenterWeb(t)
+	for _, required := range []string{
+		`activeOperationForEngine(engine.id)`,
+		`visibleEngines.length ?`,
+		`visibleEngines.map(updateCenterEngineCard)`,
+		`/api/updates/engines/${engine.id}/apply`,
+		`X-Cloudless-Action': 'update-engine'`,
+		`Cloudless-managed runtimes only; custom local builds stay untouched`,
+		`Custom local engines are never changed.`,
+	} {
+		if !strings.Contains(html, required) {
+			t.Fatalf("managed inference engine update UI is missing %q", required)
+		}
+	}
+}
+
 func TestUpdateCenterShowsEveryUpdateAuthority(t *testing.T) {
 	html := readUpdateCenterWeb(t)
-	for _, required := range []string{"CloudlessOS", "NVIDIA driver", "DGX OS and drivers", "Applications", "Update all"} {
+	for _, required := range []string{"CloudlessOS", "Inference engine updates", "NVIDIA driver", "DGX OS and drivers", "Application updates", "Update all"} {
 		if !strings.Contains(html, required) {
 			t.Fatalf("Update Center does not expose %q", required)
 		}

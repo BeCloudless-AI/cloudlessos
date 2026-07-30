@@ -114,9 +114,10 @@ The complete developer workflow is in
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/api/health` | daemon and Docker health |
-| GET | `/api/updates` | unified CloudlessOS, platform-driver and installed-app update inventory |
-| POST | `/api/updates/check` | start system/driver checks before refreshing the inventory |
+| GET | `/api/updates` | unified CloudlessOS, platform-driver, managed-engine and installed-app update inventory |
+| POST | `/api/updates/check` | start system/driver checks before refreshing registry comparisons |
 | POST | `/api/updates/apps/apply` | start selected application updates as independent background jobs |
+| POST | `/api/updates/engines/{id}/apply` | update a built-in inference engine in the background; custom engines are excluded |
 | GET | `/api/catalog` | supported app catalog |
 | GET | `/api/apps` | managed container state |
 | GET | `/api/models` | model catalog and local state |

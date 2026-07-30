@@ -385,13 +385,22 @@
   .uc-hero-copy h2 { margin: 0; font-size: 22px; letter-spacing: -.35px; }
   .uc-hero-copy p { margin: 6px 0 0; color: var(--muted); font-size: 12.5px; line-height: 1.5; }
   .uc-hero-meta { margin-top: 8px; color: var(--faint); font: 500 9.5px/1.3 'Roboto Mono', monospace; text-transform: uppercase; letter-spacing: .45px; }
+  .uc-check-button { min-width: 132px; min-height: 38px; padding: 9px 14px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; flex: none; border-color: color-mix(in srgb, var(--blue) 24%, var(--hair)); color: var(--blue); background: color-mix(in srgb, var(--blue-soft) 68%, var(--control)); white-space: nowrap; }
+  .uc-check-button .ui-icon, .uc-check-button .key-dialog-spinner { width: 15px; height: 15px; flex: 0 0 15px; }
+  .uc-check-button span { display: block; white-space: nowrap; }
+  .uc-check-button:hover:not(:disabled) { border-color: color-mix(in srgb, var(--blue) 44%, transparent); background: var(--blue-soft); transform: translateY(-1px); }
+  .uc-check-button:active:not(:disabled) { transform: translateY(0); }
+  .uc-check-button:disabled { color: var(--muted); }
   .uc-section { margin-top: 25px; }
   .uc-section-head { margin-bottom: 11px; display: flex; align-items: end; justify-content: space-between; gap: 15px; }
   .uc-section-title b, .uc-section-title span { display: block; }
   .uc-section-title b { font-size: 14px; }
   .uc-section-title span { margin-top: 3px; color: var(--muted); font-size: 10.5px; }
   .uc-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 11px; }
+  .uc-system-grid .uc-card { display: flex; flex-direction: column; }
+  .uc-system-grid .uc-card-actions { margin-top: auto; padding-top: 14px; }
   .uc-card { min-width: 0; padding: 16px; border: 1px solid var(--hair); border-radius: 15px; background: var(--panel-2); }
+  .uc-engine-card.active { border-color: color-mix(in srgb, var(--blue) 24%, var(--hair)); background: color-mix(in srgb, var(--blue-soft) 22%, var(--panel-2)); }
   .uc-card.full { grid-column: 1 / -1; }
   .uc-card-top { display: flex; align-items: center; gap: 12px; }
   .uc-card-icon { width: 39px; height: 39px; display: grid; place-items: center; flex: none; border: 1px solid var(--hair); border-radius: 11px; color: var(--blue); background: var(--control); }
@@ -413,7 +422,7 @@
   .uc-progress-track { height: 6px; overflow: hidden; border-radius: 999px; background: var(--progress-rail); }
   .uc-progress-track i { display: block; width: var(--progress, 0%); height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--progress-start), var(--progress-end)); transition: width .3s ease; }
   .uc-empty { padding: 28px; grid-column: 1 / -1; border: 1px dashed var(--line-2); border-radius: 15px; color: var(--muted); text-align: center; font-size: 12px; }
-  @media (max-width: 760px) { .uc-grid { grid-template-columns: 1fr; } .uc-hero { align-items: flex-start; flex-wrap: wrap; } .uc-hero .btn { margin-left: 71px; } .uc-body { padding: 18px 16px 28px; } }
+  @media (max-width: 760px) { .uc-grid { grid-template-columns: 1fr; } .uc-hero { align-items: flex-start; flex-wrap: wrap; } .uc-hero .uc-check-button { margin-left: 71px; } .uc-body { padding: 18px 16px 28px; } }
   .hw-card + .hw-card { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
   .set-row { display: flex; align-items: center; gap: 12px; padding: 7px 0; font-size: 13.5px; }
   .srow-label { width: 70px; color: var(--muted); flex: none; }
@@ -3683,7 +3692,7 @@
     <header class="lp-head">
       <span class="win-traffic"><i class="t-c" title="Close"></i><i class="t-m"></i><i class="t-f"></i></span>
       <span class="uc-head-icon" aria-hidden="true"><svg class="ui-icon"><use href="#ui-download"/></svg></span>
-      <span class="uc-head-copy"><b id="update-center-title">Update Center</b><span>CloudlessOS, drivers and installed applications</span></span>
+      <span class="uc-head-copy"><b id="update-center-title">Update Center</b><span>CloudlessOS, inference engines, drivers and applications</span></span>
       <button class="lp-x" id="uc-x" title="Close" aria-label="Close Update Center"><svg class="ui-icon" aria-hidden="true"><use href="#ui-close"/></svg></button>
     </header>
     <div class="uc-body" id="uc-body"><div class="uc-loading"><span><i class="key-dialog-spinner" aria-hidden="true"></i>Checking installed components…</span></div></div>
@@ -4589,7 +4598,11 @@ async function uninstallPack(id, button) {
 function appOperationInfo(job) {
   const identity = String(job.appId || '');
   let kind = 'install', target = '', name = job.currentItem || 'Application';
-  if (identity.startsWith('app:')) {
+  if (identity.startsWith('engine-update:')) {
+    target = identity.slice('engine-update:'.length); kind = 'engine-update';
+    const managed = (updateCenterData?.engines || []).find(item => item.id === target);
+    name = managed?.name || engDisplay(target);
+  } else if (identity.startsWith('app:')) {
     const parts = identity.split(':'); target = parts[1] || ''; kind = parts[2] || 'install';
     const app = catalogCache.find(item => item.id === target); if (app) name = app.name;
   } else if (identity.startsWith('pack-remove:')) {
@@ -4613,6 +4626,9 @@ function activeOperationForApp(id) {
 function activeOperationForPack(id) {
   return [...appOperations.values()].find(job => !job.done && (job.appId === `pack:${id}` || job.appId === `pack-remove:${id}`));
 }
+function activeOperationForEngine(id) {
+  return [...appOperations.values()].find(job => !job.done && job.appId === `engine-update:${id}`);
+}
 function renderAppOperations() {
   const host = document.getElementById('app-operations-home'); if (!host) return;
   const active = [...appOperations.values()].filter(job => !job.done);
@@ -4623,9 +4639,10 @@ function renderAppOperations() {
   host.innerHTML = active.map(job => {
     const info = appOperationInfo(job), pct = Math.max(0, Math.min(99, Number(job.percent) || 0));
     const determinate = pct > 0;
-    const verb = info.kind === 'remove' || info.kind === 'uninstall' ? 'Removing' : info.kind === 'reset' ? 'Resetting' : info.kind === 'update' ? 'Updating' : 'Installing';
-    const icon = info.kind === 'remove' || info.kind === 'uninstall' ? 'trash' : info.kind === 'reset' ? 'restart' : info.kind === 'update' ? 'reload' : 'download';
-    const itemDetail = job.bytesTotal ? `${modelDownloadSize(job.bytesDone)} of ${modelDownloadSize(job.bytesTotal)}` : job.itemsTotal ? `${job.itemsDone || 0} of ${job.itemsTotal} components` : 'Background operation';
+    const updating = info.kind === 'update' || info.kind === 'engine-update';
+    const verb = info.kind === 'remove' || info.kind === 'uninstall' ? 'Removing' : info.kind === 'reset' ? 'Resetting' : updating ? 'Updating' : 'Installing';
+    const icon = info.kind === 'remove' || info.kind === 'uninstall' ? 'trash' : info.kind === 'reset' ? 'restart' : updating ? 'reload' : 'download';
+    const itemDetail = job.bytesTotal ? `${modelDownloadSize(job.bytesDone)} of ${modelDownloadSize(job.bytesTotal)}` : job.itemsTotal ? `${job.itemsDone || 0} of ${job.itemsTotal} components` : info.kind === 'engine-update' ? 'Managed inference runtime' : 'Background operation';
     const timing = `${operationDuration(job.elapsedSeconds)} elapsed${job.etaSeconds > 0 ? ` · about ${operationDuration(job.etaSeconds)} remaining` : ''}`;
     return `<article class="model-download-home app-operation-home ${info.kind === 'remove' || info.kind === 'uninstall' ? 'remove' : 'install'}">
       <span class="model-download-icon">${uiIcon(icon)}</span>
@@ -4635,7 +4652,7 @@ function renderAppOperations() {
   }).join('');
 }
 function applyAppOperations(jobs) {
-  const relevant = (jobs || []).filter(job => String(job.appId || '').startsWith('app:') || String(job.appId || '').startsWith('pack:') || String(job.appId || '').startsWith('pack-remove:'));
+  const relevant = (jobs || []).filter(job => String(job.appId || '').startsWith('app:') || String(job.appId || '').startsWith('pack:') || String(job.appId || '').startsWith('pack-remove:') || String(job.appId || '').startsWith('engine-update:'));
   appOperations.clear(); relevant.forEach(job => appOperations.set(job.id, job));
   const active = relevant.filter(job => !job.done);
   active.forEach(job => appOperationSeen.add(job.id));
@@ -4645,9 +4662,9 @@ function applyAppOperations(jobs) {
     toast(`${info.name} ${ok ? (info.kind === 'remove' || info.kind === 'uninstall' ? 'removed' : 'ready') : (job.error || 'operation failed')}`, !ok);
     renderApps().then(refreshLauncher);
     refreshPacks();
-    if (info.kind === 'update') refreshUpdateCenter();
+    if (info.kind === 'update' || info.kind === 'engine-update') refreshUpdateCenter();
   });
-  installing = active.length;
+  installing = active.filter(job => !String(job.appId || '').startsWith('engine-update:')).length;
   renderAppOperations();
   if (updateCenterOpen()) renderUpdateCenter();
 }
@@ -4665,7 +4682,7 @@ function openUpdateCenter() {
 }
 function closeUpdateCenter() { document.getElementById('update-center').classList.add('hidden'); }
 function renderUpdateCenterLoading() {
-  document.getElementById('uc-body').innerHTML = '<div class="uc-loading"><span><i class="key-dialog-spinner" aria-hidden="true"></i>Checking CloudlessOS and installed applications…</span></div>';
+  document.getElementById('uc-body').innerHTML = '<div class="uc-loading"><span><i class="key-dialog-spinner" aria-hidden="true"></i>Checking CloudlessOS, managed engines and applications…</span></div>';
 }
 function updateCenterBusyState(state) { return ['checking', 'downloading', 'installing', 'applying'].includes(String(state || '').toLowerCase()); }
 function updateCenterBadge(count) {
@@ -4705,16 +4722,16 @@ function updateCenterSystemCard(system = {}) {
   let action = '';
   if (available) action = '<button class="btn primary" data-uc-system="apply">Install update</button>';
   else if (reboot) action = '<button class="btn primary" data-uc-system="reboot">Restart now</button>';
-  return `<article class="uc-card full"><div class="uc-card-top"><span class="uc-card-icon">${uiIcon('download')}</span><span class="uc-card-copy"><b>CloudlessOS</b><span>INSTALLED ${escapeHtml(current)} · ${escapeHtml(system.channel || 'stable').toUpperCase()} CHANNEL${available ? ` · AVAILABLE ${escapeHtml(latest)}` : ''}</span></span><span class="uc-state ${available || reboot ? 'available' : busy ? 'available' : 'ready'}">${status}</span></div><div class="uc-card-message">${escapeHtml(system.releaseTitle || system.message || (available ? `CloudlessOS ${latest} is ready to install.` : 'Signed CloudlessOS components are up to date.'))}</div>${system.releaseSummary && available ? `<div class="uc-card-message">${escapeHtml(system.releaseSummary)}</div>` : ''}${changes}${progress}${system.error ? `<div class="uc-card-error">${escapeHtml(system.error)}</div>` : ''}${action ? `<div class="uc-card-actions">${action}</div>` : ''}</article>`;
+  return `<article class="uc-card"><div class="uc-card-top"><span class="uc-card-icon">${uiIcon('download')}</span><span class="uc-card-copy"><b>CloudlessOS</b><span>INSTALLED ${escapeHtml(current)} · ${escapeHtml(system.channel || 'stable').toUpperCase()} CHANNEL${available ? ` · AVAILABLE ${escapeHtml(latest)}` : ''}</span></span><span class="uc-state ${available || reboot ? 'available' : busy ? 'available' : 'ready'}">${status}</span></div><div class="uc-card-message">${escapeHtml(system.releaseTitle || system.message || (available ? `CloudlessOS ${latest} is ready to install.` : 'Signed CloudlessOS components are up to date.'))}</div>${system.releaseSummary && available ? `<div class="uc-card-message">${escapeHtml(system.releaseSummary)}</div>` : ''}${changes}${progress}${system.error ? `<div class="uc-card-error">${escapeHtml(system.error)}</div>` : ''}${action ? `<div class="uc-card-actions">${action}</div>` : ''}</article>`;
 }
 function updateCenterDriverCard() {
-  if (updateCenterData.driverOwner === 'nvidia-dgx') return `<article class="uc-card full"><div class="uc-card-top"><span class="uc-card-icon">${uiIcon('machine')}</span><span class="uc-card-copy"><b>DGX OS and drivers</b><span>MANAGED BY NVIDIA</span></span><span class="uc-state ready">Vendor managed</span></div><div class="uc-card-message">Driver, firmware and DGX OS updates remain under NVIDIA’s qualified update path.</div><div class="uc-card-actions"><button class="btn" data-uc-driver="dgx">Open DGX Dashboard</button></div></article>`;
+  if (updateCenterData.driverOwner === 'nvidia-dgx') return `<article class="uc-card"><div class="uc-card-top"><span class="uc-card-icon">${uiIcon('machine')}</span><span class="uc-card-copy"><b>DGX OS and drivers</b><span>MANAGED BY NVIDIA</span></span><span class="uc-state ready">Vendor managed</span></div><div class="uc-card-message">Driver, firmware and DGX OS updates remain under NVIDIA’s qualified update path.</div><div class="uc-card-actions"><button class="btn" data-uc-driver="dgx">Open DGX Dashboard</button></div></article>`;
   const driver = updateCenterData.driver || {}, available = !!driver.updateAvailable, busy = updateCenterBusyState(driver.state), reboot = !!driver.rebootRequired;
   const status = available ? 'Available' : reboot ? 'Restart' : busy ? 'Updating' : 'Current';
   const versions = `${driver.currentDriver ? `DRIVER ${escapeHtml(driver.currentDriver)}` : 'NVIDIA DRIVER'}${available && driver.candidateVersion ? ` · AVAILABLE ${escapeHtml(driver.candidateVersion)}` : ''}`;
   const progress = busy ? `<div class="uc-progress"><div class="uc-progress-head"><span>${escapeHtml(driver.message || 'Applying driver update')}</span><b>${Math.max(0, Number(driver.progress) || 0)}%</b></div><div class="uc-progress-track" style="--progress:${Math.max(2, Number(driver.progress) || 0)}%"><i></i></div></div>` : '';
   let action = available ? '<button class="btn primary" data-uc-driver="apply">Install driver</button>' : reboot ? '<button class="btn primary" data-uc-driver="reboot">Restart now</button>' : '';
-  return `<article class="uc-card full"><div class="uc-card-top"><span class="uc-card-icon">${uiIcon('machine')}</span><span class="uc-card-copy"><b>NVIDIA driver</b><span>${versions}</span></span><span class="uc-state ${available || reboot || busy ? 'available' : 'ready'}">${status}</span></div><div class="uc-card-message">${escapeHtml(driver.message || 'The recommended NVIDIA driver is installed.')}</div>${progress}${driver.error ? `<div class="uc-card-error">${escapeHtml(driver.error)}</div>` : ''}${action ? `<div class="uc-card-actions">${action}</div>` : ''}</article>`;
+  return `<article class="uc-card"><div class="uc-card-top"><span class="uc-card-icon">${uiIcon('machine')}</span><span class="uc-card-copy"><b>NVIDIA driver</b><span>${versions}</span></span><span class="uc-state ${available || reboot || busy ? 'available' : 'ready'}">${status}</span></div><div class="uc-card-message">${escapeHtml(driver.message || 'The recommended NVIDIA driver is installed.')}</div>${progress}${driver.error ? `<div class="uc-card-error">${escapeHtml(driver.error)}</div>` : ''}${action ? `<div class="uc-card-actions">${action}</div>` : ''}</article>`;
 }
 function updateCenterAppCard(app) {
   const operation = activeOperationForApp(app.id), available = !!app.hasUpdate;
@@ -4725,25 +4742,55 @@ function updateCenterAppCard(app) {
   else if (!operation && app.build) action = `<button class="btn" data-uc-manage="${escapeAttr(app.id)}">Manage build</button>`;
   return `<article class="uc-card"><div class="uc-card-top"><span class="uc-card-icon">${glyph(app.id)}</span><span class="uc-card-copy"><b>${escapeHtml(app.name)}</b><span>${version}</span></span><span class="uc-state ${available || operation ? 'available' : !app.checkError ? 'ready' : ''}">${state}</span></div><div class="uc-card-message">${escapeHtml(operation?.message || app.notes || (available ? 'A newer container image is ready. Persistent application data and configuration will be kept.' : app.checkError || 'This application is up to date.'))}</div>${updateCenterProgress(operation)}${action ? `<div class="uc-card-actions">${action}</div>` : ''}</article>`;
 }
+function updateCenterEngineCard(engine) {
+  const operation = activeOperationForEngine(engine.id), available = !!engine.hasUpdate;
+  const state = operation ? 'Updating' : available ? 'Available' : engine.checkError ? 'Check failed' : 'Current';
+  const version = engine.current ? `RUNTIME ${escapeHtml(engine.current)}${available && engine.latest ? ` &rarr; ${escapeHtml(engine.latest)}` : ''}` : 'MANAGED RUNTIME';
+  const impact = engine.restartOnUpdate
+    ? 'The new runtime downloads in the background. Cloudless AI restarts briefly only after the download is ready; its model, settings and API identity stay the same.'
+    : 'The managed runtime downloads in the background and will be used the next time this engine launches. The currently running AI is not interrupted.';
+  const message = operation?.message || engine.notes || (available ? impact : engine.checkError || 'This managed inference runtime is up to date.');
+  const action = !operation && available ? `<button class="btn primary" data-uc-engine="${escapeAttr(engine.id)}">Update engine</button>` : '';
+  return `<article class="uc-card uc-engine-card ${engine.active ? 'active' : ''}"><div class="uc-card-top"><span class="uc-card-icon">${uiIcon('rocket')}</span><span class="uc-card-copy"><b>${escapeHtml(engine.name)}</b><span>${version}${engine.active ? ' &middot; ACTIVE' : engine.selected ? ' &middot; SELECTED' : ''}</span></span><span class="uc-state ${available || operation ? 'available' : !engine.checkError ? 'ready' : ''}">${state}</span></div><div class="uc-card-message">${escapeHtml(message)}</div>${updateCenterProgress(operation)}${action ? `<div class="uc-card-actions">${action}</div>` : ''}</article>`;
+}
 function renderUpdateCenter() {
   if (!updateCenterData || !updateCenterOpen()) return;
   const system = updateCenterData.system || {}, appUpdates = (updateCenterData.apps || []).filter(app => app.hasUpdate);
   const total = Number(updateCenterData.updateCount) || 0;
   const checked = updateCenterData.checkedAt ? new Date(updateCenterData.checkedAt).toLocaleString() : 'Not checked yet';
-  const appCards = (updateCenterData.apps || []).map(updateCenterAppCard).join('') || '<div class="uc-empty">No managed applications are installed yet.</div>';
-  document.getElementById('uc-body').innerHTML = `<div class="uc-hero"><span class="uc-hero-mark ${total ? '' : 'ready'}">${uiIcon(total ? 'download' : 'check')}</span><div class="uc-hero-copy"><h2>${total ? `${total} update${total === 1 ? '' : 's'} available` : 'Everything is up to date'}</h2><p>${total ? 'Review each update below or install all available application updates together.' : 'CloudlessOS, drivers and installed applications are on their current checked versions.'}</p><div class="uc-hero-meta">LAST CHECKED ${escapeHtml(checked)}</div></div><button class="btn ${updateCenterChecking ? '' : 'primary'}" id="uc-check" ${updateCenterChecking ? 'disabled' : ''}>${updateCenterChecking ? '<i class="key-dialog-spinner" aria-hidden="true"></i><span>Checking…</span>' : `${uiIcon('reload')}<span>Check again</span>`}</button></div><section class="uc-section"><div class="uc-section-head"><span class="uc-section-title"><b>System</b><span>Signed CloudlessOS packages and platform-owned drivers</span></span></div><div class="uc-grid">${updateCenterSystemCard(system)}${updateCenterDriverCard()}</div></section><section class="uc-section"><div class="uc-section-head"><span class="uc-section-title"><b>Applications</b><span>Installed containers update independently in the background</span></span>${appUpdates.length > 1 ? `<button class="btn primary" id="uc-update-all">Update all ${appUpdates.length}</button>` : ''}</div><div class="uc-grid">${appCards}</div></section>`;
+  const visibleApps = (updateCenterData.apps || []).filter(app => app.hasUpdate || !!activeOperationForApp(app.id));
+  const visibleEngines = (updateCenterData.engines || []).filter(engine => engine.hasUpdate || !!activeOperationForEngine(engine.id));
+  const engineSection = visibleEngines.length ? `<section class="uc-section"><div class="uc-section-head"><span class="uc-section-title"><b>Inference engine updates</b><span>Cloudless-managed runtimes only; custom local builds stay untouched</span></span></div><div class="uc-grid">${visibleEngines.map(updateCenterEngineCard).join('')}</div></section>` : '';
+  const applicationSection = visibleApps.length ? `<section class="uc-section"><div class="uc-section-head"><span class="uc-section-title"><b>Application updates</b><span>Only applications with an available or running update appear here</span></span>${appUpdates.length > 1 ? `<button class="btn primary" id="uc-update-all">Update all ${appUpdates.length}</button>` : ''}</div><div class="uc-grid">${visibleApps.map(updateCenterAppCard).join('')}</div></section>` : '';
+  document.getElementById('uc-body').innerHTML = `<div class="uc-hero"><span class="uc-hero-mark ${total ? '' : 'ready'}">${uiIcon(total ? 'download' : 'check')}</span><div class="uc-hero-copy"><h2>${total ? `${total} update${total === 1 ? '' : 's'} available` : 'Everything is up to date'}</h2><p>${total ? 'Review each available system, engine or application update below.' : 'CloudlessOS, managed engines, drivers and installed applications are on their current checked versions.'}</p><div class="uc-hero-meta">LAST CHECKED ${escapeHtml(checked)}</div></div><button class="btn uc-check-button ${updateCenterChecking ? 'checking' : ''}" id="uc-check" ${updateCenterChecking ? 'disabled' : ''}>${updateCenterChecking ? '<i class="key-dialog-spinner" aria-hidden="true"></i><span>Checking…</span>' : `${uiIcon('reload')}<span>Check again</span>`}</button></div><section class="uc-section"><div class="uc-section-head"><span class="uc-section-title"><b>System</b><span>Signed CloudlessOS packages and platform-owned drivers</span></span></div><div class="uc-grid uc-system-grid">${updateCenterSystemCard(system)}${updateCenterDriverCard()}</div></section>${engineSection}${applicationSection}`;
   wireUpdateCenter();
 }
 function wireUpdateCenter() {
   const check = document.getElementById('uc-check'); if (check) check.onclick = runUpdateCenterCheck;
   const all = document.getElementById('uc-update-all'); if (all) all.onclick = () => applyApplicationUpdates((updateCenterData.apps || []).filter(app => app.hasUpdate).map(app => app.id), all);
   document.querySelectorAll('[data-uc-app]').forEach(button => button.onclick = () => applyApplicationUpdates([button.dataset.ucApp], button));
+  document.querySelectorAll('[data-uc-engine]').forEach(button => button.onclick = () => applyEngineUpdate((updateCenterData.engines || []).find(engine => engine.id === button.dataset.ucEngine), button));
   document.querySelectorAll('[data-uc-manage]').forEach(button => button.onclick = () => { closeUpdateCenter(); openSettingsApp(button.dataset.ucManage); });
   const systemApply = document.querySelector('[data-uc-system="apply"]'); if (systemApply) systemApply.onclick = () => applySystemUpdate(systemApply);
   const systemReboot = document.querySelector('[data-uc-system="reboot"]'); if (systemReboot) systemReboot.onclick = () => openPowerDialog('reboot');
   const driverApply = document.querySelector('[data-uc-driver="apply"]'); if (driverApply) driverApply.onclick = () => applyDriverUpdate(driverApply);
   const driverReboot = document.querySelector('[data-uc-driver="reboot"]'); if (driverReboot) driverReboot.onclick = () => openPowerDialog('reboot');
   const dgx = document.querySelector('[data-uc-driver="dgx"]'); if (dgx) dgx.onclick = () => { closeUpdateCenter(); setPage = 'dgx-dashboard'; openSettings(); };
+}
+async function applyEngineUpdate(engine, returnFocus) {
+  if (!engine) return;
+  const active = !!engine.restartOnUpdate;
+  const approved = await openCloudlessDecision({
+    title: `Update ${engine.name}?`,
+    message: active ? 'CloudlessOS will download the new managed runtime while your current model keeps running.' : 'CloudlessOS will download this managed runtime in the background.',
+    detail: active ? 'When the download is ready, Cloudless AI restarts briefly with the same model, settings and stable API identity. Cluster workers receive the same reviewed image.' : 'The current AI is not interrupted. The new runtime is used on this engine’s next launch. Custom local engines are never changed.',
+    confirmLabel: 'Update engine', icon: 'download', returnFocus
+  });
+  if (!approved) return;
+  const result = await api(`/api/updates/engines/${engine.id}/apply`, { method: 'POST', headers: { 'X-Cloudless-Action': 'update-engine' } }).catch(error => ({ error: error.message }));
+  if (result.error) return toast(result.error, true);
+  toast(`${engine.name} update started in the background`);
+  await refreshAppOperations(); await refreshUpdateCenter();
 }
 async function runUpdateCenterCheck() {
   if (updateCenterChecking) return;

@@ -70,11 +70,18 @@ time so a slow download remains distinguishable from a stalled launch.
 
 The left-rail **Update Center** is the unified presentation surface for these authorities. It
 aggregates the signed CloudlessOS package status, platform-owned NVIDIA/DGX maintenance and live
-registry comparisons for installed applications. It does not replace their enforcement paths:
-system packages still run through the privileged signed updater, DGX OS remains NVIDIA-owned, and
+registry comparisons for installed applications and built-in inference engines. It does not
+replace their enforcement paths: system packages still run through the privileged signed updater,
+DGX OS remains NVIDIA-owned, and
 application updates use the same daemon-owned per-app jobs as installation. Replacement images are
 downloaded before the running container is removed, keeping the current app available until the
 brief cutover.
+
+Managed vLLM, SGLang and llama.cpp updates use a dedicated background job. An inactive engine is
+only prefetched. If the active engine is running its built-in base image, Cloudless downloads the
+reviewed image first and then recreates the engine with the same model, execution mode and stable
+API identity; Spark workers receive that same image. Model-specific runtime images and registered
+custom engines are never redirected or replaced by this update path.
 
 ## Inference engine contract
 

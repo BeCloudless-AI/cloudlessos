@@ -9,7 +9,7 @@
       "description": "High-throughput inference engine powering Cloudless AI.",
       "image": "vllm/vllm-openai:latest",
       "archImages": {
-        "arm64": "nvcr.io/nvidia/vllm:26.05.post1-py3"
+        "arm64": "nvcr.io/nvidia/vllm:26.07-py3"
       },
       "archPlatforms": {
         "arm64": [

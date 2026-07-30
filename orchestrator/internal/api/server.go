@@ -92,16 +92,31 @@ func (s *Server) SetGatewayRebind(rebind func(int) error) { s.gatewayRebind = re
 // imageFor returns the image reference to pull/run for an app: the manifest's
 // validated digest pin ("image@sha256:…") when present, else the catalog's tag.
 func (s *Server) imageFor(ctx context.Context, app catalog.App) string {
-	if p, ok := s.manifest.PinFor(ctx, app.ID, app.Image); ok {
-		return p.Ref()
+	if s.manifest != nil {
+		if p, ok := s.manifest.PinFor(ctx, app.ID, app.Image); ok {
+			return p.Ref()
+		}
 	}
 	return app.Image
 }
 
+// managedEngineSpec applies the signed image pin to a built-in inference
+// engine without redirecting a model-specific or user-built runtime. Launches
+// and Update Center replacements therefore use the same reviewed artifact.
+func (s *Server) managedEngineSpec(ctx context.Context, app catalog.App, model string, override []string) engine.RunSpec {
+	spec := catalog.EngineSpecOverride(app, model, override)
+	if !customengine.IsCustom(app.ID) && spec.Image == app.Image {
+		spec.Image = s.imageFor(ctx, app)
+	}
+	return spec
+}
+
 // infraImage resolves an infra image (cloudflared/socat) to the manifest pin, else fallback.
 func (s *Server) infraImage(ctx context.Context, key, fallback string) string {
-	if p, ok := s.manifest.PinFor(ctx, key, fallback); ok {
-		return p.Ref()
+	if s.manifest != nil {
+		if p, ok := s.manifest.PinFor(ctx, key, fallback); ok {
+			return p.Ref()
+		}
 	}
 	return fallback
 }
@@ -126,6 +141,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/updates", s.updateCenterGet)
 	mux.HandleFunc("POST /api/updates/check", s.updateCenterCheck)
 	mux.HandleFunc("POST /api/updates/apps/apply", s.updateCenterAppsApply)
+	mux.HandleFunc("POST /api/updates/engines/{id}/apply", s.updateCenterEngineApply)
 	mux.HandleFunc("GET /api/system/nvidia-driver", s.nvidiaDriverGet)
 	mux.HandleFunc("POST /api/system/nvidia-driver/check", s.nvidiaDriverCheck)
 	mux.HandleFunc("POST /api/system/nvidia-driver/apply", s.nvidiaDriverApply)
@@ -762,7 +778,7 @@ func (s *Server) applyEngine(job *jobs.Job, target catalog.App) {
 			job.Fail(errors.New("the Spark cluster is not healthy enough for distributed inference"))
 			return
 		}
-		spec := sparkcluster.CoordinatorSpec(catalog.EngineSpec(target, model))
+		spec := sparkcluster.CoordinatorSpec(s.managedEngineSpec(ctx, target, model, nil))
 		job.Progress("cluster", "Starting the coordinator on this Spark …", -1, -1)
 		_, runErr = s.eng.Run(ctx, spec)
 		if runErr != nil {
@@ -814,7 +830,7 @@ func (s *Server) applyEngine(job *jobs.Job, target catalog.App) {
 		}
 	} else {
 		override, _ := s.state.EngineCmd(target.ID, modelID)
-		_, runErr = s.eng.Run(ctx, catalog.EngineSpecOverride(target, model, override))
+		_, runErr = s.eng.Run(ctx, s.managedEngineSpec(ctx, target, model, override))
 	}
 	provision.EngineMu.Unlock()
 	if runErr != nil {

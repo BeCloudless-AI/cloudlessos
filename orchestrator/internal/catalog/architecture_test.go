@@ -33,7 +33,7 @@ func TestARM64CatalogSelectsDGXComfyImageAndHidesUnsupportedApps(t *testing.T) {
 		}
 	}
 	vllm, _ := Get("vllm")
-	if vllm.Image != "nvcr.io/nvidia/vllm:26.05.post1-py3" {
+	if vllm.Image != "nvcr.io/nvidia/vllm:26.07-py3" {
 		t.Fatalf("unexpected ARM64 vLLM image: %q", vllm.Image)
 	}
 	if len(vllm.Command) < 2 || vllm.Command[0] != "vllm" || vllm.Command[1] != "serve" {

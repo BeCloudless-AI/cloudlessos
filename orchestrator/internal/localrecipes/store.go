@@ -22,6 +22,11 @@ const (
 	DeepSeekDSparkID       = "deepseek-v4-flash-dspark-2x"
 	DeepSeekDSparkSource   = "https://github.com/tonyd2wild/DeepSeek-v4-Flash-DSpark-60-tok-s-900K-ctx-2x-DGX-Spark"
 	DeepSeekDSparkRevision = "51261f419a4a35a02966405ea9774b41735ec412"
+	CloudlessModelAlias    = "cloudless"
+	// 8888 belongs to the bundled SearXNG service. Recipe engines use their own
+	// host port so installing Research cannot prevent an inference runtime from
+	// starting.
+	DefaultRuntimePort = 8890
 )
 
 var containerImagePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/:@-]{0,511}$`)
@@ -201,13 +206,13 @@ func sameFiles(left, right map[string]string) bool {
 func NewDraft() Draft {
 	return Draft{
 		Name: "My inference recipe", Description: "A repeatable local inference setup.", Platform: "dgx-spark",
-		Engine:      Engine{Type: "vllm", Image: "cloudless/dspark-vllm:latest", ServedModelName: "local-model", ContainerPort: 8888, APIPath: "/v1", ProxyHost: "host.docker.internal", RestartPolicy: "unless-stopped", Arguments: []string{}},
+		Engine:      Engine{Type: "vllm", Image: "cloudless/dspark-vllm:latest", ServedModelName: CloudlessModelAlias, ContainerPort: DefaultRuntimePort, APIPath: "/v1", ProxyHost: "host.docker.internal", RestartPolicy: "unless-stopped", Arguments: []string{}},
 		Model:       Model{ID: "deepseek-ai/DeepSeek-V4-Flash-DSpark", Revision: "main", Quantization: "none", DType: "auto", KVCacheDType: "auto", MaxContext: 131072, MaxSequences: 1, GPUMemoryUtilization: 0.80, TensorParallel: 2, PipelineParallel: 1},
 		Distributed: Distributed{Nodes: 2, Backend: "nccl", MasterPort: 25000, Interface: "auto", HCA: "auto", IBGIDIndex: 0, WorkerAlias: "cloudless-recipe-worker"},
 		Runtime: Runtime{Adapter: "source-scripts-v1", WorkingDir: ".", TimeoutMinutes: 480,
 			Prerequisites: []string{"git", "bash", "docker", "ssh", "scp", "rsync"}, Environment: map[string]string{"HF_HUB_DISABLE_XET": "1", "HF_CACHE": "cloudless-hf"},
 			Lifecycle: Lifecycle{Build: command("bash", "./build-dspark-vllm-runtime.sh"), Download: command("bash", "./prepare-dspark-model-cache.sh"), Start: command("bash", "./start-deepseek-v4-flash-dspark.sh"), Stop: command("bash", "./stop-deepseek-v4-flash-dspark.sh")}},
-		Health: Health{Scheme: "http", Host: "127.0.0.1", Port: 8888, Path: "/health", TimeoutSeconds: 180, IntervalSeconds: 3},
+		Health: Health{Scheme: "http", Host: "127.0.0.1", Port: DefaultRuntimePort, Path: "/health", TimeoutSeconds: 180, IntervalSeconds: 3},
 	}
 }
 
@@ -332,6 +337,12 @@ func normalize(recipe Recipe) Recipe {
 	if recipe.Source.URL == DeepSeekDSparkSource && recipe.Source.Revision == DeepSeekDSparkRevision {
 		recipe.Runtime.BuildOnce = true
 		recipe.Runtime.DownloadOnce = true
+		if recipe.Engine.ContainerPort == 8888 {
+			recipe.Engine.ContainerPort = DefaultRuntimePort
+		}
+		if recipe.Health.Port == 8888 {
+			recipe.Health.Port = DefaultRuntimePort
+		}
 	}
 	if recipe.Origin == "" {
 		recipe.Origin = "local"
@@ -348,6 +359,10 @@ func normalize(recipe Recipe) Recipe {
 	if recipe.Engine.ProxyHost == "" {
 		recipe.Engine.ProxyHost = "host.docker.internal"
 	}
+	// Cloudless applications and the public API use one permanent model name.
+	// A recipe selects the underlying weights and runtime, never the client
+	// contract exposed by the OS.
+	recipe.Engine.ServedModelName = CloudlessModelAlias
 	if recipe.Engine.RestartPolicy == "" {
 		recipe.Engine.RestartPolicy = "unless-stopped"
 	}
@@ -420,7 +435,8 @@ func validateDraft(d Draft) (Draft, error) {
 			return Draft{}, fmt.Errorf("source checksum for %s must be SHA-256", name)
 		}
 	}
-	d.Engine.Type, d.Engine.Image, d.Engine.ServedModelName, d.Engine.APIPath = strings.TrimSpace(d.Engine.Type), strings.TrimSpace(d.Engine.Image), strings.TrimSpace(d.Engine.ServedModelName), strings.TrimSpace(d.Engine.APIPath)
+	d.Engine.Type, d.Engine.Image, d.Engine.APIPath = strings.TrimSpace(d.Engine.Type), strings.TrimSpace(d.Engine.Image), strings.TrimSpace(d.Engine.APIPath)
+	d.Engine.ServedModelName = CloudlessModelAlias
 	d.Engine.ProxyHost, d.Engine.RestartPolicy = strings.TrimSpace(d.Engine.ProxyHost), strings.TrimSpace(d.Engine.RestartPolicy)
 	if d.Engine.Type == "" || len(d.Engine.Type) > 64 {
 		return Draft{}, errors.New("choose an inference engine")

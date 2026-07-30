@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 )
 
 // Update is a snapshot of a job's progress.
@@ -20,6 +21,14 @@ type Update struct {
 	ContainerID string `json:"containerId,omitempty"`
 	Error       string `json:"error,omitempty"`
 	Done        bool   `json:"done"`
+	Percent     int    `json:"percent"`
+	ItemsDone   int    `json:"itemsDone,omitempty"`
+	ItemsTotal  int    `json:"itemsTotal,omitempty"`
+	CurrentItem string `json:"currentItem,omitempty"`
+	StartedAt   string `json:"startedAt,omitempty"`
+	UpdatedAt   string `json:"updatedAt,omitempty"`
+	ElapsedSecs int64  `json:"elapsedSeconds,omitempty"`
+	ETASecs     int64  `json:"etaSeconds,omitempty"`
 }
 
 // Snapshot identifies a job together with its latest progress update.
@@ -37,6 +46,7 @@ type Job struct {
 	mu    sync.Mutex
 	state Update
 	subs  map[chan Update]struct{}
+	start time.Time
 }
 
 // Manager owns all jobs.
@@ -55,12 +65,31 @@ func NewManager() *Manager {
 func (m *Manager) Create(appID string) *Job {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	return m.createLocked(appID)
+}
+
+// CreateUnique atomically reconnects to a matching active job or creates one.
+// The boolean is true only when a new job was created.
+func (m *Manager) CreateUnique(appID, activePrefix string) (*Job, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, job := range m.jobs {
+		if strings.HasPrefix(job.AppID, activePrefix) && !job.Snapshot().Done {
+			return job, false
+		}
+	}
+	return m.createLocked(appID), true
+}
+
+func (m *Manager) createLocked(appID string) *Job {
 	m.seq++
+	now := time.Now()
 	j := &Job{
 		ID:    fmt.Sprintf("job-%d", m.seq),
 		AppID: appID,
 		subs:  make(map[chan Update]struct{}),
-		state: Update{Phase: "pending", Message: "Queued"},
+		start: now,
+		state: Update{Phase: "pending", Message: "Queued", StartedAt: now.UTC().Format(time.RFC3339), UpdatedAt: now.UTC().Format(time.RFC3339)},
 	}
 	m.jobs[j.ID] = j
 	return j
@@ -93,7 +122,7 @@ func (m *Manager) List(prefix string) []Snapshot {
 func (j *Job) Snapshot() Update {
 	j.mu.Lock()
 	defer j.mu.Unlock()
-	return j.state
+	return j.snapshotLocked(time.Now())
 }
 
 // Subscribe returns a buffered channel pre-loaded with the current state.
@@ -101,7 +130,7 @@ func (j *Job) Subscribe() chan Update {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	ch := make(chan Update, 16)
-	ch <- j.state
+	ch <- j.snapshotLocked(time.Now())
 	j.subs[ch] = struct{}{}
 	return ch
 }
@@ -121,12 +150,28 @@ func (j *Job) apply(fn func(*Update)) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	fn(&j.state)
+	now := time.Now()
+	j.state.UpdatedAt = now.UTC().Format(time.RFC3339)
+	update := j.snapshotLocked(now)
 	for ch := range j.subs {
 		select {
-		case ch <- j.state:
+		case ch <- update:
 		default: // slow subscriber: drop intermediate update, it'll get the next one
 		}
 	}
+}
+
+func (j *Job) snapshotLocked(now time.Time) Update {
+	u := j.state
+	if !j.start.IsZero() {
+		u.ElapsedSecs = int64(now.Sub(j.start).Seconds())
+	}
+	if !u.Done && u.Percent > 0 && u.Percent < 100 && u.ElapsedSecs > 0 {
+		u.ETASecs = u.ElapsedSecs * int64(100-u.Percent) / int64(u.Percent)
+	} else {
+		u.ETASecs = 0
+	}
+	return u
 }
 
 // Progress reports pull/start progress. Pass done/total < 0 to leave them unchanged.
@@ -144,11 +189,56 @@ func (j *Job) Progress(phase, msg string, done, total int) {
 		if total >= 0 {
 			u.LayersTotal = total
 		}
+		if done >= 0 && total > 0 {
+			u.Percent = clampPercent(done * 100 / total)
+		}
+	})
+}
+
+// ProgressOperation reports overall progress for a multi-stage operation while
+// retaining the lower-level layer/byte fields for detailed UI presentation.
+func (j *Job) ProgressOperation(phase, msg, currentItem string, percent, done, total int) {
+	j.apply(func(u *Update) {
+		if u.Phase != phase {
+			u.BytesDone = 0
+			u.BytesTotal = 0
+		}
+		u.Phase = phase
+		u.Message = msg
+		u.CurrentItem = currentItem
+		u.Percent = clampPercent(percent)
+		u.ItemsDone = done
+		u.ItemsTotal = total
+	})
+}
+
+// ProgressDetail updates phase-local counters without replacing the operation's
+// overall percentage. App image pulls use it for layer detail and ETA together.
+func (j *Job) ProgressDetail(phase, msg string, done, total int) {
+	j.apply(func(u *Update) {
+		u.Phase = phase
+		u.Message = msg
+		u.LayersDone = done
+		u.LayersTotal = total
 	})
 }
 
 // ProgressBytes reports byte-level progress for downloads.
 func (j *Job) ProgressBytes(phase, msg string, done, total int64) {
+	j.apply(func(u *Update) {
+		u.Phase = phase
+		u.Message = msg
+		u.BytesDone = done
+		u.BytesTotal = total
+		if total > 0 {
+			u.Percent = clampPercent(int(done * 100 / total))
+		}
+	})
+}
+
+// ProgressBytesDetail adds byte counters to an operation that already owns an
+// overall multi-stage percentage. It deliberately preserves that percentage.
+func (j *Job) ProgressBytesDetail(phase, msg string, done, total int64) {
 	j.apply(func(u *Update) {
 		u.Phase = phase
 		u.Message = msg
@@ -164,6 +254,8 @@ func (j *Job) Succeed(containerID string) {
 		u.Message = "Running"
 		u.ContainerID = containerID
 		u.LayersDone = u.LayersTotal
+		u.Percent = 100
+		u.ETASecs = 0
 		u.Done = true
 	})
 }
@@ -174,6 +266,7 @@ func (j *Job) Fail(err error) {
 		u.Phase = "error"
 		u.Message = "Failed"
 		u.Error = err.Error()
+		u.ETASecs = 0
 		u.Done = true
 	})
 }
@@ -184,6 +277,17 @@ func (j *Job) Cancel() {
 		u.Phase = "canceled"
 		u.Message = "Canceled"
 		u.Error = ""
+		u.ETASecs = 0
 		u.Done = true
 	})
+}
+
+func clampPercent(value int) int {
+	if value < 0 {
+		return 0
+	}
+	if value > 100 {
+		return 100
+	}
+	return value
 }

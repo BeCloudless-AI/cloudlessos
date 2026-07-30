@@ -20,10 +20,12 @@ signed, reversible layer.
   choices.
 - Model Manager with curated models, Hugging Face account support and fit guidance.
 - Hermes Agent-powered Cloudless Assistant using the selected local model.
-- Optional AI applications and native local recipes.
+- Optional AI applications and background native recipes with progress, abort and multi-Spark
+  distribution.
 - Two-to-eight-Spark cluster setup, validation, monitoring and distributed inference.
-- Local, LAN and user-approved public API access.
-- Authenticated full host terminal and optional source-build toolchain.
+- Local, LAN and user-approved public API access with an editable client port and model alias.
+- Authenticated draggable/full-screen host terminal with persistent tabs and an optional
+  source-build toolchain.
 - Locally compiled vLLM/SGLang images selectable as first-class custom engines.
 
 The project is under active development. Read [Live Status](./docs/STATUS.md) for validated
@@ -123,6 +125,8 @@ while architecture-specific images, hardware setup and capability gates remain e
 Important documentation:
 
 - [Architecture](./docs/ARCHITECTURE.md)
+- [Inference API identity](./docs/INFERENCE_API.md)
+- [Local inference recipes](./docs/LOCAL_RECIPES.md)
 - [Custom engines](./docs/CUSTOM_ENGINES.md)
 - [Development environment](./docs/DEV_ENVIRONMENT.md)
 - [Hardware and multi-GPU strategy](./docs/HARDWARE.md)

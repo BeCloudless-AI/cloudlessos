@@ -12,6 +12,8 @@ production-ready distribution rather than proving that a local web control plane
 - Finish the managed application catalog and remove placeholder or unqualified recipes.
 - Improve model compatibility data, load progress, diagnostics and failure recovery.
 - Harden two-to-eight-Spark configuration, monitoring and distributed inference.
+- Replace whole-directory Spark cache copies with resumable, content-addressed peer distribution
+  and explicit integrity repair.
 - Validate Hermes Agent permissions, persistence, integrations and scoped API access.
 - Exercise custom source-built vLLM/SGLang registration, readiness and managed-engine rollback.
 - Complete licensing, security review and public installation/support documentation.

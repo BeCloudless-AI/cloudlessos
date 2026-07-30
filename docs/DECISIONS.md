@@ -1293,6 +1293,53 @@ managed package/image selected by the stable channel.
 
 ---
 
+## D47 - Separate the locked inference runtime from the configurable client identity
+
+**Date:** 2026-07-29 · **Status:** Accepted and implemented
+
+**Decision:** Preserve one immutable private inference contract while allowing users to configure
+the authenticated API identity presented to clients.
+
+- Managed engines and compatible custom builds remain on `cloudless-ai:8000/v1` and serve the
+  internal model name `cloudless`.
+- Native recipes may have a private backend port and API path, but route through the same gateway.
+- The authenticated gateway defaults to port `8766` and model alias `cloudless`; both client-facing
+  values are editable in Settings and persisted install-wide.
+- A port change rebinds the listener live and recreates enabled LAN or tunnel exposure. Reserved or
+  occupied ports are rejected without abandoning the working listener.
+- Client requests and responses are translated at the gateway. Hermes and installed applications
+  therefore remain independent from the user's external API name.
+- Saved custom-engine arguments are sanitized at launch so they cannot override the private port
+  or model identity.
+
+This split gives advanced users a stable integration surface without letting a custom recipe or
+engine break Cloudless's internal routing.
+
+---
+
+## D48 - Promote inference runtimes only after the stable contract passes
+
+**Date:** 2026-07-29 · **Status:** Accepted and implemented
+
+**Decision:** Treat engine and recipe activation as a fail-closed promotion rather than equating a
+running process or private health check with readiness.
+
+- Cloudless creates the stable route and probes loopback port `8000` before persisting active
+  state.
+- The probe requires HTTP `200`, valid OpenAI-compatible models JSON and the internal model ID
+  `cloudless`.
+- A failed or timed-out promotion removes the proxy and candidate runtime, stops distributed
+  workers when applicable, and records inference as unloaded with an actionable job error.
+- Native-recipe stop metadata and reviewed checkouts use persistent coordinator and worker data
+  paths, never system temporary directories, so the lifecycle remains controllable after a daemon
+  restart.
+- Recipe stop failures remain visible and do not silently discard ownership state.
+
+This boundary cannot make untrusted images or recipes reliable, but it prevents them from being
+published as healthy when Cloudless consumers cannot actually reach or identify their model.
+
+---
+
 ## Open questions (not yet decided)
 
 - **Open-source CloudlessOS?** Leaning yes (trust/community for a privacy brand, like

@@ -14,6 +14,19 @@ func TestNormalizeRepairsWindowsCheckoutFingerprints(t *testing.T) {
 	}
 }
 
+func TestNormalizeMigratesReviewedDeepSeekAwayFromSearXNGPort(t *testing.T) {
+	recipe := recipeFromDraft(DeepSeekDSparkID, "github", "reviewed-import", "now", deepSeekDraft())
+	recipe.Engine.ContainerPort = 8888
+	recipe.Health.Port = 8888
+	recipe = normalize(recipe)
+	if recipe.Engine.ContainerPort != DefaultRuntimePort || recipe.Health.Port != DefaultRuntimePort {
+		t.Fatalf("ports = engine %d, health %d; want %d", recipe.Engine.ContainerPort, recipe.Health.Port, DefaultRuntimePort)
+	}
+	if recipe.Engine.ServedModelName != CloudlessModelAlias {
+		t.Fatalf("served model = %q, want %q", recipe.Engine.ServedModelName, CloudlessModelAlias)
+	}
+}
+
 func TestImportPrefillsEditableDeepSeekRecipe(t *testing.T) {
 	store := New(t.TempDir())
 	preview, err := store.PreviewImport(DeepSeekDSparkSource + ".git")
@@ -71,7 +84,7 @@ func TestCreateAndEditEveryRecipeSectionWithoutGitHub(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if recipe.Origin != "local" || recipe.Source.URL != "" || recipe.Engine.Type != "sglang" || recipe.Runtime.Environment["CUSTOM"] != "yes" {
+	if recipe.Origin != "local" || recipe.Source.URL != "" || recipe.Engine.Type != "sglang" || recipe.Engine.ServedModelName != CloudlessModelAlias || recipe.Runtime.Environment["CUSTOM"] != "yes" {
 		t.Fatalf("recipe was not fully authored: %#v", recipe)
 	}
 

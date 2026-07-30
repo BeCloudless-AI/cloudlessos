@@ -2,6 +2,7 @@ package catalog
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/cloudless/orchestrator/internal/platform"
@@ -62,5 +63,46 @@ func TestSparkEngineSpecUsesSparkDefaultAndMemoryBudget(t *testing.T) {
 		if !slices.Contains(sglangSpec.Args, want) {
 			t.Fatalf("Spark SGLang args do not contain %q: %#v", want, sglangSpec.Args)
 		}
+	}
+}
+
+func TestEngineCommandOverrideCannotEscapePrivateContract(t *testing.T) {
+	t.Setenv("CLOUDLESS_ARCH", "amd64")
+	t.Setenv("CLOUDLESS_PLATFORM", platform.Generic)
+	vllm, ok := Get("vllm")
+	if !ok {
+		t.Fatal("vLLM unavailable")
+	}
+	spec := EngineSpecOverride(vllm, "example/model", []string{"example/model", "--port", "31337", "--served-model-name=rogue"})
+	if spec.Ports[EnginePort] != EnginePort || len(spec.Ports) != 1 {
+		t.Fatalf("ports escaped contract: %#v", spec.Ports)
+	}
+	joined := strings.Join(spec.Args, " ")
+	if strings.Contains(joined, "31337") || strings.Contains(joined, "rogue") || !strings.Contains(joined, "8000") || !strings.Contains(joined, "cloudless") {
+		t.Fatalf("command escaped contract: %s", joined)
+	}
+}
+
+func TestReviewedModelUsesItsPinnedRuntimeWithoutMutatingVLLM(t *testing.T) {
+	t.Setenv("CLOUDLESS_ARCH", "arm64")
+	t.Setenv("CLOUDLESS_PLATFORM", platform.DGXSpark)
+	vllm, ok := Get("vllm")
+	if !ok {
+		t.Fatal("vLLM unavailable")
+	}
+	originalImage := vllm.Image
+	cosmos := EngineSpec(vllm, "nvidia/Cosmos3-Edge")
+	if !strings.Contains(cosmos.Image, "vllm-openai:cosmos3@sha256:") {
+		t.Fatalf("Cosmos runtime is not pinned: %q", cosmos.Image)
+	}
+	joined := strings.Join(cosmos.Args, " ")
+	for _, want := range []string{"nvidia/Cosmos3-Edge", "--revision", "--max-model-len 131072", "--port 8000", "--served-model-name cloudless"} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("Cosmos command missing %q: %s", want, joined)
+		}
+	}
+	again, _ := Get("vllm")
+	if again.Image != originalImage {
+		t.Fatalf("model runtime mutated shared vLLM catalog: %q -> %q", originalImage, again.Image)
 	}
 }

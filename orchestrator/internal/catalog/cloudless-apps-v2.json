@@ -484,6 +484,193 @@
       }
     },
     {
+      "id": "nemo-rl",
+      "name": "NeMo RL",
+      "description": "NVIDIA's scalable post-training workbench for SFT, DPO, GRPO, PPO, and agentic reinforcement learning.",
+      "category": "Training & fine-tuning",
+      "tagline": "Post-train language and vision models with NVIDIA NeMo.",
+      "long": "NeMo RL is NVIDIA's open-source post-training framework. CloudlessOS installs the official multi-architecture NeMo RL 0.7.0 runtime and opens it as a persistent Jupyter workspace with the upstream examples, your shared Hugging Face cache, datasets, and training outputs ready to use.",
+      "examples": [
+        "Run supervised fine-tuning or preference optimization",
+        "Train agents with GRPO, PPO, or custom rewards",
+        "Scale experiments with Ray across supported NVIDIA hardware",
+        "Keep notebooks, datasets, checkpoints, and model downloads locally"
+      ],
+      "image": "cloudless/nemo-rl-workbench:0.7.0",
+      "build": "nemo-rl",
+      "architectures": ["amd64", "arm64"],
+      "ports": {"8891": 8891},
+      "env": {
+        "HF_HOME": "/root/.cache/huggingface",
+        "HF_DATASETS_CACHE": "/root/.cache/huggingface/datasets"
+      },
+      "gpus": "all",
+      "openPath": "/lab/tree/cloudless",
+      "minVramGB": 24,
+      "verified": false,
+      "preinstall": false,
+      "service": false,
+      "localOnly": true,
+      "engine": false,
+      "needsEngine": false,
+      "network": "cloudless",
+      "ipc": "host",
+      "ulimits": ["memlock=-1", "stack=67108864"],
+      "command": [
+        "--ip=0.0.0.0", "--port=8891", "--no-browser", "--allow-root",
+        "--ServerApp.token=", "--ServerApp.password=", "--ServerApp.root_dir=/workspace",
+        "--ServerApp.tornado_settings={\"headers\":{\"Content-Security-Policy\":\"frame-ancestors *\"}}"
+      ],
+      "volumes": {
+        "cloudless-nemo-rl-workspace": "/workspace/cloudless",
+        "cloudless-hf": "/root/.cache/huggingface",
+        "cloudless-training-data": "/data",
+        "cloudless-training-output": "/outputs"
+      },
+      "health": {"kind": "http", "path": "/api/status", "timeoutSeconds": 900},
+      "resources": {"memoryGB": 32, "diskGB": 80, "vramGB": 24},
+      "exposure": {"risk": "code-execution-ui", "lan": "none", "public": "none"}
+    },
+    {
+      "id": "data-designer",
+      "name": "NeMo Data Designer",
+      "description": "Generate, validate, and score synthetic datasets locally from notebooks or Python workflows.",
+      "category": "Data & evaluation",
+      "tagline": "Design high-quality synthetic data with reproducible pipelines.",
+      "long": "NeMo Data Designer creates synthetic datasets from samplers, seed data, and language models, with validation and LLM-as-a-judge support. CloudlessOS provides a persistent notebook workspace, connects it to the private Cloudless network, and disables NeMo telemetry by default.",
+      "examples": [
+        "Generate structured synthetic records from a schema",
+        "Augment an existing seed dataset",
+        "Validate rows with Python, SQL, or model judges",
+        "Call the loaded Cloudless model through its private API"
+      ],
+      "image": "cloudless/data-designer-workbench:0.8.0",
+      "build": "data-designer",
+      "architectures": ["amd64", "arm64"],
+      "ports": {"8892": 8892},
+      "env": {
+        "NEMO_TELEMETRY_ENABLED": "false",
+        "OPENAI_BASE_URL": "http://cloudless-ai:8000/v1",
+        "OPENAI_API_KEY": "cloudless"
+      },
+      "gpus": "",
+      "openPath": "/lab/tree/cloudless",
+      "minVramGB": 0,
+      "verified": false,
+      "preinstall": false,
+      "service": false,
+      "localOnly": true,
+      "engine": false,
+      "needsEngine": false,
+      "network": "cloudless",
+      "command": [
+        "--ip=0.0.0.0", "--port=8892", "--no-browser", "--allow-root",
+        "--ServerApp.token=", "--ServerApp.password=", "--ServerApp.root_dir=/workspace",
+        "--ServerApp.tornado_settings={\"headers\":{\"Content-Security-Policy\":\"frame-ancestors *\"}}"
+      ],
+      "volumes": {
+        "cloudless-data-designer-workspace": "/workspace/cloudless",
+        "cloudless-training-data": "/data",
+        "cloudless-training-output": "/outputs"
+      },
+      "health": {"kind": "http", "path": "/api/status", "timeoutSeconds": 600},
+      "resources": {"memoryGB": 4, "diskGB": 10},
+      "exposure": {"risk": "code-execution-ui", "lan": "none", "public": "none"}
+    },
+    {
+      "id": "molt",
+      "name": "MoLT",
+      "description": "PyTorch-native agentic reinforcement learning with Ray, vLLM, and NVIDIA AutoModel.",
+      "category": "Training & fine-tuning",
+      "tagline": "Research agentic RL in a small, hackable training stack.",
+      "long": "MoLT is NVIDIA NeMo Labs' agentic-first research framework for SFT and asynchronous reinforcement learning. CloudlessOS wraps the pinned 0.1.4 project image in a persistent Jupyter workspace. The published MoLT runtime is currently x86-64 only and targets supported data-center NVIDIA architectures.",
+      "examples": [
+        "Prototype custom multi-turn agents and reward functions",
+        "Run SFT with NVIDIA AutoModel and FSDP2",
+        "Experiment with asynchronous vLLM rollouts",
+        "Inspect and modify the complete research implementation"
+      ],
+      "image": "cloudless/molt-workbench:0.1.4",
+      "build": "molt",
+      "architectures": ["amd64"],
+      "ports": {"8893": 8893},
+      "env": {"HF_HOME": "/root/.cache/huggingface"},
+      "gpus": "all",
+      "openPath": "/lab/tree/cloudless",
+      "minVramGB": 80,
+      "verified": false,
+      "preinstall": false,
+      "service": false,
+      "localOnly": true,
+      "engine": false,
+      "needsEngine": false,
+      "network": "cloudless",
+      "ipc": "host",
+      "ulimits": ["memlock=-1", "stack=67108864"],
+      "command": [
+        "--ip=0.0.0.0", "--port=8893", "--no-browser", "--allow-root",
+        "--ServerApp.token=", "--ServerApp.password=", "--ServerApp.root_dir=/molt",
+        "--ServerApp.tornado_settings={\"headers\":{\"Content-Security-Policy\":\"frame-ancestors *\"}}"
+      ],
+      "volumes": {
+        "cloudless-molt-workspace": "/molt/cloudless",
+        "cloudless-hf": "/root/.cache/huggingface",
+        "cloudless-training-data": "/data",
+        "cloudless-training-output": "/outputs"
+      },
+      "health": {"kind": "http", "path": "/api/status", "timeoutSeconds": 900},
+      "resources": {"memoryGB": 64, "diskGB": 100, "vramGB": 80},
+      "exposure": {"risk": "code-execution-ui", "lan": "none", "public": "none"}
+    },
+    {
+      "id": "axolotl",
+      "name": "Axolotl",
+      "description": "Fine-tune language and vision models with reproducible YAML configurations.",
+      "category": "Training & fine-tuning",
+      "tagline": "Configure and run LoRA, QLoRA, preference, and full fine-tuning.",
+      "long": "Axolotl is a flexible fine-tuning framework for language and vision models. CloudlessOS uses its CUDA 13 and PyTorch 2.12 Blackwell runtime on both x86-64 and ARM64, adds a persistent Jupyter workspace, and shares the system model cache, datasets, and outputs.",
+      "examples": [
+        "Fine-tune a model using a readable YAML recipe",
+        "Train LoRA or QLoRA adapters",
+        "Run preference optimization and multimodal training",
+        "Export checkpoints for a Cloudless inference recipe"
+      ],
+      "image": "cloudless/axolotl-workbench:0.9.2-cu130",
+      "build": "axolotl",
+      "architectures": ["amd64", "arm64"],
+      "ports": {"8894": 8894},
+      "env": {
+        "HF_HOME": "/root/.cache/huggingface",
+        "HF_DATASETS_CACHE": "/root/.cache/huggingface/datasets"
+      },
+      "gpus": "all",
+      "openPath": "/lab/tree/cloudless",
+      "minVramGB": 12,
+      "verified": false,
+      "preinstall": false,
+      "service": false,
+      "localOnly": true,
+      "engine": false,
+      "needsEngine": false,
+      "network": "cloudless",
+      "ipc": "host",
+      "ulimits": ["memlock=-1", "stack=67108864"],
+      "command": [
+        "--ip=0.0.0.0", "--port=8894", "--no-browser", "--allow-root",
+        "--ServerApp.token=", "--ServerApp.password=", "--ServerApp.root_dir=/workspace",
+        "--ServerApp.tornado_settings={\"headers\":{\"Content-Security-Policy\":\"frame-ancestors *\"}}"
+      ],
+      "volumes": {
+        "cloudless-axolotl-workspace": "/workspace/cloudless",
+        "cloudless-hf": "/root/.cache/huggingface",
+        "cloudless-training-data": "/data",
+        "cloudless-training-output": "/outputs"
+      },
+      "health": {"kind": "http", "path": "/api/status", "timeoutSeconds": 900},
+      "resources": {"memoryGB": 16, "diskGB": 50, "vramGB": 12},
+      "exposure": {"risk": "code-execution-ui", "lan": "none", "public": "none"}
+    },
+    {
       "id": "openclaw",
       "name": "OpenClaw",
       "description": "Open-source personal AI agent that takes actions on your machine. Pre-wired to Cloudless AI.",

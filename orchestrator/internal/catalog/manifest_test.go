@@ -146,3 +146,28 @@ func TestWorkflowsUsesValidatedSameOriginPath(t *testing.T) {
 		t.Fatalf("unsafe embedded path accepted: %v", err)
 	}
 }
+
+func TestAIWorkbenchCatalogContracts(t *testing.T) {
+	for _, id := range []string{"nemo-rl", "data-designer", "molt", "axolotl"} {
+		app, ok := Get(id)
+		if !ok {
+			t.Fatalf("missing AI workbench %s", id)
+		}
+		if app.Build != id || app.OpenPath == "" || !app.LocalOnly || app.Exposure.LAN != "none" || app.Exposure.Public != "none" {
+			t.Fatalf("%s has an unsafe or incomplete workbench contract: %#v", id, app)
+		}
+		workspace := "cloudless-" + id + "-workspace"
+		mount := app.Volumes[workspace]
+		if mount == "" || mount == "/workspace" || mount == "/molt" {
+			t.Fatalf("%s workspace hides image-provided source: %q", id, mount)
+		}
+	}
+	dataDesigner, _ := Get("data-designer")
+	if dataDesigner.Env["NEMO_TELEMETRY_ENABLED"] != "false" || dataDesigner.GPUs != "" {
+		t.Fatalf("Data Designer defaults are not private and CPU-safe: %#v", dataDesigner)
+	}
+	molt, _ := Get("molt")
+	if len(molt.Architectures) != 1 || molt.Architectures[0] != "amd64" {
+		t.Fatalf("MoLT published runtime must be x86-64 only: %#v", molt.Architectures)
+	}
+}

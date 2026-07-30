@@ -23,7 +23,7 @@ independent model installer.
 
 ## API access and permissions
 
-The shareable Cloudless gateway on port `8766` exposes two authenticated surfaces:
+The shareable Cloudless gateway (port `8766` by default) exposes two authenticated surfaces:
 
 - `/v1/*` for OpenAI-compatible model inference;
 - `/agent/v1/*` and `/agent/api/*` for Hermes Agent APIs.
@@ -32,6 +32,10 @@ User-created keys have `model`, `agent` or `both` scope. A key with the wrong sc
 a missing or invalid key receives `401`. Cloudless removes the user credential before proxying and
 uses a separate random machine-local Hermes credential that is never returned to the browser.
 Per-key metrics distinguish model and agent requests.
+
+Users may change the gateway port and public model alias in **Settings -> API access**. Hermes does
+not use that public alias internally: it follows the locked private `cloudless-ai:8000/v1`
+endpoint and model identity `cloudless`. See [INFERENCE_API.md](./INFERENCE_API.md).
 
 LAN access and opt-in public tunnels expose the same scoped gateway. They do not directly expose
 the internal Hermes credential. Agent keys are high privilege because Hermes can use configured

@@ -3,6 +3,7 @@
 package apps
 
 import (
+	"context"
 	"crypto/rand"
 	"embed"
 	"encoding/hex"
@@ -14,9 +15,10 @@ import (
 	"sync"
 
 	"github.com/cloudless/orchestrator/internal/catalog"
+	"github.com/cloudless/orchestrator/internal/engine"
 )
 
-//go:embed openclaw hermes
+//go:embed openclaw hermes nemo-rl data-designer molt axolotl locateanything
 var buildFS embed.FS
 
 var configMu sync.Mutex
@@ -258,4 +260,22 @@ func Materialize(name string) (string, error) {
 		return "", err
 	}
 	return dir, nil
+}
+
+// EnsureBuild makes an embedded adapter image available without rebuilding it
+// on every daemon restart. The image contents are part of the signed Cloudless
+// package; no remote build scripts are executed.
+func EnsureBuild(ctx context.Context, eng engine.Engine, build, image string, onLine func(string)) error {
+	if build == "" || image == "" {
+		return nil
+	}
+	if _, err := eng.Output(ctx, "image", "inspect", image); err == nil {
+		return nil
+	}
+	dir, err := Materialize(build)
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(dir)
+	return eng.Build(ctx, image, dir, onLine)
 }

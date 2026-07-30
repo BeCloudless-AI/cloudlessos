@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"log"
 	"math"
@@ -28,6 +29,7 @@ import (
 	"github.com/cloudless/orchestrator/internal/jobs"
 	"github.com/cloudless/orchestrator/internal/localrecipes"
 	"github.com/cloudless/orchestrator/internal/manifest"
+	"github.com/cloudless/orchestrator/internal/models"
 	"github.com/cloudless/orchestrator/internal/places"
 	"github.com/cloudless/orchestrator/internal/power"
 	"github.com/cloudless/orchestrator/internal/provision"
@@ -41,17 +43,18 @@ var webFS embed.FS
 
 // Server wires the container engine, job manager, and state store to HTTP handlers.
 type Server struct {
-	eng          engine.Engine
-	jobs         *jobs.Manager
-	state        *state.Store
-	manifest     *manifest.Store
-	mfModels     *manifest.ModelsStore
-	mfDiff       *manifest.DiffusionStore
-	usage        *usage.Store
-	power        *power.Store
-	shutdown     func() error
-	virtualKey   func(context.Context, string, string) error
-	virtualKeyMu sync.Mutex
+	eng           engine.Engine
+	jobs          *jobs.Manager
+	state         *state.Store
+	manifest      *manifest.Store
+	mfModels      *manifest.ModelsStore
+	mfDiff        *manifest.DiffusionStore
+	usage         *usage.Store
+	power         *power.Store
+	shutdown      func() error
+	gatewayRebind func(int) error
+	virtualKey    func(context.Context, string, string) error
+	virtualKeyMu  sync.Mutex
 
 	shutdownMu     sync.Mutex
 	shutdownQueued bool
@@ -69,8 +72,8 @@ type Server struct {
 	recipeJobsMu sync.Mutex
 	recipeJobs   map[string]recipeJobControl
 
-	installMu sync.Mutex // one catalog/pack transaction may change containers at a time
-	recipes   *localrecipes.Store
+	appOperations appOperationLocks // serialize only operations that touch the same app
+	recipes       *localrecipes.Store
 }
 
 // NewServer constructs a Server backed by the given engine, state store and manifests.
@@ -81,6 +84,10 @@ func NewServer(eng engine.Engine, st *state.Store, mf *manifest.Store, mfModels 
 		shutdownDelay: time.Second, recipes: localrecipes.New(st.Dir()),
 	}
 }
+
+// SetGatewayRebind wires the daemon's listener manager into the settings API.
+// Tests and embedded callers may omit it when they never change the API port.
+func (s *Server) SetGatewayRebind(rebind func(int) error) { s.gatewayRebind = rebind }
 
 // imageFor returns the image reference to pull/run for an app: the manifest's
 // validated digest pin ("image@sha256:…") when present, else the catalog's tag.
@@ -145,8 +152,12 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/apps/{id}/config/reset", s.appConfigReset)
 	mux.HandleFunc("GET /api/apps/{id}/settings", s.appSettingsGet)
 	mux.HandleFunc("POST /api/apps/{id}/settings", s.appSettingsSet)
+	mux.HandleFunc("GET /api/jobs", s.jobList)
+	mux.HandleFunc("GET /api/jobs/{id}", s.jobState)
+	mux.HandleFunc("GET /api/jobs/{id}/events", s.jobEvents)
 	mux.HandleFunc("GET /api/settings", s.settingsGet)
 	mux.HandleFunc("POST /api/settings/model", s.settingsModel)
+	mux.HandleFunc("POST /api/settings/inference-contract", s.inferenceContractSet)
 	mux.HandleFunc("GET /api/models", s.modelsList)
 	mux.HandleFunc("GET /api/models/huggingface/search", s.huggingFaceSearch)
 	mux.HandleFunc("POST /api/models/huggingface/import", s.huggingFaceImport)
@@ -173,8 +184,6 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/diffusion/{id}/download", s.diffusionDownload)
 	mux.HandleFunc("POST /api/diffusion/{id}/uninstall", s.diffusionUninstall)
 	mux.HandleFunc("POST /api/onboarding/reset", s.onboardingReset)
-	mux.HandleFunc("GET /api/jobs/{id}", s.jobState)
-	mux.HandleFunc("GET /api/jobs/{id}/events", s.jobEvents)
 	mux.HandleFunc("GET /api/onboarding", s.onboardingGet)
 	mux.HandleFunc("POST /api/onboarding/complete", s.onboardingComplete)
 	mux.HandleFunc("GET /api/folders", s.folders)
@@ -316,19 +325,50 @@ func (s *Server) activeEngine(ctx context.Context) string {
 	return ""
 }
 
-// engineReady reports whether the active engine is serving (model loaded).
-func engineReady(ctx context.Context) bool {
+func engineModelsResponseError(body io.Reader) error {
+	var modelsResponse struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(body).Decode(&modelsResponse); err != nil {
+		return fmt.Errorf("invalid OpenAI models response: %w", err)
+	}
+	for _, model := range modelsResponse.Data {
+		if model.ID == localrecipes.CloudlessModelAlias {
+			return nil
+		}
+	}
+	return fmt.Errorf("does not serve the required model name %q", localrecipes.CloudlessModelAlias)
+}
+
+// engineEndpointError validates the entire stable inference contract: the
+// permanent port must be reachable, OpenAI-compatible, and serve Cloudless's
+// internal model identity. This is shared by recipes, bundled engines and
+// locally-built custom engines.
+func engineEndpointError(ctx context.Context) error {
 	url := fmt.Sprintf("http://127.0.0.1:%d/v1/models", catalog.EnginePort)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return false
+		return err
 	}
 	resp, err := (&http.Client{Timeout: 3 * time.Second}).Do(req)
 	if err != nil {
-		return false
+		return err
 	}
 	defer resp.Body.Close()
-	return resp.StatusCode == http.StatusOK
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("%s returned HTTP %d", url, resp.StatusCode)
+	}
+
+	if err := engineModelsResponseError(resp.Body); err != nil {
+		return fmt.Errorf("%s %w", url, err)
+	}
+	return nil
+}
+
+func engineReady(ctx context.Context) bool {
+	return engineEndpointError(ctx) == nil
 }
 
 func (s *Server) engineState(w http.ResponseWriter, r *http.Request) {
@@ -634,22 +674,58 @@ func (s *Server) applyEngine(job *jobs.Job, target catalog.App) {
 	st := s.state.Get()
 	model := st.Model
 	modelID := resolveModel(model)
+	modelRuntime, hasModelRuntime := models.Get(modelID)
 	clusterNodes := 2
 	localFallback := job.AppID == "engine:cluster-disconnect-fallback"
 	distributed := st.ExecutionMode == "cluster" && target.ID == "vllm"
 	timeout := 15 * time.Minute
 	if distributed {
 		timeout = 60 * time.Minute // the peer may need its first image/model download
+	} else if hasModelRuntime && modelRuntime.RuntimeBuild != "" {
+		timeout = 45 * time.Minute // first launch may pull and build a CUDA adapter
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	s.registerEngineJob(job.ID, cancel)
 	defer s.unregisterEngineJob(job.ID)
-	// Serialize with the startup provisioner so neither clobbers the other (D15).
+	// Serialize runtime preparation and engine replacement with startup.
 	provision.EngineMu.Lock()
+	if hasModelRuntime && modelRuntime.RuntimeBuild != "" {
+		job.Progress("building-runtime", "Preparing the reviewed "+modelRuntime.Name+" runtime ...", -1, -1)
+		if err := apps.EnsureBuild(ctx, s.eng, modelRuntime.RuntimeBuild, modelRuntime.RuntimeImage, func(line string) {
+			log.Printf("[build %s] %s", modelRuntime.RuntimeBuild, line)
+			if message := workbenchBuildMessage(modelRuntime.Name+" runtime", line); message != "" {
+				job.Progress("building-runtime", message, -1, -1)
+			}
+		}); err != nil {
+			provision.EngineMu.Unlock()
+			job.Fail(fmt.Errorf("build %s runtime: %w", modelRuntime.Name, err))
+			return
+		}
+	}
 	s.stopActiveLocalRecipeRuntime(context.Background(), job)
 	_ = s.state.SetEngine(target.ID) // remember the choice across restarts
 	_ = s.state.SetEngineUnloaded(false)
+	launchReady := false
+	// Any bundled or custom engine that cannot satisfy the stable port/model
+	// contract must fail closed. Without this cleanup, a failed image or command
+	// leaves the selected engine persisted as loaded and the desktop spins on
+	// "starting up" forever after the job itself has ended.
+	defer func() {
+		if launchReady {
+			return
+		}
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 45*time.Second)
+		defer cleanupCancel()
+		provision.EngineMu.Lock()
+		_ = s.eng.Remove(cleanupCtx, "cloudless-cluster-engine-proxy")
+		_ = s.eng.Remove(cleanupCtx, target.ContainerName())
+		if distributed {
+			_ = sparkcluster.StopWorker(cleanupCtx)
+		}
+		_ = s.state.SetEngineUnloaded(true)
+		provision.EngineMu.Unlock()
+	}()
 	if target.ID != "vllm" && st.ExecutionMode == "cluster" {
 		distributed = false
 		_ = s.state.SetExecutionMode("local")
@@ -766,6 +842,7 @@ func (s *Server) applyEngine(job *jobs.Job, target catalog.App) {
 		ready := engineReady(pctx)
 		pcancel()
 		if ready {
+			launchReady = true
 			job.Succeed("")
 			return
 		}
@@ -929,34 +1006,50 @@ func (s *Server) start(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	job := s.jobs.Create(app.ID)
+	identity := "app:" + app.ID + ":install"
+	job, created := s.jobs.CreateUnique(identity, "app:"+app.ID+":")
+	if !created {
+		if job.AppID != identity {
+			writeJSON(w, http.StatusConflict, map[string]string{"error": app.Name + " already has another background operation"})
+			return
+		}
+		writeJSON(w, http.StatusAccepted, map[string]string{"jobId": job.ID, "app": app.ID, "operation": job.AppID})
+		return
+	}
 	go s.runInstall(job, app)
 	writeJSON(w, http.StatusAccepted, map[string]string{"jobId": job.ID, "app": app.ID})
 }
 
 // runInstall pulls the image (streaming progress into the job) and runs it.
 func (s *Server) runInstall(job *jobs.Job, app catalog.App) {
-	s.installMu.Lock()
-	defer s.installMu.Unlock()
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
-	defer cancel()
-
 	dependencies, err := catalog.Dependencies(app.ID)
 	if err != nil {
 		job.Fail(err)
 		return
 	}
-	for _, dependency := range dependencies {
+	targets := append(append([]catalog.App{}, dependencies...), app)
+	ids := make([]string, 0, len(targets))
+	for _, target := range targets {
+		ids = append(ids, target.ID)
+	}
+	job.ProgressOperation("queued", "Queued in the background", app.Name, 0, 0, len(targets))
+	unlock := s.appOperations.lock(ids...)
+	defer unlock()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	defer cancel()
+
+	for index, dependency := range dependencies {
 		if current, _ := s.eng.Find(ctx, dependency.ContainerName()); current != nil && current.State == "running" {
+			job.ProgressOperation("dependency", dependency.Name+" is already ready", dependency.Name, operationPercent(index+1, len(targets), 0), index+1, len(targets))
 			continue
 		}
-		job.Progress("dependency", "Preparing required service: "+dependency.Name, -1, -1)
-		if _, err := s.installOne(ctx, job, dependency); err != nil {
+		job.ProgressOperation("dependency", "Preparing required service: "+dependency.Name, dependency.Name, operationPercent(index, len(targets), 5), index, len(targets))
+		if _, err := s.installOne(ctx, job, dependency, index, len(targets)); err != nil {
 			job.Fail(fmt.Errorf("dependency %s: %w", dependency.Name, err))
 			return
 		}
 	}
-	id, err := s.installOne(ctx, job, app)
+	id, err := s.installOne(ctx, job, app, len(targets)-1, len(targets))
 	if err != nil {
 		job.Fail(err)
 		return
@@ -964,8 +1057,16 @@ func (s *Server) runInstall(job *jobs.Job, app catalog.App) {
 	job.Succeed(id)
 }
 
-func (s *Server) installOne(ctx context.Context, job *jobs.Job, app catalog.App) (string, error) {
+func operationPercent(item, total, within int) int {
+	if total <= 0 {
+		return within
+	}
+	return (item*100 + within) / total
+}
 
+func (s *Server) installOne(ctx context.Context, job *jobs.Job, app catalog.App, item, total int) (string, error) {
+
+	job.ProgressOperation("preparing", "Preparing "+app.Name, app.Name, operationPercent(item, total, 4), item, total)
 	_ = s.eng.Remove(ctx, app.ContainerName()) // clear any stale container
 
 	// Use the manifest's validated digest when pinned, else the catalog tag.
@@ -973,7 +1074,7 @@ func (s *Server) installOne(ctx context.Context, job *jobs.Job, app catalog.App)
 
 	if app.Build != "" {
 		// Locally-built image (no upstream): materialize the embedded context and build.
-		job.Progress("building", "Building "+app.Name+" …", -1, -1)
+		job.ProgressOperation("building", "Building "+app.Name+" from its reviewed source", app.Name, operationPercent(item, total, 12), item, total)
 		dir, err := apps.Materialize(app.Build)
 		if err != nil {
 			return "", err
@@ -981,48 +1082,89 @@ func (s *Server) installOne(ctx context.Context, job *jobs.Job, app catalog.App)
 		defer os.RemoveAll(dir)
 		if err := s.eng.Build(ctx, app.Image, dir, func(l string) {
 			log.Printf("[build %s] %s", app.ID, l)
+			if message := workbenchBuildMessage(app.Name, l); message != "" {
+				job.ProgressOperation("building", message, app.Name, operationPercent(item, total, 45), item, total)
+			}
 		}); err != nil {
 			return "", err
 		}
+		// A build context always produces the catalog tag locally. A hosted
+		// manifest pin applies to pulled images and must not redirect the run
+		// step away from the image that was just built.
+		img = app.Image
 	} else {
-		job.Progress("pulling", "Pulling image…", 0, 0)
-		layers := map[string]bool{} // layer id -> complete
+		job.ProgressOperation("pulling", "Contacting the image registry for "+app.Name, app.Name, operationPercent(item, total, 10), item, total)
+		layers := map[string]*dockerPullLayer{}
 		err := s.eng.PullStream(ctx, img, func(line string) {
 			id, status, ok := splitStatus(line)
 			switch {
 			case ok && strings.HasPrefix(status, "Pulling fs layer"):
-				if _, seen := layers[id]; !seen {
-					layers[id] = false
+				if layers[id] == nil {
+					layers[id] = &dockerPullLayer{}
 				}
 			case ok && (status == "Pull complete" || status == "Already exists"):
-				layers[id] = true
+				if layers[id] == nil {
+					layers[id] = &dockerPullLayer{}
+				}
+				layers[id].complete = true
+				if layers[id].total > 0 {
+					layers[id].done = layers[id].total
+				}
+			case ok && strings.HasPrefix(status, "Downloading"):
+				if doneBytes, totalBytes, parsed := parseDockerLayerProgress(status); parsed {
+					if layers[id] == nil {
+						layers[id] = &dockerPullLayer{}
+					}
+					layers[id].done, layers[id].total = doneBytes, totalBytes
+				}
 			case strings.HasPrefix(line, "Status:"):
-				job.Progress("pulling", line, -1, -1)
+				job.ProgressOperation("pulling", line, app.Name, operationPercent(item, total, 76), item, total)
 				return
 			default:
 				return
 			}
-			done, total := countComplete(layers)
-			job.Progress("pulling", fmt.Sprintf("Downloading layers %d/%d", done, total), done, total)
+			done, layerTotal, bytesDone, bytesTotal := dockerPullTotals(layers)
+			within := 15
+			if layerTotal > 0 {
+				within += done * 60 / layerTotal
+			}
+			message := fmt.Sprintf("Downloading %s image layers — %d of %d complete", app.Name, done, layerTotal)
+			job.ProgressOperation("pulling", message, app.Name, operationPercent(item, total, within), item, total)
+			job.ProgressDetail("pulling", message, done, layerTotal)
+			if bytesTotal > 0 {
+				job.ProgressBytesDetail("pulling", message, bytesDone, bytesTotal)
+			}
 		})
 		if err != nil {
 			return "", err
 		}
 	}
 
-	job.Progress("starting", "Starting container…", -1, -1)
+	job.ProgressOperation("starting", "Starting "+app.Name+" container", app.Name, operationPercent(item, total, 82), item, total)
 	spec := s.appSpec(app)
 	spec.Image = img // run the exact image we pulled (pinned digest when manifest applies)
 	id, err := s.eng.Run(ctx, spec)
 	if err != nil {
 		return "", err
 	}
-	job.Progress("verifying", "Checking "+app.Name+" readiness…", -1, -1)
+	job.ProgressOperation("verifying", "Checking "+app.Name+" readiness", app.Name, operationPercent(item, total, 90), item, total)
 	if err := s.waitForAppHealth(ctx, app); err != nil {
 		_ = s.eng.Remove(context.Background(), app.ContainerName())
 		return "", err
 	}
+	job.ProgressOperation("component-ready", app.Name+" is ready", app.Name, operationPercent(item+1, total, 0), item+1, total)
 	return id, nil
+}
+
+func workbenchBuildMessage(name, line string) string {
+	line = strings.TrimSpace(line)
+	if line == "" || strings.HasPrefix(line, "#0 ") || strings.HasPrefix(line, "#1 ") {
+		return ""
+	}
+	if len(line) > 180 {
+		line = line[:177] + "..."
+	}
+	return "Building " + name + ": " + line
 }
 
 func (s *Server) waitForAppHealth(parent context.Context, app catalog.App) error {
@@ -1080,7 +1222,13 @@ func (s *Server) jobState(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "unknown job"})
 		return
 	}
-	writeJSON(w, http.StatusOK, job.Snapshot())
+	writeJSON(w, http.StatusOK, jobs.Snapshot{ID: job.ID, AppID: job.AppID, Update: job.Snapshot()})
+}
+
+// jobList exposes daemon-owned operation snapshots so a reloaded or repainted
+// interface can reconnect without owning the lifecycle of the work.
+func (s *Server) jobList(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, s.jobs.List(r.URL.Query().Get("prefix")))
 }
 
 // jobEvents streams job updates as Server-Sent Events until the job is done.
@@ -1139,6 +1287,62 @@ func countComplete(m map[string]bool) (done, total int) {
 	return done, total
 }
 
+type dockerPullLayer struct {
+	complete bool
+	done     int64
+	total    int64
+}
+
+func dockerPullTotals(layers map[string]*dockerPullLayer) (done, total int, bytesDone, bytesTotal int64) {
+	total = len(layers)
+	for _, layer := range layers {
+		if layer == nil {
+			continue
+		}
+		if layer.complete {
+			done++
+		}
+		bytesDone += layer.done
+		bytesTotal += layer.total
+	}
+	return
+}
+
+func parseDockerLayerProgress(status string) (done, total int64, ok bool) {
+	fields := strings.Fields(status)
+	for _, field := range fields {
+		parts := strings.Split(field, "/")
+		if len(parts) != 2 {
+			continue
+		}
+		done, errDone := parseDockerSize(parts[0])
+		total, errTotal := parseDockerSize(parts[1])
+		if errDone == nil && errTotal == nil && total > 0 {
+			return done, total, true
+		}
+	}
+	return 0, 0, false
+}
+
+func parseDockerSize(value string) (int64, error) {
+	value = strings.TrimSpace(value)
+	units := []struct {
+		suffix string
+		factor float64
+	}{{"GB", 1e9}, {"MB", 1e6}, {"kB", 1e3}, {"B", 1}}
+	for _, unit := range units {
+		if strings.HasSuffix(value, unit.suffix) {
+			number := strings.TrimSpace(strings.TrimSuffix(value, unit.suffix))
+			parsed, err := strconv.ParseFloat(number, 64)
+			if err != nil {
+				return 0, err
+			}
+			return int64(parsed * unit.factor), nil
+		}
+	}
+	return 0, fmt.Errorf("unsupported Docker size %q", value)
+}
+
 // appReset wipes an app to a clean state: remove its container (and image, so a
 // build app rebuilds the recipe), then reinstall. Runs as an async job.
 func (s *Server) appReset(w http.ResponseWriter, r *http.Request) {
@@ -1147,12 +1351,24 @@ func (s *Server) appReset(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "unknown app"})
 		return
 	}
-	job := s.jobs.Create("reset:" + app.ID)
+	identity := "app:" + app.ID + ":reset"
+	job, created := s.jobs.CreateUnique(identity, "app:"+app.ID+":")
+	if !created {
+		if job.AppID != identity {
+			writeJSON(w, http.StatusConflict, map[string]string{"error": app.Name + " already has another background operation"})
+			return
+		}
+		writeJSON(w, http.StatusAccepted, map[string]string{"jobId": job.ID, "app": app.ID, "operation": job.AppID})
+		return
+	}
 	go func() {
+		job.ProgressOperation("queued", "Reset queued in the background", app.Name, 0, 0, 1)
+		unlock := s.appOperations.lock(app.ID)
+		defer unlock()
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 		defer cancel()
 		if app.ID == "hermes" {
-			job.Progress("resetting", "Restoring the Cloudless model connection…", -1, -1)
+			job.ProgressOperation("resetting", "Restoring the Cloudless model connection", app.Name, 25, 0, 1)
 			if err := apps.ResetHermesModel(s.appConfigDir(app.ID)); err != nil {
 				job.Fail(err)
 				return
@@ -1172,12 +1388,16 @@ func (s *Server) appReset(w http.ResponseWriter, r *http.Request) {
 		if app.Build != "" { // force a fresh rebuild of locally-built apps
 			_ = s.eng.RemoveImage(ctx, app.Image)
 		}
-		s.runInstall(job, app)
+		if _, err := s.installOne(ctx, job, app, 0, 1); err != nil {
+			job.Fail(err)
+			return
+		}
+		job.Succeed("")
 	}()
 	writeJSON(w, http.StatusAccepted, map[string]string{"jobId": job.ID, "app": app.ID})
 }
 
-// appUninstall removes an app's container and image.
+// appUninstall starts a daemon-owned background removal job.
 func (s *Server) appUninstall(w http.ResponseWriter, r *http.Request) {
 	app, ok := catalog.Get(r.PathValue("id"))
 	if !ok {
@@ -1188,11 +1408,38 @@ func (s *Server) appUninstall(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "Hermes is a core CloudlessOS service and cannot be uninstalled"})
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
+	identity := "app:" + app.ID + ":uninstall"
+	job, created := s.jobs.CreateUnique(identity, "app:"+app.ID+":")
+	if !created {
+		if job.AppID != identity {
+			writeJSON(w, http.StatusConflict, map[string]string{"error": app.Name + " already has another background operation"})
+			return
+		}
+		writeJSON(w, http.StatusAccepted, map[string]string{"jobId": job.ID, "app": app.ID, "operation": job.AppID})
+		return
+	}
+	go s.runAppUninstall(job, app)
+	writeJSON(w, http.StatusAccepted, map[string]string{"jobId": job.ID, "app": app.ID})
+}
+
+func (s *Server) runAppUninstall(job *jobs.Job, app catalog.App) {
+	job.ProgressOperation("queued", "Removal queued in the background", app.Name, 0, 0, 2)
+	unlock := s.appOperations.lock(app.ID)
+	defer unlock()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
-	_ = s.eng.Remove(ctx, app.ContainerName())
-	_ = s.eng.RemoveImage(ctx, app.Image)
-	writeJSON(w, http.StatusOK, map[string]string{"status": "uninstalled"})
+	job.ProgressOperation("removing", "Stopping and removing "+app.Name, app.Name, 25, 0, 2)
+	if err := s.eng.Remove(ctx, app.ContainerName()); err != nil {
+		job.Fail(fmt.Errorf("remove %s container: %w", app.Name, err))
+		return
+	}
+	job.ProgressOperation("cleaning-image", "Removing the downloaded "+app.Name+" image", app.Name, 70, 1, 2)
+	if err := s.eng.RemoveImage(ctx, app.Image); err != nil {
+		job.Fail(fmt.Errorf("remove %s image: %w", app.Name, err))
+		return
+	}
+	job.ProgressOperation("removed", app.Name+" was removed; its persistent data was kept", app.Name, 100, 2, 2)
+	job.Succeed("")
 }
 
 // appConfigDir is where an app's editable config files live in the state dir.
@@ -1559,6 +1806,10 @@ func (s *Server) settingsModel(w http.ResponseWriter, r *http.Request) {
 	}
 	mode := "local"
 	if body.Mode == "cluster" {
+		if selected, ok := models.Get(model); ok && selected.SingleNodeOnly {
+			writeJSON(w, http.StatusConflict, map[string]string{"error": "this model currently has a reviewed single-Spark runtime only"})
+			return
+		}
 		cluster := clusterCompute(r.Context(), totalVRAMGB(r.Context()))
 		if !cluster.DistributedReady {
 			writeJSON(w, http.StatusConflict, map[string]string{"error": "the Spark cluster is not healthy"})

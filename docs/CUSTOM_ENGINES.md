@@ -25,6 +25,28 @@ The registered image inherits the corresponding managed Cloudless launch contrac
 - the Cloudless API gateway and Hermes Agent connection;
 - readiness, metrics, load, unload and abort behavior.
 
+The private runtime contract is locked to port `8000` and served model name `cloudless`.
+Cloudless removes conflicting saved `--port` and `--served-model-name` overrides when it creates
+the container. API users do not connect to that private endpoint; they use the authenticated
+client identity described in [INFERENCE_API.md](./INFERENCE_API.md).
+
+## Activation and rollback guardrail
+
+Cloudless does not mark a custom image ready merely because Docker started it. Activation waits
+for the permanent internal endpoint `http://127.0.0.1:8000/v1/models` and requires all of the
+following:
+
+- the endpoint is reachable within the bounded engine startup window;
+- it returns HTTP `200`;
+- its body is valid OpenAI-compatible models JSON; and
+- the models list contains the internal ID `cloudless`.
+
+The same check applies to bundled engines and native recipes, so a custom build cannot bypass it.
+On failure Cloudless removes the target container and stable proxy, stops a distributed worker if
+one was started, and persists the engine as unloaded. Model weights and the locally built image
+remain available for diagnosis or retry. This fail-closed cleanup prevents a bad image, command or
+endpoint from surviving as an endless **starting up** state.
+
 Cloudless automatically detects upstream vLLM images whose entrypoint already contains
 `vllm serve`, so it does not append that command twice.
 
@@ -201,13 +223,14 @@ Follow the returned job through the normal jobs API, or watch the progress in Se
 curl --fail http://127.0.0.1:8765/api/engine
 docker ps --filter 'name=cloudless-custom-' \
   --format 'name={{.Names}} image={{.Image}} status={{.Status}}'
-curl --fail http://127.0.0.1:8766/v1/models \
+curl --fail http://127.0.0.1:<API_PORT>/v1/models \
   -H 'Authorization: Bearer <CLOUDLESS_API_KEY>'
 ```
 
 The engine response marks the custom entry with `"custom": true`. Cloudless API clients
-continue using port `8766`; applications and Hermes continue using the stable internal
-`cloudless-ai` endpoint. They do not need to know the image tag.
+continue using the port and model alias shown in **Settings -> API access**; applications and
+Hermes continue using the stable internal `cloudless-ai` endpoint. They do not need to know the
+image tag. Port `8766` and model alias `cloudless` are defaults, not values a client should assume.
 
 ## Roll back safely
 
@@ -311,6 +334,16 @@ Common causes are:
 - an image whose command-line contract differs from the selected vLLM/SGLang base.
 
 Use **Abort** if loading is still active, then select managed vLLM to recover.
+
+Startup is bounded rather than indefinite. Local engines receive a 15-minute launch window;
+reviewed runtimes that must build receive up to 45 minutes; distributed launches receive up to
+60 minutes for first-time peer image and model preparation. Expiry produces a failed job and the
+cleanup described above.
+
+Do not work around an incompatible image by changing the client-facing API port or model alias.
+Those values identify the gateway, while the custom image must satisfy the locked private
+vLLM/SGLang contract. Cloudless sanitizes conflicting private port and served-name overrides at
+launch.
 
 ### The build works directly but fails through Cloudless
 

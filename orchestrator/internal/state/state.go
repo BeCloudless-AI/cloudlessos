@@ -31,6 +31,31 @@ type DisplayPreference struct {
 	Height int    `json:"height,omitempty"`
 }
 
+const (
+	DefaultInferenceAPIPort = 8766
+	DefaultInferenceAlias   = "cloudless"
+)
+
+// InferenceContract is the one client-facing OpenAI-compatible identity for
+// every managed engine and recipe. Backend ports and native model names remain
+// private implementation details behind the Cloudless gateway.
+type InferenceContract struct {
+	Port       int    `json:"port,omitempty"`
+	ModelAlias string `json:"modelAlias,omitempty"`
+}
+
+// Normalized fills legacy/empty values with the stable Cloudless defaults.
+func (c InferenceContract) Normalized() InferenceContract {
+	if c.Port == 0 {
+		c.Port = DefaultInferenceAPIPort
+	}
+	if strings.TrimSpace(c.ModelAlias) == "" {
+		c.ModelAlias = DefaultInferenceAlias
+	}
+	c.ModelAlias = strings.TrimSpace(c.ModelAlias)
+	return c
+}
+
 // CustomEngine is a locally-built, OpenAI-compatible inference image registered
 // by an advanced user. Base selects the signed Cloudless launch contract whose
 // command, volumes, ports and safety defaults the custom image inherits.
@@ -114,6 +139,7 @@ type State struct {
 	Profile        Profile                 `json:"profile"`                  // user-controlled profile
 	APIKeys        []APIKey                `json:"apiKeys,omitempty"`        // Cloudless Proxy credentials
 	Display        DisplayPreference       `json:"display,omitempty"`        // preferred display output and mode
+	InferenceAPI   InferenceContract       `json:"inferenceApi,omitempty"`   // stable client-facing API port and model alias
 	CustomModels   map[string]models.Model `json:"customModels,omitempty"`   // user-imported Hugging Face repositories
 	ModelPromotion ModelPromotion          `json:"modelPromotion,omitempty"` // verified bootstrap/full-model lifecycle
 	InstalledPacks []string                `json:"installedPacks,omitempty"` // optional capability packs installed by Cloudless
@@ -265,6 +291,21 @@ func (s *Store) SetDisplayPreference(pref DisplayPreference) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.st.Display = pref
+	return s.save()
+}
+
+// InferenceContract returns the normalized, install-wide API identity.
+func (s *Store) InferenceContract() InferenceContract {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.st.InferenceAPI.Normalized()
+}
+
+// SetInferenceContract persists a contract already validated by the API layer.
+func (s *Store) SetInferenceContract(contract InferenceContract) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.st.InferenceAPI = contract.Normalized()
 	return s.save()
 }
 

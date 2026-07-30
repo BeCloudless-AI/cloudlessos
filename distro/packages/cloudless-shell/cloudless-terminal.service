@@ -4,7 +4,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/ttyd --port 7681 --interface 127.0.0.1 --writable --check-origin --max-clients 2 --base-path /terminal --client-option titleFixed=CloudlessOS-Terminal --client-option fontSize=16 --client-option disableLeaveAlert=true /bin/login
+ExecStart=/usr/bin/ttyd --port 7681 --interface 127.0.0.1 --writable --check-origin --max-clients 8 --base-path /terminal --client-option titleFixed=CloudlessOS-Terminal --client-option fontSize=16 --client-option disableLeaveAlert=true /bin/login
 Restart=on-failure
 RestartSec=2
 UMask=0077

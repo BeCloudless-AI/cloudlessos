@@ -16,9 +16,11 @@
     "Replace the experimental SparkRun dependency with Cloudless-native, pinned recipe manifests and lifecycle commands that remain inspectable and reproducible.",
     "Prepare custom recipe runtimes and model caches once on the coordinator, then transfer the resulting runtime image and cache to peer Sparks over the direct cluster link instead of rebuilding or downloading twice.",
     "Warn before a recipe needs a specialized inference runtime, explain why the standard Cloudless vLLM engine is insufficient, and show runtime size, cache state, cluster work, API routing, and every launch step.",
-    "Report recipe preparation with stable in-place updates, byte progress, percentage, an estimated time remaining, an eight-stage timeline, and an immediate Abort action.",
-    "Add an unrestricted integrated terminal for advanced users and optional developer tooling for CUDA, source builds, and architecture-specific experimentation.",
-    "Introduce a managed custom-engine registry so locally compiled inference engines can be selected by recipes without replacing the system engine.",
+    "Run recipe preparation as a daemon-owned background operation that remains visible and abortable after Model Manager is closed, with byte progress, percentage, estimated time remaining, and an eight-stage timeline.",
+    "Label coordinator-to-peer recipe transfers explicitly so users can see which Spark is downloading, preparing, or receiving runtime and model data.",
+    "Add an unrestricted floating terminal with up to eight persistent tabs, plus optional developer tooling for CUDA, source builds, and architecture-specific experimentation.",
+    "Introduce a managed custom-engine registry so locally compiled vLLM and SGLang images can be selected as first-class engines without replacing the signed system engine.",
+    "Separate the locked private inference runtime from the client API identity, allowing users to change the authenticated API port and model alias without letting recipes or custom engines break Hermes and application routing.",
     "Remove the dormant public recipe indexer and discovery UI while retaining local recipe import, editing, checking, and execution."
   ]
 }

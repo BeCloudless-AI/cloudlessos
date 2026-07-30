@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -9,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -23,11 +25,14 @@ import (
 // authenticated with user-generated API keys. It runs on its own port (separate from
 // the no-auth dashboard) so it can be exposed on the LAN / online independently.
 const (
-	GatewayPort       = 8766
 	gatewayLanName    = "cloudless-lan-gateway"
 	gatewayTunnelName = "cloudless-tunnel-gateway"
-	servedModelName   = "cloudless" // the engine's --served-model-name
+	servedModelName   = "cloudless" // private engine identity; never user-editable
 )
+
+var inferenceAliasPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:/-]{0,63}$`)
+
+func (s *Server) inferenceContract() state.InferenceContract { return s.state.InferenceContract() }
 
 // GatewayHandler exposes two authenticated surfaces on one shareable listener:
 // /v1/* proxies raw model inference, while /agent/v1/* and /agent/api/* proxy
@@ -39,12 +44,27 @@ func (s *Server) GatewayHandler() http.Handler {
 	orig := engineProxy.Director
 	engineProxy.Director = func(req *http.Request) {
 		orig(req)
+		// Backend inference always stays on the reserved private engine socket.
+		// The configurable port belongs only to this authenticated gateway.
 		req.Host = engineTarget.Host
 		apiPath, _ := s.activeRecipeGatewaySettings()
 		if apiPath != "" && apiPath != "/v1" && strings.HasPrefix(req.URL.Path, "/v1") {
 			req.URL.Path = strings.TrimRight(apiPath, "/") + strings.TrimPrefix(req.URL.Path, "/v1")
 		}
 		req.Header.Del("Authorization") // the engine doesn't need (and shouldn't see) the user's key
+	}
+	engineProxy.ModifyResponse = func(resp *http.Response) error {
+		// Present the install-wide client alias even though every private backend
+		// deliberately keeps serving the internal "cloudless" identity.
+		alias := s.inferenceContract().ModelAlias
+		contentType := strings.ToLower(resp.Header.Get("Content-Type"))
+		if alias == servedModelName || (!strings.Contains(contentType, "json") && !strings.Contains(contentType, "event-stream")) {
+			return nil
+		}
+		resp.Body = &gatewayAliasBody{src: resp.Body, reader: bufio.NewReader(resp.Body), alias: alias}
+		resp.ContentLength = -1
+		resp.Header.Del("Content-Length")
+		return nil
 	}
 	engineProxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
 		writeOpenAIError(w, http.StatusBadGateway, "The Cloudless engine isn't reachable — make sure a model is loaded.")
@@ -100,6 +120,35 @@ func (s *Server) GatewayHandler() http.Handler {
 	})
 	return mux
 }
+
+// gatewayAliasBody rewrites line-oriented JSON/SSE without buffering a streamed
+// completion. It also handles ordinary one-line JSON responses at EOF.
+type gatewayAliasBody struct {
+	src     io.ReadCloser
+	reader  *bufio.Reader
+	pending []byte
+	alias   string
+}
+
+func (b *gatewayAliasBody) Read(dst []byte) (int, error) {
+	for len(b.pending) == 0 {
+		line, err := b.reader.ReadBytes('\n')
+		if len(line) > 0 {
+			encoded, _ := json.Marshal(b.alias)
+			line = bytes.ReplaceAll(line, []byte(`"model":"cloudless"`), append([]byte(`"model":`), encoded...))
+			line = bytes.ReplaceAll(line, []byte(`"id":"cloudless"`), append([]byte(`"id":`), encoded...))
+			b.pending = line
+		}
+		if err != nil && len(b.pending) == 0 {
+			return 0, err
+		}
+	}
+	n := copy(dst, b.pending)
+	b.pending = b.pending[n:]
+	return n, nil
+}
+
+func (b *gatewayAliasBody) Close() error { return b.src.Close() }
 
 func (s *Server) authorizeGateway(w http.ResponseWriter, r *http.Request, scope string) (string, bool) {
 	token := bearerToken(r)
@@ -333,22 +382,23 @@ func (s *Server) gatewayGet(w http.ResponseWriter, r *http.Request) {
 		tunURL = s.tunnelURL(ctx, gatewayTunnelName)
 	}
 
+	contract := s.inferenceContract()
 	model := s.state.Get().Model
 	if model == "" {
 		model = catalog.DefaultModel()
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"port":       GatewayPort,
-		"servedName": servedModelName, // what callers put in "model"
-		"model":      model,           // the real model behind it
-		"localURL":   fmt.Sprintf("http://localhost:%d/v1", GatewayPort),
+		"port":       contract.Port,
+		"servedName": contract.ModelAlias, // what callers put in "model"
+		"model":      model,               // the real model behind it
+		"localURL":   fmt.Sprintf("http://localhost:%d/v1", contract.Port),
 		"agent": map[string]any{
 			"ready": hermesReady(ctx), "servedName": "hermes-agent",
-			"localURL": fmt.Sprintf("http://localhost:%d/agent/v1", GatewayPort),
+			"localURL": fmt.Sprintf("http://localhost:%d/agent/v1", contract.Port),
 		},
 		"keys": keys,
 		"lan": map[string]any{
-			"enabled": lanOn, "ip": ip, "url": lanURL(lanOn, ip), "agentURL": agentLanURL(lanOn, ip),
+			"enabled": lanOn, "ip": ip, "url": lanURL(lanOn, ip, contract.Port), "agentURL": agentLanURL(lanOn, ip, contract.Port),
 		},
 		"tunnel": map[string]any{
 			"enabled": tunOn, "url": tunURL, "modelURL": appendURLPath(tunURL, "/v1"), "agentURL": appendURLPath(tunURL, "/agent/v1"),
@@ -356,16 +406,92 @@ func (s *Server) gatewayGet(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func lanURL(on bool, ip string) string {
+func validateInferenceContract(contract state.InferenceContract) error {
+	contract = contract.Normalized()
+	if contract.Port < 1024 || contract.Port > 65535 {
+		return fmt.Errorf("API port must be between 1024 and 65535")
+	}
+	for _, reserved := range []int{8000, 8642, 8765, 9119} {
+		if contract.Port == reserved {
+			return fmt.Errorf("port %d is reserved by CloudlessOS", contract.Port)
+		}
+	}
+	if !inferenceAliasPattern.MatchString(contract.ModelAlias) {
+		return fmt.Errorf("model name must be 1-64 URL-safe characters without spaces")
+	}
+	return nil
+}
+
+// inferenceContractSet updates the single client-facing identity. Recipes and
+// custom engines cannot override it; their private details stay behind the
+// authenticated gateway.
+func (s *Server) inferenceContractSet(w http.ResponseWriter, r *http.Request) {
+	var requested state.InferenceContract
+	if err := json.NewDecoder(r.Body).Decode(&requested); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad request"})
+		return
+	}
+	requested = requested.Normalized()
+	if err := validateInferenceContract(requested); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	previous := s.inferenceContract()
+	if requested.Port != previous.Port {
+		if s.gatewayRebind == nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "the API listener cannot be reconfigured in this environment"})
+			return
+		}
+		if err := s.gatewayRebind(requested.Port); err != nil {
+			writeJSON(w, http.StatusConflict, map[string]string{"error": "that port is unavailable: " + err.Error()})
+			return
+		}
+	}
+	if err := s.state.SetInferenceContract(requested); err != nil {
+		if requested.Port != previous.Port && s.gatewayRebind != nil {
+			_ = s.gatewayRebind(previous.Port)
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if requested.Port != previous.Port {
+		s.restartGatewayExposure(r.Context(), requested.Port)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"port": requested.Port, "servedName": requested.ModelAlias,
+		"localURL": fmt.Sprintf("http://localhost:%d/v1", requested.Port),
+	})
+}
+
+func (s *Server) restartGatewayExposure(parent context.Context, port int) {
+	ctx, cancel := context.WithTimeout(parent, 45*time.Second)
+	defer cancel()
+	lan, _ := s.eng.Find(ctx, gatewayLanName)
+	tunnel, _ := s.eng.Find(ctx, gatewayTunnelName)
+	lanEnabled := lan != nil && lan.State == "running"
+	tunnelEnabled := tunnel != nil && tunnel.State == "running"
+	_ = s.eng.Remove(ctx, gatewayLanName)
+	_ = s.eng.Remove(ctx, gatewayTunnelName)
+	if lanEnabled {
+		if ip := provision.PrimaryLANIP(); ip != "" {
+			_, _ = s.eng.Run(ctx, gatewayLANSpec(s.infraImage(ctx, "socat", catalog.SocatImage), ip, port))
+		}
+	}
+	if tunnelEnabled {
+		_, _ = s.eng.Run(ctx, gatewayTunnelSpec(s.infraImage(ctx, "cloudflared", catalog.CloudflaredImage), port))
+	}
+}
+
+func lanURL(on bool, ip string, port int) string {
 	if on && ip != "" {
-		return fmt.Sprintf("http://%s:%d/v1", ip, GatewayPort)
+		return fmt.Sprintf("http://%s:%d/v1", ip, port)
 	}
 	return ""
 }
 
-func agentLanURL(on bool, ip string) string {
+func agentLanURL(on bool, ip string, port int) string {
 	if on && ip != "" {
-		return fmt.Sprintf("http://%s:%d/agent/v1", ip, GatewayPort)
+		return fmt.Sprintf("http://%s:%d/agent/v1", ip, port)
 	}
 	return ""
 }
@@ -437,20 +563,22 @@ func (s *Server) gatewayLanSet(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "could not fetch forwarder: " + err.Error()})
 		return
 	}
-	spec := engine.RunSpec{
-		Name: gatewayLanName, Image: img, Network: "host",
-		Args: []string{
-			fmt.Sprintf("TCP-LISTEN:%d,bind=%s,fork,reuseaddr", GatewayPort, ip),
-			fmt.Sprintf("TCP:127.0.0.1:%d", GatewayPort),
-		},
-	}
+	port := s.inferenceContract().Port
+	spec := gatewayLANSpec(img, ip, port)
 	if _, err := s.eng.Run(ctx, spec); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"enabled": true, "ip": ip, "url": lanURL(true, ip), "agentURL": agentLanURL(true, ip),
+		"enabled": true, "ip": ip, "url": lanURL(true, ip, port), "agentURL": agentLanURL(true, ip, port),
 	})
+}
+
+func gatewayLANSpec(image, ip string, port int) engine.RunSpec {
+	return engine.RunSpec{Name: gatewayLanName, Image: image, Network: "host", Args: []string{
+		fmt.Sprintf("TCP-LISTEN:%d,bind=%s,fork,reuseaddr", port, ip),
+		fmt.Sprintf("TCP:127.0.0.1:%d", port),
+	}}
 }
 
 func (s *Server) gatewayTunnelSet(w http.ResponseWriter, r *http.Request) {
@@ -476,10 +604,7 @@ func (s *Server) gatewayTunnelSet(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "could not fetch cloudflared: " + err.Error()})
 		return
 	}
-	if _, err := s.eng.Run(ctx, engine.RunSpec{
-		Name: gatewayTunnelName, Image: img, Network: "host",
-		Args: []string{"tunnel", "--no-autoupdate", "--url", fmt.Sprintf("http://localhost:%d", GatewayPort)},
-	}); err != nil {
+	if _, err := s.eng.Run(ctx, gatewayTunnelSpec(img, s.inferenceContract().Port)); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
@@ -498,4 +623,9 @@ func (s *Server) gatewayTunnelSet(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"enabled": true, "url": url, "modelURL": appendURLPath(url, "/v1"), "agentURL": appendURLPath(url, "/agent/v1"),
 	})
+}
+
+func gatewayTunnelSpec(image string, port int) engine.RunSpec {
+	return engine.RunSpec{Name: gatewayTunnelName, Image: image, Network: "host",
+		Args: []string{"tunnel", "--no-autoupdate", "--url", fmt.Sprintf("http://localhost:%d", port)}}
 }

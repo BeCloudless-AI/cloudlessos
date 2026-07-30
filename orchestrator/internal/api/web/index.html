@@ -1438,6 +1438,43 @@
   .app-surface-loading span { display: inline-flex; align-items: center; gap: 9px; }
   .app-surface-loading i { width: 16px; height: 16px; border: 2px solid var(--hair); border-top-color: var(--blue); border-radius: 50%; animation: spin .8s linear infinite; }
   .app-surface-frame { width: 100%; height: 100%; display: block; border: 0; background: #fff; }
+  .terminal-window {
+    position: fixed; z-index: 84; left: max(96px,calc(50% - 440px)); top: 86px;
+    width: min(880px,calc(100vw - 130px)); height: min(610px,calc(100vh - 150px)); min-width: 520px; min-height: 340px;
+    display: flex; flex-direction: column; overflow: hidden; resize: both;
+    border: 1px solid color-mix(in srgb,var(--line-2) 80%,transparent); border-radius: 17px;
+    background: #0b0e14; box-shadow: 0 34px 90px -34px rgba(4,8,20,.78),0 8px 24px -16px rgba(4,8,20,.55);
+  }
+  .terminal-window.hidden { display: none; }
+  .terminal-window.dragging { resize: none; cursor: grabbing; }
+  .terminal-window.dragging::after { content: ""; position: absolute; z-index: 20; inset: 43px 0 0; cursor: grabbing; }
+  .terminal-window.maximized { inset: 0 !important; width: auto !important; height: auto !important; resize: none; border: 0; border-radius: 0; }
+  .terminal-titlebar { height: 43px; flex: none; display: flex; align-items: center; gap: 9px; padding: 0 9px 0 13px; color: #dbe4f7; background: #151a24; border-bottom: 1px solid #293141; cursor: move; user-select: none; touch-action: none; }
+  .terminal-mark { width: 25px; height: 25px; display: grid; place-items: center; flex: none; border-radius: 8px; color: #8da7ff; background: rgba(112,141,255,.13); }
+  .terminal-mark .ui-icon { width: 14px; height: 14px; }
+  .terminal-window-title { min-width: 0; flex: 1; display: grid; gap: 1px; }
+  .terminal-window-title b { font-size: 10px; line-height: 1.2; }
+  .terminal-window-title span { color: #8994aa; font: 7px/1.2 'Roboto Mono',ui-monospace,monospace; }
+  .terminal-window-controls { display: flex; align-items: center; gap: 5px; }
+  .terminal-window-control { width: 28px; height: 28px; padding: 0; display: grid; place-items: center; border: 0; border-radius: 8px; color: #9aa6bc; background: transparent; cursor: pointer; }
+  .terminal-window-control:hover { color: #eef3ff; background: #252c39; }
+  .terminal-window-control .ui-icon { width: 13px; height: 13px; }
+  .terminal-tabs { height: 39px; flex: none; padding: 5px 8px 0; display: flex; align-items: end; gap: 5px; overflow-x: auto; background: #10141d; border-bottom: 1px solid #252c39; }
+  .terminal-tab { height: 33px; min-width: 126px; max-width: 190px; display: flex; align-items: center; border: 1px solid transparent; border-bottom: 0; border-radius: 9px 9px 0 0; color: #8792a8; background: transparent; }
+  .terminal-tab.active { color: #edf2ff; border-color: #303849; background: #0b0e14; }
+  .terminal-tab-select { min-width: 0; flex: 1; height: 100%; padding: 0 5px 0 10px; overflow: hidden; border: 0; color: inherit; background: transparent; font: 8px/1 'Roboto Mono',ui-monospace,monospace; text-align: left; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+  .terminal-tab-close { width: 25px; height: 25px; flex: none; padding: 0; display: grid; place-items: center; border: 0; border-radius: 7px; color: #6f7b91; background: transparent; cursor: pointer; }
+  .terminal-tab-close:hover { color: #fff; background: #2b3342; }
+  .terminal-tab-close .ui-icon { width: 11px; height: 11px; }
+  .terminal-tab-add { width: 29px; height: 29px; margin-bottom: 2px; flex: none; padding: 0; display: grid; place-items: center; border: 0; border-radius: 8px; color: #8f9bb1; background: transparent; cursor: pointer; }
+  .terminal-tab-add:hover { color: #fff; background: #252c39; }
+  .terminal-tab-add .ui-icon { width: 13px; height: 13px; }
+  .terminal-frames { position: relative; min-height: 0; flex: 1; background: #05070a; }
+  .terminal-frame { position: absolute; inset: 0; width: 100%; height: 100%; display: block; border: 0; background: #05070a; }
+  .terminal-frame.hidden { visibility: hidden; pointer-events: none; }
+  .terminal-footer { height: 25px; flex: none; padding: 0 10px; display: flex; align-items: center; justify-content: space-between; gap: 12px; color: #748097; background: #10141d; border-top: 1px solid #252c39; font: 7px/1 'Roboto Mono',ui-monospace,monospace; }
+  .terminal-footer span:first-child { color: #64c987; }
+  @media (max-width: 720px) { .terminal-window { inset: 70px 10px 82px 10px; width: auto; height: auto; min-width: 0; min-height: 0; resize: none; } .terminal-window.maximized { inset: 0 !important; } }
   .cluster-surface-content { min-height: 0; flex: 1; overflow: auto; padding: 30px; background: var(--w-base); }
   .cluster-surface-content > .cluster-page { width: min(1180px, 100%); margin: 0 auto; }
   @media (max-width: 720px) { .cluster-surface-content { padding: 18px; } }
@@ -1538,8 +1575,8 @@
   .tile.running .ic:hover .stopx, .stopx:hover { display: grid; }
 
   /* model downloads — shared visual language on Home and in Model Manager */
-  .model-downloads-home { margin: -8px 0 24px; display: grid; gap: 9px; }
-  .model-downloads-home.hidden { display: none; }
+  .model-downloads-home, .recipe-jobs-home, .app-operations-home { margin: -8px 0 24px; display: grid; gap: 9px; }
+  .model-downloads-home.hidden, .recipe-jobs-home.hidden, .app-operations-home.hidden { display: none; }
   .model-download-home {
     min-width: 0; padding: 13px 15px; display: grid;
     grid-template-columns: 38px minmax(0, 1fr) auto; align-items: center; gap: 12px;
@@ -1558,6 +1595,16 @@
   .model-download-meta { color: var(--muted); font-size: 10.5px; font-variant-numeric: tabular-nums; }
   .model-download-percent { min-width: 42px; color: var(--progress-end); font-size: 12px; font-weight: 800; text-align: right; font-variant-numeric: tabular-nums; }
   .model-download-actions { display: flex; align-items: center; gap: 9px; }
+  .recipe-job-home .model-download-icon .ui-icon { animation: mdl-download-pulse 1.2s ease-in-out infinite; }
+  .recipe-job-home .model-download-meta { white-space: normal; line-height: 1.45; }
+  .app-operation-home .model-download-meta { white-space: normal; line-height: 1.45; }
+  .app-operation-home.install .model-download-icon .ui-icon { animation: mdl-download-pulse 1.2s ease-in-out infinite; }
+  .app-operation-home.remove { border-color: color-mix(in srgb, var(--warn) 28%, var(--hair)); }
+  .app-operation-home.remove .model-download-icon { color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, var(--card)); }
+  .app-operation-detail { color: var(--faint); font: 8px/1.45 'Roboto Mono',ui-monospace,monospace; }
+  .recipe-home-context { color: var(--faint); font: 8px/1.45 'Roboto Mono',ui-monospace,monospace; }
+  .recipe-home-actions { display: flex; align-items: center; gap: 7px; }
+  .recipe-home-actions .btn { min-height: 32px; padding: 0 10px; font-size: 9px; white-space: nowrap; }
   .model-download-cancel {
     width: 30px; height: 30px; padding: 0; display: grid; place-items: center; border-radius: 9px;
     border: 1px solid var(--hair); color: var(--muted); background: color-mix(in srgb, var(--card) 82%, transparent);
@@ -2802,6 +2849,8 @@
   .recipe-progress .track { height: 6px; margin-top: 11px; }
   .recipe-progress-meta { margin-top: 8px; display: flex; justify-content: space-between; gap: 12px; color: var(--faint); font: 8px/1.4 'Roboto Mono',ui-monospace,monospace; }
   .recipe-progress-meta span:last-child { text-align: right; }
+  .recipe-progress-route { margin-top: 9px; padding: 9px 11px; display: flex; align-items: flex-start; gap: 8px; border: 1px solid var(--hair); border-radius: 9px; color: var(--muted); background: color-mix(in srgb,var(--control) 68%,transparent); font-size: 9px; font-weight: 620; line-height: 1.45; }
+  .recipe-progress-route .ui-icon { width: 14px; height: 14px; flex: none; margin-top: 1px; color: var(--blue); }
   .recipe-progress-stages { margin-top: 12px; display: grid; grid-template-columns: repeat(8,minmax(0,1fr)); gap: 4px; }
   .recipe-progress-stage { min-width: 0; display: grid; grid-template-columns: 8px minmax(0,1fr); align-items: center; gap: 4px; color: var(--faint); font: 7px/1.2 'Roboto Mono',ui-monospace,monospace; text-transform: uppercase; }
   .recipe-progress-stage::before { content: ''; width: 6px; height: 6px; border: 1px solid var(--line); border-radius: 50%; background: var(--control); }
@@ -3418,6 +3467,7 @@
     <symbol id="ui-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" stroke="none"/></symbol>
     <symbol id="ui-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
     <symbol id="ui-close" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+    <symbol id="ui-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
     <symbol id="ui-expand" viewBox="0 0 24 24"><path d="M15 3h6v6m0-6-7 7M3 21l7-7m-1 7H3v-6"/></symbol>
     <symbol id="ui-collapse" viewBox="0 0 24 24"><path d="m14 10 7-7m-1 7h-6V4M3 21l7-7m-6 0h6v6"/></symbol>
     <symbol id="ui-arrow-up" viewBox="0 0 24 24"><path d="m5 12 7-7 7 7M12 19V5"/></symbol>
@@ -3491,6 +3541,8 @@
     <button class="btn primary eb-action model-load-action hidden" id="eb-load" type="button"><svg class="ui-icon" aria-hidden="true"><use href="#ui-rocket"/></svg><span>Load model</span></button>
   </div>
 
+  <section class="app-operations-home hidden" id="app-operations-home" aria-live="polite"></section>
+  <section class="recipe-jobs-home hidden" id="recipe-jobs-home" aria-live="polite"></section>
   <section class="model-downloads-home hidden" id="model-downloads-home" aria-live="polite"></section>
 
   <section class="home-cluster hidden" id="home-cluster" aria-live="polite"></section>
@@ -3596,6 +3648,22 @@
   </div>
 </section>
 
+<!-- Terminal is a persistent floating workspace. Hiding it never destroys its sessions. -->
+<section class="terminal-window hidden" id="terminal-window" role="dialog" aria-label="CloudlessOS Terminal">
+  <header class="terminal-titlebar" id="terminal-titlebar">
+    <span class="terminal-mark"><svg class="ui-icon" aria-hidden="true"><use href="#ui-terminal"/></svg></span>
+    <span class="terminal-window-title"><b>Terminal</b><span>Authenticated host shell</span></span>
+    <span class="terminal-window-controls">
+      <button class="terminal-window-control" id="terminal-minimize" type="button" title="Hide terminal — sessions keep running" aria-label="Hide terminal"><svg class="ui-icon" aria-hidden="true"><use href="#ui-minus"/></svg></button>
+      <button class="terminal-window-control" id="terminal-maximize" type="button" title="Maximize terminal" aria-label="Maximize terminal"><svg class="ui-icon" aria-hidden="true"><use href="#ui-expand"/></svg></button>
+      <button class="terminal-window-control" id="terminal-hide" type="button" title="Return to CloudlessOS — sessions keep running" aria-label="Return to CloudlessOS"><svg class="ui-icon" aria-hidden="true"><use href="#ui-close"/></svg></button>
+    </span>
+  </header>
+  <nav class="terminal-tabs" id="terminal-tabs" aria-label="Terminal sessions"><button class="terminal-tab-add" id="terminal-tab-add" type="button" title="New terminal tab" aria-label="New terminal tab"><svg class="ui-icon" aria-hidden="true"><use href="#ui-plus"/></svg></button></nav>
+  <div class="terminal-frames" id="terminal-frames"></div>
+  <footer class="terminal-footer"><span>● LOCAL HOST</span><span>Sessions continue while this window is hidden</span></footer>
+</section>
+
 <!-- Spark clustering opens as a first-class CloudlessOS window. -->
 <section class="app-surface hidden" id="cluster-surface" role="dialog" aria-modal="true" aria-labelledby="cluster-surface-title">
   <header class="app-surface-bar">
@@ -3691,6 +3759,8 @@ const uiIcon = (name, cls = 'ui-icon') => `<svg class="${cls}" aria-hidden="true
 const tileBg = id => TILE_BG[id] || 'linear-gradient(135deg,#cfd9e8,#aab8cc)';
 const gb = mb => (mb / 1024).toFixed(1);
 let installing = 0, catalogCache = [], packCache = [], gpuBuilt = 0, gpuDetailsOpen = false, appsEntered = false;
+const appOperations = new Map(), appOperationSeen = new Set(), appOperationNotified = new Set();
+let appOperationSignature = '';
 let lastRunning = {}, engineReady = false, engineUnloaded = false, engineActive = '', engineExecutionMode = 'local', engineOperation = 'idle', engineSwitching = false, engineAborting = false, engineLoadJobId = '', activeEngineName = 'the engine';
 let pinnedIds = [], lpQuery = '', lpView = '';
 let clusterWizard = { step: 1, peers: [], host: '', username: '', password: '', cable: false, preflight: null, busy: false, error: '', adding: false, existingNodes: 0 };
@@ -4124,6 +4194,72 @@ function closeAppSurface() {
   if (appSurfaceReturnFocus && document.contains(appSurfaceReturnFocus)) appSurfaceReturnFocus.focus();
   appSurfaceReturnFocus = null;
 }
+let terminalTabSequence=0,terminalActiveTab='',terminalRestoreRect=null;
+const terminalTabs=new Map();
+function terminalWindowOpen(){return !document.getElementById('terminal-window').classList.contains('hidden');}
+function hideTerminalWindow(){document.getElementById('terminal-window').classList.add('hidden');hideVirtualKeyboard();}
+function selectTerminalTab(id){
+  if(!terminalTabs.has(id))return;terminalActiveTab=id;
+  terminalTabs.forEach((entry,key)=>{entry.tab.classList.toggle('active',key===id);entry.frame.classList.toggle('hidden',key!==id);});
+  terminalTabs.get(id).frame.focus();
+}
+function addTerminalTab(){
+  if(terminalTabs.size>=8){toast('A maximum of eight terminal sessions can be open.');return terminalActiveTab;}
+  const id='terminal-'+(++terminalTabSequence),tabs=document.getElementById('terminal-tabs'),frames=document.getElementById('terminal-frames');
+  const tab=document.createElement('span');tab.className='terminal-tab';tab.innerHTML='<button class="terminal-tab-select" type="button">Shell '+terminalTabSequence+'</button><button class="terminal-tab-close" type="button" title="Close this terminal session" aria-label="Close terminal session">'+uiIcon('close')+'</button>';
+  tabs.insertBefore(tab,document.getElementById('terminal-tab-add'));
+  const frame=document.createElement('iframe');frame.className='terminal-frame';frame.title='Terminal session '+terminalTabSequence;frame.allow='clipboard-read; clipboard-write';frame.src='/terminal/';frames.appendChild(frame);
+  terminalTabs.set(id,{tab,frame});tab.querySelector('.terminal-tab-select').onclick=()=>selectTerminalTab(id);tab.querySelector('.terminal-tab-close').onclick=()=>closeTerminalTab(id);
+  frame.addEventListener('focus',()=>{if(terminalWindowOpen()){virtualPointerObserved=true;showVirtualKeyboard(frame);}});
+  selectTerminalTab(id);return id;
+}
+function closeTerminalTab(id){
+  const entry=terminalTabs.get(id);if(!entry)return;const keys=[...terminalTabs.keys()],index=keys.indexOf(id);entry.frame.src='about:blank';entry.frame.remove();entry.tab.remove();terminalTabs.delete(id);
+  if(terminalActiveTab===id){const next=[...terminalTabs.keys()][Math.max(0,index-1)];terminalActiveTab='';if(next)selectTerminalTab(next);else hideTerminalWindow();}
+}
+function openTerminalWindow(){
+  const win=document.getElementById('terminal-window');if(!terminalTabs.size)addTerminalTab();win.classList.remove('hidden');selectTerminalTab(terminalActiveTab||[...terminalTabs.keys()][0]);
+}
+function toggleTerminalWindow(){if(terminalWindowOpen())hideTerminalWindow();else openTerminalWindow();}
+function terminalWindowScale(win){const rect=win.getBoundingClientRect();return win.offsetWidth>0?rect.width/win.offsetWidth:(parseFloat(getComputedStyle(document.documentElement).zoom)||1);}
+function terminalViewport(){return {width:window.visualViewport?.width||document.documentElement.clientWidth||innerWidth,height:window.visualViewport?.height||document.documentElement.clientHeight||innerHeight};}
+function clampTerminalWindow(){
+  const win=document.getElementById('terminal-window');if(win.classList.contains('maximized')||win.classList.contains('hidden'))return;
+  const rect=win.getBoundingClientRect(),scale=terminalWindowScale(win),viewport=terminalViewport(),margin=8;
+  const left=Math.max(margin,Math.min(Math.max(margin,viewport.width-rect.width-margin),rect.left));
+  const top=Math.max(margin,Math.min(Math.max(margin,viewport.height-rect.height-margin),rect.top));
+  win.style.left=(left/scale)+'px';win.style.top=(top/scale)+'px';win.style.right='auto';win.style.bottom='auto';
+}
+function setTerminalMaximizeButton(maximized){
+  const button=document.getElementById('terminal-maximize'),use=button.querySelector('use');
+  button.title=maximized?'Restore terminal window':'Full-screen terminal';button.setAttribute('aria-label',button.title);
+  use.setAttribute('href',maximized?'#ui-collapse':'#ui-expand');
+}
+function toggleTerminalMaximize(){
+  const win=document.getElementById('terminal-window'),maximized=win.classList.contains('maximized');
+  if(maximized){win.classList.remove('maximized');if(terminalRestoreRect){Object.assign(win.style,terminalRestoreRect);terminalRestoreRect=null;}clampTerminalWindow();}
+  else{terminalRestoreRect={left:win.style.left,top:win.style.top,right:win.style.right,bottom:win.style.bottom,width:win.style.width,height:win.style.height};win.classList.add('maximized');}
+  setTerminalMaximizeButton(!maximized);
+}
+function initTerminalWindow(){
+  const win=document.getElementById('terminal-window'),bar=document.getElementById('terminal-titlebar');let drag=null;
+  document.getElementById('terminal-tab-add').onclick=addTerminalTab;document.getElementById('terminal-minimize').onclick=hideTerminalWindow;document.getElementById('terminal-hide').onclick=hideTerminalWindow;document.getElementById('terminal-maximize').onclick=toggleTerminalMaximize;
+  bar.addEventListener('pointerdown',event=>{
+    if(event.button!==0||event.target.closest('button')||win.classList.contains('maximized'))return;
+    const rect=win.getBoundingClientRect();drag={pointerId:event.pointerId,startX:event.clientX,startY:event.clientY,left:rect.left,top:rect.top,scale:terminalWindowScale(win),width:rect.width,height:rect.height};
+    win.classList.add('dragging');event.preventDefault();
+  });
+  window.addEventListener('pointermove',event=>{
+    if(!drag||event.pointerId!==drag.pointerId)return;
+    const viewport=terminalViewport(),margin=8,maxLeft=Math.max(margin,viewport.width-drag.width-margin),maxTop=Math.max(margin,viewport.height-drag.height-margin);
+    const left=Math.max(margin,Math.min(maxLeft,drag.left+event.clientX-drag.startX)),top=Math.max(margin,Math.min(maxTop,drag.top+event.clientY-drag.startY));
+    win.style.left=(left/drag.scale)+'px';win.style.top=(top/drag.scale)+'px';win.style.right='auto';win.style.bottom='auto';
+  });
+  const finishDrag=event=>{if(!drag||event.pointerId!==drag.pointerId)return;drag=null;win.classList.remove('dragging');};
+  window.addEventListener('pointerup',finishDrag);window.addEventListener('pointercancel',finishDrag);window.addEventListener('blur',()=>{drag=null;win.classList.remove('dragging');});
+  bar.addEventListener('dblclick',event=>{if(!event.target.closest('button'))toggleTerminalMaximize();});
+  window.addEventListener('resize',clampTerminalWindow);window.visualViewport?.addEventListener('resize',clampTerminalWindow);setTerminalMaximizeButton(false);
+}
 let clusterSurfaceReturnFocus = null;
 function clusterSurfaceOpen() { return !document.getElementById('cluster-surface').classList.contains('hidden'); }
 function openSparkClusterSurface() {
@@ -4177,19 +4313,22 @@ async function renderApps() {
   } else {
     pad.innerHTML = pinned.map(app => {
       const isRun = running[app.id] === 'running';
+      const operation = activeOperationForApp(app.id);
       const gated = app.needsEngine && !engineReady; // waiting for the model
-      const cls = 'tile' + (isRun && !gated ? ' running' : '') + (gated ? ' gated' : (app.image ? '' : ' disabled'));
-      const meta = gated ? '<span class="dot wait"></span>Waiting for AI' : (isRun ? '<span class="dot"></span>Running' : (app.image ? '' : 'Coming soon'));
+      const cls = 'tile' + (operation ? ' busy' : '') + (isRun && !gated ? ' running' : '') + (gated ? ' gated' : (app.image ? '' : ' disabled'));
+      const meta = operation ? escapeHtml(operation.message || 'Working in background…') : gated ? '<span class="dot wait"></span>Waiting for AI' : (isRun ? '<span class="dot"></span>Running' : (app.image ? '' : 'Coming soon'));
+      const progress = operation && operation.percent ? Math.max(4, Math.min(100, operation.percent)) : 0;
       return `<div class="${cls}" data-id="${app.id}">
         <div class="ic">${glyph(app.id)}</div><button class="stopx" title="Stop ${escapeAttr(app.name)}" aria-label="Stop ${escapeAttr(app.name)}">${uiIcon('close', 'ui-icon sm')}</button>
         <div class="tile-copy"><div class="nm">${escapeHtml(app.name)}</div><div class="meta">${meta}</div></div>
-        <div class="tbar indet"><i></i></div></div>`;
+        <div class="tbar ${progress ? '' : 'indet'}"><i style="width:${progress}%"></i></div></div>`;
     }).join('');
     if (!appsEntered) { appsEntered = true; pad.classList.add('enter'); setTimeout(() => pad.classList.remove('enter'), 1400); }
     pad.querySelectorAll('.tile').forEach(tile => {
       const app = catalog.find(a => a.id === tile.dataset.id);
       const isRun = running[app.id] === 'running';
-      tile.querySelector('.ic').onclick = () => { if (engineBlocked(app)) return; if (isRun) openApp(app); else if (app.image) startInstall(app, tile); };
+      const operation = activeOperationForApp(app.id);
+      tile.querySelector('.ic').onclick = () => { if (operation || engineBlocked(app)) return; if (isRun) openApp(app); else if (app.image) startInstall(app, tile); };
       const stop = tile.querySelector('.stopx');
       if (stop) stop.onclick = async e => { e.stopPropagation(); try { await api(`/api/apps/${app.id}/stop`, { method: 'POST' }); } catch {} renderApps(); };
     });
@@ -4298,6 +4437,8 @@ function renderAppIntro(el) {
 }
 
 function packStatusBadge(pack) {
+  const operation = activeOperationForPack(pack.id);
+  if (operation) return `<span class="ac-badge">${operation.appId.startsWith('pack-remove:') ? 'removing' : 'installing'}</span>`;
   if (pack.status === 'installed') return '<span class="ac-badge run">installed</span>';
   if (pack.status === 'partial') return '<span class="ac-badge">setup incomplete</span>';
   return '<span class="ac-badge soon">optional</span>';
@@ -4316,6 +4457,7 @@ function renderPackDetail(el, pack) {
   const serviceCount = pack.total || (pack.components || []).length;
   const launchApp = pack.launchApp ? catalogCache.find(item => item.id === pack.launchApp) : null;
   const pinned = !!launchApp && pinnedIds.includes(launchApp.id);
+  const operation = activeOperationForPack(pack.id);
   el.innerHTML = `<div class="ad pack-ad" data-pack="${escapeAttr(pack.id)}">
     <div class="ad-head"><div class="ad-ic">${packGlyph(pack)}</div><div class="ad-id"><div class="ad-nm">${escapeHtml(pack.name)} ${packStatusBadge(pack)}</div><div class="ad-cat">${escapeHtml(pack.category || 'Cloudless capability')}</div></div></div>
     ${pack.tagline ? `<div class="pack-tagline">${escapeHtml(pack.tagline)}</div>` : ''}
@@ -4330,7 +4472,7 @@ function renderPackDetail(el, pack) {
     ${examples ? `<div class="ad-sec">Examples of what you can do</div><ul class="ad-uses">${examples}</ul>` : ''}
     <div class="ad-sec">What Cloudless installs</div><div class="pack-component-list">${components}</div>
   </div>`;
-  const actions = `${installed && pack.launchApp ? '<button class="ac-btn primary" data-pack-action="open">Open</button>' : ''}
+  const actions = operation ? `<button class="ac-btn primary" disabled>${escapeHtml(operation.message || 'Working in background…')}</button>` : `${installed && pack.launchApp ? '<button class="ac-btn primary" data-pack-action="open">Open</button>' : ''}
     ${!installed ? `<button class="ac-btn primary" data-pack-action="install">${partial ? 'Finish setup' : 'Install'}</button>` : ''}
     ${installed && launchApp ? `<button class="ac-btn pin ${pinned ? 'on' : ''}" data-pack-action="pin">${pinned ? '★ Pinned' : '☆ Pin'}</button>` : ''}
     ${installed || partial ? '<button class="ac-btn" data-pack-action="remove">Remove</button>' : ''}`;
@@ -4361,19 +4503,9 @@ async function installPack(id, button) {
   try {
     const started = await api(`/api/packs/${id}/install`, { method: 'POST' });
     if (!started.jobId) throw new Error('No installation job');
-    const stream = new EventSource(`/api/jobs/${started.jobId}/events`);
-    let closed = false;
-    const finish = async ok => { if (closed) return; closed = true; stream.close(); await refreshPacks(); toast(ok ? 'Cloudless capability installed' : 'Installation rolled back safely', !ok); };
-    stream.onmessage = event => {
-      const update = JSON.parse(event.data);
-      if (update.message) button.textContent = update.message;
-      if (update.phase === 'error') finish(false);
-      else if (update.done) finish(update.phase === 'running');
-    };
-    stream.onerror = async () => {
-      try { const status = await api(`/api/jobs/${started.jobId}`); if (status.done) finish(status.phase === 'running'); }
-      catch { finish(false); }
-    };
+    toast('Installation started in the background');
+    await refreshAppOperations();
+    await refreshPacks();
   } catch (error) {
     button.disabled = false; button.textContent = 'Install';
     toast(error.message || 'Could not install this capability', true);
@@ -4385,22 +4517,91 @@ async function uninstallPack(id, button) {
   try {
     const started = await api(`/api/packs/${id}/uninstall`, { method: 'POST', headers: { 'X-Cloudless-Action': 'pack-uninstall' } });
     if (!started.jobId) throw new Error('No removal job');
-    const stream = new EventSource(`/api/jobs/${started.jobId}/events`);
-    let closed = false;
-    const finish = async ok => { if (closed) return; closed = true; stream.close(); await refreshPacks(); toast(ok ? 'Cloudless capability removed' : 'Could not remove every service', !ok); };
-    stream.onmessage = event => { const update = JSON.parse(event.data); if (update.message) button.textContent = update.message; if (update.phase === 'error') finish(false); else if (update.done) finish(update.phase === 'running'); };
-    stream.onerror = async () => { try { const status = await api(`/api/jobs/${started.jobId}`); if (status.done) finish(status.phase === 'running'); } catch { finish(false); } };
+    toast('Removal started in the background');
+    await refreshAppOperations();
+    await refreshPacks();
   } catch (error) { button.disabled = false; button.textContent = 'Remove'; toast(error.message || 'Could not remove this capability', true); }
 }
 
+function appOperationInfo(job) {
+  const identity = String(job.appId || '');
+  let kind = 'install', target = '', name = job.currentItem || 'Application';
+  if (identity.startsWith('app:')) {
+    const parts = identity.split(':'); target = parts[1] || ''; kind = parts[2] || 'install';
+    const app = catalogCache.find(item => item.id === target); if (app) name = app.name;
+  } else if (identity.startsWith('pack-remove:')) {
+    target = identity.slice('pack-remove:'.length); kind = 'remove';
+    const pack = packCache.find(item => item.id === target); if (pack) name = pack.name;
+  } else if (identity.startsWith('pack:')) {
+    target = identity.slice('pack:'.length); kind = 'install';
+    const pack = packCache.find(item => item.id === target); if (pack) name = pack.name;
+  }
+  return { identity, kind, target, name };
+}
+function operationDuration(seconds) {
+  seconds = Math.max(0, Number(seconds) || 0);
+  if (seconds < 60) return `${Math.round(seconds)}s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${Math.round(seconds % 60)}s`;
+  return `${Math.floor(seconds / 3600)}h ${Math.round((seconds % 3600) / 60)}m`;
+}
+function activeOperationForApp(id) {
+  return [...appOperations.values()].find(job => !job.done && String(job.appId || '').startsWith(`app:${id}:`));
+}
+function activeOperationForPack(id) {
+  return [...appOperations.values()].find(job => !job.done && (job.appId === `pack:${id}` || job.appId === `pack-remove:${id}`));
+}
+function renderAppOperations() {
+  const host = document.getElementById('app-operations-home'); if (!host) return;
+  const active = [...appOperations.values()].filter(job => !job.done);
+  const signature = JSON.stringify([catalogCache.length, packCache.length, active.map(job => [job.id, job.phase, job.message, job.percent, job.layersDone, job.layersTotal, job.bytesDone, job.bytesTotal, job.itemsDone, job.itemsTotal, job.elapsedSeconds, job.etaSeconds])]);
+  if (signature === appOperationSignature) return;
+  appOperationSignature = signature;
+  host.classList.toggle('hidden', active.length === 0);
+  host.innerHTML = active.map(job => {
+    const info = appOperationInfo(job), pct = Math.max(0, Math.min(99, Number(job.percent) || 0));
+    const determinate = pct > 0;
+    const verb = info.kind === 'remove' || info.kind === 'uninstall' ? 'Removing' : info.kind === 'reset' ? 'Resetting' : 'Installing';
+    const icon = info.kind === 'remove' || info.kind === 'uninstall' ? 'trash' : info.kind === 'reset' ? 'restart' : 'download';
+    const itemDetail = job.bytesTotal ? `${modelDownloadSize(job.bytesDone)} of ${modelDownloadSize(job.bytesTotal)}` : job.itemsTotal ? `${job.itemsDone || 0} of ${job.itemsTotal} components` : 'Background operation';
+    const timing = `${operationDuration(job.elapsedSeconds)} elapsed${job.etaSeconds > 0 ? ` · about ${operationDuration(job.etaSeconds)} remaining` : ''}`;
+    return `<article class="model-download-home app-operation-home ${info.kind === 'remove' || info.kind === 'uninstall' ? 'remove' : 'install'}">
+      <span class="model-download-icon">${uiIcon(icon)}</span>
+      <div class="model-download-copy"><span class="model-download-title">${verb} ${escapeHtml(info.name)}</span><span class="model-download-meta">${escapeHtml(job.message || 'Queued in the background')}</span><span class="model-download-track ${determinate ? '' : 'indeterminate'}" style="--progress:${pct}%"><i></i></span><span class="app-operation-detail">${escapeHtml(itemDetail)} · ${escapeHtml(timing)} · You can keep using CloudlessOS.</span></div>
+      <span class="recipe-home-actions"><span class="model-download-percent">${determinate ? pct + '%' : 'Queued'}</span></span>
+    </article>`;
+  }).join('');
+}
+function applyAppOperations(jobs) {
+  const relevant = (jobs || []).filter(job => String(job.appId || '').startsWith('app:') || String(job.appId || '').startsWith('pack:') || String(job.appId || '').startsWith('pack-remove:'));
+  appOperations.clear(); relevant.forEach(job => appOperations.set(job.id, job));
+  const active = relevant.filter(job => !job.done);
+  active.forEach(job => appOperationSeen.add(job.id));
+  relevant.filter(job => job.done && appOperationSeen.has(job.id) && !appOperationNotified.has(job.id)).forEach(job => {
+    appOperationNotified.add(job.id);
+    const info = appOperationInfo(job), ok = job.phase === 'running';
+    toast(`${info.name} ${ok ? (info.kind === 'remove' || info.kind === 'uninstall' ? 'removed' : 'ready') : (job.error || 'operation failed')}`, !ok);
+    renderApps().then(refreshLauncher);
+    refreshPacks();
+  });
+  installing = active.length;
+  renderAppOperations();
+}
+async function refreshAppOperations() {
+  const jobs = await api('/api/jobs').catch(() => null); if (jobs) applyAppOperations(jobs);
+}
+
 function statusBadge(a) {
+  const operation = activeOperationForApp(a.id);
+  if (operation) return `<span class="ac-badge">${operation.appId.endsWith(':uninstall') ? 'removing' : operation.appId.endsWith(':reset') ? 'resetting' : 'installing'}</span>`;
   return lastRunning[a.id] === 'running' ? '<span class="ac-badge run">running</span>'
     : (a.image ? '' : '<span class="ac-badge soon">soon</span>');
 }
 function appActions(a) {
   const isRun = lastRunning[a.id] === 'running';
+  const operation = activeOperationForApp(a.id);
   const pinned = pinnedIds.includes(a.id);
   let acts = '';
+  if (operation) return `<button class="ac-btn primary" disabled>${escapeHtml(operation.message || 'Working in background…')}</button>`;
   if (isRun) acts += `<button class="ac-btn primary" data-do="open">Open</button><button class="ac-btn" data-do="stop">Stop</button>`;
   else if (a.image) acts += `<button class="ac-btn primary" data-do="install">Install</button>`;
   else acts += `<button class="ac-btn" disabled>Coming soon</button>`;
@@ -4458,48 +4659,20 @@ function installApp(id, btn) {
   if (engineBlocked(app)) return;
   if (lastRunning[id] === 'running') { openApp(app); return; }
   if (!app.image) { toast(app.name + ' is not installable yet'); return; }
-  if (btn) { btn.classList.add('busy'); btn.textContent = 'Installing…'; } else toast('Installing ' + app.name + '…');
-  installing++;
+  if (btn) { btn.classList.add('busy'); btn.textContent = 'Starting…'; }
   api(`/api/apps/${id}/start`, { method: 'POST' }).then(res => {
-    if (!res.jobId) { installing--; renderApps().then(refreshLauncher); return; }
-    const es = new EventSource(`/api/jobs/${res.jobId}/events`); let ended = false;
-    const fin = ok => { if (ended) return; ended = true; es.close(); installing--; toast(app.name + (ok ? ' installed' : ' failed'), !ok); renderApps().then(refreshLauncher); };
-    es.onmessage = e => { const u = JSON.parse(e.data);
-      if (btn) { if (u.phase === 'pulling') btn.textContent = u.layersTotal > 0 ? `Downloading ${u.layersDone}/${u.layersTotal}` : 'Preparing…';
-        else if (u.phase === 'building') btn.textContent = 'Building…'; else if (u.phase === 'starting') btn.textContent = 'Starting…'; }
-      if (u.phase === 'error') return fin(false);
-      if (u.done) fin(u.phase === 'running');
-    };
-    es.onerror = () => fin(true);
-  }).catch(() => { installing--; if (btn) { btn.classList.remove('busy'); btn.textContent = 'Install'; } toast('Install failed', true); });
+    if (!res.jobId) { renderApps().then(refreshLauncher); return; }
+    toast(app.name + ' installation is running in the background');
+    refreshAppOperations().then(() => renderApps().then(refreshLauncher));
+  }).catch(() => { if (btn) { btn.classList.remove('busy'); btn.textContent = 'Install'; } toast('Install failed', true); });
 }
 function startInstall(app, tile) {
   if (engineBlocked(app)) return;
   tile.classList.add('busy'); tile.querySelector('.meta').textContent = 'Preparing…';
   const bar = tile.querySelector('.tbar'); if (bar) { bar.classList.add('indet'); bar.querySelector('i').style.width = ''; }
   api(`/api/apps/${app.id}/start`, { method: 'POST' })
-    .then(res => { if (res.jobId) trackJob(res.jobId, tile); else renderApps(); })
+    .then(res => { if (res.jobId) { toast(app.name + ' installation is running in the background'); refreshAppOperations(); } else renderApps(); })
     .catch(() => renderApps());
-}
-function trackJob(jobId, tile) {
-  installing++;
-  const meta = tile.querySelector('.meta');
-  const bar = tile.querySelector('.tbar'), fill = bar && bar.querySelector('i');
-  const det = pct => { if (!bar) return; bar.classList.remove('indet'); fill.style.width = Math.max(4, Math.min(100, pct)) + '%'; };
-  const indet = () => { if (!bar) return; bar.classList.add('indet'); fill.style.width = ''; };
-  const es = new EventSource(`/api/jobs/${jobId}/events`); let ended = false;
-  const done = r => { if (ended) return; ended = true; es.close(); installing--; if (r) renderApps(); else tile.classList.remove('busy'); };
-  es.onmessage = e => { const u = JSON.parse(e.data);
-    if (u.phase === 'pulling') {
-      if (u.layersTotal > 0) { meta.textContent = `Downloading ${u.layersDone}/${u.layersTotal}`; det(u.layersDone / u.layersTotal * 100); }
-      else { meta.textContent = 'Preparing…'; indet(); }
-    }
-    else if (u.phase === 'building') { meta.textContent = 'Building…'; indet(); }
-    else if (u.phase === 'starting') { meta.textContent = 'Starting…'; det(96); }
-    else if (u.phase === 'error') { meta.textContent = 'Failed'; toast('Install failed: ' + (u.error || 'error'), true); return done(false); }
-    if (u.done) { if (u.phase === 'running') det(100); done(u.phase === 'running'); }
-  };
-  es.onerror = () => done(true);
 }
 function installById(id) {
   const app = catalogCache.find(a => a.id === id);
@@ -5606,10 +5779,12 @@ function openUninstallDialog(id, app) {
     close.disabled = true; cancel.disabled = true; submit.disabled = true;
     submit.innerHTML = '<span class="key-dialog-spinner" aria-hidden="true"></span><span>Uninstalling…</span>';
     try {
-      await api(`/api/apps/${id}/uninstall`, { method: 'POST' });
+      const started = await api(`/api/apps/${id}/uninstall`, { method: 'POST' });
+      if (!started.jobId) throw new Error('No removal job');
       keyDialogBusy = false;
       closeKeyDialog();
-      toast(name + ' uninstalled');
+      toast(name + ' removal is running in the background');
+      await refreshAppOperations();
       renderApps();
       setPage = 'general';
       renderSettings();
@@ -5639,6 +5814,15 @@ async function renderApiPage(c) {
       <div class="inf-page-desc">Connect clients either to raw model inference or to the full Hermes agent. ${distributed ? 'Model requests are automatically served by your Spark cluster.' : 'Requests stay on this machine'} unless you enable network access.</div></div>
       <span class="inf-state-pill ready">${distributed ? 'Cluster' : 'Local'}</span>
     </div>
+    <section class="api-section">
+      <div class="api-section-head"><div><div class="api-section-title">Permanent API identity</div><div class="api-section-desc">Every recipe and inference engine is presented to clients through this same port and model name.</div></div></div>
+      <div class="api-access-grid">
+        <label class="fld"><span class="fld-label">API port</span><input class="fld-input" id="api-contract-port" type="number" min="1024" max="65535" step="1" value="${escapeAttr(String(g.port))}"><span class="fld-help">Reserved CloudlessOS service ports cannot be selected.</span></label>
+        <label class="fld"><span class="fld-label">Model name</span><input class="fld-input" id="api-contract-alias" value="${escapeAttr(g.servedName)}" maxlength="64" spellcheck="false"><span class="fld-help">Clients always use this name, even when the underlying model or engine changes.</span></label>
+      </div>
+      <div class="machine-driver-note">${uiIcon('check')}<span>Guardrail active: recipes and custom engines cannot override this client-facing contract. Their private ports and native model identifiers remain isolated behind the Cloudless gateway.</span></div>
+      <div class="api-section-head" style="margin-top:14px"><div></div><button class="btn primary" id="api-contract-save" type="button">${uiIcon('check')}<span>Save API identity</span></button></div>
+    </section>
     <section class="api-section">
       <div class="api-section-head"><div><div class="api-section-title">Connect a client</div><div class="api-section-desc">Both endpoints use the OpenAI format but have different capabilities and key permissions.</div></div></div>
       <div class="api-service-grid">
@@ -5678,6 +5862,20 @@ async function renderApiPage(c) {
   if (g.tunnel && g.tunnel.enabled && g.tunnel.url) apiTunRender(tout, g.tunnel);
 
   document.getElementById('key-gen').onclick = openKeyDialog;
+  document.getElementById('api-contract-save').onclick = async e => {
+    const button = e.currentTarget;
+    const port = Number(document.getElementById('api-contract-port').value);
+    const modelAlias = document.getElementById('api-contract-alias').value.trim();
+    button.disabled = true; button.innerHTML = `<span class="key-dialog-spinner" aria-hidden="true"></span><span>Applying…</span>`;
+    try {
+      await api('/api/settings/inference-contract', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ port, modelAlias }) });
+      toast('API identity saved');
+      await renderApiPage(c);
+    } catch (error) {
+      toast(error?.message || 'Could not save the API identity', true);
+      button.disabled = false; button.innerHTML = `${uiIcon('check')}<span>Save API identity</span>`;
+    }
+  };
   const lan = document.getElementById('gw-lan');
   lan.onchange = async () => {
     const enable = lan.checked; lan.disabled = true;
@@ -5852,7 +6050,7 @@ async function renderEnginePage(c) {
   c.querySelectorAll('[data-abort-engine]').forEach(b => b.onclick = abortModelLoad);
   c.querySelectorAll('[data-remove-custom]').forEach(b => b.onclick = () => removeCustomEngine(b.dataset.removeCustom));
   const customToggle = document.getElementById('custom-engine-toggle'); if (customToggle) customToggle.onclick = () => { customEngineFormOpen = !customEngineFormOpen; renderEnginePage(c); };
-  const customTerminal = document.getElementById('custom-engine-terminal'); if (customTerminal) customTerminal.onclick = () => { closeSettings(); openAppSurface('Terminal', '/terminal/', '>_'); };
+  const customTerminal = document.getElementById('custom-engine-terminal'); if (customTerminal) customTerminal.onclick = () => { closeSettings(); openTerminalWindow(); };
   const customCancel = document.getElementById('custom-engine-cancel'); if (customCancel) customCancel.onclick = () => { customEngineFormOpen = false; renderEnginePage(c); };
   const customSave = document.getElementById('custom-engine-save'); if (customSave) customSave.onclick = registerCustomEngine;
 }
@@ -6202,7 +6400,7 @@ function launchModel(m) {
   const memoryType = (mmLM && mmLM.memoryType) || 'dedicated';
   const cluster = (mmLM && mmLM.cluster) || {};
   const clusterNodes = sparkCount(cluster);
-  const clusterEligible = Boolean(!m.gated && cluster.distributedReady && m.clusterFit && m.clusterFit !== 'over' && m.clusterFit !== 'unknown');
+  const clusterEligible = Boolean(!m.singleNodeOnly && !m.gated && cluster.distributedReady && m.clusterFit && m.clusterFit !== 'over' && m.clusterFit !== 'unknown');
   let selectedMode = clusterEligible && m.fit === 'over' ? 'cluster' : 'local';
   keyDialogBusy = false;
   keyDialogReturnFocus = document.activeElement;
@@ -6417,8 +6615,8 @@ function recipeJob(data, id) {
   return (data.jobs || []).find(job => !job.done && (job.appId === `recipe:${id}` || job.appId === `recipe:${id}:check` || job.appId === `recipe:${id}:stop`));
 }
 const RECIPE_RUN_STAGES = [
-  ['source','Recipe'], ['building','Runtime'], ['syncing-image','Runtime copy'], ['downloading','Model'],
-  ['syncing-model','Model copy'], ['stopping','Switch'], ['starting','Start'], ['connecting','Connect'],
+  ['source','Recipe'], ['building','Runtime'], ['syncing-image','Runtime to peers'], ['downloading','Internet download'],
+  ['syncing-model','Model to peers'], ['stopping','Switch'], ['starting','Start'], ['connecting','Connect'],
 ];
 function recipeRunStageIndex(phase) {
   const aliases = {'syncing-source':'syncing-image',health:'starting',ready:'connecting',running:'connecting',pending:'source'};
@@ -6426,7 +6624,7 @@ function recipeRunStageIndex(phase) {
   return Math.max(0,RECIPE_RUN_STAGES.findIndex(stage => stage[0] === normalized));
 }
 function recipeRunPhaseLabel(phase) {
-  return ({pending:'Preparing recipe',source:'Verifying recipe',building:'Preparing custom runtime','syncing-source':'Preparing the other Spark','syncing-image':'Copying runtime to other Sparks',downloading:'Downloading model weights','syncing-model':'Copying model to other Sparks',stopping:'Switching inference engines',starting:'Starting inference',health:'Checking engine readiness',connecting:'Connecting Cloudless',ready:'Recipe ready',running:'Recipe ready',canceled:'Launch canceled',error:'Launch failed'})[phase] || 'Preparing recipe';
+  return ({pending:'Preparing recipe',source:'Verifying recipe',building:'Preparing custom runtime','syncing-source':'Copying recipe setup','syncing-image':'Direct-link runtime transfer',downloading:'Internet download to the primary Spark','syncing-model':'Direct-link model transfer',stopping:'Switching inference engines',starting:'Starting inference',health:'Checking engine readiness',connecting:'Connecting Cloudless',ready:'Recipe ready',running:'Recipe ready',canceled:'Launch canceled',error:'Launch failed'})[phase] || 'Preparing recipe';
 }
 function recipeProgressParts(job) {
   const byteTotal = Number(job && job.bytesTotal) || 0;
@@ -6434,18 +6632,54 @@ function recipeProgressParts(job) {
   const done = byteTotal ? Number(job && job.bytesDone) || 0 : Number(job && job.layersDone) || 0;
   return {byteTotal,total,done,pct:total ? Math.max(2,Math.min(100,Math.round(done/total*100))) : 8};
 }
+function recipeProgressMessage(job) {
+  const raw=String(job && job.message || 'Working…');
+  if(job && job.phase==='downloading' && /trying to resume download/i.test(raw)) return 'Hugging Face timed out. Cloudless is resuming automatically; files already downloaded are preserved.';
+  return raw;
+}
 function recipeProgressStages(phase) {
   const active = recipeRunStageIndex(phase);
   return RECIPE_RUN_STAGES.map((stage,index) => '<span class="recipe-progress-stage ' + (index < active ? 'done' : index === active ? 'on' : '') + '"><span>' + escapeHtml(stage[1]) + '</span></span>').join('');
 }
 function recipeProgressMeta(job, parts) {
-  const amount = parts.byteTotal ? modelDownloadSize(job.bytesDone) + ' of ' + modelDownloadSize(job.bytesTotal) : 'Artifacts stay cached for future launches';
+  const amount = parts.byteTotal ? modelDownloadSize(job.bytesDone) + ' of ' + modelDownloadSize(job.bytesTotal) : (job.phase === 'downloading' ? 'Waiting for download-size data' : 'Artifacts stay cached for future launches');
   return '<span>Stage ' + (recipeRunStageIndex(job.phase)+1) + ' of ' + RECIPE_RUN_STAGES.length + '</span><span>' + escapeHtml(amount) + '</span>';
+}
+function recipeProgressRoute(phase) {
+  if (phase === 'downloading') return 'Internet → primary Spark. Speed is limited by the internet connection and Hugging Face, not by the cable between Sparks. The high-speed Spark cable is idle until the model is ready.';
+  if (phase === 'syncing-source') return 'Primary Spark → peer Spark. Copying only the small recipe setup over the direct Spark connection.';
+  if (phase === 'syncing-image') return 'Primary Spark → peer Spark. The completed inference runtime is now using the direct high-speed Spark connection.';
+  if (phase === 'syncing-model') return 'Primary Spark → peer Spark. The completed model cache is now using the direct high-speed Spark connection.';
+  return '';
+}
+function recipeProgressRouteHTML(phase) {
+  const route=recipeProgressRoute(phase);return route ? '<div class="recipe-progress-route">'+uiIcon('network')+'<span>'+escapeHtml(route)+'</span></div>' : '';
 }
 function recipeProgressHTML(job) {
   if (!job) return '';
   const parts = recipeProgressParts(job);
-  return `<div class="recipe-progress" aria-live="polite"><div class="recipe-progress-head"><div class="recipe-progress-copy"><div class="recipe-progress-kicker">${escapeHtml(recipeRunPhaseLabel(job.phase))}</div><div class="recipe-progress-row">${escapeHtml(job.message || 'Working...')}</div></div><b class="recipe-progress-percent">${parts.total ? parts.pct + '%' : 'Active'}</b></div><div class="track" role="progressbar" aria-label="Current recipe operation" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${parts.pct}"><i style="width:${parts.pct}%"></i></div><div class="recipe-progress-meta">${recipeProgressMeta(job,parts)}</div><div class="recipe-progress-stages">${recipeProgressStages(job.phase)}</div></div>`;
+  return `<div class="recipe-progress" aria-live="polite"><div class="recipe-progress-head"><div class="recipe-progress-copy"><div class="recipe-progress-kicker">${escapeHtml(recipeRunPhaseLabel(job.phase))}</div><div class="recipe-progress-row">${escapeHtml(recipeProgressMessage(job))}</div></div><b class="recipe-progress-percent">${parts.total ? parts.pct + '%' : 'Active'}</b></div><div class="track" role="progressbar" aria-label="Overall recipe launch progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${parts.pct}"><i style="width:${parts.pct}%"></i></div><div class="recipe-progress-meta">${recipeProgressMeta(job,parts)}</div>${recipeProgressRouteHTML(job.phase)}<div class="recipe-progress-stages">${recipeProgressStages(job.phase)}</div></div>`;
+}
+let recipeHomeSignature='';
+function recipeRunID(job){const match=/^recipe:([^:]+)$/.exec(String(job&&job.appId||''));return match?match[1]:'';}
+function openRecipeLibrary(){mmTab='recipes';mmDetail=null;mmHF=false;document.getElementById('models').classList.remove('hidden');renderModelManager();}
+function renderHomeRecipeJobs(data){
+  const host=document.getElementById('recipe-jobs-home');if(!host)return;
+  const jobs=(data&&data.jobs||[]).filter(job=>!job.done&&recipeRunID(job));
+  const signature=JSON.stringify(jobs);if(signature===recipeHomeSignature)return;recipeHomeSignature=signature;
+  host.classList.toggle('hidden',jobs.length===0);
+  host.innerHTML=jobs.map(job=>{const id=recipeRunID(job),recipe=(data.recipes||[]).find(item=>item.id===id)||{},parts=recipeProgressParts(job),route=recipeProgressRoute(job.phase);return `<article class="model-download-home recipe-job-home" data-home-recipe="${escapeAttr(id)}"><span class="model-download-icon">${uiIcon(job.phase==='downloading'?'download':'recipes')}</span><div class="model-download-copy"><span class="model-download-title">${escapeHtml(recipe.name||'Preparing inference recipe')}</span><span class="model-download-meta">${escapeHtml(recipeProgressMessage(job))}</span><span class="model-download-track ${parts.total?'':'indeterminate'}" style="--progress:${parts.pct}%"><i></i></span><span class="recipe-home-context">${escapeHtml(route||'This operation runs in the background. You can keep using CloudlessOS.')}</span></div><span class="recipe-home-actions"><span class="model-download-percent">${parts.total?parts.pct+'%':'Active'}</span><button class="btn" type="button" data-view-recipe>View details</button><button class="model-download-cancel" type="button" data-abort-home-recipe="${escapeAttr(id)}" title="Abort recipe launch" aria-label="Abort recipe launch">${uiIcon('stop')}</button></span></article>`}).join('');
+  host.querySelectorAll('[data-view-recipe]').forEach(button=>button.onclick=openRecipeLibrary);
+  host.querySelectorAll('[data-abort-home-recipe]').forEach(button=>button.onclick=async()=>{button.disabled=true;button.innerHTML='<span class="key-dialog-spinner" aria-hidden="true"></span>';const result=await api('/api/recipes/'+encodeURIComponent(button.dataset.abortHomeRecipe)+'/abort',{method:'POST'}).catch(()=>({error:'Could not abort this recipe.'}));if(result.error){toast(result.error,true);button.disabled=false;button.innerHTML=uiIcon('stop');}else toast('Stopping recipe launch');});
+}
+async function refreshRecipeJobs(){
+  const data=await api('/api/recipes').catch(()=>null);if(!data)return;
+  const previous=mmRecipes,previousActive=JSON.stringify((previous&&previous.jobs||[]).filter(job=>!job.done&&recipeRunID(job)).map(job=>job.id));
+  mmRecipes=data;renderHomeRecipeJobs(data);
+  if(modelsOpen()&&mmTab==='recipes'&&!mmDetail){
+    const currentActive=JSON.stringify((data.jobs||[]).filter(job=>!job.done&&recipeRunID(job)).map(job=>job.id));
+    if(previousActive!==currentActive)paintLocalRecipes(document.getElementById('mm-tab-body'),data);else(data.jobs||[]).filter(job=>!job.done).forEach(job=>{const id=recipeRunID(job);if(id)updateRecipeRunCard(id,job.id,job);});
+  }
 }
 function markRecipeAbortPending(button) {
   if (!button) return;
@@ -6483,12 +6717,13 @@ function updateRecipeRunCard(recipeId, jobId, update = {}) {
   if (!progress) return;
   const parts = recipeProgressParts(update);
   const message = progress.querySelector('.recipe-progress-row'), percent = progress.querySelector('.recipe-progress-percent'), bar = progress.querySelector('.track i');
-  if (message) message.textContent = update.message || 'Starting recipe…';
+  if (message) message.textContent = recipeProgressMessage(update);
   if (percent) percent.textContent = parts.total ? parts.pct + '%' : 'Active';
   if (bar) bar.style.width = parts.pct + '%';
   const track=progress.querySelector('.track');if(track)track.setAttribute('aria-valuenow',String(parts.pct));
   const kicker=progress.querySelector('.recipe-progress-kicker');if(kicker)kicker.textContent=recipeRunPhaseLabel(update.phase);
   const meta=progress.querySelector('.recipe-progress-meta');if(meta)meta.innerHTML=recipeProgressMeta(update,parts);
+  const route=progress.querySelector('.recipe-progress-route'),routeHTML=recipeProgressRouteHTML(update.phase);if(route){if(routeHTML){route.outerHTML=routeHTML}else{route.remove()}}else if(routeHTML){const metaNode=progress.querySelector('.recipe-progress-meta');if(metaNode)metaNode.insertAdjacentHTML('afterend',routeHTML)}
   const stages=progress.querySelector('.recipe-progress-stages');if(stages)stages.innerHTML=recipeProgressStages(update.phase);
 }
 function recipeReady(recipe, data) {
@@ -6626,7 +6861,7 @@ function openRecipeLaunchDialog(recipe, plan, trigger) {
   dialog.classList.add('recipe-launch-dialog');
   content.innerHTML='<div class="key-dialog-head"><span class="key-dialog-icon">'+uiIcon(custom?'warning':'rocket')+'</span><div class="key-dialog-heading"><div class="key-dialog-title" id="key-dialog-title">Review recipe launch</div><div class="key-dialog-sub">Cloudless will prepare the exact runtime and model required by '+escapeHtml(recipe.name||'this recipe')+'.</div></div><button class="key-dialog-close" id="recipe-launch-close" type="button" aria-label="Close">'+uiIcon('close')+'</button></div><div class="key-dialog-body">'+
     (custom?'<div class="recipe-launch-warning">'+uiIcon('warning')+'<div><b>Specialized inference runtime required</b>'+escapeHtml(plan.runtimeReason||'This recipe cannot safely use the standard Cloudless inference engine.')+'</div></div>':'')+
-    '<div class="recipe-launch-grid"><div class="recipe-launch-fact"><span>Inference runtime</span><b>'+escapeHtml(runtimeStatus)+'</b><small>'+escapeHtml(runtimeDetail)+'</small></div><div class="recipe-launch-fact"><span>Model weights</span><b>'+escapeHtml(modelStatus)+'</b><small>'+escapeHtml(plan.modelId||recipe.model&&recipe.model.id||'Configured model')+'</small></div><div class="recipe-launch-fact"><span>Cluster work</span><b>'+nodes+' Spark'+(nodes===1?'':'s')+'</b><small>'+(nodes>1?'Prepared once here, then copied over the direct Spark link':'Prepared on this machine')+'</small></div><div class="recipe-launch-fact"><span>Cloudless connection</span><b>Automatic after health check</b><small>Engine port '+Number(recipe.engine&&recipe.engine.containerPort||0)+' is routed through the Cloudless API</small></div></div>'+
+    '<div class="recipe-launch-grid"><div class="recipe-launch-fact"><span>Inference runtime</span><b>'+escapeHtml(runtimeStatus)+'</b><small>'+escapeHtml(runtimeDetail)+'</small></div><div class="recipe-launch-fact"><span>Model weights</span><b>'+escapeHtml(modelStatus)+'</b><small>'+escapeHtml(plan.modelId||recipe.model&&recipe.model.id||'Configured model')+'</small></div><div class="recipe-launch-fact"><span>Cluster work</span><b>'+nodes+' Spark'+(nodes===1?'':'s')+'</b><small>'+(nodes>1?'Prepared once here, then copied over the direct Spark link':'Prepared on this machine')+'</small></div><div class="recipe-launch-fact"><span>Cloudless connection</span><b>'+escapeHtml((mmRecipes&&mmRecipes.contract&&mmRecipes.contract.modelAlias)||'cloudless')+' · port '+escapeHtml(String((mmRecipes&&mmRecipes.contract&&mmRecipes.contract.port)||8766))+'</b><small>Every recipe is published through the API identity configured in Settings.</small></div></div>'+
     '<div class="recipe-launch-flow"><b>What will happen</b><ol><li>Verify the pinned recipe source and configuration.</li>'+(custom&&!runtimeReady?'<li>Download and prepare the specialized runtime once on this Spark.</li>':'<li>Reuse the exact cached inference runtime.</li>')+(nodes>1?'<li>Copy missing runtime files to the other Spark over the private link.</li>':'')+(modelReady?'<li>Reuse the cached model weights.</li>':'<li>Download the model weights once and show byte progress and an ETA.</li>')+(nodes>1?'<li>Copy missing model weights to the other Spark.</li>':'')+'<li>Start inference, verify readiness, and connect it to Cloudless.</li></ol></div><p class="recipe-launch-cache-note">Completed runtime images and model weights remain cached. Normal future launches should not repeat these downloads.</p><div class="key-dialog-actions"><button class="btn" id="recipe-launch-cancel" type="button">Cancel</button><button class="btn primary" id="recipe-launch-confirm" type="button">'+uiIcon('rocket')+'<span>'+escapeHtml(confirmLabel)+'</span></button></div></div>';
   layer.classList.remove('hidden');
   return new Promise(resolve=>{let settled=false;const finish=accepted=>{if(settled)return;settled=true;keyDialogOnClose=null;closeKeyDialog();resolve(accepted);};keyDialogOnClose=()=>{if(settled)return;settled=true;resolve(false);};document.getElementById('recipe-launch-close').onclick=closeKeyDialog;document.getElementById('recipe-launch-cancel').onclick=closeKeyDialog;document.getElementById('recipe-launch-confirm').onclick=()=>finish(true);document.getElementById('recipe-launch-cancel').focus();});
@@ -6691,12 +6926,12 @@ function recipeBuilderContent() {
   if (step === 2) return recipePage('Inference engine', 'Choose the server Cloudless will expose through its normal API gateway.',
     recipeSection('Engine', 'Built-in choices provide clear metadata; Custom accepts any engine launched by your runtime commands.', '<div class="recipe-builder-fields cols-3">' +
       recipeField('rb-engine-type','Inference engine',d.engine.type,{placeholder:'vllm, sglang, llama.cpp, tgi…'}) +
-      recipeField('rb-engine-port','Container/listen port',d.engine.containerPort,{type:'number',min:1,max:65535}) +
+      recipeField('rb-engine-port','Private runtime port',d.engine.containerPort,{type:'number',min:1,max:65535,help:'Used only behind the gateway. Clients always use the API port configured in Settings.'}) +
       recipeField('rb-engine-api','API base path',d.engine.apiPath,{placeholder:'/v1'}) +
       recipeField('rb-engine-proxy','API proxy target',d.engine.proxyHost,{placeholder:'host.docker.internal',help:'Host the Cloudless API gateway connects to.'}) +
       recipeField('rb-engine-restart','Restart policy',d.engine.restartPolicy,{placeholder:'unless-stopped',help:'For example: no, always, unless-stopped, or on-failure:5.'}) +
       recipeField('rb-engine-image','Container image',d.engine.image,{full:true,placeholder:'repository/image:tag'}) +
-      recipeField('rb-engine-served','Served model name',d.engine.servedModelName,{full:true,placeholder:'my-model'}) +
+      recipeField('rb-engine-served','Private runtime alias','cloudless',{full:true,readonly:true,help:'Reserved for internal compatibility. Clients use the editable model name configured in Settings → API access.'}) +
       recipeField('rb-engine-args','Additional engine arguments',recipeLines(d.engine.arguments),{type:'textarea',full:true,tall:true,placeholder:'--enable-prefix-caching\n--disable-log-requests',help:'One argument per line. They are also available as ENGINE_ARGS.'}) + '</div>'));
   if (step === 3) return recipePage('Model and memory', 'Every model-loading and parallelism control is editable.',
     recipeSection('Model identity', 'Use a Hugging Face ID, local path, or any identifier understood by the selected engine.', '<div class="recipe-builder-fields">' +
@@ -6770,8 +7005,8 @@ function recipePersistPage() {
     } else if (step === 2) {
       d.engine.type = recipeRead('rb-engine-type'); d.engine.containerPort = recipeNumber('rb-engine-port'); d.engine.apiPath = recipeRead('rb-engine-api');
       d.engine.proxyHost = recipeRead('rb-engine-proxy'); d.engine.restartPolicy = recipeRead('rb-engine-restart');
-      d.engine.image = recipeRead('rb-engine-image'); d.engine.servedModelName = recipeRead('rb-engine-served'); d.engine.arguments = recipeParseLines(recipeRead('rb-engine-args'));
-      if (!d.engine.type || !d.engine.servedModelName) throw new Error('Choose an engine and served model name.');
+      d.engine.image = recipeRead('rb-engine-image'); d.engine.servedModelName = 'cloudless'; d.engine.arguments = recipeParseLines(recipeRead('rb-engine-args'));
+      if (!d.engine.type) throw new Error('Choose an inference engine.');
     } else if (step === 3) {
       d.model.id = recipeRead('rb-model-id'); d.model.revision = recipeRead('rb-model-revision'); d.model.quantization = recipeRead('rb-model-quant');
       d.model.dtype = recipeRead('rb-model-dtype'); d.model.kvCacheDtype = recipeRead('rb-model-kv'); d.model.maxContext = recipeNumber('rb-model-context');
@@ -7222,6 +7457,7 @@ function renderModelDetail(c) {
   const recNote = m.recommended ? `<div class="md-banner rec">${escapeHtml(m.recommendBy || 'Recommended for your region')}.</div>` : '';
   const gatedNote = (lm && m.gated && !m.downloaded) ? `<div class="md-banner note">This Hugging Face repository is gated. Accept its terms and provide your Hugging Face token before downloading.</div>` : '';
   const sourceNote = (lm && m.source === 'huggingface') ? `<div class="md-banner note hf-source-note"><span class="hf-mark">HF</span><span><b>Imported from Hugging Face</b><br>${escapeHtml(m.runtimeNote || 'This community repository will be validated by the active engine when it launches.')}</span></div>` : '';
+  const runtimeNote = (lm && m.source !== 'huggingface' && m.runtimeNote) ? `<div class="md-banner note">${uiIcon('shield')}<span><b>Reviewed Cloudless runtime</b><br>${escapeHtml(m.runtimeNote)}</span></div>` : '';
   c.innerHTML = `
     <button class="lp-back" id="mm-back">${uiIcon('arrow-right', 'ui-icon')}<span>All models</span></button>
     <div class="md-detail">
@@ -7239,6 +7475,7 @@ function renderModelDetail(c) {
       ${recNote}
       ${gatedNote}
       ${sourceNote}
+      ${runtimeNote}
       ${fit}
       ${clusterFit}
       ${m.description ? `<div class="md-section-title">About this model</div><p class="md-desc">${escapeHtml(m.description)}</p>` : ''}
@@ -7832,8 +8069,11 @@ async function renderAppPage(c, id) {
       });
       if (!approved) return;
     }
-    toast(id === 'hermes' ? 'Restoring the Cloudless model connection…' : 'Resetting ' + id + '…');
-    api(`/api/apps/${id}/reset`, { method: 'POST' }).then(r => { if (r.jobId) trackJobToast(r.jobId, id); }).catch(() => toast('Failed', true));
+    api(`/api/apps/${id}/reset`, { method: 'POST' }).then(r => {
+      if (!r.jobId) throw new Error('No reset job');
+      toast((id === 'hermes' ? 'Hermes reset' : 'App reset') + ' is running in the background');
+      refreshAppOperations();
+    }).catch(() => toast('Failed', true));
   };
   const uninstall = c.querySelector('[data-appuninstall]');
   if (uninstall) uninstall.onclick = () => openUninstallDialog(id, app);
@@ -8041,7 +8281,7 @@ document.getElementById('models').addEventListener('click', e => { if (e.target.
 document.getElementById('dock-launcher').onclick = openLauncher;
 document.getElementById('dock-models').onclick = openModelManager;
 document.getElementById('dock-inference').onclick = openInference;
-document.getElementById('dock-terminal').onclick = () => openAppSurface('Terminal', '/terminal/', '>_');
+document.getElementById('dock-terminal').onclick = toggleTerminalWindow;
 document.getElementById('dock-asst').onclick = () => openAsst();
 document.getElementById('dock-settings').onclick = openSettings;
 // the red traffic light closes its window (mirrors the legacy × button and Esc)
@@ -9067,6 +9307,7 @@ let virtualKeyboardTarget = null, virtualKeyboardSuppressedTarget = null, virtua
 function virtualKeyboardEligible(target) {
   if (!(target instanceof HTMLElement) || target.disabled || target.readOnly) return false;
   if (target === document.getElementById('app-surface-frame') && appSurfaceOpen()) return true;
+  if (target instanceof HTMLIFrameElement && target.classList.contains('terminal-frame') && terminalWindowOpen()) return true;
   if (target.isContentEditable) return true;
   if (target.tagName === 'TEXTAREA') return true;
   if (target.tagName !== 'INPUT') return false;
@@ -9142,7 +9383,7 @@ function moveVirtualCaret(target, direction) {
   try { target.setSelectionRange(next, next); } catch {}
 }
 function embeddedVirtualKeyboardTarget(target) {
-  return target instanceof HTMLIFrameElement && target === document.getElementById('app-surface-frame') && appSurfaceOpen();
+  return target instanceof HTMLIFrameElement && ((target === document.getElementById('app-surface-frame') && appSurfaceOpen()) || (target.classList.contains('terminal-frame') && terminalWindowOpen()));
 }
 let embeddedVirtualKeyQueue = Promise.resolve();
 function emitEmbeddedVirtualKey(action, value = '') {
@@ -9237,11 +9478,12 @@ function initVirtualKeyboard() {
 /* ---- boot ---- */
 initBackground();
 initRenderGovernor();
+initTerminalWindow();
 initVirtualKeyboard();
 tickClock(); setInterval(tickClock, 1000);
 async function bootCloudless() {
   await refreshCapabilities();
-  refreshStatus(); renderGPUs(); renderSystem(); renderHomeCluster(); renderPlaces(); renderApps(); renderEngine(); refreshNetStatus(); refreshActiveModel(); refreshProfileBadge(); refreshModelDownloads();
+  refreshStatus(); renderGPUs(); renderSystem(); renderHomeCluster(); renderPlaces(); renderApps(); renderEngine(); refreshNetStatus(); refreshActiveModel(); refreshProfileBadge(); refreshModelDownloads(); refreshRecipeJobs(); refreshAppOperations();
   api('/api/onboarding').then(o => {
     const afterIntro = () => { if (!o || !o.completed) renderApps().then(showOnboarding); };
     showStartupIntro(afterIntro, (o && o.bootID) || '');
@@ -9252,6 +9494,8 @@ setInterval(() => { refreshStatus(); renderGPUs(); renderSystem(); renderEngine(
 setInterval(renderHomeCluster, 10000);
 setInterval(() => { if (installing === 0) renderApps(); }, 8000);
 setInterval(refreshModelDownloads, 3000);
+setInterval(refreshRecipeJobs, 3000);
+setInterval(refreshAppOperations, 1500);
 setInterval(refreshNetStatus, 20000);
 </script>
 </body>

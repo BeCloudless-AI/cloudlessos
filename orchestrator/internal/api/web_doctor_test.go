@@ -27,9 +27,29 @@ func TestOptionalCapabilitiesAreNativeLauncherUI(t *testing.T) {
 		t.Fatal(err)
 	}
 	page := string(data)
-	for _, required := range []string{"selectPack", "renderPackDetail", "Services included", "What Cloudless installs", "setLauncherActions", "/api/packs", "installPack", "Installation rolled back safely"} {
+	for _, required := range []string{"selectPack", "renderPackDetail", "Services included", "What Cloudless installs", "setLauncherActions", "/api/packs", "installPack", "Installation started in the background"} {
 		if !strings.Contains(page, required) {
 			t.Fatalf("optional capability UI is missing %q", required)
+		}
+	}
+}
+
+func TestAppOperationsRemainVisibleOutsideLauncher(t *testing.T) {
+	data, err := webFS.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(data)
+	for _, required := range []string{
+		`id="app-operations-home"`,
+		"refreshAppOperations",
+		"/api/jobs",
+		"elapsedSeconds",
+		"etaSeconds",
+		"You can keep using CloudlessOS",
+	} {
+		if !strings.Contains(page, required) {
+			t.Fatalf("background app operation UI is missing %q", required)
 		}
 	}
 }

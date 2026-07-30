@@ -162,7 +162,7 @@ func (s *Server) assistantContext(ctx context.Context) assistant.Context {
 			currentListed = true
 		}
 		clusterFit := ""
-		if cluster.DistributedReady {
+		if cluster.DistributedReady && !m.SingleNodeOnly {
 			clusterFit = fitFor(m.MinVRAMGB, cluster.CombinedMemoryGB)
 		}
 		modelOptions = append(modelOptions, assistant.ModelOption{

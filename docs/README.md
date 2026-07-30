@@ -10,7 +10,10 @@
 ## Developer guides
 
 - [Development environment](./DEV_ENVIRONMENT.md)
+- [Use and configure the inference API](./INFERENCE_API.md)
+- [Create and run local inference recipes](./LOCAL_RECIPES.md)
 - [Build and register a custom inference engine](./CUSTOM_ENGINES.md)
+- [Use AI training and data workbenches](./AI_WORKBENCHES.md)
 - [Build the distribution](../distro/README.md)
 - [Install and operate on DGX Spark](../distro/DGX-SPARK.md)
 - [Publish signed updates](../distro/UPDATES.md)

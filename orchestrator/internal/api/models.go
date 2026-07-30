@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -391,7 +392,7 @@ func (s *Server) modelsList(w http.ResponseWriter, r *http.Request) {
 		})
 		mv := modelView{Model: m, Fit: estimate.Status, FitEstimate: estimate,
 			Active: !engineUnloaded && m.ID == current, Downloaded: have[m.ID]}
-		if cluster.DistributedReady {
+		if cluster.DistributedReady && !m.SingleNodeOnly {
 			clusterEstimate := modelfit.EstimateModel(m, modelfit.Envelope{
 				MemoryGB: float64(cluster.LocalMemoryGB), MemoryType: memoryType,
 				Nodes: cluster.Nodes, Sharded: true,
@@ -638,8 +639,15 @@ func (s *Server) modelUninstall(w http.ResponseWriter, r *http.Request) {
 }
 
 func huggingFaceModelBytes(ctx context.Context, repo, token string) int64 {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
-		"https://huggingface.co/api/models/"+repo+"?blobs=true", nil)
+	return huggingFaceModelRevisionBytes(ctx, repo, "", token)
+}
+
+func huggingFaceModelRevisionBytes(ctx context.Context, repo, revision, token string) int64 {
+	endpoint := "https://huggingface.co/api/models/" + repo
+	if revision = strings.TrimSpace(revision); revision != "" {
+		endpoint += "/revision/" + url.PathEscape(revision)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint+"?blobs=true", nil)
 	if err != nil {
 		return 0
 	}
@@ -721,17 +729,27 @@ func (s *Server) runModelDownload(ctx context.Context, cancel context.CancelFunc
 	defer s.unregisterModelJob(job.ID)
 	vllm, _ := catalog.Get("vllm")
 	img := s.imageFor(ctx, vllm)
+	revision := ""
+	if model, ok := models.Get(repo); ok && model.RuntimeImage != "" {
+		if model.RuntimeBuild == "" {
+			img = model.RuntimeImage
+		}
+		revision = model.Revision
+	}
 	metadataCtx, metadataCancel := context.WithTimeout(ctx, 12*time.Second)
-	total := huggingFaceModelBytes(metadataCtx, repo, token)
+	total := huggingFaceModelRevisionBytes(metadataCtx, repo, revision, token)
 	metadataCancel()
 	root := s.modelVolumePath(ctx)
 	job.ProgressBytes("downloading", "Preparing "+repo+"…", s.modelRepoBytes(ctx, repo, root), total)
-	py := "import os; from huggingface_hub import snapshot_download; snapshot_download(os.environ['CLOUDLESS_MODEL_ID'])"
+	py := "import os; from huggingface_hub import snapshot_download; kw={}; revision=os.environ.get('CLOUDLESS_MODEL_REVISION',''); kw.update(revision=revision) if revision else None; snapshot_download(os.environ['CLOUDLESS_MODEL_ID'], **kw)"
 	containerName := "cloudless-model-download-" + job.ID
 	result := make(chan error, 1)
 	go func() {
 		args := []string{"run", "--rm", "--name", containerName, "--entrypoint", "python3",
 			"-e", "CLOUDLESS_MODEL_ID=" + repo}
+		if revision != "" {
+			args = append(args, "-e", "CLOUDLESS_MODEL_REVISION="+revision)
+		}
 		if token != "" {
 			args = append(args, "-e", "HF_TOKEN="+token)
 		}

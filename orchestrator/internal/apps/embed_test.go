@@ -7,6 +7,20 @@ import (
 	"testing"
 )
 
+func TestAIWorkbenchBuildContextsAreEmbedded(t *testing.T) {
+	for _, id := range []string{"nemo-rl", "data-designer", "molt", "axolotl", "locateanything"} {
+		dir, err := Materialize(id)
+		if err != nil {
+			t.Fatalf("materialize %s: %v", id, err)
+		}
+		if _, err := os.Stat(filepath.Join(dir, "Dockerfile")); err != nil {
+			os.RemoveAll(dir)
+			t.Fatalf("%s Dockerfile is not embedded: %v", id, err)
+		}
+		os.RemoveAll(dir)
+	}
+}
+
 func TestResetHermesModelPreservesUnrelatedConfiguration(t *testing.T) {
 	dir := t.TempDir()
 	config := `model:

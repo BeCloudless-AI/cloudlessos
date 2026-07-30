@@ -5,11 +5,14 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sync"
 	"syscall"
 	"time"
 
@@ -57,16 +60,44 @@ func main() {
 		}
 	}()
 
-	// Cloudless Proxy: the OpenAI-compatible, key-authenticated gateway on its own
-	// port (separate from the no-auth dashboard so it can be exposed independently).
-	gwAddr := envOr("CLOUDLESS_GATEWAY_ADDR", "127.0.0.1:8766")
-	gatewayServer := &http.Server{Addr: gwAddr, Handler: srv.GatewayHandler(), ReadHeaderTimeout: 10 * time.Second}
-	go func() {
-		log.Printf("cloudless proxy (API gateway) listening on http://%s", gwAddr)
-		if err := gatewayServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Printf("gateway error: %v", err)
+	// Cloudless Proxy: the OpenAI-compatible, key-authenticated gateway. Its
+	// listener can be rebound atomically when the user changes the API contract.
+	gatewayHost := "127.0.0.1"
+	if configured := os.Getenv("CLOUDLESS_GATEWAY_ADDR"); configured != "" {
+		if host, _, splitErr := net.SplitHostPort(configured); splitErr == nil {
+			gatewayHost = host
 		}
-	}()
+	}
+	var gatewayMu sync.Mutex
+	var gatewayServer *http.Server
+	rebindGateway := func(port int) error {
+		addr := net.JoinHostPort(gatewayHost, fmt.Sprintf("%d", port))
+		listener, listenErr := net.Listen("tcp", addr)
+		if listenErr != nil {
+			return listenErr
+		}
+		next := &http.Server{Addr: addr, Handler: srv.GatewayHandler(), ReadHeaderTimeout: 10 * time.Second}
+		gatewayMu.Lock()
+		previous := gatewayServer
+		gatewayServer = next
+		gatewayMu.Unlock()
+		go func() {
+			log.Printf("cloudless proxy (API gateway) listening on http://%s", addr)
+			if serveErr := next.Serve(listener); serveErr != nil && serveErr != http.ErrServerClosed {
+				log.Printf("gateway error: %v", serveErr)
+			}
+		}()
+		if previous != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			_ = previous.Shutdown(ctx)
+			cancel()
+		}
+		return nil
+	}
+	srv.SetGatewayRebind(rebindGateway)
+	if err := rebindGateway(st.InferenceContract().Port); err != nil {
+		log.Printf("gateway start failed: %v", err)
+	}
 
 	// Flush gateway key-usage + the usage analytics store to disk periodically
 	// (per-request updates are debounced in memory).
@@ -141,7 +172,12 @@ func main() {
 	pw.Flush()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	_ = gatewayServer.Shutdown(ctx)
+	gatewayMu.Lock()
+	activeGateway := gatewayServer
+	gatewayMu.Unlock()
+	if activeGateway != nil {
+		_ = activeGateway.Shutdown(ctx)
+	}
 	_ = httpServer.Shutdown(ctx)
 }
 

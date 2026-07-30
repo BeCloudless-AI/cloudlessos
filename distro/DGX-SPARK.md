@@ -146,7 +146,8 @@ pretending it is dedicated VRAM. Model fit estimates use that same capacity.
 
 DGX Spark developers can compile a trusted upstream revision for GB10 and register the resulting
 local Docker image in **Settings -> Engine -> Custom engine builds**. The Cloudless terminal is a
-full authenticated host shell; install the optional build dependencies with:
+floating, tabbed, full authenticated host shell; hiding it preserves each open session. Install
+the optional build dependencies with:
 
 ```bash
 sudo cloudless-developer-tools
@@ -169,3 +170,15 @@ Recipes use the same native lifecycle model as the local editor, with pinned
 sources, explicit commands, cluster requirements, progress, abort, stop, health,
 active-model state, and the stable Cloudless API gateway. No external recipe
 runtime is installed or required.
+
+Recipe preparation continues in the background when Model Manager is closed. For multi-Spark
+recipes, `buildOnce` and `downloadOnce` prepare data on the coordinator and copy missing runtime or
+model data to peers over the private SSH link. The current model-cache check requires the exact
+snapshot and matching whole-repository directory size; a partial or mismatched peer cache is
+replaced with a complete tar-stream copy rather than resumed. See
+[`../docs/LOCAL_RECIPES.md`](../docs/LOCAL_RECIPES.md) for the lifecycle and current limitations.
+
+The private engine identity remains `cloudless-ai:8000` with model name `cloudless`. API clients
+use the authenticated port and alias configured in **Settings -> API access**, so recipes and
+engine changes do not require client reconfiguration. See
+[`../docs/INFERENCE_API.md`](../docs/INFERENCE_API.md).

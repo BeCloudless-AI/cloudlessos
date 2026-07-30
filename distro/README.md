@@ -106,9 +106,11 @@ On the installed system:
 - Settings → Machine checks Ubuntu's signed repositories daily for the driver recommended
   for the detected NVIDIA GPU. Installation is user-confirmed, reports progress, warns
   about Secure Boot, and requires a restart before the new kernel driver becomes active.
-- `cloudlessd.service` serves the OS on loopback ports 8765 and 8766.
+- `cloudlessd.service` serves the OS control surface on loopback port 8765 and the authenticated
+  inference gateway on user-configurable port 8766 by default.
 - `cloudless-terminal.service` serves an authenticated `/bin/login` terminal on loopback port
-  7681; `cloudlessd` proxies it at `/terminal/` so it stays inside the Cloudless interface.
+  7681; `cloudlessd` proxies it at `/terminal/` so its floating, persistent tabs stay inside the
+  Cloudless interface.
 - LightDM signs into an unprivileged `cloudless` account and launches the browser in kiosk
   mode through Openbox.
 - `cloudless-firstboot.service` writes `/var/lib/cloudless/validation-report.txt`.
@@ -132,6 +134,9 @@ When `/usr/local/cuda/bin/nvcc` is present, `/etc/profile.d/cloudless-cuda.sh` e
 SDK in new terminal sessions. A source-built vLLM or SGLang Docker image can then be registered
 from Settings -> Engine without replacing the signed managed engine. See
 [`../docs/CUSTOM_ENGINES.md`](../docs/CUSTOM_ENGINES.md).
+
+The locked private inference contract and configurable client gateway are documented in
+[`../docs/INFERENCE_API.md`](../docs/INFERENCE_API.md).
 
 ## Write the ISO to USB
 

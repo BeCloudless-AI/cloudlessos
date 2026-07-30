@@ -69,8 +69,27 @@ func TestRunRecipeCommandCancelTerminatesProcessGroup(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("canceled command did not stop")
 	}
-	if err := syscall.Kill(childPID, 0); err == nil {
-		t.Fatalf("child process %d survived cancellation", childPID)
+	reapDeadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(reapDeadline) {
+		if err := syscall.Kill(childPID, 0); err != nil {
+			return
+		}
+		// Minimal test containers may not run an init process that promptly reaps
+		// orphaned children. A zombie has exited and cannot keep doing work, which
+		// is the behavior this cancellation test is intended to verify.
+		if stat, err := os.ReadFile("/proc/" + strconv.Itoa(childPID) + "/stat"); err == nil && strings.Contains(string(stat), ") Z ") {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatalf("child process %d survived cancellation", childPID)
+}
+
+func TestRunRecipeCommandFailureIncludesLastOutputLine(t *testing.T) {
+	job := jobs.NewManager().Create("recipe:test")
+	err := runRecipeCommand(context.Background(), job, "starting", "Start inference", t.TempDir(), nil, "bash", "-c", "echo preparing; echo 'undefined volume cloudless-hf' >&2; exit 1")
+	if err == nil || !strings.Contains(err.Error(), "undefined volume cloudless-hf") {
+		t.Fatalf("run error = %v, want final command output", err)
 	}
 }
 
@@ -92,7 +111,8 @@ func TestGitHubRecipePreviewDoesNotPersist(t *testing.T) {
 func TestPrepareRecipeComposeAddsRestartPolicy(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "docker-compose.dspark.yml")
-	source := "services:\n  vllm-dspark:\n    image: ${DSPARK_VLLM_IMAGE:-vllm-dspark-runtime:clean}\n    network_mode: host\n"
+	source := "services:\n  vllm-dspark:\n    image: ${DSPARK_VLLM_IMAGE:-vllm-dspark-runtime:clean}\n    network_mode: host\n    volumes:\n      - ${HF_CACHE:-${HOME}/.cache/huggingface}:/cache/huggingface\n    command:\n      - bash\n      - -lc\n      - >\n        exec vllm serve model\n        --port 8888\n"
+	source = strings.Replace(source, "        --port 8888\n", "        --host ${VLLM_HOST:-127.0.0.1}\n        --port 8888\n", 1)
 	if err := os.WriteFile(path, []byte(source), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -105,6 +125,90 @@ func TestPrepareRecipeComposeAddsRestartPolicy(t *testing.T) {
 	}
 	if !strings.Contains(string(data), "restart: on-failure:5") {
 		t.Fatal("managed restart policy was not added")
+	}
+	if !strings.Contains(string(data), "cloudless-hf-cache:/cache/huggingface") ||
+		!strings.Contains(string(data), "name: ${HF_CACHE:-cloudless-hf}") {
+		t.Fatal("managed external model-cache volume was not added")
+	}
+	if !strings.Contains(string(data), "--port ${ENGINE_PORT:-8890}") {
+		t.Fatal("managed recipe engine port was not added")
+	}
+	if !strings.Contains(string(data), "--host ${VLLM_HOST:-0.0.0.0}") || strings.Contains(string(data), "--host ${VLLM_HOST:-127.0.0.1}") {
+		t.Fatal("managed recipe engine is not reachable from the stable proxy")
+	}
+}
+
+func TestPrepareRecipeComposeRejectsUnknownBindLayout(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "docker-compose.dspark.yml")
+	source := "services:\n  vllm-dspark:\n    image: ${DSPARK_VLLM_IMAGE:-vllm-dspark-runtime:clean}\n    volumes:\n      - ${HF_CACHE:-${HOME}/.cache/huggingface}:/cache/huggingface\n    command:\n      - --host 0.0.0.0\n      - --port 8888\n"
+	if err := os.WriteFile(path, []byte(source), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := prepareRecipeCompose(dir, "unless-stopped"); err == nil || !strings.Contains(err.Error(), "engine-host layout changed") {
+		t.Fatalf("prepareRecipeCompose error = %v, want fail-closed host-layout error", err)
+	}
+}
+
+func TestRecipeRuntimeCheckoutIsPersistent(t *testing.T) {
+	got := recipeCheckout(localrecipes.Recipe{ID: "local-0123456789abcdef"})
+	want := filepath.Join(recipeRuntimeRoot, "local-0123456789abcdef")
+	if got != want || strings.HasPrefix(got, "/tmp/") || strings.HasPrefix(got, "/var/tmp/") {
+		t.Fatalf("recipeCheckout = %q, want persistent %q", got, want)
+	}
+}
+
+func TestPrepareRecipeWorkerCheckoutUsesEnrolledUserPath(t *testing.T) {
+	dir := t.TempDir()
+	start := `#!/bin/bash
+SCRIPT_DIR="$(pwd)"
+COMPOSE_FILE="${COMPOSE_FILE:-$SCRIPT_DIR/docker-compose.dspark.yml}"
+echo "${WORKER_HOST}:${SCRIPT_DIR}"
+ssh "$WORKER_HOST" "mkdir -p '$SCRIPT_DIR'"
+scp file "${WORKER_HOST}:${SCRIPT_DIR}/file"
+ssh "$WORKER_HOST" "cd '$SCRIPT_DIR' && docker compose up -d"
+`
+	stop := `#!/bin/bash
+SCRIPT_DIR="$(pwd)"
+COMPOSE_FILE="${COMPOSE_FILE:-$SCRIPT_DIR/docker-compose.dspark.yml}"
+ssh "$WORKER_HOST" "cd '$SCRIPT_DIR' && docker compose down"
+`
+	if err := os.WriteFile(filepath.Join(dir, "start-deepseek-v4-flash-dspark.sh"), []byte(start), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "stop-deepseek-v4-flash-dspark.sh"), []byte(stop), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := prepareRecipeWorkerCheckout(dir); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"start-deepseek-v4-flash-dspark.sh", "stop-deepseek-v4-flash-dspark.sh"} {
+		data, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		text := string(data)
+		if !strings.Contains(text, `WORKER_CHECKOUT="${WORKER_CHECKOUT:-$SCRIPT_DIR}"`) || !strings.Contains(text, "cd '$WORKER_CHECKOUT'") {
+			t.Fatalf("%s did not receive worker checkout guardrail:\n%s", name, text)
+		}
+	}
+	data, _ := os.ReadFile(filepath.Join(dir, "start-deepseek-v4-flash-dspark.sh"))
+	if !strings.Contains(string(data), "${WORKER_HOST}:${WORKER_CHECKOUT}") || !strings.Contains(string(data), "mkdir -p '$WORKER_CHECKOUT'") {
+		t.Fatalf("start script still copies to coordinator checkout:\n%s", data)
+	}
+}
+
+func TestRecipePeerCheckoutIsPersistentAndUserWritable(t *testing.T) {
+	got, err := recipePeerCheckout("local-0123456789abcdef", "ledomaine")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "/home/ledomaine/.local/share/cloudless/recipes-runtime/local-0123456789abcdef"
+	if got != want {
+		t.Fatalf("recipePeerCheckout = %q, want %q", got, want)
+	}
+	if _, err := recipePeerCheckout("local-0123456789abcdef", "../root"); err == nil {
+		t.Fatal("unsafe worker username was accepted")
 	}
 }
 
@@ -142,7 +246,8 @@ func TestRecipeRuntimeUsesEditableEngineModelClusterAndEnvironment(t *testing.T)
 		t.Fatalf("workdir = %q", workdir)
 	}
 	for key, want := range map[string]string{
-		"ENGINE_TYPE": "sglang", "ENGINE_IMAGE": "example/sglang:custom", "SERVED_MODEL_NAME": "served-custom",
+		"ENGINE_TYPE": "sglang", "ENGINE_IMAGE": "example/sglang:custom", "SERVED_MODEL_NAME": "cloudless",
+		"VLLM_HOST":   "0.0.0.0",
 		"ENGINE_PORT": "31000", "DSPARK_MODEL": "example/custom-model", "DSPARK_MODEL_REVISION": "custom-revision",
 		"MAX_MODEL_LEN": "77777", "MAX_NUM_SEQS": "9", "GPU_MEMORY_UTILIZATION": "0.63",
 		"TENSOR_PARALLEL_SIZE": "3", "PIPELINE_PARALLEL_SIZE": "2", "MASTER_PORT": "29999", "CUSTOM_RECIPE_VALUE": "present",
@@ -228,6 +333,9 @@ docker run --rm -i \
 	text := string(data)
 	if strings.Count(text, `DSPARK_MODEL_REVISION="$DSPARK_MODEL_REVISION"`) != 2 {
 		t.Fatalf("model revision was not passed into both containers:\n%s", text)
+	}
+	if strings.Count(text, `HF_TOKEN="${HF_TOKEN:-}"`) != 2 {
+		t.Fatalf("the optional Hugging Face account was not passed into both containers:\n%s", text)
 	}
 	if strings.Count(text, `revision=os.environ["DSPARK_MODEL_REVISION"]`) != 2 {
 		t.Fatalf("model revision was not applied to both downloads:\n%s", text)
@@ -395,12 +503,12 @@ func TestRecipeRunProgressUpdatesWithoutRepaintingManager(t *testing.T) {
 		`const RECIPE_RUN_STAGES = [`,
 		`function recipeRunPhaseLabel(phase)`,
 		`class="recipe-progress-stages"`,
-		`aria-label="Current recipe operation"`,
+		`aria-label="Overall recipe launch progress"`,
 		`data.plans&&data.plans[id]`,
 		`trackLocalRecipeJob(result.jobId,'run',id)`,
 		`action.dataset.liveRecipeAbort = recipeId`,
 		`update.phase === 'canceled'`,
-		`message.textContent = update.message || 'Starting recipe…'`,
+		`message.textContent = recipeProgressMessage(update)`,
 	} {
 		if !strings.Contains(page, want) {
 			t.Fatalf("stable recipe run UI is missing %q", want)

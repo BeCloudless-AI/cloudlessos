@@ -33,6 +33,8 @@ import (
 var recipeInterfacePattern = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,64}$`)
 var localRecipeIDPattern = regexp.MustCompile(`^(?:deepseek-v4-flash-dspark-2x|local-[0-9a-f]{16})$`)
 
+const recipeRuntimeRoot = "/var/lib/cloudless/recipes-runtime"
+
 type recipeJobControl struct {
 	cancel context.CancelFunc
 	job    *jobs.Job
@@ -55,6 +57,7 @@ func (s *Server) localRecipesList(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"recipes": recipes, "active": active, "jobs": s.jobs.List("recipe:"),
 		"defaults": localrecipes.NewDraft(),
+		"contract": s.inferenceContract(),
 		"cluster":  clusterCompute(r.Context(), totalVRAMGB(r.Context())),
 		"plans":    plans,
 	})
@@ -303,7 +306,10 @@ func (s *Server) localRecipeStop(w http.ResponseWriter, r *http.Request) {
 }
 
 func recipeCheckout(recipe localrecipes.Recipe) string {
-	return filepath.Join("/var/tmp/cloudless-recipes", recipe.ID)
+	// This must survive cloudlessd restarts. The service uses PrivateTmp, so a
+	// checkout under /tmp or /var/tmp disappears into a new mount namespace and
+	// leaves Cloudless unable to run the recipe's stop lifecycle after an update.
+	return filepath.Join(recipeRuntimeRoot, recipe.ID)
 }
 
 func commandEnv(extra map[string]string) []string {
@@ -312,6 +318,14 @@ func commandEnv(extra map[string]string) []string {
 		env = append(env, key+"="+value)
 	}
 	return env
+}
+
+func localRecipeNodeName() string {
+	name, err := os.Hostname()
+	if err != nil || strings.TrimSpace(name) == "" {
+		return "this Spark"
+	}
+	return strings.TrimSpace(name)
 }
 
 func runRecipeCommand(ctx context.Context, job *jobs.Job, phase, label, dir string, env map[string]string, name string, args ...string) error {
@@ -357,6 +371,7 @@ func runRecipeCommand(ctx context.Context, job *jobs.Job, phase, label, dir stri
 	scanner := bufio.NewScanner(reader)
 	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
 	progress := newRecipeCommandProgress(phase, label)
+	lastLine := ""
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" {
@@ -365,6 +380,7 @@ func runRecipeCommand(ctx context.Context, job *jobs.Job, phase, label, dir stri
 		if len(line) > 220 {
 			line = line[:217] + "..."
 		}
+		lastLine = line
 		if message, doneBytes, totalBytes, ok := progress.parse(line); ok {
 			job.ProgressBytes(phase, message, doneBytes, totalBytes)
 		} else {
@@ -376,6 +392,9 @@ func runRecipeCommand(ctx context.Context, job *jobs.Job, phase, label, dir stri
 		return ctxErr
 	}
 	if err != nil {
+		if lastLine != "" {
+			return fmt.Errorf("%s: %s: %w", label, lastLine, err)
+		}
 		return fmt.Errorf("%s: %w", label, err)
 	}
 	return scanner.Err()
@@ -408,7 +427,27 @@ func prepareRecipeCompose(checkout, restartPolicy string) error {
 	if strings.Count(string(data), needle) != 1 {
 		return errors.New("reviewed compose service layout changed")
 	}
+	volumeMount := "      - ${HF_CACHE:-${HOME}/.cache/huggingface}:/cache/huggingface\n"
+	if strings.Count(string(data), volumeMount) != 1 {
+		return errors.New("reviewed compose model-cache layout changed")
+	}
 	managed := strings.Replace(string(data), needle, needle+"    restart: "+restartPolicy+"\n", 1)
+	managed = strings.Replace(managed, volumeMount, "      - cloudless-hf-cache:/cache/huggingface\n", 1)
+	// The reviewed runtime uses host networking. Its original loopback bind is
+	// healthy from the host, but unreachable from the bridge-networked stable
+	// Cloudless proxy. Bind the private recipe port on the host interfaces; the
+	// public contract remains protected by the loopback-only port 8000 proxy.
+	host := "        --host ${VLLM_HOST:-127.0.0.1}\n"
+	if strings.Count(managed, host) != 1 {
+		return errors.New("reviewed compose engine-host layout changed")
+	}
+	managed = strings.Replace(managed, host, "        --host ${VLLM_HOST:-0.0.0.0}\n", 1)
+	port := "        --port 8888\n"
+	if strings.Count(managed, port) != 1 {
+		return errors.New("reviewed compose engine-port layout changed")
+	}
+	managed = strings.Replace(managed, port, "        --port ${ENGINE_PORT:-8890}\n", 1)
+	managed += "\nvolumes:\n  cloudless-hf-cache:\n    external: true\n    name: ${HF_CACHE:-cloudless-hf}\n"
 	return os.WriteFile(path, []byte(managed), 0o600)
 }
 
@@ -426,7 +465,7 @@ func prepareRecipeModelPin(recipe localrecipes.Recipe, checkout string) error {
 		old, new string
 		count    int
 	}{
-		{"    -e DSPARK_MODEL=\"$DSPARK_MODEL\" \\\n", "    -e DSPARK_MODEL=\"$DSPARK_MODEL\" \\\n    -e DSPARK_MODEL_REVISION=\"$DSPARK_MODEL_REVISION\" \\\n", 2},
+		{"    -e DSPARK_MODEL=\"$DSPARK_MODEL\" \\\n", "    -e DSPARK_MODEL=\"$DSPARK_MODEL\" \\\n    -e DSPARK_MODEL_REVISION=\"$DSPARK_MODEL_REVISION\" \\\n    -e HF_TOKEN=\"${HF_TOKEN:-}\" \\\n", 2},
 		{"snapshot_download(os.environ[\"DSPARK_MODEL\"], max_workers=", "snapshot_download(os.environ[\"DSPARK_MODEL\"], revision=os.environ[\"DSPARK_MODEL_REVISION\"], max_workers=", 1},
 		{"snapshot_download(os.environ[\"DSPARK_MODEL\"], local_files_only=True)", "snapshot_download(os.environ[\"DSPARK_MODEL\"], revision=os.environ[\"DSPARK_MODEL_REVISION\"], local_files_only=True)", 1},
 	}
@@ -439,9 +478,51 @@ func prepareRecipeModelPin(recipe localrecipes.Recipe, checkout string) error {
 	return os.WriteFile(path, []byte(managed), 0o700)
 }
 
+// prepareRecipeWorkerCheckout separates the root-owned coordinator checkout
+// from the enrolled user's persistent checkout on worker Sparks. The reviewed
+// upstream scripts originally assume the same absolute path on both nodes,
+// which is neither writable nor safe when cloudlessd runs as root.
+func prepareRecipeWorkerCheckout(checkout string) error {
+	paths := []string{"start-deepseek-v4-flash-dspark.sh", "stop-deepseek-v4-flash-dspark.sh"}
+	for _, name := range paths {
+		path := filepath.Join(checkout, name)
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		managed := string(data)
+		composeLine := "COMPOSE_FILE=\"${COMPOSE_FILE:-$SCRIPT_DIR/docker-compose.dspark.yml}\"\n"
+		if strings.Count(managed, composeLine) != 1 {
+			return fmt.Errorf("reviewed %s worker-path layout changed", name)
+		}
+		managed = strings.Replace(managed, composeLine, composeLine+"WORKER_CHECKOUT=\"${WORKER_CHECKOUT:-$SCRIPT_DIR}\"\n", 1)
+		remoteUses := strings.Count(managed, "cd '$SCRIPT_DIR'")
+		if remoteUses < 1 {
+			return fmt.Errorf("reviewed %s remote checkout layout changed", name)
+		}
+		managed = strings.ReplaceAll(managed, "cd '$SCRIPT_DIR'", "cd '$WORKER_CHECKOUT'")
+		if name == "start-deepseek-v4-flash-dspark.sh" {
+			replacements := []struct{ old, new string }{
+				{"${WORKER_HOST}:${SCRIPT_DIR}", "${WORKER_HOST}:${WORKER_CHECKOUT}"},
+				{"mkdir -p '$SCRIPT_DIR'", "mkdir -p '$WORKER_CHECKOUT'"},
+			}
+			for _, replacement := range replacements {
+				if !strings.Contains(managed, replacement.old) {
+					return fmt.Errorf("reviewed %s copy layout changed", name)
+				}
+				managed = strings.ReplaceAll(managed, replacement.old, replacement.new)
+			}
+		}
+		if err := os.WriteFile(path, []byte(managed), 0o700); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func prepareRecipeCheckout(ctx context.Context, job *jobs.Job, recipe localrecipes.Recipe) (string, error) {
 	checkout := recipeCheckout(recipe)
-	if !localRecipeIDPattern.MatchString(recipe.ID) || checkout != filepath.Join("/var/tmp/cloudless-recipes", recipe.ID) {
+	if !localRecipeIDPattern.MatchString(recipe.ID) || checkout != filepath.Join(recipeRuntimeRoot, recipe.ID) {
 		return "", errors.New("unsafe recipe working directory")
 	}
 	if err := os.RemoveAll(checkout); err != nil {
@@ -478,6 +559,9 @@ func prepareRecipeCheckout(ctx context.Context, job *jobs.Job, recipe localrecip
 			return "", err
 		}
 		if err := prepareRecipeModelPin(recipe, checkout); err != nil {
+			return "", err
+		}
+		if err := prepareRecipeWorkerCheckout(checkout); err != nil {
 			return "", err
 		}
 	}
@@ -573,6 +657,14 @@ func writeRecipeRuntime(recipe localrecipes.Recipe, checkout string, cluster spa
 	if len(cluster.LocalIPs) > 0 {
 		masterAddress = cluster.LocalIPs[0]
 	}
+	workerCheckout := checkout
+	if len(cluster.Nodes) > 0 {
+		var workerErr error
+		workerCheckout, workerErr = recipePeerCheckout(recipe.ID, cluster.Nodes[0].Username)
+		if workerErr != nil {
+			return nil, "", workerErr
+		}
+	}
 	values := map[string]string{
 		"WORKER_HOST": strings.Join(aliases, ","), "WORKER_HOSTS": strings.Join(aliases, ","),
 		"MASTER_ADDR":        masterAddress,
@@ -593,6 +685,10 @@ func writeRecipeRuntime(recipe localrecipes.Recipe, checkout string, cluster spa
 	for key, value := range recipe.Runtime.Environment {
 		values[key] = value
 	}
+	// A host-networked runtime must be reachable from Cloudless's isolated
+	// bridge proxy. Recipes may tune the private port but cannot force a
+	// loopback-only bind that strands every OS client behind port 8000.
+	values["VLLM_HOST"] = "0.0.0.0"
 	if recipe.Runtime.BuildOnce && nodes > 1 {
 		values["WORKER_BUILD"] = "0"
 	}
@@ -622,7 +718,9 @@ func writeRecipeRuntime(recipe localrecipes.Recipe, checkout string, cluster spa
 		"HOME": home, "PATH": binDir + ":" + os.Getenv("PATH"),
 		"RSYNC_RSH":       "/usr/bin/ssh -F " + filepath.Join(sshDir, "config"),
 		"ENV_FILE":        filepath.Join(checkout, ".env.dspark"),
-		"WORKER_CHECKOUT": checkout,
+		"WORKER_CHECKOUT": workerCheckout,
+		"API_URL":         fmt.Sprintf("http://127.0.0.1:%d/v1/models", recipe.Engine.ContainerPort),
+		"CHAT_URL":        fmt.Sprintf("http://127.0.0.1:%d/v1/chat/completions", recipe.Engine.ContainerPort),
 	}
 	for key, value := range values {
 		commandEnvironment[key] = value
@@ -648,6 +746,41 @@ func runConfiguredRecipeCommand(ctx context.Context, job *jobs.Job, phase, label
 		return nil
 	}
 	return runRecipeCommand(ctx, job, phase, label, dir, env, command.Program, command.Args...)
+}
+
+func (s *Server) runRecipeModelDownload(ctx context.Context, job *jobs.Job, recipe localrecipes.Recipe, dir string, env map[string]string, token string) error {
+	localNode := localRecipeNodeName()
+	result := make(chan error, 1)
+	go func() {
+		result <- runConfiguredRecipeCommand(ctx, job, "downloading", "Internet download on "+localNode, dir, env, recipe.Runtime.Lifecycle.Download)
+	}()
+
+	metadataCtx, metadataCancel := context.WithTimeout(ctx, 12*time.Second)
+	total := huggingFaceModelRevisionBytes(metadataCtx, recipe.Model.ID, recipe.Model.Revision, token)
+	metadataCancel()
+	root := s.modelVolumePath(ctx)
+	started := time.Now()
+	firstDone := s.modelRepoBytes(ctx, recipe.Model.ID, root)
+	ticker := time.NewTicker(4 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case err := <-result:
+			return err
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+			done := s.modelRepoBytes(ctx, recipe.Model.ID, root)
+			message := "Internet download on " + localNode + " — " + formatDownloadProgress(done, total)
+			elapsed := time.Since(started).Seconds()
+			if transferred := done - firstDone; total > done && elapsed > 4 && transferred > 0 {
+				if eta := recipeProgressETA(total-done, float64(transferred)/elapsed); eta != "" {
+					message += " · " + eta
+				}
+			}
+			job.ProgressBytes("downloading", message, done, total)
+		}
+	}
 }
 
 // stopActiveLocalRecipeRuntime is called while EngineMu is held. It makes a
@@ -701,6 +834,31 @@ func waitRecipeHealth(ctx context.Context, job *jobs.Job, recipe localrecipes.Re
 	}
 }
 
+// waitRecipePromotion verifies the endpoint that every Cloudless client will
+// actually use. A recipe's own health URL is necessary but not sufficient: a
+// host-loopback backend can be healthy while remaining unreachable from the
+// bridge-networked stable proxy. Recipes are not persisted as active until this
+// contract succeeds, preventing an endless "starting up" state.
+func waitRecipePromotion(ctx context.Context) error {
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		probeCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		err := engineEndpointError(probeCtx)
+		cancel()
+		if err == nil {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("stable Cloudless inference endpoint is unreachable: %w", err)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(500 * time.Millisecond):
+		}
+	}
+}
+
 func (s *Server) runLocalRecipe(job *jobs.Job, recipe localrecipes.Recipe) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(recipe.Runtime.TimeoutMinutes)*time.Minute)
 	defer cancel()
@@ -738,6 +896,14 @@ func (s *Server) runLocalRecipe(job *jobs.Job, recipe localrecipes.Recipe) {
 		finishRecipeJob(job, err)
 		return
 	}
+	// Reuse the account connected in Model Manager for recipe downloads. Add it
+	// only to the command environment, after the on-disk recipe environment was
+	// written, so the credential is never copied into the checkout or to peers.
+	hfToken := ""
+	if token, tokenErr := s.state.HuggingFaceToken(); tokenErr == nil && token != "" {
+		hfToken = token
+		env["HF_TOKEN"] = token
+	}
 	var peers []recipePeer
 	if recipe.Distributed.Nodes > 1 && (recipe.Runtime.BuildOnce || recipe.Runtime.DownloadOnce) {
 		peers, err = recipeDistributionPeers(recipe, cluster, env)
@@ -765,9 +931,10 @@ func (s *Server) runLocalRecipe(job *jobs.Job, recipe localrecipes.Recipe) {
 		}
 		step++
 	}
-	job.ProgressBytes("downloading", "Downloading the model once on this Spark...", 0, 0)
-	job.Progress("downloading", "Downloading and verifying the model once on this Spark...", step, totalSteps)
-	if err := runConfiguredRecipeCommand(ctx, job, "downloading", "Model preparation", workdir, env, recipe.Runtime.Lifecycle.Download); err != nil {
+	localNode := localRecipeNodeName()
+	job.ProgressBytes("downloading", "Connecting "+localNode+" to Hugging Face over the internet...", 0, 0)
+	job.Progress("downloading", "Downloading model weights from Hugging Face to "+localNode+". The direct Spark cable is not used during this stage.", step, totalSteps)
+	if err := s.runRecipeModelDownload(ctx, job, recipe, workdir, env, hfToken); err != nil {
 		finishRecipeJob(job, err)
 		return
 	}
@@ -793,6 +960,12 @@ func (s *Server) runLocalRecipe(job *jobs.Job, recipe localrecipes.Recipe) {
 	job.Progress("starting", "Starting the inference recipe...", step, totalSteps)
 	startErr := runConfiguredRecipeCommand(ctx, job, "starting", "Start inference", workdir, env, recipe.Runtime.Lifecycle.Start)
 	if startErr != nil {
+		// A compose-based start can create restarting containers before its
+		// wrapper notices an error or is aborted. Always run the reviewed stop
+		// lifecycle so failed launches do not retain ports or accelerator memory.
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		_ = runConfiguredRecipeCommand(cleanupCtx, job, "stopping", "Clean up failed inference start", workdir, env, recipe.Runtime.Lifecycle.Stop)
+		cleanupCancel()
 		finishRecipeJob(job, startErr)
 		return
 	}
@@ -813,6 +986,20 @@ func (s *Server) runLocalRecipe(job *jobs.Job, recipe localrecipes.Recipe) {
 	spec.Image = proxyImage
 	if _, err := s.eng.Run(ctx, spec); err != nil {
 		finishRecipeJob(job, err)
+		return
+	}
+	job.Progress("connecting", "Verifying the permanent Cloudless inference endpoint...", step, totalSteps)
+	if err := waitRecipePromotion(ctx); err != nil {
+		// Fail closed: do not publish a recipe as active when only its private
+		// health URL works. Remove the broken route and stop the runtime so the
+		// UI reaches an explicit unloaded/error state rather than spinning forever.
+		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		_ = s.eng.Remove(cleanupCtx, "cloudless-cluster-engine-proxy")
+		_ = runConfiguredRecipeCommand(cleanupCtx, job, "stopping", "Clean up unreachable inference runtime", workdir, env, recipe.Runtime.Lifecycle.Stop)
+		cleanupCancel()
+		_ = s.state.SetLocalRecipe("")
+		_ = s.state.SetEngineUnloaded(true)
+		finishRecipeJob(job, fmt.Errorf("%w; the recipe backend must be reachable from its configured proxy host %q on port %d (host-networked servers must bind 0.0.0.0, not 127.0.0.1)", err, recipe.Engine.ProxyHost, recipe.Engine.ContainerPort))
 		return
 	}
 	if err := s.state.SetModel(recipe.Model.ID); err != nil {
@@ -878,9 +1065,16 @@ func (s *Server) stopLocalRecipe(job *jobs.Job, recipe localrecipes.Recipe) {
 	job.Progress("stopping", "Running the configured stop step...", 0, 1)
 	cluster, err := sparkcluster.Status(ctx)
 	if err == nil || recipe.Distributed.Nodes == 1 {
-		if env, workdir, envErr := writeRecipeRuntime(recipe, checkout, cluster, false); envErr == nil {
-			_ = runConfiguredRecipeCommand(ctx, job, "stopping", "Stop inference", workdir, env, recipe.Runtime.Lifecycle.Stop)
+		if env, workdir, envErr := writeRecipeRuntime(recipe, checkout, cluster, false); envErr != nil {
+			job.Fail(fmt.Errorf("prepare recipe stop: %w", envErr))
+			return
+		} else if stopErr := runConfiguredRecipeCommand(ctx, job, "stopping", "Stop inference", workdir, env, recipe.Runtime.Lifecycle.Stop); stopErr != nil {
+			job.Fail(fmt.Errorf("stop recipe runtime: %w", stopErr))
+			return
 		}
+	} else {
+		job.Fail(fmt.Errorf("read cluster before stopping recipe: %w", err))
+		return
 	}
 	_ = s.eng.Remove(ctx, "cloudless-cluster-engine-proxy")
 	_ = s.state.SetLocalRecipe("")

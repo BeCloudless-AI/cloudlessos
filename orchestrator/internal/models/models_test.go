@@ -20,3 +20,33 @@ func TestMergePreservesHostedEntriesAndAddsNewBuiltins(t *testing.T) {
 		}
 	}
 }
+
+func TestReviewedNVIDIAModelRuntimesArePinned(t *testing.T) {
+	for _, id := range []string{"nvidia/Cosmos3-Edge", "nvidia/LocateAnything-3B"} {
+		model, ok := Get(id)
+		if !ok {
+			t.Fatalf("missing reviewed model %s", id)
+		}
+		if model.Revision == "" || model.RuntimeImage == "" || model.PreferredEngine != "vllm" || len(model.RuntimeCommand) == 0 {
+			t.Fatalf("%s has an incomplete runtime contract: %#v", id, model)
+		}
+		if !model.SingleNodeOnly {
+			t.Fatalf("%s must remain single-node until its distributed runtime is reviewed", id)
+		}
+		if id == "nvidia/LocateAnything-3B" && (model.RuntimeBuild != "locateanything" || model.RuntimeEntry != "python3") {
+			t.Fatalf("LocateAnything is not wired to its Transformers adapter: %#v", model)
+		}
+	}
+}
+
+func TestMergeCannotEraseReviewedRuntimeContract(t *testing.T) {
+	hosted := []Model{{ID: "nvidia/Cosmos3-Edge", Name: "Hosted display name"}}
+	got := Merge(hosted)
+	if len(got) == 0 || got[0].Name != "Hosted display name" {
+		t.Fatalf("hosted display metadata was not preserved: %#v", got)
+	}
+	builtin, _ := Get("nvidia/Cosmos3-Edge")
+	if got[0].RuntimeImage != builtin.RuntimeImage || got[0].Revision != builtin.Revision || !got[0].SingleNodeOnly {
+		t.Fatalf("reviewed runtime contract was erased: %#v", got[0])
+	}
+}

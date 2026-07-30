@@ -40,7 +40,8 @@ development.
 The primary listeners are:
 
 - `127.0.0.1:8765`: CloudlessOS UI and local control API.
-- `127.0.0.1:8766`: key-authenticated OpenAI-compatible model and agent gateway.
+- `127.0.0.1:8766`: default key-authenticated OpenAI-compatible model and agent gateway.
+  Its client port and model alias are editable in **Settings -> API access**.
 - `127.0.0.1:7681`: authenticated ttyd terminal, proxied through `/terminal/`.
 
 Production values are configured in `distro/packages/cloudless-orchestrator/cloudless.env`.
@@ -70,6 +71,30 @@ changes.
 The active model comes from Model Manager. vLLM and SGLang receive Hugging Face model IDs;
 llama.cpp follows its GGUF command contract. DGX Spark may use the distributed managed-vLLM
 path when a healthy cluster is configured.
+
+The private runtime identity is deliberately different from the client identity. Engines always
+serve `cloudless` at `cloudless-ai:8000`; the authenticated gateway translates the configurable
+client model alias and can rebind its listener without restarting `cloudlessd`. See
+[`../docs/INFERENCE_API.md`](../docs/INFERENCE_API.md).
+
+Activation is transactional and fail-closed. Before a bundled or custom engine is reported ready,
+the stable loopback endpoint must return HTTP `200`, valid OpenAI models JSON and model ID
+`cloudless`. A failed or timed-out activation removes the candidate container and proxy, stops any
+distributed worker and persists inference as unloaded instead of leaving stale startup state.
+
+## Native recipe lifecycle
+
+Machine-local `cloudless.recipe/v1` profiles run as asynchronous daemon jobs rather than modal-
+owned browser work. They support dry checks, progress and ETA, abort, cache reuse, private runtime
+routing, and coordinator-to-peer distribution for Spark clusters. Recipes cannot override the
+private or client-facing inference identity. Current cache and transfer semantics are documented
+in [`../docs/LOCAL_RECIPES.md`](../docs/LOCAL_RECIPES.md).
+
+Recipe-private health is followed by the same stable `/v1/models` promotion check used for other
+engines. Active state is committed only after that check succeeds. Persistent lifecycle data lives
+under `/var/lib/cloudless/recipes-runtime` on the coordinator and the enrolled user's
+`~/.local/share/cloudless/recipes-runtime` on workers so stop and replacement remain possible after
+an orchestrator restart.
 
 ## Custom source-built engines
 
@@ -101,7 +126,12 @@ The complete developer workflow is in
 | DELETE | `/api/engines/custom/{id}` | remove an inactive registration |
 | GET | `/api/engine/metrics` | normalized engine metrics |
 | GET | `/api/gateway` | API keys and gateway exposure state |
+| POST | `/api/settings/inference-contract` | change the client API port and model alias |
+| GET | `/api/recipes` | local recipes, active jobs and inference contract |
+| POST | `/api/recipes/{id}/run` | launch a recipe as a background job |
+| POST | `/api/recipes/{id}/abort` | abort an active recipe operation |
 | POST | `/api/assistant/chat` | streamed Cloudless Assistant response |
+| GET | `/api/jobs` | reconnectable snapshots for all asynchronous jobs (optional `prefix`) |
 | GET | `/api/jobs/{id}` | asynchronous job snapshot |
 | GET | `/api/jobs/{id}/events` | SSE job progress |
 | GET | `/api/system/spark-cluster` | DGX Spark cluster state |

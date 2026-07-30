@@ -66,12 +66,6 @@ func (s *Server) packInstall(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "unknown or unsupported service pack"})
 		return
 	}
-	for _, snapshot := range s.jobs.List("pack:" + pack.ID) {
-		if !snapshot.Done {
-			writeJSON(w, http.StatusAccepted, map[string]string{"jobId": snapshot.ID, "pack": pack.ID})
-			return
-		}
-	}
 	order, err := catalog.PackInstallOrder(pack.ID)
 	if err != nil {
 		writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
@@ -96,14 +90,23 @@ func (s *Server) packInstall(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInsufficientStorage, map[string]string{"error": fmt.Sprintf("%s needs about %d GB but this machine does not have enough free storage", pack.Name, neededDiskGB)})
 		return
 	}
-	job := s.jobs.Create("pack:" + pack.ID)
+	job, created := s.jobs.CreateUnique("pack:"+pack.ID, "pack:"+pack.ID)
+	if !created {
+		writeJSON(w, http.StatusAccepted, map[string]string{"jobId": job.ID, "pack": pack.ID})
+		return
+	}
 	go s.runPackInstall(job, pack, order)
 	writeJSON(w, http.StatusAccepted, map[string]string{"jobId": job.ID, "pack": pack.ID})
 }
 
 func (s *Server) runPackInstall(job *jobs.Job, pack catalog.Pack, order []catalog.App) {
-	s.installMu.Lock()
-	defer s.installMu.Unlock()
+	ids := make([]string, 0, len(order))
+	for _, app := range order {
+		ids = append(ids, app.ID)
+	}
+	job.ProgressOperation("queued", "Installation queued in the background", pack.Name, 0, 0, len(order))
+	unlock := s.appOperations.lock(ids...)
+	defer unlock()
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Minute)
 	defer cancel()
 	newContainers := make([]string, 0, len(order))
@@ -116,8 +119,8 @@ func (s *Server) runPackInstall(job *jobs.Job, pack catalog.Pack, order []catalo
 	}
 	for index, app := range order {
 		if existing, _ := s.eng.Find(ctx, app.ContainerName()); existing == nil || existing.State != "running" {
-			job.Progress("component", fmt.Sprintf("Installing %s — component %d of %d", app.Name, index+1, len(order)), index, len(order))
-			id, err := s.installOne(ctx, job, app)
+			job.ProgressOperation("component", fmt.Sprintf("Installing %s — component %d of %d", app.Name, index+1, len(order)), app.Name, operationPercent(index, len(order), 4), index, len(order))
+			id, err := s.installOne(ctx, job, app, index, len(order))
 			if err != nil {
 				rollback()
 				job.Fail(fmt.Errorf("%s could not install %s: %w; newly installed components were removed", pack.Name, app.Name, err))
@@ -138,7 +141,7 @@ func (s *Server) runPackInstall(job *jobs.Job, pack catalog.Pack, order []catalo
 		job.Fail(fmt.Errorf("%s installed but its state could not be saved: %w", pack.Name, err))
 		return
 	}
-	job.Progress("verifying", "All components passed their health contracts.", len(order), len(order))
+	job.ProgressOperation("verifying", "All components passed their health contracts", pack.Name, 99, len(order), len(order))
 	job.Succeed("")
 }
 
@@ -146,7 +149,7 @@ func (s *Server) configurePackApp(ctx context.Context, job *jobs.Job, app catalo
 	if app.ID != "perplexica" {
 		return nil
 	}
-	job.Progress("configuring", "Connecting Cloudless Research to your Cloudless model…", 0, 1)
+	job.ProgressOperation("configuring", "Connecting Cloudless Research to your Cloudless model", app.Name, 96, 0, 1)
 	for port := range app.Ports {
 		return configureCloudlessResearch(ctx, fmt.Sprintf("http://127.0.0.1:%d", port))
 	}
@@ -244,32 +247,41 @@ func (s *Server) packUninstall(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "pack uninstall confirmation header required"})
 		return
 	}
-	job := s.jobs.Create("pack-remove:" + pack.ID)
+	job, created := s.jobs.CreateUnique("pack-remove:"+pack.ID, "pack-remove:"+pack.ID)
+	if !created {
+		writeJSON(w, http.StatusAccepted, map[string]string{"jobId": job.ID, "pack": pack.ID})
+		return
+	}
 	go s.runPackUninstall(job, pack)
 	writeJSON(w, http.StatusAccepted, map[string]string{"jobId": job.ID, "pack": pack.ID})
 }
 
 func (s *Server) runPackUninstall(job *jobs.Job, pack catalog.Pack) {
-	s.installMu.Lock()
-	defer s.installMu.Unlock()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
+	order, err := catalog.PackInstallOrder(pack.ID)
+	if err != nil {
+		job.Fail(err)
+		return
+	}
+	ids := make([]string, 0, len(order))
+	for _, app := range order {
+		ids = append(ids, app.ID)
+	}
+	job.ProgressOperation("queued", "Removal queued in the background", pack.Name, 0, 0, len(order))
+	unlock := s.appOperations.lock(ids...)
+	defer unlock()
 	usedElsewhere := map[string]bool{}
 	for _, installedID := range s.state.Packs() {
 		if installedID == pack.ID {
 			continue
 		}
 		if other, ok := catalog.GetPack(installedID); ok {
-			order, _ := catalog.PackInstallOrder(other.ID)
-			for _, app := range order {
+			otherOrder, _ := catalog.PackInstallOrder(other.ID)
+			for _, app := range otherOrder {
 				usedElsewhere[app.ID] = true
 			}
 		}
-	}
-	order, err := catalog.PackInstallOrder(pack.ID)
-	if err != nil {
-		job.Fail(err)
-		return
 	}
 	for index := len(order) - 1; index >= 0; index-- {
 		app := order[index]
@@ -279,7 +291,8 @@ func (s *Server) runPackUninstall(job *jobs.Job, pack catalog.Pack) {
 		if container, _ := s.eng.Find(ctx, app.ContainerName()); container == nil {
 			continue
 		}
-		job.Progress("removing", "Removing "+app.Name+"…", len(order)-index-1, len(order))
+		done := len(order) - index - 1
+		job.ProgressOperation("removing", "Removing "+app.Name, app.Name, operationPercent(done, len(order), 20), done, len(order))
 		if err := s.eng.Remove(ctx, app.ContainerName()); err != nil {
 			job.Fail(err)
 			return

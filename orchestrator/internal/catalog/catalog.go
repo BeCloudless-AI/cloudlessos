@@ -6,9 +6,11 @@ package catalog
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/cloudless/orchestrator/internal/capabilities"
 	"github.com/cloudless/orchestrator/internal/engine"
+	"github.com/cloudless/orchestrator/internal/models"
 	"github.com/cloudless/orchestrator/internal/platform"
 )
 
@@ -289,6 +291,12 @@ func EngineSpec(a App, model string) engine.RunSpec {
 	if model == "" {
 		model = DefaultModel()
 	}
+	if runtime, ok := models.Get(model); ok && runtime.PreferredEngine == a.ID && runtime.RuntimeImage != "" {
+		rs.Image = runtime.RuntimeImage
+		rs.EntryPoint = runtime.RuntimeEntry
+		rs.Args = append([]string(nil), runtime.RuntimeCommand...)
+		return enforcePrivateEngineContract(rs)
+	}
 	args := make([]string, len(rs.Args)) // copy: don't mutate the shared catalog slice
 	copy(args, rs.Args)
 	for i := range args {
@@ -297,7 +305,7 @@ func EngineSpec(a App, model string) engine.RunSpec {
 		}
 	}
 	rs.Args = args
-	return rs
+	return enforcePrivateEngineContract(rs)
 }
 
 // EngineSpecOverride is EngineSpec with the container command replaced by a
@@ -308,7 +316,39 @@ func EngineSpecOverride(a App, model string, override []string) engine.RunSpec {
 	if len(override) > 0 {
 		rs.Args = append([]string(nil), override...)
 	}
-	return rs
+	return enforcePrivateEngineContract(rs)
+}
+
+// enforcePrivateEngineContract is the final launch-time guardrail for every
+// bundled and user-built inference image. Saved command overrides may tune an
+// engine, but cannot move its private socket or change its internal model name.
+// Client-facing customization belongs to the authenticated gateway instead.
+func enforcePrivateEngineContract(spec engine.RunSpec) engine.RunSpec {
+	spec.Ports = map[int]int{EnginePort: EnginePort}
+	args := append([]string(nil), spec.Args...)
+	setFlag := func(flags []string, value string) bool {
+		for i := 0; i < len(args); i++ {
+			for _, flag := range flags {
+				if args[i] == flag {
+					if i+1 < len(args) {
+						args[i+1] = value
+					} else {
+						args = append(args, value)
+					}
+					return true
+				}
+				if strings.HasPrefix(args[i], flag+"=") {
+					args[i] = flag + "=" + value
+					return true
+				}
+			}
+		}
+		return false
+	}
+	setFlag([]string{"--port"}, fmt.Sprintf("%d", EnginePort))
+	setFlag([]string{"--served-model-name", "--alias"}, "cloudless")
+	spec.Args = args
+	return spec
 }
 
 // DefaultEngine returns the id of the default engine (the preinstalled one).

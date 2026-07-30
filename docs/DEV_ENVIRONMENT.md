@@ -108,8 +108,9 @@ desktop switching and cluster operations.
 
 ## Compile custom inference engines
 
-Installed CloudlessOS systems expose an authenticated full host terminal. The optional build
-toolchain is installed with:
+Installed CloudlessOS systems expose an authenticated full host terminal in a floating window.
+It supports up to eight persistent tabs, so hiding and reopening the window does not replace an
+existing shell. The optional build toolchain is installed with:
 
 ```bash
 sudo cloudless-developer-tools

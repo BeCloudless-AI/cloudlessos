@@ -17,6 +17,7 @@ import (
 	"github.com/cloudless/orchestrator/internal/customengine"
 	"github.com/cloudless/orchestrator/internal/engine"
 	"github.com/cloudless/orchestrator/internal/manifest"
+	"github.com/cloudless/orchestrator/internal/models"
 	"github.com/cloudless/orchestrator/internal/platform"
 	"github.com/cloudless/orchestrator/internal/sparkcluster"
 	"github.com/cloudless/orchestrator/internal/state"
@@ -138,11 +139,25 @@ func Run(ctx context.Context, eng engine.Engine, st *state.Store, mf *manifest.S
 			} else {
 				_ = eng.Remove(ctx, e.ContainerName())
 				spec := catalog.EngineSpec(e, model)
-				spec.Image = pinnedImage(ctx, mf, e)
+				// Model-specific runtimes (for example Cosmos3) carry a reviewed
+				// image in EngineSpec. The signed app manifest only pins the normal
+				// engine image and must not overwrite that model contract.
+				if spec.Image == e.Image {
+					spec.Image = pinnedImage(ctx, mf, e)
+				}
 				// Pin the served model's revision when the default model is in use.
 				served := model
 				if served == "" {
 					served = catalog.DefaultModel()
+				}
+				if runtime, ok := models.Get(served); ok && runtime.RuntimeBuild != "" {
+					logf(e.ID + ": preparing reviewed " + runtime.Name + " runtime")
+					if err := apps.EnsureBuild(ctx, eng, runtime.RuntimeBuild, runtime.RuntimeImage, func(line string) {
+						logf("[build " + runtime.RuntimeBuild + "] " + line)
+					}); err != nil {
+						logf(e.ID + ": runtime build failed: " + err.Error())
+						continue
+					}
 				}
 				if clusterMode {
 					// Both ranks must receive the exact same vLLM topology and model
@@ -150,7 +165,10 @@ func Run(ctx context.Context, eng engine.Engine, st *state.Store, mf *manifest.S
 					// safely be applied to only the coordinator.
 					logf(fmt.Sprintf("%s: using standard %d-Spark distributed launch command", e.ID, sparkcluster.NodeCount()))
 				} else if override, ok := st.EngineCmd(e.ID, served); ok {
-					spec.Args = override // a user-saved launch command wins verbatim
+					spec = catalog.EngineSpecOverride(e, model, override)
+					if spec.Image == e.Image {
+						spec.Image = pinnedImage(ctx, mf, e)
+					}
 					logf(e.ID + ": using saved launch command")
 				} else if mp, ok := mf.ModelPin(ctx, defaultModelPinKey()); ok && served == mp.Repo {
 					args := append([]string{}, spec.Args...) // copy: don't mutate the shared catalog slice

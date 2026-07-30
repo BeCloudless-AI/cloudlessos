@@ -68,6 +68,14 @@ sorted order. This prevents both same-app corruption and pack dependency deadloc
 include overall percentage, phase-local items or bytes, elapsed time and an estimated remaining
 time so a slow download remains distinguishable from a stalled launch.
 
+The left-rail **Update Center** is the unified presentation surface for these authorities. It
+aggregates the signed CloudlessOS package status, platform-owned NVIDIA/DGX maintenance and live
+registry comparisons for installed applications. It does not replace their enforcement paths:
+system packages still run through the privileged signed updater, DGX OS remains NVIDIA-owned, and
+application updates use the same daemon-owned per-app jobs as installation. Replacement images are
+downloaded before the running container is removed, keeping the current app available until the
+brief cutover.
+
 ## Inference engine contract
 
 Exactly one engine or native recipe serves the selected model. Managed consumers use the stable

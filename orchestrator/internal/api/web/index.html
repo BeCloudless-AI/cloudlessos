@@ -365,6 +365,55 @@
   .sys-update-error { margin-top: 8px; font-size: 11.5px; color: var(--err); overflow-wrap: anywhere; }
   .sys-update-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 13px; }
   .sys-update-spin .ui-icon { animation: spin .9s linear infinite; transform-origin: center; }
+  .dock-badge { position: absolute; right: -4px; top: -5px; z-index: 2; min-width: 18px; height: 18px; padding: 0 5px; display: grid; place-items: center; border: 2px solid var(--card-solid); border-radius: 999px; color: #fff; background: var(--err); font: 700 9px/1 'Roboto Mono', monospace; box-shadow: 0 5px 12px -6px rgba(0,0,0,.65); }
+  .dock-badge.hidden { display: none; }
+  .uc { width: min(1180px, var(--ui-vw-96, 96vw)); height: min(var(--ui-vh-92, 92vh), 940px); display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--card-edge); border-radius: 23px; color: var(--ink); background: var(--card-solid); box-shadow: var(--shadow); }
+  .uc-head-icon { width: 38px; height: 38px; margin-left: 12px; display: grid; place-items: center; border-radius: 12px; color: var(--blue); background: var(--blue-soft); }
+  .uc-head-icon .ui-icon { width: 20px; height: 20px; }
+  .uc-head-copy { min-width: 0; margin-left: 12px; }
+  .uc-head-copy b, .uc-head-copy span { display: block; }
+  .uc-head-copy b { font-size: 15px; }
+  .uc-head-copy span { margin-top: 2px; color: var(--muted); font-size: 10.5px; }
+  .uc-body { flex: 1; min-height: 0; overflow-y: auto; padding: 25px 28px 34px; scrollbar-gutter: stable; }
+  .uc-loading { min-height: 380px; display: grid; place-items: center; color: var(--muted); }
+  .uc-loading span { display: flex; align-items: center; gap: 11px; }
+  .uc-hero { padding: 23px; display: flex; align-items: center; gap: 18px; border: 1px solid var(--hair); border-radius: 19px; background: linear-gradient(135deg, var(--panel-2), color-mix(in srgb, var(--blue-soft) 42%, var(--panel-2))); }
+  .uc-hero-mark { width: 53px; height: 53px; display: grid; place-items: center; flex: none; border-radius: 16px; color: #fff; background: var(--blue); box-shadow: 0 14px 25px -17px var(--blue); }
+  .uc-hero-mark.ready { color: var(--accent); background: color-mix(in srgb, var(--accent) 15%, var(--panel)); box-shadow: none; }
+  .uc-hero-mark .ui-icon { width: 25px; height: 25px; }
+  .uc-hero-copy { min-width: 0; flex: 1; }
+  .uc-hero-copy h2 { margin: 0; font-size: 22px; letter-spacing: -.35px; }
+  .uc-hero-copy p { margin: 6px 0 0; color: var(--muted); font-size: 12.5px; line-height: 1.5; }
+  .uc-hero-meta { margin-top: 8px; color: var(--faint); font: 500 9.5px/1.3 'Roboto Mono', monospace; text-transform: uppercase; letter-spacing: .45px; }
+  .uc-section { margin-top: 25px; }
+  .uc-section-head { margin-bottom: 11px; display: flex; align-items: end; justify-content: space-between; gap: 15px; }
+  .uc-section-title b, .uc-section-title span { display: block; }
+  .uc-section-title b { font-size: 14px; }
+  .uc-section-title span { margin-top: 3px; color: var(--muted); font-size: 10.5px; }
+  .uc-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 11px; }
+  .uc-card { min-width: 0; padding: 16px; border: 1px solid var(--hair); border-radius: 15px; background: var(--panel-2); }
+  .uc-card.full { grid-column: 1 / -1; }
+  .uc-card-top { display: flex; align-items: center; gap: 12px; }
+  .uc-card-icon { width: 39px; height: 39px; display: grid; place-items: center; flex: none; border: 1px solid var(--hair); border-radius: 11px; color: var(--blue); background: var(--control); }
+  .uc-card-icon .ui-icon { width: 18px; height: 18px; }
+  .uc-card-copy { min-width: 0; flex: 1; }
+  .uc-card-copy b, .uc-card-copy span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .uc-card-copy b { font-size: 13px; }
+  .uc-card-copy span { margin-top: 3px; color: var(--muted); font: 500 9.5px/1.3 'Roboto Mono', monospace; }
+  .uc-state { padding: 4px 7px; flex: none; border-radius: 999px; color: var(--muted); background: var(--control); font: 700 8.5px/1.2 'Roboto Mono', monospace; text-transform: uppercase; letter-spacing: .4px; }
+  .uc-state.available { color: var(--blue); background: var(--blue-soft); }
+  .uc-state.ready { color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+  .uc-card-message { margin-top: 12px; color: var(--ink-2); font-size: 11.5px; line-height: 1.5; }
+  .uc-card-actions { margin-top: 14px; display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+  .uc-card-error { margin-top: 10px; color: var(--err); font-size: 10.5px; }
+  .uc-changes { margin: 12px 0 0; padding: 11px 12px 11px 27px; border-radius: 10px; color: var(--ink-2); background: var(--control); }
+  .uc-changes li { font-size: 10.5px; line-height: 1.5; }
+  .uc-progress { margin-top: 12px; }
+  .uc-progress-head { margin-bottom: 6px; display: flex; justify-content: space-between; gap: 10px; color: var(--muted); font: 500 9px/1.2 'Roboto Mono', monospace; }
+  .uc-progress-track { height: 6px; overflow: hidden; border-radius: 999px; background: var(--progress-rail); }
+  .uc-progress-track i { display: block; width: var(--progress, 0%); height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--progress-start), var(--progress-end)); transition: width .3s ease; }
+  .uc-empty { padding: 28px; grid-column: 1 / -1; border: 1px dashed var(--line-2); border-radius: 15px; color: var(--muted); text-align: center; font-size: 12px; }
+  @media (max-width: 760px) { .uc-grid { grid-template-columns: 1fr; } .uc-hero { align-items: flex-start; flex-wrap: wrap; } .uc-hero .btn { margin-left: 71px; } .uc-body { padding: 18px 16px 28px; } }
   .hw-card + .hw-card { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
   .set-row { display: flex; align-items: center; gap: 12px; padding: 7px 0; font-size: 13.5px; }
   .srow-label { width: 70px; color: var(--muted); flex: none; }
@@ -3572,6 +3621,7 @@
   <button class="dock-item" id="dock-launcher" aria-label="Apps" title="Apps"><span class="dock-tip">Apps</span><span class="dock-glyph" aria-hidden="true"><svg class="ui-icon"><use href="#ui-apps"/></svg></span></button>
   <button class="dock-item" id="dock-models" aria-label="Models" title="Models"><span class="dock-tip">Models</span><span class="dock-glyph" aria-hidden="true"><svg class="ui-icon"><use href="#ui-models"/></svg></span></button>
   <button class="dock-item" id="dock-inference" aria-label="Metrics" title="Metrics"><span class="dock-tip">Metrics</span><span class="dock-glyph" aria-hidden="true"><svg class="ui-icon"><use href="#ui-metrics"/></svg></span><span class="run-dot"></span></button>
+  <button class="dock-item" id="dock-updates" aria-label="Updates" title="Updates"><span class="dock-tip">Updates</span><span class="dock-glyph" aria-hidden="true"><svg class="ui-icon"><use href="#ui-download"/></svg></span><span class="dock-badge hidden" id="dock-update-badge">0</span></button>
   <button class="dock-item" id="dock-terminal" aria-label="Terminal" title="Terminal"><span class="dock-tip">Terminal</span><span class="dock-glyph" aria-hidden="true"><svg class="ui-icon"><use href="#ui-terminal"/></svg></span></button>
   <span class="dock-sep"></span>
   <button class="dock-item accent" id="dock-asst" aria-label="Assistant" title="Assistant"><span class="dock-tip">Assistant</span><span class="dock-glyph" aria-hidden="true"><svg class="ui-icon"><use href="#ui-assistant"/></svg></span></button>
@@ -3625,6 +3675,19 @@
     </div>
     <div class="mm-body" id="inf-body"></div>
   </div>
+</div>
+
+<!-- Unified Update Center: CloudlessOS, drivers and managed applications. -->
+<div class="overlay hidden" id="update-center">
+  <section class="uc" role="dialog" aria-modal="true" aria-labelledby="update-center-title">
+    <header class="lp-head">
+      <span class="win-traffic"><i class="t-c" title="Close"></i><i class="t-m"></i><i class="t-f"></i></span>
+      <span class="uc-head-icon" aria-hidden="true"><svg class="ui-icon"><use href="#ui-download"/></svg></span>
+      <span class="uc-head-copy"><b id="update-center-title">Update Center</b><span>CloudlessOS, drivers and installed applications</span></span>
+      <button class="lp-x" id="uc-x" title="Close" aria-label="Close Update Center"><svg class="ui-icon" aria-hidden="true"><use href="#ui-close"/></svg></button>
+    </header>
+    <div class="uc-body" id="uc-body"><div class="uc-loading"><span><i class="key-dialog-spinner" aria-hidden="true"></i>Checking installed components…</span></div></div>
+  </section>
 </div>
 
 <!-- API key creation stays inside the CloudlessOS interface (never a browser prompt). -->
@@ -4560,8 +4623,8 @@ function renderAppOperations() {
   host.innerHTML = active.map(job => {
     const info = appOperationInfo(job), pct = Math.max(0, Math.min(99, Number(job.percent) || 0));
     const determinate = pct > 0;
-    const verb = info.kind === 'remove' || info.kind === 'uninstall' ? 'Removing' : info.kind === 'reset' ? 'Resetting' : 'Installing';
-    const icon = info.kind === 'remove' || info.kind === 'uninstall' ? 'trash' : info.kind === 'reset' ? 'restart' : 'download';
+    const verb = info.kind === 'remove' || info.kind === 'uninstall' ? 'Removing' : info.kind === 'reset' ? 'Resetting' : info.kind === 'update' ? 'Updating' : 'Installing';
+    const icon = info.kind === 'remove' || info.kind === 'uninstall' ? 'trash' : info.kind === 'reset' ? 'restart' : info.kind === 'update' ? 'reload' : 'download';
     const itemDetail = job.bytesTotal ? `${modelDownloadSize(job.bytesDone)} of ${modelDownloadSize(job.bytesTotal)}` : job.itemsTotal ? `${job.itemsDone || 0} of ${job.itemsTotal} components` : 'Background operation';
     const timing = `${operationDuration(job.elapsedSeconds)} elapsed${job.etaSeconds > 0 ? ` · about ${operationDuration(job.etaSeconds)} remaining` : ''}`;
     return `<article class="model-download-home app-operation-home ${info.kind === 'remove' || info.kind === 'uninstall' ? 'remove' : 'install'}">
@@ -4582,17 +4645,159 @@ function applyAppOperations(jobs) {
     toast(`${info.name} ${ok ? (info.kind === 'remove' || info.kind === 'uninstall' ? 'removed' : 'ready') : (job.error || 'operation failed')}`, !ok);
     renderApps().then(refreshLauncher);
     refreshPacks();
+    if (info.kind === 'update') refreshUpdateCenter();
   });
   installing = active.length;
   renderAppOperations();
+  if (updateCenterOpen()) renderUpdateCenter();
 }
 async function refreshAppOperations() {
   const jobs = await api('/api/jobs').catch(() => null); if (jobs) applyAppOperations(jobs);
 }
 
+/* ---- Update Center ---- */
+let updateCenterData = null, updateCenterChecking = false, updateCenterPollTimer = null;
+function updateCenterOpen() { return !document.getElementById('update-center').classList.contains('hidden'); }
+function openUpdateCenter() {
+  document.getElementById('update-center').classList.remove('hidden');
+  if (updateCenterData) renderUpdateCenter(); else renderUpdateCenterLoading();
+  refreshUpdateCenter();
+}
+function closeUpdateCenter() { document.getElementById('update-center').classList.add('hidden'); }
+function renderUpdateCenterLoading() {
+  document.getElementById('uc-body').innerHTML = '<div class="uc-loading"><span><i class="key-dialog-spinner" aria-hidden="true"></i>Checking CloudlessOS and installed applications…</span></div>';
+}
+function updateCenterBusyState(state) { return ['checking', 'downloading', 'installing', 'applying'].includes(String(state || '').toLowerCase()); }
+function updateCenterBadge(count) {
+  const badge = document.getElementById('dock-update-badge');
+  count = Math.max(0, Number(count) || 0);
+  badge.classList.toggle('hidden', count === 0);
+  badge.textContent = count > 99 ? '99+' : String(count);
+  document.getElementById('dock-updates').classList.toggle('running', count > 0);
+}
+async function refreshUpdateCenter(showFailure = false) {
+  try {
+    const next = await api('/api/updates');
+    if (next.error) throw new Error(next.error);
+    updateCenterData = next;
+    updateCenterBadge(next.updateCount);
+    if (updateCenterOpen()) renderUpdateCenter();
+    return next;
+  } catch (error) {
+    if (updateCenterOpen() && !updateCenterData) document.getElementById('uc-body').innerHTML = `<div class="uc-empty">Could not read update status.<br>${escapeHtml(error.message || '')}</div>`;
+    if (showFailure) toast(error.message || 'Could not check for updates', true);
+    return null;
+  }
+}
+function updateCenterProgress(job) {
+  if (!job || job.done) return '';
+  const percent = Math.max(0, Math.min(99, Number(job.percent) || 0));
+  const detail = job.bytesTotal ? `${modelDownloadSize(job.bytesDone)} of ${modelDownloadSize(job.bytesTotal)}` : job.message || 'Working in the background';
+  return `<div class="uc-progress"><div class="uc-progress-head"><span>${escapeHtml(detail)}</span><b>${percent ? percent + '%' : 'WORKING'}</b></div><div class="uc-progress-track" style="--progress:${percent || 8}%"><i></i></div></div>`;
+}
+function updateCenterSystemCard(system = {}) {
+  const state = system.state || 'idle', busy = updateCenterBusyState(state), available = state === 'available', reboot = state === 'reboot_required';
+  const current = system.currentVersion || document.documentElement.dataset.cloudlessVersion || 'unknown';
+  const latest = system.availableVersion || current;
+  const status = available ? 'Available' : reboot ? 'Restart' : busy ? 'Updating' : state === 'failed' ? 'Attention' : 'Current';
+  const changes = available && (system.changelog || []).length ? `<ul class="uc-changes">${system.changelog.map(item => `<li>${escapeHtml(item)}</li>`).join('')}</ul>` : '';
+  const progress = busy ? `<div class="uc-progress"><div class="uc-progress-head"><span>${escapeHtml(system.message || 'Installing signed packages')}</span><b>${Math.max(0, Number(system.progress) || 0)}%</b></div><div class="uc-progress-track" style="--progress:${Math.max(2, Number(system.progress) || 0)}%"><i></i></div></div>` : '';
+  let action = '';
+  if (available) action = '<button class="btn primary" data-uc-system="apply">Install update</button>';
+  else if (reboot) action = '<button class="btn primary" data-uc-system="reboot">Restart now</button>';
+  return `<article class="uc-card full"><div class="uc-card-top"><span class="uc-card-icon">${uiIcon('download')}</span><span class="uc-card-copy"><b>CloudlessOS</b><span>INSTALLED ${escapeHtml(current)} · ${escapeHtml(system.channel || 'stable').toUpperCase()} CHANNEL${available ? ` · AVAILABLE ${escapeHtml(latest)}` : ''}</span></span><span class="uc-state ${available || reboot ? 'available' : busy ? 'available' : 'ready'}">${status}</span></div><div class="uc-card-message">${escapeHtml(system.releaseTitle || system.message || (available ? `CloudlessOS ${latest} is ready to install.` : 'Signed CloudlessOS components are up to date.'))}</div>${system.releaseSummary && available ? `<div class="uc-card-message">${escapeHtml(system.releaseSummary)}</div>` : ''}${changes}${progress}${system.error ? `<div class="uc-card-error">${escapeHtml(system.error)}</div>` : ''}${action ? `<div class="uc-card-actions">${action}</div>` : ''}</article>`;
+}
+function updateCenterDriverCard() {
+  if (updateCenterData.driverOwner === 'nvidia-dgx') return `<article class="uc-card full"><div class="uc-card-top"><span class="uc-card-icon">${uiIcon('machine')}</span><span class="uc-card-copy"><b>DGX OS and drivers</b><span>MANAGED BY NVIDIA</span></span><span class="uc-state ready">Vendor managed</span></div><div class="uc-card-message">Driver, firmware and DGX OS updates remain under NVIDIA’s qualified update path.</div><div class="uc-card-actions"><button class="btn" data-uc-driver="dgx">Open DGX Dashboard</button></div></article>`;
+  const driver = updateCenterData.driver || {}, available = !!driver.updateAvailable, busy = updateCenterBusyState(driver.state), reboot = !!driver.rebootRequired;
+  const status = available ? 'Available' : reboot ? 'Restart' : busy ? 'Updating' : 'Current';
+  const versions = `${driver.currentDriver ? `DRIVER ${escapeHtml(driver.currentDriver)}` : 'NVIDIA DRIVER'}${available && driver.candidateVersion ? ` · AVAILABLE ${escapeHtml(driver.candidateVersion)}` : ''}`;
+  const progress = busy ? `<div class="uc-progress"><div class="uc-progress-head"><span>${escapeHtml(driver.message || 'Applying driver update')}</span><b>${Math.max(0, Number(driver.progress) || 0)}%</b></div><div class="uc-progress-track" style="--progress:${Math.max(2, Number(driver.progress) || 0)}%"><i></i></div></div>` : '';
+  let action = available ? '<button class="btn primary" data-uc-driver="apply">Install driver</button>' : reboot ? '<button class="btn primary" data-uc-driver="reboot">Restart now</button>' : '';
+  return `<article class="uc-card full"><div class="uc-card-top"><span class="uc-card-icon">${uiIcon('machine')}</span><span class="uc-card-copy"><b>NVIDIA driver</b><span>${versions}</span></span><span class="uc-state ${available || reboot || busy ? 'available' : 'ready'}">${status}</span></div><div class="uc-card-message">${escapeHtml(driver.message || 'The recommended NVIDIA driver is installed.')}</div>${progress}${driver.error ? `<div class="uc-card-error">${escapeHtml(driver.error)}</div>` : ''}${action ? `<div class="uc-card-actions">${action}</div>` : ''}</article>`;
+}
+function updateCenterAppCard(app) {
+  const operation = activeOperationForApp(app.id), available = !!app.hasUpdate;
+  const state = operation ? 'Updating' : available ? 'Available' : app.build ? 'Local build' : app.checkError ? 'Check failed' : 'Current';
+  const version = app.current ? `IMAGE ${escapeHtml(app.current)}${available && app.latest ? ` → ${escapeHtml(app.latest)}` : ''}` : app.build ? 'BUILT ON THIS MACHINE' : 'INSTALLED';
+  let action = '';
+  if (!operation && available) action = `<button class="btn primary" data-uc-app="${escapeAttr(app.id)}">Update</button>`;
+  else if (!operation && app.build) action = `<button class="btn" data-uc-manage="${escapeAttr(app.id)}">Manage build</button>`;
+  return `<article class="uc-card"><div class="uc-card-top"><span class="uc-card-icon">${glyph(app.id)}</span><span class="uc-card-copy"><b>${escapeHtml(app.name)}</b><span>${version}</span></span><span class="uc-state ${available || operation ? 'available' : !app.checkError ? 'ready' : ''}">${state}</span></div><div class="uc-card-message">${escapeHtml(operation?.message || app.notes || (available ? 'A newer container image is ready. Persistent application data and configuration will be kept.' : app.checkError || 'This application is up to date.'))}</div>${updateCenterProgress(operation)}${action ? `<div class="uc-card-actions">${action}</div>` : ''}</article>`;
+}
+function renderUpdateCenter() {
+  if (!updateCenterData || !updateCenterOpen()) return;
+  const system = updateCenterData.system || {}, appUpdates = (updateCenterData.apps || []).filter(app => app.hasUpdate);
+  const total = Number(updateCenterData.updateCount) || 0;
+  const checked = updateCenterData.checkedAt ? new Date(updateCenterData.checkedAt).toLocaleString() : 'Not checked yet';
+  const appCards = (updateCenterData.apps || []).map(updateCenterAppCard).join('') || '<div class="uc-empty">No managed applications are installed yet.</div>';
+  document.getElementById('uc-body').innerHTML = `<div class="uc-hero"><span class="uc-hero-mark ${total ? '' : 'ready'}">${uiIcon(total ? 'download' : 'check')}</span><div class="uc-hero-copy"><h2>${total ? `${total} update${total === 1 ? '' : 's'} available` : 'Everything is up to date'}</h2><p>${total ? 'Review each update below or install all available application updates together.' : 'CloudlessOS, drivers and installed applications are on their current checked versions.'}</p><div class="uc-hero-meta">LAST CHECKED ${escapeHtml(checked)}</div></div><button class="btn ${updateCenterChecking ? '' : 'primary'}" id="uc-check" ${updateCenterChecking ? 'disabled' : ''}>${updateCenterChecking ? '<i class="key-dialog-spinner" aria-hidden="true"></i><span>Checking…</span>' : `${uiIcon('reload')}<span>Check again</span>`}</button></div><section class="uc-section"><div class="uc-section-head"><span class="uc-section-title"><b>System</b><span>Signed CloudlessOS packages and platform-owned drivers</span></span></div><div class="uc-grid">${updateCenterSystemCard(system)}${updateCenterDriverCard()}</div></section><section class="uc-section"><div class="uc-section-head"><span class="uc-section-title"><b>Applications</b><span>Installed containers update independently in the background</span></span>${appUpdates.length > 1 ? `<button class="btn primary" id="uc-update-all">Update all ${appUpdates.length}</button>` : ''}</div><div class="uc-grid">${appCards}</div></section>`;
+  wireUpdateCenter();
+}
+function wireUpdateCenter() {
+  const check = document.getElementById('uc-check'); if (check) check.onclick = runUpdateCenterCheck;
+  const all = document.getElementById('uc-update-all'); if (all) all.onclick = () => applyApplicationUpdates((updateCenterData.apps || []).filter(app => app.hasUpdate).map(app => app.id), all);
+  document.querySelectorAll('[data-uc-app]').forEach(button => button.onclick = () => applyApplicationUpdates([button.dataset.ucApp], button));
+  document.querySelectorAll('[data-uc-manage]').forEach(button => button.onclick = () => { closeUpdateCenter(); openSettingsApp(button.dataset.ucManage); });
+  const systemApply = document.querySelector('[data-uc-system="apply"]'); if (systemApply) systemApply.onclick = () => applySystemUpdate(systemApply);
+  const systemReboot = document.querySelector('[data-uc-system="reboot"]'); if (systemReboot) systemReboot.onclick = () => openPowerDialog('reboot');
+  const driverApply = document.querySelector('[data-uc-driver="apply"]'); if (driverApply) driverApply.onclick = () => applyDriverUpdate(driverApply);
+  const driverReboot = document.querySelector('[data-uc-driver="reboot"]'); if (driverReboot) driverReboot.onclick = () => openPowerDialog('reboot');
+  const dgx = document.querySelector('[data-uc-driver="dgx"]'); if (dgx) dgx.onclick = () => { closeUpdateCenter(); setPage = 'dgx-dashboard'; openSettings(); };
+}
+async function runUpdateCenterCheck() {
+  if (updateCenterChecking) return;
+  updateCenterChecking = true; renderUpdateCenter();
+  const started = await api('/api/updates/check', { method: 'POST' }).catch(error => ({ error: error.message }));
+  if (started.error) toast(started.error, true);
+  await refreshUpdateCenter(true);
+  updateCenterChecking = false; renderUpdateCenter();
+  pollUpdateCenterAuthorities();
+}
+async function applyApplicationUpdates(ids, returnFocus) {
+  if (!ids.length) return;
+  const approved = await openCloudlessDecision({ title: ids.length > 1 ? `Update ${ids.length} applications?` : 'Update this application?', message: 'CloudlessOS will download each new image in the background.', detail: 'Applications keep running while images download. Persistent data and settings are preserved during the brief restart.', confirmLabel: ids.length > 1 ? 'Update all' : 'Update', icon: 'download', returnFocus });
+  if (!approved) return;
+  const result = await api('/api/updates/apps/apply', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Cloudless-Action': 'update-apps' }, body: JSON.stringify({ ids }) }).catch(error => ({ error: error.message }));
+  if (result.error) return toast(result.error, true);
+  toast(`${ids.length} application update${ids.length === 1 ? '' : 's'} started in the background`);
+  await refreshAppOperations(); renderUpdateCenter();
+}
+async function applySystemUpdate(returnFocus) {
+  const approved = await openCloudlessDecision({ title: 'Install the CloudlessOS update?', message: 'CloudlessOS will install the signed system packages now.', detail: 'Installed apps and their data remain in place. A restart may be required when the update finishes.', confirmLabel: 'Install update', icon: 'download', returnFocus });
+  if (!approved) return;
+  const result = await api('/api/system/update/apply', { method: 'POST', headers: { 'X-Cloudless-Action': 'update' } }).catch(error => ({ error: error.message }));
+  if (result.error) return toast(result.error, true);
+  toast('CloudlessOS update started in the background'); pollUpdateCenterAuthorities();
+}
+async function applyDriverUpdate(returnFocus) {
+  const approved = await openCloudlessDecision({ title: 'Install the NVIDIA driver update?', message: 'CloudlessOS will install NVIDIA’s recommended compatible driver.', detail: 'GPU applications may restart and the machine will usually need a reboot.', confirmLabel: 'Install driver', icon: 'download', returnFocus });
+  if (!approved) return;
+  const result = await api('/api/system/nvidia-driver/apply', { method: 'POST', headers: { 'X-Cloudless-Action': 'nvidia-driver' } }).catch(error => ({ error: error.message }));
+  if (result.error) return toast(result.error, true);
+  toast('NVIDIA driver update started'); pollUpdateCenterAuthorities();
+}
+function pollUpdateCenterAuthorities() {
+  clearInterval(updateCenterPollTimer);
+  let polls = 0;
+  updateCenterPollTimer = setInterval(async () => {
+    polls++;
+    if (!updateCenterData) return;
+    const [system, driver] = await Promise.all([api('/api/system/update').catch(() => null), updateCenterData.driverOwner === 'cloudless' ? api('/api/system/nvidia-driver').catch(() => null) : Promise.resolve(null)]);
+    if (system && !system.error) updateCenterData.system = system;
+    if (driver && !driver.error) updateCenterData.driver = driver;
+    const busy = updateCenterBusyState(system?.state) || updateCenterBusyState(driver?.state);
+    if (updateCenterOpen()) renderUpdateCenter();
+    // systemd starts the privileged worker asynchronously. Keep observing long
+    // enough to see its first status write instead of mistaking startup latency
+    // for an already-finished operation.
+    if (!busy && polls >= 6) { clearInterval(updateCenterPollTimer); updateCenterPollTimer = null; refreshUpdateCenter(); }
+  }, 1500);
+}
+
 function statusBadge(a) {
   const operation = activeOperationForApp(a.id);
-  if (operation) return `<span class="ac-badge">${operation.appId.endsWith(':uninstall') ? 'removing' : operation.appId.endsWith(':reset') ? 'resetting' : 'installing'}</span>`;
+  if (operation) return `<span class="ac-badge">${operation.appId.endsWith(':uninstall') ? 'removing' : operation.appId.endsWith(':reset') ? 'resetting' : operation.appId.endsWith(':update') ? 'updating' : 'installing'}</span>`;
   return lastRunning[a.id] === 'running' ? '<span class="ac-badge run">running</span>'
     : (a.image ? '' : '<span class="ac-badge soon">soon</span>');
 }
@@ -8281,9 +8486,12 @@ document.getElementById('models').addEventListener('click', e => { if (e.target.
 document.getElementById('dock-launcher').onclick = openLauncher;
 document.getElementById('dock-models').onclick = openModelManager;
 document.getElementById('dock-inference').onclick = openInference;
+document.getElementById('dock-updates').onclick = openUpdateCenter;
 document.getElementById('dock-terminal').onclick = toggleTerminalWindow;
 document.getElementById('dock-asst').onclick = () => openAsst();
 document.getElementById('dock-settings').onclick = openSettings;
+document.getElementById('uc-x').onclick = closeUpdateCenter;
+document.getElementById('update-center').addEventListener('click', event => { if (event.target.id === 'update-center') closeUpdateCenter(); });
 // the red traffic light closes its window (mirrors the legacy × button and Esc)
 document.querySelectorAll('.win-traffic .t-c').forEach(dot => {
   const head = dot.closest('.lp-head, .set-topbar');
@@ -9188,6 +9396,7 @@ document.addEventListener('keydown', e => {
     document.getElementById('shutdown').focus();
   }
   else if (!np.classList.contains('hidden')) np.classList.add('hidden');
+  else if (updateCenterOpen()) closeUpdateCenter();
   else if (modelsOpen()) closeModelManager();
   else if (launcherOpen()) closeLauncher();
   else if (!document.getElementById('asst').classList.contains('hidden')) closeAsst();
@@ -9484,6 +9693,7 @@ tickClock(); setInterval(tickClock, 1000);
 async function bootCloudless() {
   await refreshCapabilities();
   refreshStatus(); renderGPUs(); renderSystem(); renderHomeCluster(); renderPlaces(); renderApps(); renderEngine(); refreshNetStatus(); refreshActiveModel(); refreshProfileBadge(); refreshModelDownloads(); refreshRecipeJobs(); refreshAppOperations();
+  setTimeout(() => refreshUpdateCenter(), 1800);
   api('/api/onboarding').then(o => {
     const afterIntro = () => { if (!o || !o.completed) renderApps().then(showOnboarding); };
     showStartupIntro(afterIntro, (o && o.bootID) || '');
@@ -9497,6 +9707,7 @@ setInterval(refreshModelDownloads, 3000);
 setInterval(refreshRecipeJobs, 3000);
 setInterval(refreshAppOperations, 1500);
 setInterval(refreshNetStatus, 20000);
+setInterval(() => { if (!updateCenterOpen()) refreshUpdateCenter(); }, 15 * 60 * 1000);
 </script>
 </body>
 </html>

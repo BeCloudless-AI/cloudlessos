@@ -123,6 +123,9 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/system/update", s.systemUpdateGet)
 	mux.HandleFunc("POST /api/system/update/check", s.systemUpdateCheck)
 	mux.HandleFunc("POST /api/system/update/apply", s.systemUpdateApply)
+	mux.HandleFunc("GET /api/updates", s.updateCenterGet)
+	mux.HandleFunc("POST /api/updates/check", s.updateCenterCheck)
+	mux.HandleFunc("POST /api/updates/apps/apply", s.updateCenterAppsApply)
 	mux.HandleFunc("GET /api/system/nvidia-driver", s.nvidiaDriverGet)
 	mux.HandleFunc("POST /api/system/nvidia-driver/check", s.nvidiaDriverCheck)
 	mux.HandleFunc("POST /api/system/nvidia-driver/apply", s.nvidiaDriverApply)
@@ -1067,7 +1070,6 @@ func operationPercent(item, total, within int) int {
 func (s *Server) installOne(ctx context.Context, job *jobs.Job, app catalog.App, item, total int) (string, error) {
 
 	job.ProgressOperation("preparing", "Preparing "+app.Name, app.Name, operationPercent(item, total, 4), item, total)
-	_ = s.eng.Remove(ctx, app.ContainerName()) // clear any stale container
 
 	// Use the manifest's validated digest when pinned, else the catalog tag.
 	img := s.imageFor(ctx, app)
@@ -1141,6 +1143,11 @@ func (s *Server) installOne(ctx context.Context, job *jobs.Job, app catalog.App,
 	}
 
 	job.ProgressOperation("starting", "Starting "+app.Name+" container", app.Name, operationPercent(item, total, 82), item, total)
+	// Keep the currently running version available while a replacement image is
+	// downloaded or built. The brief cutover starts only after the new artifact
+	// is ready locally, so background updates do not create download-length
+	// application outages.
+	_ = s.eng.Remove(ctx, app.ContainerName())
 	spec := s.appSpec(app)
 	spec.Image = img // run the exact image we pulled (pinned digest when manifest applies)
 	id, err := s.eng.Run(ctx, spec)

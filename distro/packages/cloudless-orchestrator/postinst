@@ -3,6 +3,9 @@ set -e
 install -d -m 0750 /var/lib/cloudless
 systemctl daemon-reload >/dev/null 2>&1 || true
 systemctl enable cloudlessd.service >/dev/null 2>&1 || true
+# Install the official Tailscale client on the next normal boot, outside dpkg's
+# lock. It remains logged out and shares nothing until the user opts in.
+systemctl enable cloudless-tailscale-install.service >/dev/null 2>&1 || true
 
 # Remove runtime data left by the retired third-party recipe provider. These
 # exact paths were created by earlier CloudlessOS arm64 packages and are not

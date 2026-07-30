@@ -28,6 +28,39 @@ sh -n "$DISTRO/packages/cloudless-branding/os-release"
 # background visible.
 grep -Fq '$HOME/snap/chromium/common/cloudless-browser' \
     "$DISTRO/packages/cloudless-shell/cloudless-kiosk"
+grep -Fq '$HOME/snap/chromium/common/cloudless-web-browser' \
+    "$DISTRO/packages/cloudless-shell/cloudless-browser-agent"
+grep -Fq '$HOME/snap/firefox/common/cloudless-web-browser' \
+    "$DISTRO/packages/cloudless-shell/cloudless-browser-agent"
+grep -Fq -- '--new-tab "$url"' \
+    "$DISTRO/packages/cloudless-shell/cloudless-browser-agent"
+grep -Fq -- '--class CloudlessBrowser' \
+    "$DISTRO/packages/cloudless-shell/cloudless-browser-agent"
+grep -Fq 'wmctrl -i -r "$window" -b add,above' \
+    "$DISTRO/packages/cloudless-shell/cloudless-browser-agent"
+grep -Fq 'wmctrl -i -r "$KIOSK_WINDOW" -b add,below' \
+    "$DISTRO/packages/cloudless-shell/cloudless-browser-agent"
+grep -Fq 'xdotool windowraise "$window"' \
+    "$DISTRO/packages/cloudless-shell/cloudless-browser-agent"
+grep -Fq 'wmctrl -i -a "$window"' \
+    "$DISTRO/packages/cloudless-shell/cloudless-browser-agent"
+grep -Fq 'flock -n 9' \
+    "$DISTRO/packages/cloudless-shell/cloudless-browser-agent"
+grep -Fq '9>&-' \
+    "$DISTRO/packages/cloudless-shell/cloudless-browser-agent"
+grep -Fq -- '--class CloudlessKiosk' \
+    "$DISTRO/packages/cloudless-shell/cloudless-kiosk"
+grep -Fq '/usr/bin/cloudless-browser-agent' \
+    "$DISTRO/packages/cloudless-shell/openbox-autostart"
+grep -Fq '/run/cloudless-browser/requests' \
+    "$DISTRO/packages/cloudless-shell/cloudless-browser.tmpfiles"
+sh -n "$DISTRO/packages/cloudless-shell/cloudless-browser-agent"
+sh -n "$DISTRO/packages/cloudless-orchestrator/cloudless-install-tailscale"
+grep -Fq 'https://tailscale.com/install.sh' \
+    "$DISTRO/packages/cloudless-orchestrator/cloudless-install-tailscale"
+grep -Fq 'cloudless-tailscale-install.service' "$DISTRO/scripts/build-packages.sh"
+grep -Fq 'Restart=on-failure' \
+    "$DISTRO/packages/cloudless-orchestrator/cloudless-tailscale-install.service"
 grep -Fq '/usr/bin/ttyd' "$DISTRO/packages/cloudless-shell/cloudless-terminal.service"
 grep -Fq 'disable --now ttyd.service' "$DISTRO/packages/cloudless-shell/postinst"
 grep -Fq 'export CUDA_HOME=/usr/local/cuda' "$DISTRO/packages/cloudless-shell/cloudless-cuda.sh"
@@ -41,10 +74,16 @@ grep -Fq 'CLOUDLESS_DESKTOP_HOME=/home/cloudless' \
 grep -Fq 'capabilities.BuildVersion=$VERSION' "$DISTRO/scripts/build-packages.sh"
 orchestrator_deb="$(find "$OUT" -maxdepth 1 -type f -name 'cloudless-orchestrator_*_amd64.deb' -print -quit)"
 test -n "$orchestrator_deb"
+shell_deb="$(find "$OUT" -maxdepth 1 -type f -name 'cloudless-shell_*_amd64.deb' -print -quit)"
+test -n "$shell_deb"
 dpkg-deb -f "$orchestrator_deb" Depends | grep -Eq '(^|, )gpgv(,|$)'
 dpkg-deb -f "$orchestrator_deb" Depends | grep -Eq '(^|, )xdotool(,|$)'
 dpkg-deb -c "$orchestrator_deb" |
     grep -F './usr/share/cloudless/cloudless-archive-keyring.pgp' >/dev/null
+dpkg-deb -c "$orchestrator_deb" | grep -F './usr/lib/cloudless/cloudless-install-tailscale' >/dev/null
+dpkg-deb -c "$orchestrator_deb" | grep -F './lib/systemd/system/cloudless-tailscale-install.service' >/dev/null
+dpkg-deb -c "$shell_deb" | grep -F './usr/bin/cloudless-browser-agent' >/dev/null
+dpkg-deb -c "$shell_deb" | grep -F './usr/lib/tmpfiles.d/cloudless-browser.conf' >/dev/null
 grep -Fq 'update-alternatives --set default.plymouth' \
     "$DISTRO/packages/cloudless-branding/postinst"
 grep -Fq 'Wants=docker.service' "$DISTRO/packages/cloudless-orchestrator/cloudlessd.service"

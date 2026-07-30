@@ -1,0 +1,13 @@
+{
+  "title": "Secure remote access and a persistent system browser",
+  "summary": "CloudlessOS 0.2.6 adds opt-in Tailscale remote access and a persistent native Browser for authentication, documentation, and ordinary web use without leaving the Cloudless desktop.",
+  "changes": [
+    "Add Browser as a permanent Cloudless desktop tool backed by a separate persistent Firefox or Chromium profile with native tabs, history, bookmarks, and downloads.",
+    "Keep Browser above the fullscreen Cloudless kiosk, show its running state in the dock, and restore a minimized Browser from the same dock icon.",
+    "Route external Cloudless links through Browser instead of opening browser-native popups or embedding websites that prohibit framing.",
+    "Add Settings > Remote access with optional Tailscale installation, account connection, device identity, tailnet address, private Cloudless Serve, and Tailscale SSH controls.",
+    "Install the official Tailscale Linux client after a normal boot while keeping it logged out and all sharing disabled until the user opts in.",
+    "Keep Tailscale authentication and credentials outside CloudlessOS by completing sign-in in the dedicated Browser.",
+    "Polish system action buttons so icons and labels stay correctly aligned across Remote access, Engine, and API access settings."
+  ]
+}

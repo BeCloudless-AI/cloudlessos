@@ -3,4 +3,5 @@ set -e
 if [ "$1" = remove ]; then
     systemctl stop cloudlessd.service >/dev/null 2>&1 || true
     systemctl disable cloudlessd.service >/dev/null 2>&1 || true
+    systemctl disable cloudless-tailscale-install.service >/dev/null 2>&1 || true
 fi

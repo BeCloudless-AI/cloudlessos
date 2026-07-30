@@ -1606,6 +1606,10 @@
     box-shadow: 0 18px 34px -14px color-mix(in srgb, var(--blue) 60%, transparent), inset 0 1px 0 rgba(255,255,255,0.7); }
   .tile .ic:active { transform: translateY(-1px) scale(.97); }
   .tile.running .ic { border-color: color-mix(in srgb, var(--accent) 55%, var(--line-2)); }
+  .tile.system-task .ic { color: var(--blue); background: linear-gradient(160deg, color-mix(in srgb, var(--blue-soft) 82%, #fff), var(--blue-soft)); }
+  .tile.system-task .ic .ui-icon { width: 32px; height: 32px; }
+  .browser-task-slot { flex: none; }
+  .browser-task-slot.hidden { display: none; }
   .tile.busy .ic { animation: pulse 1.4s ease-in-out infinite; }
   .tile.disabled .ic { opacity: 0.45; cursor: default; }
   @keyframes pulse { 50% { opacity: 0.55; } }
@@ -1765,6 +1769,12 @@
     .tour-card, .tour-spot, .tour-guard, .tour-corner { animation: none; transition: none; }
   }
   .btn { padding: 9px 18px; border-radius: 12px; border: 1px solid var(--card-edge); background: var(--control); color: var(--ink); font-weight: 500; transition: filter 0.15s, background 0.15s, box-shadow .15s; }
+  .btn.control-action {
+    min-height: 38px; padding: 9px 14px; display: inline-flex; align-items: center; justify-content: center;
+    gap: 8px; line-height: 1; white-space: nowrap;
+  }
+  .btn.control-action > .ui-icon { width: 15px; height: 15px; flex: 0 0 15px; margin: 0; }
+  .btn.control-action > span { display: block; min-width: 0; line-height: 1.1; white-space: nowrap; }
   .btn:hover { background: var(--card-strong); }
   .btn.primary { background: var(--blue); border-color: transparent; color: #fff; box-shadow: 0 8px 20px -8px color-mix(in srgb, var(--blue) 70%, transparent); }
   .btn.primary:hover { filter: brightness(1.08); background: var(--blue); }
@@ -3517,6 +3527,7 @@
     <symbol id="ui-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
     <symbol id="ui-unlink" viewBox="0 0 24 24"><path d="m18.84 12.25 1.72-1.71a5 5 0 0 0-7.07-7.07l-1.72 1.71M5.17 11.75l-1.71 1.71a5 5 0 0 0 7.07 7.07l1.71-1.71M8 2v3M2 8h3m11 11v3m3-6h3"/><path d="m8 16 8-8"/></symbol>
     <symbol id="ui-terminal" viewBox="0 0 24 24"><path d="m4 17 6-5-6-5m8 10h8"/></symbol>
+    <symbol id="ui-browser" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></symbol>
     <symbol id="ui-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="13" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></symbol>
     <symbol id="ui-rocket" viewBox="0 0 24 24"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09Z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.87 12.87 0 0 1 22 2c0 2.72-.78 7.5-6.05 11a22.35 22.35 0 0 1-3.95 2Z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0m1 7v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/><circle cx="16" cy="8" r="1"/></symbol>
     <symbol id="ui-recipes" viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/><path d="M8 7h8M8 11h6"/></symbol>
@@ -3607,6 +3618,12 @@
 
   <section class="apps-sec" id="home-apps">
     <div class="pad" id="pad"></div>
+    <div class="browser-task-slot" id="browser-task-slot">
+      <div class="tile running system-task" data-system-app="browser">
+        <div class="ic" title="Restore Browser" aria-label="Restore Browser"><svg class="ui-icon" aria-hidden="true"><use href="#ui-browser"/></svg></div>
+        <div class="tile-copy"><div class="nm">Browser</div><div class="meta"><span class="dot"></span>Minimized</div></div>
+      </div>
+    </div>
     <div class="places-launch-wrap">
       <button class="sec-act apps-dock-all apps-dock-places" id="open-places" type="button" title="Open a place" aria-label="Places" aria-expanded="false" aria-controls="places-quick"><svg class="ui-icon" aria-hidden="true"><use href="#ui-folder"/></svg><span>Places</span></button>
       <div class="places-quick hidden" id="places-quick" role="menu" aria-label="Places">
@@ -3631,6 +3648,7 @@
   <button class="dock-item" id="dock-models" aria-label="Models" title="Models"><span class="dock-tip">Models</span><span class="dock-glyph" aria-hidden="true"><svg class="ui-icon"><use href="#ui-models"/></svg></span></button>
   <button class="dock-item" id="dock-inference" aria-label="Metrics" title="Metrics"><span class="dock-tip">Metrics</span><span class="dock-glyph" aria-hidden="true"><svg class="ui-icon"><use href="#ui-metrics"/></svg></span><span class="run-dot"></span></button>
   <button class="dock-item" id="dock-updates" aria-label="Updates" title="Updates"><span class="dock-tip">Updates</span><span class="dock-glyph" aria-hidden="true"><svg class="ui-icon"><use href="#ui-download"/></svg></span><span class="dock-badge hidden" id="dock-update-badge">0</span></button>
+  <button class="dock-item" id="dock-browser" aria-label="Browser" title="Browser"><span class="dock-tip">Browser</span><span class="dock-glyph" aria-hidden="true"><svg class="ui-icon"><use href="#ui-browser"/></svg></span><span class="run-dot"></span></button>
   <button class="dock-item" id="dock-terminal" aria-label="Terminal" title="Terminal"><span class="dock-tip">Terminal</span><span class="dock-glyph" aria-hidden="true"><svg class="ui-icon"><use href="#ui-terminal"/></svg></span></button>
   <span class="dock-sep"></span>
   <button class="dock-item accent" id="dock-asst" aria-label="Assistant" title="Assistant"><span class="dock-tip">Assistant</span><span class="dock-glyph" aria-hidden="true"><svg class="ui-icon"><use href="#ui-assistant"/></svg></span></button>
@@ -4265,6 +4283,38 @@ function closeAppSurface() {
   document.getElementById('app-surface-loading').classList.remove('hidden');
   if (appSurfaceReturnFocus && document.contains(appSurfaceReturnFocus)) appSurfaceReturnFocus.focus();
   appSurfaceReturnFocus = null;
+}
+let browserRuntimeStatus={available:false,running:false,minimized:false};
+async function openSystemBrowser(url = 'https://www.google.com', action = 'open') {
+  const target = String(url || '').trim() || 'https://www.google.com';
+  let result;
+  try {
+    result = await api('/api/system/browser', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({url:target,action}) });
+  } catch {
+    result = { error:'Could not reach the Cloudless Browser service.' };
+  }
+  if (result.opened) { refreshBrowserDock(); setTimeout(refreshBrowserDock,1200); if(action!=='show')toast('Opened in Browser'); return true; }
+  toast(result.error || 'Browser is not available in this session', true);
+  return false;
+}
+async function refreshBrowserDock() {
+  const button=document.getElementById('dock-browser');
+  if(!button)return;
+  const status=await api('/api/system/browser',{cache:'no-store'}).catch(()=>({available:false,running:false,minimized:false}));
+  browserRuntimeStatus=status;
+  button.classList.toggle('running',!!status.running);
+  const label=status.running ? (status.minimized?'Browser — minimized':'Browser — running') : 'Browser';
+  button.title=label; button.setAttribute('aria-label',label);
+  const tip=button.querySelector('.dock-tip'); if(tip)tip.textContent=label;
+  syncBrowserLauncherTask(status);
+}
+function syncBrowserLauncherTask(status=browserRuntimeStatus){
+  const slot=document.getElementById('browser-task-slot');if(!slot)return;
+  slot.classList.remove('hidden');
+  const label=status.running?(status.minimized?'Minimized':'Running'):'Open';
+  const state=slot.querySelector('.meta');if(state)state.innerHTML=`${status.running?'<span class="dot"></span>':''}${label}`;
+  slot.querySelector('.tile').classList.toggle('running',!!status.running);
+  slot.querySelector('.ic').onclick=()=>openSystemBrowser('https://www.google.com','show');
 }
 let terminalTabSequence=0,terminalActiveTab='',terminalRestoreRect=null;
 const terminalTabs=new Map();
@@ -5411,6 +5461,7 @@ async function renderSettings() {
       ...(dgxSpark ? [{ id: 'dgx-dashboard', icon: 'metrics', label: 'DGX Dashboard' }] : []),
       { id: 'engine', icon: 'rocket', label: 'Engine' },
       { id: 'api', icon: 'key', label: 'API access' },
+      { id: 'remote-access', icon: 'network', label: 'Remote access' },
       ...(hermes ? [{ id: 'app:hermes', glyph: glyph('hermes'), label: hermes.name }] : []),
     ] },
     { label: 'apps', items: apps.map(a => ({ id: 'app:' + a.id, glyph: glyph(a.id), label: a.name })) },
@@ -5426,7 +5477,7 @@ async function renderSettings() {
     renderSettings();
   });
 
-  let title = { profile: 'Profile', hardware: 'Machine', 'dgx-dashboard': 'DGX Dashboard', engine: 'Engine', api: 'API access', doctor: 'Cloudless Doctor', display: 'Display', appearance: 'Appearance', general: 'General' }[setPage] || '';
+  let title = { profile: 'Profile', hardware: 'Machine', 'dgx-dashboard': 'DGX Dashboard', engine: 'Engine', api: 'API access', 'remote-access': 'Remote access', doctor: 'Cloudless Doctor', display: 'Display', appearance: 'Appearance', general: 'General' }[setPage] || '';
   if (setPage.startsWith('app:')) { const a = configurableApps.find(x => 'app:' + x.id === setPage); title = a ? a.name : ''; }
   document.getElementById('set-page-title').textContent = title;
 
@@ -5436,12 +5487,36 @@ async function renderSettings() {
   else if (setPage === 'dgx-dashboard') renderDGXDashboardPage(c);
   else if (setPage === 'engine') renderEnginePage(c);
   else if (setPage === 'api') renderApiPage(c);
+  else if (setPage === 'remote-access') renderRemoteAccessPage(c);
   else if (setPage === 'doctor') renderDoctorPage(c);
   else if (setPage === 'display') renderDisplayPage(c);
   else if (setPage === 'appearance') renderAppearancePage(c);
   else if (setPage === 'general') renderGeneralPage(c);
   else if (setPage.startsWith('app:')) renderAppPage(c, setPage.slice(4));
   else renderHardwarePage(c);
+}
+
+async function renderRemoteAccessPage(c) {
+  c.innerHTML = '<div class="machine-page"><section class="machine-card"><div class="empty">Checking secure remote access…</div></section></div>';
+  let status; try { status = await api('/api/system/tailscale'); } catch { status = {error:'Could not inspect Tailscale.'}; }
+  if (!status.installed) {
+    c.innerHTML = `<div class="machine-page"><div class="inf-page-hero"><span class="inf-page-icon">${uiIcon('network')}</span><div class="inf-page-copy"><div class="inf-page-eyebrow">Private networking</div><div class="inf-page-title">Remote access with Tailscale</div><div class="inf-page-desc">Reach CloudlessOS securely from your own devices without opening router ports or exposing the machine publicly.</div></div><span class="inf-state-pill">NOT INSTALLED</span></div><section class="machine-card"><div class="machine-card-head"><div><div class="machine-card-title">Add secure remote access</div><div class="machine-card-desc">CloudlessOS installs the official Tailscale Linux client. Connecting an account remains optional and Tailscale owns authentication and encryption.</div></div></div><div class="machine-driver-note">${uiIcon('alert')}<span>Installation downloads software from Tailscale's official Ubuntu repository. Nothing is shared until you connect a tailnet and explicitly enable access.</span></div><div class="machine-driver-actions"><button class="btn primary control-action" id="tailscale-install">${uiIcon('download')}<span>Install Tailscale</span></button></div></section></div>`;
+    document.getElementById('tailscale-install').onclick = async event => {
+      const button = event.currentTarget; button.disabled = true; button.innerHTML = '<i class="key-dialog-spinner"></i><span>Installing…</span>';
+      const result = await api('/api/system/tailscale/install', {method:'POST',headers:{'X-Cloudless-Action':'tailscale-install'}}).catch(error=>({error:error.message}));
+      if (result.error) { toast(result.error, true); button.disabled=false; renderRemoteAccessPage(c); return; }
+      toast('Tailscale installation started');
+      for (let attempt=0; attempt<90; attempt++) { await new Promise(resolve=>setTimeout(resolve,2000)); const next=await api('/api/system/tailscale').catch(()=>null); if(next?.installed){renderRemoteAccessPage(c);return;} }
+      toast('Installation is still running. Check again in a moment.'); renderRemoteAccessPage(c);
+    };
+    return;
+  }
+  const connected = !!status.connected, ip = (status.ips || []).find(value => /^100\./.test(value)) || (status.ips || [])[0] || 'Not assigned';
+  c.innerHTML = `<div class="machine-page"><div class="inf-page-hero"><span class="inf-page-icon">${uiIcon('network')}</span><div class="inf-page-copy"><div class="inf-page-eyebrow">Private networking</div><div class="inf-page-title">Tailscale</div><div class="inf-page-desc">${connected ? 'This CloudlessOS machine is reachable through your encrypted tailnet.' : 'Connect this machine to your tailnet to use CloudlessOS remotely.'}</div></div><span class="inf-state-pill ${connected?'ready':''}">${connected?'CONNECTED':'NOT CONNECTED'}</span></div><section class="machine-card"><div class="machine-card-head"><div><div class="machine-card-title">${connected ? escapeHtml(status.deviceName || 'CloudlessOS') : 'Connect your account'}</div><div class="machine-card-desc">${connected ? escapeHtml(status.dnsName || status.tailnet || 'Secure tailnet connection') : 'Authentication opens in Cloudless Browser and your password never passes through CloudlessOS.'}</div></div></div><div class="machine-facts"><div class="machine-fact"><div class="machine-fact-label">Tailscale IP</div><div class="machine-fact-value">${escapeHtml(ip)}</div></div><div class="machine-fact"><div class="machine-fact-label">Client version</div><div class="machine-fact-value">${escapeHtml(status.version || 'Installed')}</div></div>${connected?`<div class="machine-fact"><div class="machine-fact-label">Tailnet</div><div class="machine-fact-value">${escapeHtml(status.tailnet || 'Connected')}</div></div>`:''}</div><div class="machine-driver-actions">${connected?`<button class="btn control-action" id="tailscale-dashboard">${uiIcon('browser')}<span>Open Tailscale</span></button><button class="btn cluster-danger control-action" id="tailscale-logout">${uiIcon('unlink')}<span>Disconnect account</span></button>`:`<button class="btn primary control-action" id="tailscale-connect">${uiIcon('network')}<span>Connect Tailscale</span></button>`}</div></section>${connected?`<section class="machine-card"><div class="machine-card-head"><div><div class="machine-card-title">CloudlessOS over your tailnet</div><div class="machine-card-desc">These controls remain private to authenticated devices allowed by your Tailscale access policy.</div></div></div><div class="set-row"><span><b>Serve CloudlessOS</b><span class="fld-help">Give this dashboard a private HTTPS address inside your tailnet.</span></span><label class="switch"><input type="checkbox" id="tailscale-serve" ${status.serveEnabled?'checked':''}><span class="track2"></span></label></div><div class="set-row"><span><b>Tailscale SSH</b><span class="fld-help">Allow terminal access according to your tailnet SSH policy.</span></span><label class="switch"><input type="checkbox" id="tailscale-ssh" ${status.sshEnabled?'checked':''}><span class="track2"></span></label></div></section>`:''}</div>`;
+  const connect=document.getElementById('tailscale-connect'); if(connect)connect.onclick=async()=>{connect.disabled=true;connect.innerHTML='<i class="key-dialog-spinner"></i><span>Preparing sign-in…</span>';const result=await api('/api/system/tailscale/connect',{method:'POST'}).catch(error=>({error:error.message}));if(result.authURL){await openSystemBrowser(result.authURL);toast('Finish connecting in Browser');}else if(result.error)toast(result.error,true);else toast('Tailscale connected');setTimeout(()=>renderRemoteAccessPage(c),1500);};
+  const dashboard=document.getElementById('tailscale-dashboard'); if(dashboard)dashboard.onclick=()=>openSystemBrowser(status.webURL||'http://100.100.100.100');
+  const logout=document.getElementById('tailscale-logout'); if(logout)logout.onclick=async()=>{const approved=await openCloudlessDecision({title:'Disconnect Tailscale?',message:'This machine will stop being reachable through your tailnet.',detail:'CloudlessOS data and local networking are not changed.',confirmLabel:'Disconnect',icon:'unlink',returnFocus:logout});if(!approved)return;await api('/api/system/tailscale/logout',{method:'POST',headers:{'X-Cloudless-Action':'tailscale-logout'}});renderRemoteAccessPage(c);};
+  for(const [id,path] of [['tailscale-serve','serve'],['tailscale-ssh','ssh']]){const toggle=document.getElementById(id);if(toggle)toggle.onchange=async()=>{toggle.disabled=true;const result=await api('/api/system/tailscale/'+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:toggle.checked})}).catch(error=>({error:error.message}));if(result.error){toast(result.error,true);toggle.checked=!toggle.checked;}else toast(`${path==='serve'?'Private Cloudless access':'Tailscale SSH'} ${toggle.checked?'enabled':'disabled'}`);toggle.disabled=false;};}
 }
 
 function renderDGXDashboardPage(c) {
@@ -6073,7 +6148,7 @@ async function renderApiPage(c) {
         <label class="fld"><span class="fld-label">Model name</span><input class="fld-input" id="api-contract-alias" value="${escapeAttr(g.servedName)}" maxlength="64" spellcheck="false"><span class="fld-help">Clients always use this name, even when the underlying model or engine changes.</span></label>
       </div>
       <div class="machine-driver-note">${uiIcon('check')}<span>Guardrail active: recipes and custom engines cannot override this client-facing contract. Their private ports and native model identifiers remain isolated behind the Cloudless gateway.</span></div>
-      <div class="api-section-head" style="margin-top:14px"><div></div><button class="btn primary" id="api-contract-save" type="button">${uiIcon('check')}<span>Save API identity</span></button></div>
+      <div class="api-section-head" style="margin-top:14px"><div></div><button class="btn primary control-action" id="api-contract-save" type="button">${uiIcon('check')}<span>Save API identity</span></button></div>
     </section>
     <section class="api-section">
       <div class="api-section-head"><div><div class="api-section-title">Connect a client</div><div class="api-section-desc">Both endpoints use the OpenAI format but have different capabilities and key permissions.</div></div></div>
@@ -6285,7 +6360,7 @@ async function renderEnginePage(c) {
     </div>
     <div class="ec-grid">${cards}</div>
     <section class="custom-engine-panel">
-      <div class="custom-engine-head"><div><div class="custom-engine-title">Custom engine builds</div><div class="custom-engine-sub">Compile and tag an image in the full host terminal, then register it without replacing the Cloudless-managed runtime.</div></div><span class="row-actions"><button class="btn" id="custom-engine-terminal">${uiIcon('terminal')}<span>Open Terminal</span></button><button class="btn" id="custom-engine-toggle">${uiIcon(customEngineFormOpen ? 'close' : 'plus')}<span>${customEngineFormOpen ? 'Cancel' : 'Register local build'}</span></button></span></div>
+      <div class="custom-engine-head"><div><div class="custom-engine-title">Custom engine builds</div><div class="custom-engine-sub">Compile and tag an image in the full host terminal, then register it without replacing the Cloudless-managed runtime.</div></div><span class="row-actions"><button class="btn control-action" id="custom-engine-terminal">${uiIcon('terminal')}<span>Open Terminal</span></button><button class="btn control-action" id="custom-engine-toggle">${uiIcon(customEngineFormOpen ? 'close' : 'plus')}<span>${customEngineFormOpen ? 'Cancel' : 'Register local build'}</span></button></span></div>
       ${customEngineFormOpen ? `<div class="custom-engine-form">
         <label>Display name<input id="custom-engine-name" maxlength="64" placeholder="SM121 optimized vLLM"></label>
         <label>Local Docker image<input id="custom-engine-image" spellcheck="false" placeholder="cloudless/vllm-sm121:dev"></label>
@@ -8534,9 +8609,19 @@ document.getElementById('dock-launcher').onclick = openLauncher;
 document.getElementById('dock-models').onclick = openModelManager;
 document.getElementById('dock-inference').onclick = openInference;
 document.getElementById('dock-updates').onclick = openUpdateCenter;
+document.getElementById('dock-browser').onclick = () => openSystemBrowser('https://www.google.com','show');
 document.getElementById('dock-terminal').onclick = toggleTerminalWindow;
 document.getElementById('dock-asst').onclick = () => openAsst();
 document.getElementById('dock-settings').onclick = openSettings;
+document.addEventListener('click', event => {
+  const anchor = event.target.closest && event.target.closest('a[href]');
+  if (!anchor || event.defaultPrevented || event.button !== 0) return;
+  let target; try { target = new URL(anchor.href, location.href); } catch { return; }
+  if (anchor.target === '_blank' || target.origin !== location.origin) {
+    event.preventDefault();
+    openSystemBrowser(target.href);
+  }
+}, true);
 document.getElementById('uc-x').onclick = closeUpdateCenter;
 document.getElementById('update-center').addEventListener('click', event => { if (event.target.id === 'update-center') closeUpdateCenter(); });
 // the red traffic light closes its window (mirrors the legacy × button and Esc)
@@ -9753,6 +9838,8 @@ setInterval(() => { if (installing === 0) renderApps(); }, 8000);
 setInterval(refreshModelDownloads, 3000);
 setInterval(refreshRecipeJobs, 3000);
 setInterval(refreshAppOperations, 1500);
+setInterval(refreshBrowserDock, 3000);
+refreshBrowserDock();
 setInterval(refreshNetStatus, 20000);
 setInterval(() => { if (!updateCenterOpen()) refreshUpdateCenter(); }, 15 * 60 * 1000);
 </script>

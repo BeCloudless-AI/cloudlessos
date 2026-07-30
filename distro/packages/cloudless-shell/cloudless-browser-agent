@@ -1,0 +1,137 @@
+#!/bin/sh
+# Launch a real, persistent Chromium browser profile from requests queued by
+# cloudlessd. This process runs inside the graphical session as the unprivileged
+# desktop user, so external websites are never proxied through CloudlessOS.
+set -u
+export HOME="${HOME:-/home/cloudless}"
+export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+export XDG_CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
+export PATH="/snap/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
+REQUESTS=/run/cloudless-browser/requests
+STATUS=/run/cloudless-browser/status.json
+KIOSK_WINDOW=
+
+# Openbox autostart can be evaluated more than once while the graphical
+# session is being repaired or refreshed. Only one agent may consume browser
+# requests and manage the window layers.
+exec 9>/run/cloudless-browser/agent.lock
+flock -n 9 || exit 0
+
+discover_kiosk() {
+    if [ -n "$KIOSK_WINDOW" ] && xprop -id "$KIOSK_WINDOW" WM_CLASS >/dev/null 2>&1; then
+        wmctrl -i -r "$KIOSK_WINDOW" -b add,below >/dev/null 2>&1 || true
+        return
+    fi
+    KIOSK_WINDOW="$(wmctrl -lx 2>/dev/null | awk 'tolower($3) ~ /cloudlesskiosk/ || $0 ~ /^0x[0-9a-f]+[[:space:]]+[0-9]+[[:space:]].*[[:space:]]Cloudless (—|-)/ { print $1; exit }')"
+    if [ -n "$KIOSK_WINDOW" ]; then
+        xdotool set_window --classname CloudlessKiosk --class CloudlessKiosk "$KIOSK_WINDOW" >/dev/null 2>&1 || true
+        # The kiosk is the desktop surface. Keeping it on Openbox's bottom
+        # layer prevents a focus click inside CloudlessOS from covering a
+        # floating system window such as the Browser.
+        wmctrl -i -r "$KIOSK_WINDOW" -b add,below >/dev/null 2>&1 || true
+    fi
+}
+
+browser_window() {
+    window="$(wmctrl -lx 2>/dev/null | awk 'tolower($3) ~ /cloudlessbrowser/ { print $1; exit }')"
+    if [ -n "$window" ]; then
+        printf '%s\n' "$window"
+        return
+    fi
+    discover_kiosk
+    wmctrl -lx 2>/dev/null | awk -v kiosk="$KIOSK_WINDOW" '$1 != kiosk && tolower($3) ~ /(firefox|chromium|google-chrome)/ { print $1; exit }'
+}
+
+publish_status() {
+    discover_kiosk
+    window="$(browser_window)"
+    running=false
+    minimized=false
+    if [ -n "$window" ]; then
+        running=true
+        xdotool set_window --classname CloudlessBrowser --class CloudlessBrowser "$window" >/dev/null 2>&1 || true
+        if xprop -id "$window" _NET_WM_STATE 2>/dev/null | grep -q '_NET_WM_STATE_HIDDEN'; then
+            minimized=true
+        fi
+        # The Browser is a desktop tool, not content inside the fullscreen
+        # kiosk. Keep its Openbox layer above the kiosk even after the kiosk
+        # reloads or the display mode changes.
+        wmctrl -i -r "$window" -b add,above >/dev/null 2>&1 || true
+        if [ "$minimized" = false ]; then
+            # Raising does not focus the window. This is a fallback for window
+            # managers that reorder fullscreen windows after a kiosk click.
+            xdotool windowraise "$window" >/dev/null 2>&1 || true
+            active="$(xdotool getactivewindow 2>/dev/null || true)"
+            case "$active" in
+                ''|"$((window))") ;;
+                *)
+                    # Openbox permits a focused fullscreen Firefox kiosk to
+                    # eclipse an EWMH "above" window. A visible Browser is a
+                    # foreground CloudlessOS workspace, so immediately return
+                    # it to the front. Users can minimize it from its native
+                    # title bar whenever they want to work in the desktop.
+                    wmctrl -i -a "$window" >/dev/null 2>&1 || true
+                    ;;
+            esac
+        fi
+    fi
+    printf '{"running":%s,"minimized":%s}\n' "$running" "$minimized" >"$STATUS.tmp"
+    mv -f "$STATUS.tmp" "$STATUS"
+}
+
+restore_browser() {
+    window="$(browser_window)"
+    [ -n "$window" ] || return 1
+    wmctrl -i -r "$window" -b remove,hidden >/dev/null 2>&1 || true
+    wmctrl -i -r "$window" -b add,above >/dev/null 2>&1 || true
+    wmctrl -i -a "$window" >/dev/null 2>&1 || true
+    return 0
+}
+
+find_browser() {
+    for candidate in chromium chromium-browser google-chrome-stable firefox; do
+        if command -v "$candidate" >/dev/null 2>&1; then command -v "$candidate"; return 0; fi
+    done
+    return 1
+}
+
+while :; do
+    for request in "$REQUESTS"/*.json; do
+        [ -f "$request" ] || continue
+        url="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8")).get("url", ""))' "$request" 2>/dev/null || true)"
+        action="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8")).get("action", "open"))' "$request" 2>/dev/null || true)"
+        rm -f "$request"
+        case "$url" in http://*|https://*) ;; *) continue ;; esac
+        if [ "$action" = show ] && restore_browser; then
+            continue
+        fi
+        browser="$(find_browser || true)"
+        [ -n "$browser" ] || continue
+        case "$(basename "$browser")" in
+            firefox)
+                case "$browser" in
+                    /snap/*|*/snap/*) profile="$HOME/snap/firefox/common/cloudless-web-browser" ;;
+                    *) profile="$XDG_CONFIG_HOME/cloudless-web-browser/firefox" ;;
+                esac
+                mkdir -p "$profile"
+                if [ -e "$profile/lock" ] || [ -L "$profile/lock" ] || [ -e "$profile/.parentlock" ]; then
+                    "$browser" --profile "$profile" --new-tab "$url" 9>&- >/dev/null 2>&1 &
+                else
+                    "$browser" --class CloudlessBrowser --new-instance --profile "$profile" --new-window "$url" 9>&- >/dev/null 2>&1 &
+                fi
+                ;;
+            *)
+                case "$browser" in
+                    /snap/*|*/snap/*) profile="$HOME/snap/chromium/common/cloudless-web-browser" ;;
+                    *) profile="$XDG_CONFIG_HOME/cloudless-web-browser" ;;
+                esac
+                mkdir -p "$profile"
+                "$browser" --class=CloudlessBrowser --user-data-dir="$profile" "$url" \
+                    --no-first-run --disable-session-crashed-bubble \
+                    --class=CloudlessBrowser 9>&- >/dev/null 2>&1 &
+                ;;
+        esac
+    done
+    publish_status
+    sleep 0.2
+done

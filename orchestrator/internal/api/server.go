@@ -33,6 +33,7 @@ import (
 	"github.com/cloudless/orchestrator/internal/places"
 	"github.com/cloudless/orchestrator/internal/power"
 	"github.com/cloudless/orchestrator/internal/provision"
+	"github.com/cloudless/orchestrator/internal/remoteaccess"
 	"github.com/cloudless/orchestrator/internal/sparkcluster"
 	"github.com/cloudless/orchestrator/internal/state"
 	"github.com/cloudless/orchestrator/internal/usage"
@@ -74,6 +75,7 @@ type Server struct {
 
 	appOperations appOperationLocks // serialize only operations that touch the same app
 	recipes       *localrecipes.Store
+	remoteAccess  remoteaccess.Service
 }
 
 // NewServer constructs a Server backed by the given engine, state store and manifests.
@@ -81,7 +83,7 @@ func NewServer(eng engine.Engine, st *state.Store, mf *manifest.Store, mfModels 
 	return &Server{
 		eng: eng, jobs: jobs.NewManager(), state: st, manifest: mf, mfModels: mfModels,
 		mfDiff: mfDiff, usage: us, power: pw, shutdown: systemShutdown, virtualKey: emitSystemVirtualKey,
-		shutdownDelay: time.Second, recipes: localrecipes.New(st.Dir()),
+		shutdownDelay: time.Second, recipes: localrecipes.New(st.Dir()), remoteAccess: remoteaccess.New(),
 	}
 }
 
@@ -133,6 +135,14 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/capabilities", s.capabilities)
 	mux.HandleFunc("POST /api/system/shutdown", s.systemShutdown)
 	mux.HandleFunc("POST /api/system/reboot", s.systemReboot)
+	mux.HandleFunc("GET /api/system/browser", s.systemBrowserStatus)
+	mux.HandleFunc("POST /api/system/browser", s.systemBrowserOpen)
+	mux.HandleFunc("GET /api/system/tailscale", s.tailscaleStatus)
+	mux.HandleFunc("POST /api/system/tailscale/install", s.tailscaleInstall)
+	mux.HandleFunc("POST /api/system/tailscale/connect", s.tailscaleConnect)
+	mux.HandleFunc("POST /api/system/tailscale/logout", s.tailscaleLogout)
+	mux.HandleFunc("POST /api/system/tailscale/ssh", s.tailscaleSSH)
+	mux.HandleFunc("POST /api/system/tailscale/serve", s.tailscaleServe)
 	mux.HandleFunc("GET /api/system/display", s.displayGet)
 	mux.HandleFunc("POST /api/system/display", s.displaySet)
 	mux.HandleFunc("GET /api/system/update", s.systemUpdateGet)
@@ -248,7 +258,14 @@ func (s *Server) Routes() http.Handler {
 	if err != nil {
 		log.Fatalf("embed web assets: %v", err)
 	}
-	mux.Handle("GET /", http.FileServer(http.FS(sub)))
+	ui := http.FileServer(http.FS(sub))
+	mux.Handle("GET /", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// CloudlessOS updates replace the embedded interface in cloudlessd.
+		// Never let the long-running kiosk reuse HTML or JavaScript from the
+		// previous package after the daemon restarts.
+		w.Header().Set("Cache-Control", "no-store")
+		ui.ServeHTTP(w, r)
+	}))
 
 	return logging(mux)
 }

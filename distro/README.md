@@ -113,6 +113,12 @@ On the installed system:
   Cloudless interface.
 - LightDM signs into an unprivileged `cloudless` account and launches the browser in kiosk
   mode through Openbox.
+- A second, persistent Chromium profile is available as the Cloudless Browser. A small
+  graphical-session agent consumes validated requests from `/run/cloudless-browser/requests`, so
+  external sites get native tabs and site isolation without being proxied or embedded by the OS.
+- The official Tailscale Linux client is installed by `cloudless-tailscale-install.service` after a
+  normal boot. It is not connected, advertised, or publicly exposed until the user enables it in
+  Settings → Remote access.
 - `cloudless-firstboot.service` writes `/var/lib/cloudless/validation-report.txt`.
 
 The first hardware setup requires internet access and may take several minutes. A driver

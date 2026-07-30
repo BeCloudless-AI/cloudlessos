@@ -1,0 +1,17 @@
+#!/bin/sh
+# Install Tailscale from its official Linux distribution channel. This script
+# runs after installation and can also be retried from Cloudless Settings.
+set -eu
+export DEBIAN_FRONTEND=noninteractive
+
+if command -v tailscale >/dev/null 2>&1; then
+    systemctl enable --now tailscaled.service
+    exit 0
+fi
+
+work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT
+curl --proto '=https' --tlsv1.2 -fsSL https://tailscale.com/install.sh -o "$work/install.sh"
+chmod 0700 "$work/install.sh"
+sh "$work/install.sh"
+systemctl enable --now tailscaled.service

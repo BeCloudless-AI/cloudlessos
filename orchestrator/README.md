@@ -43,6 +43,10 @@ The primary listeners are:
 - `127.0.0.1:8766`: default key-authenticated OpenAI-compatible model and agent gateway.
   Its client port and model alias are editable in **Settings -> API access**.
 - `127.0.0.1:7681`: authenticated ttyd terminal, proxied through `/terminal/`.
+- `/api/system/browser`: validates and queues HTTP(S) addresses for the unprivileged persistent
+  Cloudless Browser profile in the active graphical session.
+- `/api/system/tailscale/*`: reports Tailscale state and exposes explicit install, login, logout,
+  private Serve and SSH actions. Cloudless never receives tailnet credentials.
 
 Production values are configured in `distro/packages/cloudless-orchestrator/cloudless.env`.
 

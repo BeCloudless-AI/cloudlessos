@@ -1,0 +1,19 @@
+[Unit]
+Description=Install Tailscale for CloudlessOS remote access
+Wants=network-online.target
+After=network-online.target
+StartLimitIntervalSec=15min
+StartLimitBurst=5
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/cloudless/cloudless-install-tailscale
+Restart=on-failure
+RestartSec=60s
+TimeoutStartSec=10min
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+
+[Install]
+WantedBy=multi-user.target

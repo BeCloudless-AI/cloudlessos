@@ -10,6 +10,7 @@ done
 install -d -o cloudless -g cloudless -m 0750 /home/cloudless /home/cloudless/.config /home/cloudless/.config/openbox
 install -d -o cloudless -g cloudless -m 0755 /home/cloudless/Cloudless /home/cloudless/Cloudless/Models /home/cloudless/Cloudless/Outputs /home/cloudless/Cloudless/Workspace /home/cloudless/Downloads
 install -o cloudless -g cloudless -m 0644 /usr/share/cloudless/openbox-autostart /home/cloudless/.config/openbox/autostart
+systemd-tmpfiles --create /usr/lib/tmpfiles.d/cloudless-browser.conf >/dev/null 2>&1 || true
 
 is_dgx_spark() {
     [ -r /etc/dgx-release ] || \

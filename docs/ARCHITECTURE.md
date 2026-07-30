@@ -43,6 +43,17 @@ The terminal requires normal OS authentication. It deliberately provides the aut
 user's real host permissions rather than a Cloudless-specific restricted shell. Its floating
 window supports up to eight persistent terminal tabs; hiding the window does not recreate a tab.
 
+The Browser is another static desktop tool, but it is deliberately not an iframe or an arbitrary
+HTTP reverse proxy. `cloudlessd` validates an HTTP(S) target and writes a request into
+`/run/cloudless-browser/requests`; the unprivileged graphical-session agent opens it in a separate
+persistent Chromium profile. Native tabs, site isolation, downloads, history and password storage
+therefore remain browser-owned, while the Cloudless kiosk stays available behind the window.
+
+Tailscale is the optional private remote-access plane. The official Linux client is installed by a
+separate systemd oneshot after boot so package upgrades never nest APT inside dpkg. It starts logged
+out. Cloudless Settings can request interactive login, Tailscale Serve for the local dashboard, and
+Tailscale SSH, but Tailscale remains the authority for identity, encryption and tailnet policy.
+
 ## Orchestrator
 
 `cloudlessd` is responsible for:

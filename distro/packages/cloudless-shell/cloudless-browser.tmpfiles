@@ -1,0 +1,3 @@
+d /run/cloudless-browser 2770 root cloudless -
+d /run/cloudless-browser/requests 2770 root cloudless -
+f /run/cloudless-browser/status.json 0660 cloudless cloudless - {"running":false,"minimized":false}

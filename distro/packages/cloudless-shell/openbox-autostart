@@ -4,4 +4,5 @@ xset s off
 xset -dpms
 xset s noblank
 unclutter -idle 0.5 -root &
+/usr/bin/cloudless-browser-agent &
 /usr/bin/cloudless-kiosk

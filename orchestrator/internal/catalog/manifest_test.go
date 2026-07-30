@@ -148,8 +148,16 @@ func TestWorkflowsUsesValidatedSameOriginPath(t *testing.T) {
 }
 
 func TestAIWorkbenchCatalogContracts(t *testing.T) {
+	getManifestApp := func(id string) (App, bool) {
+		for _, app := range manifestDocument.Apps {
+			if app.ID == id {
+				return app, true
+			}
+		}
+		return App{}, false
+	}
 	for _, id := range []string{"nemo-rl", "data-designer", "molt", "axolotl"} {
-		app, ok := Get(id)
+		app, ok := getManifestApp(id)
 		if !ok {
 			t.Fatalf("missing AI workbench %s", id)
 		}
@@ -162,11 +170,11 @@ func TestAIWorkbenchCatalogContracts(t *testing.T) {
 			t.Fatalf("%s workspace hides image-provided source: %q", id, mount)
 		}
 	}
-	dataDesigner, _ := Get("data-designer")
+	dataDesigner, _ := getManifestApp("data-designer")
 	if dataDesigner.Env["NEMO_TELEMETRY_ENABLED"] != "false" || dataDesigner.GPUs != "" {
 		t.Fatalf("Data Designer defaults are not private and CPU-safe: %#v", dataDesigner)
 	}
-	molt, _ := Get("molt")
+	molt, _ := getManifestApp("molt")
 	if len(molt.Architectures) != 1 || molt.Architectures[0] != "amd64" {
 		t.Fatalf("MoLT published runtime must be x86-64 only: %#v", molt.Architectures)
 	}

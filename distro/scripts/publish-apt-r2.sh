@@ -164,8 +164,8 @@ PY
     version="$(release_version)"
     for artifact in install-dgx-spark.sh cloudless-apps-manifest.json cloudless-models.json cloudless-diffusion.json cloudless-trust-inventory.json cloudless-physical-qualification.json "cloudless-$version.spdx.json"; do
         gpgv --keyring "$KEY" \
-            "$REPO/artifacts/$version/$artifact.asc" \
-            "$REPO/artifacts/$version/$artifact" >/dev/null 2>&1 || {
+            "$REPO/artifacts/$version/$CHANNEL/$artifact.asc" \
+            "$REPO/artifacts/$version/$CHANNEL/$artifact" >/dev/null 2>&1 || {
             echo "Invalid detached signature for $artifact" >&2
             return 1
         }
@@ -250,11 +250,12 @@ PY
 verify_local
 verify_artifact_set "$DIST/cloudless-release.json" "$REPO"
 VERSION="$(release_version)"
-cmp -s "$APP_MANIFEST" "$REPO/artifacts/$VERSION/cloudless-apps-manifest.json" || {
+ARTIFACTS="$REPO/artifacts/$VERSION/$CHANNEL"
+cmp -s "$APP_MANIFEST" "$ARTIFACTS/cloudless-apps-manifest.json" || {
     echo "The application manifest changed after release signing; sign again." >&2
     exit 1
 }
-cmp -s "$DGX_INSTALLER" "$REPO/artifacts/$VERSION/install-dgx-spark.sh" || {
+cmp -s "$DGX_INSTALLER" "$ARTIFACTS/install-dgx-spark.sh" || {
     echo "The DGX installer changed after release signing; sign again." >&2
     exit 1
 }
@@ -290,24 +291,24 @@ aws s3 cp "$DIST/InRelease" "$DEST/dists/$CHANNEL/InRelease" --endpoint-url "$CL
     --cache-control 'no-store,max-age=0,must-revalidate' --only-show-errors
 # Mutable convenience aliases are promoted only after signed APT metadata has
 # committed the immutable, versioned artifact hashes.
-aws s3 cp "$REPO/artifacts/$VERSION/cloudless-apps-manifest.json" \
+aws s3 cp "$ARTIFACTS/cloudless-apps-manifest.json" \
     "s3://$CLOUDLESS_R2_BUCKET/manifests/cloudless-apps-manifest.json" \
     --endpoint-url "$CLOUDLESS_R2_ENDPOINT" --cache-control 'no-store,max-age=0,must-revalidate' --only-show-errors
-aws s3 cp "$REPO/artifacts/$VERSION/cloudless-apps-manifest.json.asc" \
+aws s3 cp "$ARTIFACTS/cloudless-apps-manifest.json.asc" \
     "s3://$CLOUDLESS_R2_BUCKET/manifests/cloudless-apps-manifest.json.asc" \
     --endpoint-url "$CLOUDLESS_R2_ENDPOINT" --cache-control 'no-store,max-age=0,must-revalidate' --only-show-errors
 for manifest_name in cloudless-models.json cloudless-diffusion.json; do
-    aws s3 cp "$REPO/artifacts/$VERSION/$manifest_name" \
+    aws s3 cp "$ARTIFACTS/$manifest_name" \
         "s3://$CLOUDLESS_R2_BUCKET/manifests/$manifest_name" \
         --endpoint-url "$CLOUDLESS_R2_ENDPOINT" --cache-control 'no-store,max-age=0,must-revalidate' --only-show-errors
-    aws s3 cp "$REPO/artifacts/$VERSION/$manifest_name.asc" \
+    aws s3 cp "$ARTIFACTS/$manifest_name.asc" \
         "s3://$CLOUDLESS_R2_BUCKET/manifests/$manifest_name.asc" \
         --endpoint-url "$CLOUDLESS_R2_ENDPOINT" --cache-control 'no-store,max-age=0,must-revalidate' --only-show-errors
 done
-aws s3 cp "$REPO/artifacts/$VERSION/install-dgx-spark.sh" \
+aws s3 cp "$ARTIFACTS/install-dgx-spark.sh" \
     "s3://$CLOUDLESS_R2_BUCKET/install-dgx-spark.sh" \
     --endpoint-url "$CLOUDLESS_R2_ENDPOINT" --cache-control 'no-store,max-age=0,must-revalidate' --only-show-errors
-aws s3 cp "$REPO/artifacts/$VERSION/install-dgx-spark.sh.asc" \
+aws s3 cp "$ARTIFACTS/install-dgx-spark.sh.asc" \
     "s3://$CLOUDLESS_R2_BUCKET/install-dgx-spark.sh.asc" \
     --endpoint-url "$CLOUDLESS_R2_ENDPOINT" --cache-control 'no-store,max-age=0,must-revalidate' --only-show-errors
 # Supported CloudlessOS clients now follow by-hash immediately. Updating the
@@ -319,9 +320,9 @@ aws s3 cp "$DIST/main/" "$DEST/dists/$CHANNEL/main/" --recursive --endpoint-url 
 verify_public
 verify_public_artifacts
 curl -fsS "$APP_MANIFEST_PUBLIC?v=$(sha256sum "$APP_MANIFEST" | awk '{print $1}')" -o "$work/public-app-manifest"
-curl -fsS "$APP_MANIFEST_PUBLIC.asc?v=$(sha256sum "$REPO/artifacts/$VERSION/cloudless-apps-manifest.json.asc" | awk '{print $1}')" \
+curl -fsS "$APP_MANIFEST_PUBLIC.asc?v=$(sha256sum "$ARTIFACTS/cloudless-apps-manifest.json.asc" | awk '{print $1}')" \
     -o "$work/public-app-manifest.asc"
-cmp -s "$REPO/artifacts/$VERSION/cloudless-apps-manifest.json" "$work/public-app-manifest" || {
+cmp -s "$ARTIFACTS/cloudless-apps-manifest.json" "$work/public-app-manifest" || {
     echo "Public app manifest does not match the published source" >&2
     exit 1
 }
@@ -331,20 +332,20 @@ for entry in \
     "cloudless-diffusion.json|$DIFFUSION_MANIFEST_PUBLIC"; do
     manifest_name="${entry%%|*}"
     manifest_url="${entry#*|}"
-    curl -fsS "$manifest_url?v=$(sha256sum "$REPO/artifacts/$VERSION/$manifest_name" | awk '{print $1}')" \
+    curl -fsS "$manifest_url?v=$(sha256sum "$ARTIFACTS/$manifest_name" | awk '{print $1}')" \
         -o "$work/public-$manifest_name"
-    curl -fsS "$manifest_url.asc?v=$(sha256sum "$REPO/artifacts/$VERSION/$manifest_name.asc" | awk '{print $1}')" \
+    curl -fsS "$manifest_url.asc?v=$(sha256sum "$ARTIFACTS/$manifest_name.asc" | awk '{print $1}')" \
         -o "$work/public-$manifest_name.asc"
-    cmp -s "$REPO/artifacts/$VERSION/$manifest_name" "$work/public-$manifest_name" || {
+    cmp -s "$ARTIFACTS/$manifest_name" "$work/public-$manifest_name" || {
         echo "Public $manifest_name does not match the published source" >&2
         exit 1
     }
     gpgv --keyring "$KEY" "$work/public-$manifest_name.asc" "$work/public-$manifest_name" >/dev/null
 done
 curl -fsS "$DGX_INSTALLER_PUBLIC?v=$(sha256sum "$DGX_INSTALLER" | awk '{print $1}')" -o "$work/public-dgx-installer"
-curl -fsS "$DGX_INSTALLER_PUBLIC.asc?v=$(sha256sum "$REPO/artifacts/$VERSION/install-dgx-spark.sh.asc" | awk '{print $1}')" \
+curl -fsS "$DGX_INSTALLER_PUBLIC.asc?v=$(sha256sum "$ARTIFACTS/install-dgx-spark.sh.asc" | awk '{print $1}')" \
     -o "$work/public-dgx-installer.asc"
-cmp -s "$REPO/artifacts/$VERSION/install-dgx-spark.sh" "$work/public-dgx-installer" || {
+cmp -s "$ARTIFACTS/install-dgx-spark.sh" "$work/public-dgx-installer" || {
     echo "Public DGX installer does not match the published source" >&2
     exit 1
 }

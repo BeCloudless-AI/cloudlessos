@@ -276,7 +276,7 @@ for arch in "${ARCHES[@]}"; do
     done
 done
 install -d "$REPO/releases"
-artifacts_dir="$REPO/artifacts/$VERSION"
+artifacts_dir="$REPO/artifacts/$VERSION/$CHANNEL"
 rm -rf "$artifacts_dir"
 install -d "$artifacts_dir"
 (
@@ -298,14 +298,15 @@ for artifact in install-dgx-spark.sh cloudless-apps-manifest.json cloudless-mode
         --output "$signature" "$file"
     printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
         "$artifact" \
-        "artifacts/$VERSION/$artifact" \
+        "artifacts/$VERSION/$CHANNEL/$artifact" \
         "$(sha256sum "$file" | awk '{print $1}')" \
         "$(wc -c < "$file" | tr -d '[:space:]')" \
         "$(sha256sum "$signature" | awk '{print $1}')" \
         "$(wc -c < "$signature" | tr -d '[:space:]')" \
         >> "$artifacts_file"
 done
-manifest="$REPO/releases/$VERSION.json"
+install -d "$REPO/releases/$VERSION"
+manifest="$REPO/releases/$VERSION/$CHANNEL.json"
 python3 - "$NOTES" "$packages_file" "$artifacts_file" "$RELEASE_GATES" "$manifest" "$VERSION" "$CHANNEL" "$SOURCE_COMMIT" "$(date -u +%FT%TZ)" <<'PY'
 import json, sys
 notes_path, packages_path, artifacts_path, gates_path, output, version, channel, source_commit, published_at = sys.argv[1:]

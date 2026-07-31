@@ -41,21 +41,23 @@ repo="$work/repository"
 gpgv --keyring "$work/test-keyring.pgp" "$repo/dists/stable/InRelease"
 grep -Fqx 'Acquire-By-Hash: yes' "$repo/dists/stable/Release"
 grep -Fq ' cloudless-release.json' "$repo/dists/stable/Release"
-cmp "$repo/releases/$TEST_VERSION.json" "$repo/dists/stable/cloudless-release.json"
-grep -Fq '"architecture":"amd64"' "$repo/releases/$TEST_VERSION.json"
-grep -Fq '"architecture":"arm64"' "$repo/releases/$TEST_VERSION.json"
-grep -Fq '"schema":"cloudless.release.v2"' "$repo/releases/$TEST_VERSION.json"
-test -s "$repo/artifacts/$TEST_VERSION/cloudless-trust-inventory.json"
-test -s "$repo/artifacts/$TEST_VERSION/cloudless-trust-inventory.json.asc"
-test -s "$repo/artifacts/$TEST_VERSION/cloudless-physical-qualification.json.asc"
-grep -Fq '"schema":"cloudless.trust-inventory.v1"' "$repo/artifacts/$TEST_VERSION/cloudless-trust-inventory.json"
-grep -Fq '"sourceCommit":"0123456789abcdef0123456789abcdef01234567"' "$repo/releases/$TEST_VERSION.json"
-grep -Fq '"install-dgx-spark.sh"' "$repo/releases/$TEST_VERSION.json"
+release_manifest="$repo/releases/$TEST_VERSION/stable.json"
+artifacts="$repo/artifacts/$TEST_VERSION/stable"
+cmp "$release_manifest" "$repo/dists/stable/cloudless-release.json"
+grep -Fq '"architecture":"amd64"' "$release_manifest"
+grep -Fq '"architecture":"arm64"' "$release_manifest"
+grep -Fq '"schema":"cloudless.release.v2"' "$release_manifest"
+test -s "$artifacts/cloudless-trust-inventory.json"
+test -s "$artifacts/cloudless-trust-inventory.json.asc"
+test -s "$artifacts/cloudless-physical-qualification.json.asc"
+grep -Fq '"schema":"cloudless.trust-inventory.v1"' "$artifacts/cloudless-trust-inventory.json"
+grep -Fq '"sourceCommit":"0123456789abcdef0123456789abcdef01234567"' "$release_manifest"
+grep -Fq '"install-dgx-spark.sh"' "$release_manifest"
 for artifact in cloudless-apps-manifest.json cloudless-models.json cloudless-diffusion.json; do
-    grep -Fq "\"$artifact\"" "$repo/releases/$TEST_VERSION.json"
+    grep -Fq "\"$artifact\"" "$release_manifest"
 done
-grep -Fq "\"cloudless-$TEST_VERSION.spdx.json\"" "$repo/releases/$TEST_VERSION.json"
-python3 - "$repo/releases/$TEST_VERSION.json" "$repo" <<'PY'
+grep -Fq "\"cloudless-$TEST_VERSION.spdx.json\"" "$release_manifest"
+python3 - "$release_manifest" "$repo" <<'PY'
 import hashlib, json, pathlib, sys
 with open(sys.argv[1], encoding="utf-8") as handle:
     release = json.load(handle)
@@ -66,6 +68,10 @@ if release["compatibility"]["matrixSha256"] != release["validation"]["matrixSha2
 if release["physicalQualification"] != release["validation"]["physicalQualification"]:
     raise SystemExit("physical qualification is not bound to validation")
 root = pathlib.Path(sys.argv[2])
+for artifact in release["artifacts"]:
+    prefix = f"artifacts/{release['version']}/{release['channel']}/"
+    if not artifact["path"].startswith(prefix) or not artifact["signature"].startswith(prefix):
+        raise SystemExit(f"artifact is not channel scoped: {artifact['name']}")
 for package in release["packages"]:
     data = (root / package["filename"]).read_bytes()
     if len(data) != package["size"] or hashlib.sha256(data).hexdigest() != package["sha256"]:
@@ -73,12 +79,12 @@ for package in release["packages"]:
 PY
 for artifact in install-dgx-spark.sh cloudless-apps-manifest.json cloudless-models.json cloudless-diffusion.json cloudless-trust-inventory.json cloudless-physical-qualification.json "cloudless-$TEST_VERSION.spdx.json"; do
     gpgv --keyring "$work/test-keyring.pgp" \
-        "$repo/artifacts/$TEST_VERSION/$artifact.asc" \
-        "$repo/artifacts/$TEST_VERSION/$artifact"
+        "$artifacts/$artifact.asc" \
+        "$artifacts/$artifact"
 done
 tampered="$work/tampered-repository"
 cp -a "$repo" "$tampered"
-printf '\n# tampered\n' >> "$tampered/artifacts/$TEST_VERSION/install-dgx-spark.sh"
+printf '\n# tampered\n' >> "$tampered/artifacts/$TEST_VERSION/stable/install-dgx-spark.sh"
 if CLOUDLESS_APT_REPO_OUT="$tampered" \
    CLOUDLESS_R2_ENDPOINT=https://invalid.invalid \
    CLOUDLESS_R2_BUCKET=invalid \
@@ -105,7 +111,7 @@ cmp "$repo/dists/stable/cloudless-release.json" \
 # an immutable generation.
 next_repo="$work/next-repository"
 cp -a "$repo" "$next_repo"
-python3 - "$next_repo/dists/stable/cloudless-release.json" "$next_repo/releases/$TEST_VERSION.json" <<'PY'
+python3 - "$next_repo/dists/stable/cloudless-release.json" "$next_repo/releases/$TEST_VERSION/stable.json" <<'PY'
 import json, os, sys
 for path in sys.argv[1:]:
     with open(path, encoding="utf-8") as handle:

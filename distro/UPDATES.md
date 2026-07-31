@@ -134,11 +134,14 @@ plus retained per-package rollback objects. The embedded compatibility contract 
 validated generic AMD64, generic ARM64 and DGX Spark ARM64 targets and binds them to the release
 matrix hash. Devices reject manifests for another channel, platform or architecture.
 
-Each release also contains immutable, versioned copies of
+Each release also contains immutable, version-and-channel-scoped copies of
 `install-dgx-spark.sh` and `cloudless-apps-manifest.json`. Their SHA-256 hashes
 and detached-signature hashes are inside `cloudless-release.json`, which is
 itself covered by signed APT metadata. The immutable files are uploaded before
 `InRelease`; mutable convenience aliases are updated only after that commit.
+The retained release manifest uses the same `<version>/<channel>` namespace, so
+publishing stable metadata cannot overwrite beta qualification evidence or signatures
+for the same version.
 Cloudless devices verify the application manifest with the packaged archive
 key and retain the last verified copy if the network or signature is invalid.
 The DGX installation guide verifies the installer signature before execution.

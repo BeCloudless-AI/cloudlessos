@@ -722,6 +722,9 @@ Implementation status (July 31, 2026):
   descriptor bound into its gate attestation. Pre-1.0 builds disclose `not-qualified`; a stable
   1.0+ generation fails before building unless all physical targets match its exact version and
   full source commit.
+- Retained release manifests and standalone signed artifacts are now isolated by both version and
+  channel. A stable promotion can no longer overwrite beta qualification evidence, signatures or
+  immutable artifact paths for the same semantic version.
 - [`OPERATIONS.md`](./OPERATIONS.md) indexes the install, DGX, update, recovery, cluster, terminal,
   privacy, diagnostics/support and qualification guides. Privacy documentation distinguishes local
   inference from explicit update, registry, Hugging Face, Tailscale, Cloudflare and browser traffic,

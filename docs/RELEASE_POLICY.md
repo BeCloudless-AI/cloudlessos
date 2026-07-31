@@ -17,6 +17,10 @@ required by [RELEASE_QUALIFICATION.md](./RELEASE_QUALIFICATION.md).
 5. Promote only from the same source commit. Stable publication must rerun the production gates and
    public verification. Any source change creates a new candidate and restarts the soak window.
 
+Immutable release manifests, standalone artifacts and their detached signatures are stored under a
+version-and-channel namespace. Beta and stable evidence for the same version therefore remain
+independently addressable and one channel cannot overwrite the other's qualification descriptor.
+
 The release manifest always carries a signed physical-qualification descriptor. A pre-1.0 build may
 state `not-qualified` so development can continue without implying hardware support. A stable 1.0+
 release cannot be built unless `cloudless-qualify verify-set` proves every authoritative target ZIP

@@ -42,5 +42,14 @@ grep -Fq 'commit="${CLOUDLESS_SOURCE_COMMIT:-}"' "$matrix"
 grep -Fq 'if [ -z "$commit" ]; then' "$matrix"
 grep -Fq 'physicalQualification' "$matrix"
 grep -Fq 'cloudless-physical-qualification.json' "$builder"
+grep -Fq 'artifacts_dir="$REPO/artifacts/$VERSION/$CHANNEL"' "$builder"
+grep -Fq '"artifacts/$VERSION/$CHANNEL/$artifact"' "$builder"
+grep -Fq 'manifest="$REPO/releases/$VERSION/$CHANNEL.json"' "$builder"
+grep -Fq 'ARTIFACTS="$REPO/artifacts/$VERSION/$CHANNEL"' "$ROOT/distro/scripts/publish-apt-r2.sh"
+if grep -Fq 'artifacts/$VERSION/$artifact' "$builder" || \
+   grep -Fq '$REPO/artifacts/$VERSION/cloudless-' "$ROOT/distro/scripts/publish-apt-r2.sh"; then
+    echo "Release scripts still use a channel-ambiguous artifact path." >&2
+    exit 1
+fi
 
 echo "Release test isolation checks passed."

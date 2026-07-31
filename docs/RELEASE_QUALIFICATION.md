@@ -103,6 +103,23 @@ Only a complete campaign receives `qualification-result.json`. The result binds 
 check records, boot records and every evidence digest. A later failed validation removes the stale
 result rather than leaving an invalid campaign looking qualified.
 
+Once `status` reports `QUALIFIED`, seal the complete campaign into one atomic, self-verifying
+archive. Write the archive outside the campaign directory so it cannot become part of its own
+evidence inventory:
+
+```bash
+sudo cloudless-qualify export \
+  /var/lib/cloudless/qualification/0.2.7-01234567/dgx-spark-arm64-2 \
+  --output /var/lib/cloudless/qualification/0.2.7-01234567-dgx-spark-arm64-2.zip
+sudo cloudless-qualify verify-export \
+  /var/lib/cloudless/qualification/0.2.7-01234567-dgx-spark-arm64-2.zip
+```
+
+Export refuses incomplete or changed campaigns, unsafe paths, symlinks and oversized payloads. It
+writes through a private temporary file, verifies every member against the export inventory and the
+sealed campaign evidence root, and only then atomically publishes the final mode-0600 ZIP. Retain
+that ZIP beside the CI artifacts for the exact release commit.
+
 Run the tooling contract validator before and after a qualification campaign:
 
 ```bash

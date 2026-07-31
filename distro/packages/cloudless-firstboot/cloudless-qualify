@@ -22,9 +22,11 @@ from pathlib import Path
 
 SCHEMA = "cloudless.physical-evidence.v1"
 CHECK_SCHEMA = "cloudless.physical-check.v1"
+EXPORT_SCHEMA = "cloudless.physical-export.v1"
 DEFAULT_MATRIX = Path("/usr/share/cloudless/physical-validation-matrix.json")
 DEFAULT_UPDATE_STATUS = Path("/var/lib/cloudless-updater/status.json")
 MAX_EVIDENCE_BYTES = 64 * 1024 * 1024
+MAX_EXPORT_BYTES = 2 * 1024 * 1024 * 1024
 VERSION_RE = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+(?:[-+~][0-9A-Za-z][0-9A-Za-z.+~_-]*)?$")
 COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 SECRET_PATTERNS = [
@@ -575,19 +577,14 @@ def validate_campaign(campaign: Path, matrix_path: Path) -> list[str]:
     return errors
 
 
-def print_status(campaign: Path, matrix_path: Path) -> int:
+def seal_campaign(campaign: Path, matrix_path: Path) -> dict:
     matrix = load_matrix(matrix_path)
     target = campaign_target(campaign, matrix)
     errors = validate_campaign(campaign, matrix_path)
-    print(f"CloudlessOS qualification: {target['id']}")
-    print(f"Unique boots: {len(list((campaign / 'boots').glob('*.json')))}/{matrix['minimumBootCycles']}")
     result_path = campaign / "qualification-result.json"
     if errors:
         result_path.unlink(missing_ok=True)
-        print("INCOMPLETE")
-        for error in errors:
-            print(f"  - {error}")
-        return 1
+        raise ValueError("qualification campaign is incomplete: " + "; ".join(errors))
     records = {}
     for directory in ("boots", "checks"):
         for path in sorted((campaign / directory).glob("*.json")):
@@ -602,8 +599,186 @@ def print_status(campaign: Path, matrix_path: Path) -> int:
         "records": records,
     }
     atomic_json(result_path, result)
+    return result
+
+
+def print_status(campaign: Path, matrix_path: Path) -> int:
+    matrix = load_matrix(matrix_path)
+    target = campaign_target(campaign, matrix)
+    errors = validate_campaign(campaign, matrix_path)
+    print(f"CloudlessOS qualification: {target['id']}")
+    print(f"Unique boots: {len(list((campaign / 'boots').glob('*.json')))}/{matrix['minimumBootCycles']}")
+    if errors:
+        (campaign / "qualification-result.json").unlink(missing_ok=True)
+        print("INCOMPLETE")
+        for error in errors:
+            print(f"  - {error}")
+        return 1
+    seal_campaign(campaign, matrix_path)
     print("QUALIFIED — all required evidence is present and unchanged")
     return 0
+
+
+def export_members(campaign: Path) -> list[Path]:
+    verify_campaign_layout(campaign)
+    members = [campaign / "campaign.json", campaign / "qualification-result.json"]
+    for directory in ("boots", "checks", "evidence"):
+        members.extend(sorted(path for path in (campaign / directory).rglob("*") if path.is_file()))
+    campaign_root = campaign.resolve()
+    total = 0
+    for path in members:
+        if path.is_symlink() or not path.is_file():
+            raise ValueError(f"qualification export member must be a regular file: {path}")
+        try:
+            path.resolve().relative_to(campaign_root)
+        except ValueError as exc:
+            raise ValueError(f"qualification export member escapes the campaign: {path}") from exc
+        total += path.stat().st_size
+        if total > MAX_EXPORT_BYTES:
+            raise ValueError("qualification export exceeds the supported size")
+    return members
+
+
+def export_campaign(campaign: Path, matrix_path: Path, output: Path) -> Path:
+    seal_campaign(campaign, matrix_path)
+    campaign_root = campaign.resolve()
+    output_parent = output.parent.resolve()
+    output_parent.mkdir(parents=True, exist_ok=True)
+    output = output_parent / output.name
+    if output.suffix.lower() != ".zip":
+        raise ValueError("qualification export must use a .zip filename")
+    try:
+        output.resolve().relative_to(campaign_root)
+    except ValueError:
+        pass
+    else:
+        raise ValueError("qualification export must be written outside the campaign directory")
+
+    members = export_members(campaign)
+    records = {
+        path.relative_to(campaign).as_posix(): {
+            "sha256": sha256_file(path),
+            "bytes": path.stat().st_size,
+        }
+        for path in members
+    }
+    campaign_manifest = load_json(campaign / "campaign.json")
+    export_manifest = {
+        "schema": EXPORT_SCHEMA,
+        "target": campaign_manifest["target"]["id"],
+        "version": campaign_manifest["version"],
+        "sourceCommit": campaign_manifest["sourceCommit"],
+        "exportedAt": utc_now(),
+        "records": records,
+    }
+    fd, temporary_name = tempfile.mkstemp(prefix=f".{output.name}.", dir=output_parent)
+    os.close(fd)
+    temporary = Path(temporary_name)
+    try:
+        with zipfile.ZipFile(temporary, "w", compression=zipfile.ZIP_STORED, allowZip64=True) as archive:
+            for path in members:
+                relative = path.relative_to(campaign).as_posix()
+                info = zipfile.ZipInfo(relative, date_time=(1980, 1, 1, 0, 0, 0))
+                info.external_attr = 0o600 << 16
+                archive.writestr(info, path.read_bytes())
+            manifest_bytes = (json.dumps(export_manifest, indent=2, sort_keys=True) + "\n").encode()
+            info = zipfile.ZipInfo("qualification-export.json", date_time=(1980, 1, 1, 0, 0, 0))
+            info.external_attr = 0o600 << 16
+            archive.writestr(info, manifest_bytes)
+        verify_export(temporary)
+        os.chmod(temporary, 0o600)
+        os.replace(temporary, output)
+        return output
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def verify_export(path: Path) -> dict:
+    if path.is_symlink() or not path.is_file():
+        raise ValueError("qualification export must be a regular file")
+    if path.stat().st_size <= 0 or path.stat().st_size > MAX_EXPORT_BYTES:
+        raise ValueError("qualification export size is outside the supported range")
+    try:
+        with zipfile.ZipFile(path) as archive:
+            infos = archive.infolist()
+            names = [info.filename for info in infos]
+            if len(infos) > 4096:
+                raise ValueError("qualification export contains too many members")
+            if len(names) != len(set(names)):
+                raise ValueError("qualification export contains duplicate members")
+            expanded = 0
+            for info in infos:
+                name = info.filename
+                member = Path(name)
+                expanded += info.file_size
+                if (
+                    member.is_absolute()
+                    or ".." in member.parts
+                    or name.endswith("/")
+                    or info.flag_bits & 0x1
+                ):
+                    raise ValueError(f"qualification export contains an unsafe member: {name}")
+            if expanded > MAX_EXPORT_BYTES:
+                raise ValueError("qualification export expands beyond the supported size")
+            if archive.getinfo("qualification-export.json").file_size > 16 * 1024 * 1024:
+                raise ValueError("qualification export manifest is too large")
+            manifest = json.loads(archive.read("qualification-export.json"))
+            if not isinstance(manifest, dict) or manifest.get("schema") != EXPORT_SCHEMA:
+                raise ValueError("qualification export manifest is invalid")
+            records = manifest.get("records")
+            if not isinstance(records, dict) or not records:
+                raise ValueError("qualification export record inventory is missing")
+            expected_names = set(records) | {"qualification-export.json"}
+            if set(names) != expected_names:
+                raise ValueError("qualification export contents do not match its inventory")
+            for name, expected in records.items():
+                info = archive.getinfo(name)
+                digest = hashlib.sha256()
+                with archive.open(info) as handle:
+                    for block in iter(lambda: handle.read(1024 * 1024), b""):
+                        digest.update(block)
+                if info.file_size != expected.get("bytes") or digest.hexdigest() != expected.get("sha256"):
+                    raise ValueError(f"qualification export member failed integrity verification: {name}")
+            for identity_name in ("qualification-result.json", "campaign.json"):
+                if archive.getinfo(identity_name).file_size > 1024 * 1024:
+                    raise ValueError(f"qualification identity is too large: {identity_name}")
+            result = json.loads(archive.read("qualification-result.json"))
+            campaign = json.loads(archive.read("campaign.json"))
+            if (
+                result.get("schema") != "cloudless.physical-result.v1"
+                or result.get("campaignSha256") != hashlib.sha256(archive.read("campaign.json")).hexdigest()
+                or result.get("target") != manifest.get("target")
+                or campaign.get("target", {}).get("id") != manifest.get("target")
+                or campaign.get("version") != manifest.get("version")
+                or campaign.get("sourceCommit") != manifest.get("sourceCommit")
+            ):
+                raise ValueError("qualification export identities do not agree")
+            result_records = result.get("records")
+            if not isinstance(result_records, dict) or not result_records:
+                raise ValueError("qualification result record inventory is missing")
+            root_payload = json.dumps(result_records, sort_keys=True, separators=(",", ":")).encode()
+            if hashlib.sha256(root_payload).hexdigest() != result.get("evidenceRootSha256"):
+                raise ValueError("qualification result evidence root is invalid")
+            for name, digest in result_records.items():
+                if name not in records or records[name].get("sha256") != digest:
+                    raise ValueError(f"qualification result record is absent or changed: {name}")
+            for name in result_records:
+                if not name.startswith("checks/"):
+                    continue
+                if archive.getinfo(name).file_size > 1024 * 1024:
+                    raise ValueError(f"qualification check is too large: {name}")
+                check = json.loads(archive.read(name))
+                for evidence in check.get("evidence", []):
+                    evidence_name = evidence.get("path")
+                    exported = records.get(evidence_name, {})
+                    if (
+                        exported.get("sha256") != evidence.get("sha256")
+                        or exported.get("bytes") != evidence.get("bytes")
+                    ):
+                        raise ValueError(f"qualification check evidence is absent or changed: {evidence_name}")
+            return manifest
+    except (KeyError, zipfile.BadZipFile, json.JSONDecodeError) as exc:
+        raise ValueError("qualification export is malformed") from exc
 
 
 def matrix_argument(parser: argparse.ArgumentParser) -> None:
@@ -661,6 +836,14 @@ def main(argv: list[str] | None = None) -> int:
     next_check.add_argument("--json", action="store_true", help="emit the next check as JSON")
     matrix_argument(next_check)
 
+    export = subparsers.add_parser("export", help="seal and atomically export a completed campaign")
+    export.add_argument("campaign", type=Path)
+    export.add_argument("--output", required=True, type=Path)
+    matrix_argument(export)
+
+    verify = subparsers.add_parser("verify-export", help="verify a sealed qualification export")
+    verify.add_argument("archive", type=Path)
+
     args = parser.parse_args(argv)
     try:
         if args.command == "begin":
@@ -694,6 +877,17 @@ def main(argv: list[str] | None = None) -> int:
             return print_plan(args.campaign, args.matrix, as_json=args.json)
         if args.command == "next":
             return print_plan(args.campaign, args.matrix, only_next=True, as_json=args.json)
+        if args.command == "export":
+            result = export_campaign(args.campaign, args.matrix, args.output)
+            print(f"Qualification export created and verified: {result}")
+            return 0
+        if args.command == "verify-export":
+            manifest = verify_export(args.archive)
+            print(
+                f"Verified qualification export: {manifest['target']} "
+                f"{manifest['version']} ({manifest['sourceCommit'][:12]})"
+            )
+            return 0
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1

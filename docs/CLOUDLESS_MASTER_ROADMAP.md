@@ -708,6 +708,11 @@ Implementation status (July 31, 2026):
   retains the exact source commit obtained from its signed release manifest, and qualification
   automatically consumes it only when the installed version matches; fresh ISO candidates retain
   an explicit full-commit fallback.
+- Completed physical campaigns can now be exported as one private, atomic ZIP. The exporter refuses
+  incomplete or mutated campaigns, inventories and hashes every boot/check/evidence member, binds
+  them back to the sealed qualification result and verifies the finished archive before publication.
+  A separate offline `verify-export` command makes retained VM/Spark evidence independently
+  reviewable without trusting the mutable source directory.
 - [`OPERATIONS.md`](./OPERATIONS.md) indexes the install, DGX, update, recovery, cluster, terminal,
   privacy, diagnostics/support and qualification guides. Privacy documentation distinguishes local
   inference from explicit update, registry, Hugging Face, Tailscale, Cloudflare and browser traffic,

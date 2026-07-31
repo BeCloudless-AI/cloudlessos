@@ -74,6 +74,47 @@ class PhysicalQualificationTest(unittest.TestCase):
         self.assertEqual(qualify.print_status(campaign, self.matrix), 1)
         self.assertFalse((campaign / "qualification-result.json").exists())
 
+    def test_completed_campaign_exports_as_self_verifying_archive(self):
+        campaign = self.begin()
+        for number in range(10):
+            qualify.record_boot(campaign, str(uuid.UUID(int=number + 1)))
+        self.record_all(campaign, "virtualbox-amd64")
+        archive = self.root / "qualified.zip"
+        self.assertEqual(qualify.export_campaign(campaign, self.matrix, archive), archive)
+        manifest = qualify.verify_export(archive)
+        self.assertEqual(manifest["schema"], qualify.EXPORT_SCHEMA)
+        self.assertEqual(manifest["target"], "virtualbox-amd64")
+        self.assertEqual(manifest["version"], "1.2.3-rc1")
+        self.assertIn("qualification-result.json", manifest["records"])
+        with zipfile.ZipFile(archive) as exported:
+            self.assertEqual(set(exported.namelist()), set(manifest["records"]) | {"qualification-export.json"})
+
+    def test_export_rejects_incomplete_campaign_and_campaign_local_output(self):
+        campaign = self.begin()
+        with self.assertRaisesRegex(ValueError, "incomplete"):
+            qualify.export_campaign(campaign, self.matrix, self.root / "incomplete.zip")
+        for number in range(10):
+            qualify.record_boot(campaign, str(uuid.UUID(int=number + 1)))
+        self.record_all(campaign, "virtualbox-amd64")
+        with self.assertRaisesRegex(ValueError, "outside"):
+            qualify.export_campaign(campaign, self.matrix, campaign / "unsafe.zip")
+
+    def test_export_verification_detects_member_tampering(self):
+        campaign = self.begin()
+        for number in range(10):
+            qualify.record_boot(campaign, str(uuid.UUID(int=number + 1)))
+        self.record_all(campaign, "virtualbox-amd64")
+        archive = qualify.export_campaign(campaign, self.matrix, self.root / "qualified.zip")
+        tampered = self.root / "tampered.zip"
+        with zipfile.ZipFile(archive) as source, zipfile.ZipFile(tampered, "w") as target:
+            for name in source.namelist():
+                payload = source.read(name)
+                if name == "campaign.json":
+                    payload += b"\n"
+                target.writestr(name, payload)
+        with self.assertRaisesRegex(ValueError, "integrity verification"):
+            qualify.verify_export(tampered)
+
     def test_unique_boots_and_cluster_checks_cannot_be_bypassed(self):
         campaign = self.begin("dgx-spark-arm64-2", "aarch64", "dgx-spark")
         boot = str(uuid.UUID(int=1))

@@ -150,6 +150,13 @@ mode-0600 `cloudless.ci-qualification.v1` document is bound into the release gat
 set. Local fixture input exists only in the unit-test command and is not accepted by the production
 release entry point.
 
+If GitHub rejects a run before scheduling jobs, the release command reports the exact run URL and
+distinguishes that `startup_failure` from a normal failed job or a commit that was never dispatched.
+A zero-job startup failure must be resolved in the repository's Actions access or the owner
+account's Actions billing/spending settings after validating the workflow with `actionlint`; it
+cannot be waived with local tests. The collector accepts both native `gh` and WSL's authenticated
+`gh.exe`, so this diagnosis works from the supported Windows/WSL release workstation.
+
 Run the tooling contract validator before and after a qualification campaign:
 
 ```bash

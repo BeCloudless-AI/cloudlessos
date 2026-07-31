@@ -690,6 +690,13 @@ Implementation status (July 31, 2026):
   detached-signed, published, checked again before R2 promotion and independently enforced by the
   installed updater. Pre-1.0 releases remain explicit `not-qualified`. A current retained green run
   is still required before the 1.0 gate can be closed.
+- Hosted CI diagnostics now distinguish a commit with no dispatch, an ordinary failed run and a
+  GitHub `startup_failure` that creates zero jobs. The collector links the exact rejected run,
+  accepts the authenticated `gh.exe` exposed to the supported WSL release environment, and points
+  the operator to Actions access/billing before workflow syntax. The current master workflow passes
+  official `actionlint`, is active with Actions enabled, but GitHub run `30631775752` was rejected in
+  one second with zero jobs on July 31, 2026. This is external operational evidence, not a green
+  matrix, so the CI checklist remains open and the 1.0 release gate remains fail-closed.
 - The lifecycle soak now includes a process-level burst of browser requests interrupted by an
   agent restart, proving no request is discarded and the same persistent profile is reused. It
   also drives 64 simultaneous local terminal-proxy sessions alongside 64 rejected remote attempts,

@@ -8,6 +8,7 @@ import datetime as dt
 import json
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 from pathlib import Path
@@ -39,14 +40,25 @@ def utc_now() -> str:
     return dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
+def github_cli() -> str:
+    # The supported release workflow is commonly launched from WSL on a
+    # Windows workstation. GitHub CLI is then exposed as gh.exe rather than a
+    # Linux gh binary; accept both without relying on shell aliases.
+    for name in ("gh", "gh.exe"):
+        candidate = shutil.which(name)
+        if candidate and os.access(candidate, os.X_OK):
+            return candidate
+    raise ValueError("GitHub CLI is required to collect CI qualification evidence")
+
+
 def gh_json(repository: str, endpoint: str, fields: dict[str, str] | None = None) -> dict:
-    command = ["gh", "api", "--method", "GET", f"repos/{repository}/{endpoint}"]
+    command = [github_cli(), "api", "--method", "GET", f"repos/{repository}/{endpoint}"]
     for key, value in (fields or {}).items():
         command.extend(("-f", f"{key}={value}"))
     try:
         result = subprocess.run(command, check=True, capture_output=True, text=True)
-    except FileNotFoundError as exc:
-        raise ValueError("GitHub CLI is required to collect CI qualification evidence") from exc
+    except OSError as exc:
+        raise ValueError(f"GitHub CLI could not be executed: {exc}") from exc
     except subprocess.CalledProcessError as exc:
         detail = (exc.stderr or "").strip()
         raise ValueError(f"GitHub CI evidence query failed: {detail or 'unknown gh error'}") from exc
@@ -63,7 +75,7 @@ def live_evidence(repository: str, commit: str) -> tuple[dict, dict, dict]:
     if not REPOSITORY_RE.fullmatch(repository):
         raise ValueError("repository must be in owner/name form")
     runs = gh_json(repository, "actions/workflows/multiarch.yml/runs", {
-        "head_sha": commit, "status": "success", "per_page": "100",
+        "head_sha": commit, "per_page": "100",
     })
     candidates = [
         run for run in runs.get("workflow_runs", [])
@@ -72,7 +84,32 @@ def live_evidence(repository: str, commit: str) -> tuple[dict, dict, dict]:
         and run.get("status") == "completed" and run.get("conclusion") == "success"
     ]
     if not candidates:
-        raise ValueError("no successful CloudlessOS qualification run exists for the exact source commit")
+        matching = [
+            run for run in runs.get("workflow_runs", [])
+            if isinstance(run, dict) and run.get("head_sha") == commit
+            and run.get("path") == WORKFLOW_PATH and run.get("name") == WORKFLOW_NAME
+        ]
+        if not matching:
+            raise ValueError(
+                "no CloudlessOS qualification run exists for the exact source commit; "
+                "dispatch it with `gh workflow run multiarch.yml --ref <branch>`"
+            )
+        latest = max(matching, key=lambda item: int(item.get("id", 0)))
+        run_id = int(latest.get("id", 0))
+        run_url = str(latest.get("html_url") or f"https://github.com/{repository}/actions")
+        conclusion = str(latest.get("conclusion") or latest.get("status") or "unknown")
+        if conclusion == "startup_failure" and run_id > 0:
+            jobs = gh_json(repository, f"actions/runs/{run_id}/jobs", {"per_page": "100"})
+            if jobs.get("total_count") == 0 or jobs.get("jobs") == []:
+                raise ValueError(
+                    "GitHub rejected the exact-commit qualification before creating any jobs "
+                    f"(startup_failure: {run_url}). Check repository Actions access and the owner "
+                    "account's Actions billing/spending status; if both are enabled, validate the "
+                    "workflow file with actionlint"
+                )
+        raise ValueError(
+            f"the latest exact-commit CloudlessOS qualification concluded {conclusion}: {run_url}"
+        )
     run = max(candidates, key=lambda item: int(item.get("id", 0)))
     run_id = int(run.get("id", 0))
     if run_id <= 0:

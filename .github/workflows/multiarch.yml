@@ -44,6 +44,7 @@ jobs:
       - name: Release and security policy tests
         run: |
           bash distro/scripts/test-preinstall.sh
+          bash distro/scripts/test-configure-release-env.sh
           bash distro/scripts/test-release-env.sh
           bash distro/scripts/test-release-preflight.sh
           bash distro/scripts/test-release-isolation.sh

@@ -55,6 +55,12 @@ strictly, publishes its non-secret operational facts, binds them into the releas
 manifest, and detached-signs the resulting descriptor. Pre-1.0 releases explicitly publish
 `not-operational` when no attestation is supplied; a 1.0+ stable release fails closed.
 
+The one-time configurator prompts for both optional evidence paths and stores them alongside the
+existing release settings without printing their contents. It verifies that the qualification
+directory exists and refuses a missing or group/world-readable security attestation. Future
+`release.sh` runs therefore need only the version and channel; they do not ask the operator to
+re-enter evidence locations.
+
 The offline archive signing-key backup remains separate from the R2 credential. Keep it encrypted,
 offline and readable only during signing. R2 compromise must not grant signing authority.
 

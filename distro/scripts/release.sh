@@ -127,6 +127,7 @@ echo "==> Go static analysis"
 docker run --rm -v "$ROOT:/src" -w /src/orchestrator \
     cloudless-release-builder go vet ./...
 echo "==> Release environment loader"
+bash "$ROOT/distro/scripts/test-configure-release-env.sh"
 bash "$ROOT/distro/scripts/test-release-env.sh"
 echo "==> Production release preflight"
 bash "$ROOT/distro/scripts/test-release-preflight.sh"

@@ -15,7 +15,7 @@ usage() {
 case "$CHANNEL" in stable|beta) ;; *) usage; exit 2 ;; esac
 [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]] || { usage; exit 2; }
 
-for command in docker git node python3 sha256sum tar tee; do
+for command in docker git python3 sha256sum tar tee; do
     command -v "$command" >/dev/null || { echo "Missing required command: $command" >&2; exit 1; }
 done
 [ "$(git -C "$ROOT" rev-parse HEAD)" = "$COMMIT" ] || {

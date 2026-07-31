@@ -23,6 +23,7 @@ from pathlib import Path
 SCHEMA = "cloudless.physical-evidence.v1"
 CHECK_SCHEMA = "cloudless.physical-check.v1"
 EXPORT_SCHEMA = "cloudless.physical-export.v1"
+SET_SCHEMA = "cloudless.physical-set.v1"
 DEFAULT_MATRIX = Path("/usr/share/cloudless/physical-validation-matrix.json")
 DEFAULT_UPDATE_STATUS = Path("/var/lib/cloudless-updater/status.json")
 MAX_EVIDENCE_BYTES = 64 * 1024 * 1024
@@ -725,6 +726,12 @@ def verify_export(path: Path) -> dict:
             manifest = json.loads(archive.read("qualification-export.json"))
             if not isinstance(manifest, dict) or manifest.get("schema") != EXPORT_SCHEMA:
                 raise ValueError("qualification export manifest is invalid")
+            if (
+                not VERSION_RE.fullmatch(str(manifest.get("version", "")))
+                or not COMMIT_RE.fullmatch(str(manifest.get("sourceCommit", "")))
+                or not str(manifest.get("exportedAt", "")).endswith("Z")
+            ):
+                raise ValueError("qualification export identity is invalid")
             records = manifest.get("records")
             if not isinstance(records, dict) or not records:
                 raise ValueError("qualification export record inventory is missing")
@@ -779,6 +786,49 @@ def verify_export(path: Path) -> dict:
             return manifest
     except (KeyError, zipfile.BadZipFile, json.JSONDecodeError) as exc:
         raise ValueError("qualification export is malformed") from exc
+
+
+def verify_export_set(archives: list[Path], matrix_path: Path) -> dict:
+    matrix = load_matrix(matrix_path)
+    required_targets = [str(target["id"]) for target in matrix.get("targets", [])]
+    if not archives:
+        raise ValueError("at least one qualification export is required")
+    by_target: dict[str, dict] = {}
+    identities: set[tuple[str, str]] = set()
+    records = []
+    for archive in archives:
+        manifest = verify_export(archive)
+        target = str(manifest.get("target", ""))
+        if target not in required_targets:
+            raise ValueError(f"qualification export has an unknown target: {target or 'missing'}")
+        if target in by_target:
+            raise ValueError(f"qualification set contains duplicate target evidence: {target}")
+        by_target[target] = manifest
+        identities.add((str(manifest["version"]), str(manifest["sourceCommit"])))
+        records.append(
+            {
+                "target": target,
+                "filename": archive.name,
+                "sha256": sha256_file(archive),
+                "bytes": archive.stat().st_size,
+            }
+        )
+    if len(identities) != 1:
+        raise ValueError("qualification exports do not describe one exact version and source commit")
+    missing = [target for target in required_targets if target not in by_target]
+    if missing:
+        raise ValueError("qualification set is incomplete; missing targets: " + ", ".join(missing))
+    version, source_commit = next(iter(identities))
+    records.sort(key=lambda item: required_targets.index(item["target"]))
+    return {
+        "schema": SET_SCHEMA,
+        "version": version,
+        "sourceCommit": source_commit,
+        "matrixSha256": sha256_file(matrix_path),
+        "verifiedAt": utc_now(),
+        "targets": required_targets,
+        "archives": records,
+    }
 
 
 def matrix_argument(parser: argparse.ArgumentParser) -> None:
@@ -844,6 +894,14 @@ def main(argv: list[str] | None = None) -> int:
     verify = subparsers.add_parser("verify-export", help="verify a sealed qualification export")
     verify.add_argument("archive", type=Path)
 
+    verify_set = subparsers.add_parser(
+        "verify-set", help="verify that every required hardware target qualified one exact candidate"
+    )
+    verify_set.add_argument("archives", nargs="+", type=Path)
+    verify_set.add_argument("--output", type=Path, help="write the verified set manifest atomically")
+    verify_set.add_argument("--json", action="store_true", help="emit the verified set as JSON")
+    matrix_argument(verify_set)
+
     args = parser.parse_args(argv)
     try:
         if args.command == "begin":
@@ -887,6 +945,23 @@ def main(argv: list[str] | None = None) -> int:
                 f"Verified qualification export: {manifest['target']} "
                 f"{manifest['version']} ({manifest['sourceCommit'][:12]})"
             )
+            return 0
+        if args.command == "verify-set":
+            manifest = verify_export_set(args.archives, args.matrix)
+            if args.output:
+                output = args.output.resolve()
+                if any(output == archive.resolve() for archive in args.archives):
+                    raise ValueError("qualification set output cannot replace an input archive")
+                atomic_json(output, manifest)
+            if args.json:
+                print(json.dumps(manifest, indent=2, sort_keys=True))
+            else:
+                print(
+                    f"Verified complete qualification set: {manifest['version']} "
+                    f"({manifest['sourceCommit'][:12]}) across {len(manifest['targets'])} targets"
+                )
+                if args.output:
+                    print(f"Qualification set manifest: {args.output.resolve()}")
             return 0
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)

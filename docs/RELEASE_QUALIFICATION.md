@@ -120,6 +120,20 @@ writes through a private temporary file, verifies every member against the expor
 sealed campaign evidence root, and only then atomically publishes the final mode-0600 ZIP. Retain
 that ZIP beside the CI artifacts for the exact release commit.
 
+After every matrix target has produced an export, verify them together. This rejects a missing or
+duplicate target and, critically, rejects evidence mixed across versions or source commits:
+
+```bash
+sudo cloudless-qualify verify-set \
+  /var/lib/cloudless/qualification/exports/*.zip \
+  --output /var/lib/cloudless/qualification/cloudless-0.2.7-physical-set.json
+```
+
+The resulting mode-0600 `cloudless.physical-set.v1` manifest binds the authoritative matrix digest,
+exact version, full source commit and SHA-256/size of every target archive. Retain it with the
+archives and CI artifacts. A partial collection is useful while testing, but it is not release
+qualification and cannot produce this manifest.
+
 Run the tooling contract validator before and after a qualification campaign:
 
 ```bash

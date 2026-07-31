@@ -115,6 +115,56 @@ class PhysicalQualificationTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "integrity verification"):
             qualify.verify_export(tampered)
 
+    def qualification_set_fixtures(self):
+        matrix = qualify.load_matrix(self.matrix)
+        archives = []
+        manifests = {}
+        for target in matrix["targets"]:
+            archive = self.root / f"{target['id']}.zip"
+            archive.write_bytes(f"sealed {target['id']}\n".encode())
+            archives.append(archive)
+            manifests[archive] = {
+                "schema": qualify.EXPORT_SCHEMA,
+                "target": target["id"],
+                "version": "1.2.3-rc1",
+                "sourceCommit": "0123456789abcdef0123456789abcdef01234567",
+                "exportedAt": "2026-07-31T00:00:00Z",
+            }
+        return archives, manifests
+
+    def test_complete_export_set_binds_every_target_to_one_candidate(self):
+        archives, manifests = self.qualification_set_fixtures()
+        with mock.patch.object(qualify, "verify_export", side_effect=lambda path: manifests[path]):
+            result = qualify.verify_export_set(archives, self.matrix)
+        expected = [target["id"] for target in qualify.load_matrix(self.matrix)["targets"]]
+        self.assertEqual(result["schema"], qualify.SET_SCHEMA)
+        self.assertEqual(result["targets"], expected)
+        self.assertEqual([record["target"] for record in result["archives"]], expected)
+        self.assertEqual(result["version"], "1.2.3-rc1")
+        self.assertEqual(result["sourceCommit"], "0123456789abcdef0123456789abcdef01234567")
+
+    def test_export_set_rejects_missing_duplicate_and_mixed_candidate_evidence(self):
+        archives, manifests = self.qualification_set_fixtures()
+        with mock.patch.object(qualify, "verify_export", side_effect=lambda path: manifests[path]):
+            with self.assertRaisesRegex(ValueError, "missing targets"):
+                qualify.verify_export_set(archives[:-1], self.matrix)
+
+            duplicate = self.root / "duplicate.zip"
+            duplicate.write_bytes(b"duplicate target\n")
+            manifests[duplicate] = dict(manifests[archives[0]])
+            with self.assertRaisesRegex(ValueError, "duplicate target"):
+                qualify.verify_export_set(archives + [duplicate], self.matrix)
+
+            manifests[archives[-1]] = dict(manifests[archives[-1]], sourceCommit="f" * 40)
+            with self.assertRaisesRegex(ValueError, "one exact version and source commit"):
+                qualify.verify_export_set(archives, self.matrix)
+
+            manifests[archives[-1]] = dict(
+                manifests[archives[0]], target=manifests[archives[-1]]["target"], version="1.2.4-rc1"
+            )
+            with self.assertRaisesRegex(ValueError, "one exact version and source commit"):
+                qualify.verify_export_set(archives, self.matrix)
+
     def test_unique_boots_and_cluster_checks_cannot_be_bypassed(self):
         campaign = self.begin("dgx-spark-arm64-2", "aarch64", "dgx-spark")
         boot = str(uuid.UUID(int=1))

@@ -713,6 +713,10 @@ Implementation status (July 31, 2026):
   them back to the sealed qualification result and verifies the finished archive before publication.
   A separate offline `verify-export` command makes retained VM/Spark evidence independently
   reviewable without trusting the mutable source directory.
+- The release-level `verify-set` gate rejects missing or duplicate hardware targets and any mixture
+  of versions or source commits. Its private manifest binds the authoritative physical matrix plus
+  every archive's SHA-256 and size, so a release decision can prove that VM, generic NVIDIA and all
+  required Spark-topology evidence came from one exact candidate.
 - [`OPERATIONS.md`](./OPERATIONS.md) indexes the install, DGX, update, recovery, cluster, terminal,
   privacy, diagnostics/support and qualification guides. Privacy documentation distinguishes local
   inference from explicit update, registry, Hugging Face, Tailscale, Cloudflare and browser traffic,

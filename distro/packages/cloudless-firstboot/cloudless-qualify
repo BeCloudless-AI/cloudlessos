@@ -58,7 +58,11 @@ def utc_now() -> str:
 
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
-    with path.open("rb") as handle:
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(path, flags)
+    with os.fdopen(descriptor, "rb") as handle:
+        if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
+            raise ValueError(f"file must be a regular non-symlink file: {path}")
         for block in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest()
@@ -83,8 +87,12 @@ def atomic_json(path: Path, payload: object) -> None:
 
 
 def load_json(path: Path) -> dict:
-    with path.open(encoding="utf-8") as handle:
-        value = json.load(handle)
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(path, flags)
+    with os.fdopen(descriptor, "rb") as handle:
+        if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
+            raise ValueError(f"{path} must be a regular non-symlink file")
+        value = json.loads(handle.read().decode("utf-8"))
     if not isinstance(value, dict):
         raise ValueError(f"{path} does not contain a JSON object")
     return value
@@ -1045,6 +1053,9 @@ def validate_campaign(campaign: Path, matrix_path: Path) -> list[str]:
     if len(boot_files) < minimum_boots:
         errors.append(f"ten-boot-cycles: {len(boot_files)}/{minimum_boots} unique boots recorded")
     for boot_path in boot_files:
+        if boot_path.is_symlink():
+            errors.append(f"ten-boot-cycles: boot evidence is a symlink {boot_path.name}")
+            continue
         try:
             boot = load_json(boot_path)
         except (OSError, ValueError, json.JSONDecodeError):
@@ -1075,6 +1086,9 @@ def validate_campaign(campaign: Path, matrix_path: Path) -> list[str]:
         if check == "ten-boot-cycles":
             continue
         path = campaign / "checks" / f"{check}.json"
+        if path.is_symlink():
+            errors.append(f"{check}: result must not be a symlink")
+            continue
         try:
             result = load_json(path)
         except (OSError, ValueError, json.JSONDecodeError):
@@ -1089,16 +1103,33 @@ def validate_campaign(campaign: Path, matrix_path: Path) -> list[str]:
             errors.append(f"{check}: evidence is missing")
             continue
         for item in evidence:
+            if not isinstance(item, dict):
+                errors.append(f"{check}: evidence record is malformed")
+                continue
             relative = str(item.get("path", ""))
-            candidate = (campaign / relative).resolve()
+            relative_path = Path(relative)
+            if relative_path.is_absolute() or not relative_path.parts or ".." in relative_path.parts:
+                errors.append(f"{check}: evidence path is unsafe")
+                continue
+            candidate = campaign / relative_path
+            if candidate.is_symlink():
+                errors.append(f"{check}: evidence file must not be a symlink")
+                continue
             try:
-                candidate.relative_to(campaign.resolve())
-            except ValueError:
+                resolved = candidate.resolve(strict=True)
+                resolved.relative_to(campaign.resolve())
+            except (OSError, ValueError):
                 errors.append(f"{check}: evidence path escapes the campaign")
                 continue
-            if not candidate.is_file() or candidate.is_symlink():
+            if not candidate.is_file():
                 errors.append(f"{check}: evidence file is missing")
-            elif sha256_file(candidate) != item.get("sha256"):
+                continue
+            try:
+                digest = sha256_file(candidate)
+            except (OSError, ValueError):
+                errors.append(f"{check}: evidence file is missing or not regular")
+                continue
+            if digest != item.get("sha256"):
                 errors.append(f"{check}: evidence digest changed")
     return errors
 

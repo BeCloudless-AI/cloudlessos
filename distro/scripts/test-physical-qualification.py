@@ -527,6 +527,32 @@ class PhysicalQualificationTest(unittest.TestCase):
                 [self.evidence],
             )
 
+    def test_recorded_evidence_cannot_be_replaced_by_an_in_campaign_symlink(self):
+        campaign = self.begin()
+        qualify.record_check(
+            campaign, self.matrix, "clean-install", "pass", "Install observed", [self.evidence]
+        )
+        result = qualify.load_json(campaign / "checks" / "clean-install.json")
+        destination = campaign / result["evidence"][0]["path"]
+        substitute = campaign / "evidence" / "substitute.txt"
+        shutil.copyfile(destination, substitute)
+        destination.unlink()
+        destination.symlink_to(substitute)
+        errors = qualify.validate_campaign(campaign, self.matrix)
+        self.assertIn("clean-install: evidence file must not be a symlink", errors)
+
+    def test_check_result_cannot_be_replaced_by_a_symlink(self):
+        campaign = self.begin()
+        qualify.record_check(
+            campaign, self.matrix, "clean-install", "pass", "Install observed", [self.evidence]
+        )
+        result = campaign / "checks" / "clean-install.json"
+        substitute = campaign / "checks" / "clean-install-original.json"
+        result.rename(substitute)
+        result.symlink_to(substitute)
+        errors = qualify.validate_campaign(campaign, self.matrix)
+        self.assertIn("clean-install: result must not be a symlink", errors)
+
     @staticmethod
     def soak_sample(index, *, failed=False):
         return {

@@ -752,7 +752,9 @@ Implementation status (July 31, 2026):
   incomplete. It produces evidence for human review; it does not self-attest a passing check.
 - Qualification evidence now opens submitted files with no-follow semantics, validates and hashes
   the same file descriptor, and publishes owner-only copies atomically. This closes a symlink
-  admission bug and prevents interrupted copies from becoming trusted campaign evidence.
+  admission bug and prevents interrupted copies from becoming trusted campaign evidence. Campaign
+  revalidation, sealing and export also reject substituted evidence, boot records and check results
+  instead of resolving symlinks and accidentally trusting their targets.
 - `physical-validation-matrix.json` defines the exact VirtualBox, generic NVIDIA, single-Spark and
   every two-to-eight-Spark target, with common and cluster-specific required checks.
   [`RELEASE_QUALIFICATION.md`](./RELEASE_QUALIFICATION.md) defines the evidence directory, redaction

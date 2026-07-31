@@ -92,6 +92,10 @@ grep -Fq 'prepare-ci-qualification.py' "$runner"
 grep -Fq 'go build -buildvcs=false' "$runner"
 grep -Fq 'Source changed while qualification was running' "$runner"
 grep -Fq 'CLOUDLESS_VERSION="$VERSION" CLOUDLESS_TEST_ARCH="$architecture"' "$runner"
+if [ "$(grep -Fc 'export PATH="/usr/local/go/bin:$PATH"; go test -json -race' "$runner")" -ne 2 ]; then
+    echo "Both local soak commands must pin the release-builder Go toolchain." >&2
+    exit 1
+fi
 if [ -d "$ROOT/.github/workflows" ] && find "$ROOT/.github/workflows" -type f \( -name '*.yml' -o -name '*.yaml' \) -print -quit | grep -q .; then
     echo "Hosted GitHub Actions workflows must remain disabled." >&2
     exit 1

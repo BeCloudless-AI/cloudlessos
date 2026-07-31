@@ -75,14 +75,25 @@ var (
 )
 
 type releaseManifest struct {
-	Schema        string               `json:"schema"`
-	Version       string               `json:"version"`
-	Channel       string               `json:"channel"`
-	SourceCommit  string               `json:"sourceCommit"`
-	Title         string               `json:"title"`
-	Summary       string               `json:"summary"`
-	Changes       []string             `json:"changes"`
-	Compatibility releaseCompatibility `json:"compatibility"`
+	Schema                string                       `json:"schema"`
+	Version               string                       `json:"version"`
+	Channel               string                       `json:"channel"`
+	SourceCommit          string                       `json:"sourceCommit"`
+	Title                 string                       `json:"title"`
+	Summary               string                       `json:"summary"`
+	Changes               []string                     `json:"changes"`
+	Compatibility         releaseCompatibility         `json:"compatibility"`
+	PhysicalQualification releasePhysicalQualification `json:"physicalQualification"`
+}
+
+type releasePhysicalQualification struct {
+	Schema                 string `json:"schema"`
+	Status                 string `json:"status"`
+	Required               bool   `json:"required"`
+	Version                string `json:"version"`
+	Channel                string `json:"channel"`
+	SourceCommit           string `json:"sourceCommit"`
+	QualificationSetSHA256 string `json:"qualificationSetSha256"`
 }
 
 type releaseCompatibility struct {
@@ -654,6 +665,8 @@ func candidates(ctx context.Context, status osupdate.Status) (osupdate.Status, e
 	status.CurrentSourceCommit = ""
 	status.ReleaseTitle = ""
 	status.ReleaseSummary = ""
+	status.QualificationStatus = ""
+	status.QualificationRequired = false
 	status.Changelog = nil
 	for _, name := range managedPackages {
 		installed, err := installedVersion(ctx, name)
@@ -694,12 +707,16 @@ func candidates(ctx context.Context, status osupdate.Status) (osupdate.Status, e
 		status.ReleaseSummary = release.Summary
 		status.Changelog = release.Changes
 		status.AvailableSourceCommit = release.SourceCommit
+		status.QualificationStatus = release.PhysicalQualification.Status
+		status.QualificationRequired = release.PhysicalQualification.Required
 	} else if status.CurrentVersion != "" {
 		release, err := loadReleaseManifest(ctx, status.Channel, status.CurrentVersion)
 		if err != nil {
 			return status, fmt.Errorf("could not verify installed release identity: %w", err)
 		}
 		status.CurrentSourceCommit = release.SourceCommit
+		status.QualificationStatus = release.PhysicalQualification.Status
+		status.QualificationRequired = release.PhysicalQualification.Required
 	}
 	return status, nil
 }
@@ -801,6 +818,9 @@ func validateReleaseManifest(release, manifest []byte, version, channel string) 
 	if !compatible {
 		return releaseManifest{}, fmt.Errorf("release does not support %s/%s", platform.Detect(), platform.Architecture())
 	}
+	if err := validatePhysicalQualification(parsed); err != nil {
+		return releaseManifest{}, err
+	}
 	if strings.TrimSpace(parsed.Title) == "" || len(parsed.Changes) == 0 {
 		return releaseManifest{}, errors.New("release notes are incomplete")
 	}
@@ -810,6 +830,41 @@ func validateReleaseManifest(release, manifest []byte, version, channel string) 
 		}
 	}
 	return parsed, nil
+}
+
+func validatePhysicalQualification(release releaseManifest) error {
+	major := 0
+	if fields := strings.SplitN(release.Version, ".", 2); len(fields) > 0 {
+		major, _ = strconv.Atoi(fields[0])
+	}
+	required := release.Channel == "stable" && major >= 1
+	physical := release.PhysicalQualification
+	if physical.Schema == "" {
+		if required {
+			return errors.New("stable CloudlessOS 1.0+ release is missing physical qualification")
+		}
+		return nil // Legacy pre-1.0 signed releases did not carry this descriptor.
+	}
+	if physical.Schema != "cloudless.physical-release.v1" ||
+		physical.Version != release.Version || physical.Channel != release.Channel ||
+		physical.SourceCommit != release.SourceCommit || physical.Required != required {
+		return errors.New("release physical qualification identity is invalid")
+	}
+	if physical.Status != "qualified" && physical.Status != "not-qualified" {
+		return errors.New("release physical qualification status is invalid")
+	}
+	if required && physical.Status != "qualified" {
+		return errors.New("stable CloudlessOS 1.0+ release is not physically qualified")
+	}
+	if physical.Status == "qualified" {
+		if len(physical.QualificationSetSHA256) != 64 {
+			return errors.New("release physical qualification set identity is incomplete")
+		}
+		if _, err := hex.DecodeString(physical.QualificationSetSHA256); err != nil {
+			return errors.New("release physical qualification set identity is malformed")
+		}
+	}
+	return nil
 }
 
 func releaseManifestIdentity(release []byte) (string, int64, error) {

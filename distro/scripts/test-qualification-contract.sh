@@ -58,6 +58,7 @@ if failure_targets != {"dgx-spark-arm64-2"}:
 print("Physical qualification contract covers VM, NVIDIA and every one-to-eight-Spark topology.")
 PY
 python3 "$ROOT/distro/scripts/test-physical-qualification.py"
+python3 "$ROOT/distro/scripts/test-physical-release.py"
 
 workflow="$ROOT/.github/workflows/multiarch.yml"
 grep -Fq 'name: package-qualification-${{ github.run_id }}-${{ github.run_attempt }}' "$workflow"

@@ -20,13 +20,15 @@ func TestSystemUpdateGet(t *testing.T) {
 	status.State = "available"
 	status.CurrentVersion = "0.1.0"
 	status.AvailableVersion = "0.1.1"
+	status.QualificationStatus = "not-qualified"
 	if err := osupdate.Write(status); err != nil {
 		t.Fatal(err)
 	}
 
 	rec := httptest.NewRecorder()
 	(&Server{}).systemUpdateGet(rec, httptest.NewRequest(http.MethodGet, "/api/system/update", nil))
-	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"availableVersion":"0.1.1"`) {
+	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"availableVersion":"0.1.1"`) ||
+		!strings.Contains(rec.Body.String(), `"qualificationStatus":"not-qualified"`) {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
 }
@@ -86,6 +88,7 @@ func TestEmbeddedSystemUpdateUIKeepsTruthfulLifecycleStates(t *testing.T) {
 		"sys-update-error",
 		"Installing verified update",
 		"openCloudlessDecision({",
+		"updateQualificationNote(update)",
 	} {
 		if !strings.Contains(source, contract) {
 			t.Fatalf("embedded update UI is missing contract %q", contract)

@@ -10,6 +10,7 @@ OUT="$ROOT/distro/out/release-gates.json"
 PACKAGES="${CLOUDLESS_PACKAGE_OUT:-$ROOT/distro/out/packages}"
 SECURITY_OUT="${CLOUDLESS_SECURITY_OUT:-$ROOT/distro/out/security}"
 SBOM="${CLOUDLESS_SBOM:-$SECURITY_OUT/cloudless-$VERSION.spdx.json}"
+PHYSICAL_QUALIFICATION="${CLOUDLESS_PHYSICAL_QUALIFICATION:-$ROOT/distro/out/qualification/cloudless-physical-qualification.json}"
 
 [ -n "$VERSION" ] || { echo "Usage: $0 VERSION [stable|beta]" >&2; exit 2; }
 case "$CHANNEL" in stable|beta) ;; *) echo "Invalid channel: $CHANNEL" >&2; exit 2 ;; esac
@@ -134,13 +135,48 @@ for report_path in (source_report_path, package_report_path):
         raise SystemExit(f"security report contains {len(findings)} unresolved high/critical vulnerabilities")
 PY
 
+echo "==> Validating physical qualification identity"
+test -s "$PHYSICAL_QUALIFICATION" || { echo "Missing physical qualification descriptor" >&2; exit 1; }
+python3 - "$PHYSICAL_QUALIFICATION" "$VERSION" "$CHANNEL" "$commit" "$ROOT/distro/release/physical-validation-matrix.json" <<'PY'
+import hashlib, json, sys
+path, version, channel, commit, matrix_path = sys.argv[1:]
+with open(path, encoding="utf-8") as handle:
+    physical = json.load(handle)
+with open(matrix_path, "rb") as handle:
+    matrix_hash = hashlib.sha256(handle.read()).hexdigest()
+required = channel == "stable" and int(version.split(".", 1)[0]) >= 1
+if physical.get("schema") != "cloudless.physical-release.v1":
+    raise SystemExit("invalid physical qualification descriptor schema")
+for field, expected in (
+    ("version", version), ("channel", channel), ("sourceCommit", commit),
+    ("matrixSha256", matrix_hash), ("required", required),
+):
+    if physical.get(field) != expected:
+        raise SystemExit(f"physical qualification {field} mismatch")
+if physical.get("status") not in {"qualified", "not-qualified"}:
+    raise SystemExit("physical qualification status is invalid")
+if required and physical.get("status") != "qualified":
+    raise SystemExit("CloudlessOS 1.0+ stable releases require physical qualification")
+if physical.get("status") == "qualified":
+    qualification_set = physical.get("qualificationSet")
+    if not isinstance(qualification_set, dict):
+        raise SystemExit("qualified release is missing its physical qualification set")
+    canonical = json.dumps(qualification_set, sort_keys=True, separators=(",", ":")).encode()
+    if hashlib.sha256(canonical).hexdigest() != physical.get("qualificationSetSha256"):
+        raise SystemExit("physical qualification set digest is invalid")
+    if qualification_set.get("version") != version or qualification_set.get("sourceCommit") != commit:
+        raise SystemExit("physical qualification set identity does not match the release")
+PY
+
 matrix_sha="$(sha256sum "$MATRIX" | awk '{print $1}')"
 mkdir -p "$(dirname "$OUT")"
-python3 - "$OUT.tmp" "$VERSION" "$CHANNEL" "$commit" "$matrix_sha" "$MATRIX" <<'PY'
+python3 - "$OUT.tmp" "$VERSION" "$CHANNEL" "$commit" "$matrix_sha" "$MATRIX" "$PHYSICAL_QUALIFICATION" <<'PY'
 import datetime, json, os, sys
-output, version, channel, commit, matrix_sha, matrix_path = sys.argv[1:]
+output, version, channel, commit, matrix_sha, matrix_path, physical_path = sys.argv[1:]
 with open(matrix_path, encoding="utf-8") as handle:
     matrix = json.load(handle)
+with open(physical_path, encoding="utf-8") as handle:
+    physical = json.load(handle)
 document = {
     "schema": "cloudless.release-gates.v1",
     "version": version,
@@ -150,6 +186,7 @@ document = {
     "matrixSha256": matrix_sha,
     "targets": matrix["targets"],
     "passedGates": matrix["requiredGates"],
+    "physicalQualification": physical,
 }
 with open(output, "w", encoding="utf-8") as handle:
     json.dump(document, handle, ensure_ascii=False, separators=(",", ":"))

@@ -59,14 +59,21 @@ bash distro/scripts/release.sh 0.2.1 stable
 ```
 
 The one-time setup stores these values in `~/.config/cloudless/release.env` with
-mode `0600`. The release command loads only the five supported settings from that
+mode `0600`. The release command loads only the supported settings from that
 file without evaluating it as shell code. Set `CLOUDLESS_RELEASE_ENV` to use a
 different private path. Never put this file in the repository.
+
+To bind completed physical campaigns, set the optional non-secret
+`CLOUDLESS_PHYSICAL_QUALIFICATION_DIR` entry to a private directory containing the sealed target
+ZIPs produced by `cloudless-qualify export`. The release command verifies the complete set before
+running expensive builders. Pre-1.0 releases without it are signed with an explicit
+`not-qualified` descriptor; stable releases from 1.0 onward fail closed unless every matrix target
+belongs to the exact version and source commit being released.
 
 The command refuses dirty or unpushed source, including untracked files. Before starting a builder,
 production preflight also requires the committed archive fingerprint, Cloudless update signing
 identity, account-scoped Cloudflare endpoint, non-placeholder credential shapes and the exact
-AMD64/ARM64/DGX validation contract. It runs the Go, browser
+AMD64/ARM64/DGX validation contract and physical-evidence policy. It runs the Go, browser
 JavaScript, AMD64, ARM64, package-content, signed-repository, and atomic
 publication tests; asks for explicit confirmation; imports the signing key only
 inside the disposable release container; signs the complete generation;

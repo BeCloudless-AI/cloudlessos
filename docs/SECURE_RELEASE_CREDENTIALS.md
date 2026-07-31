@@ -31,6 +31,11 @@ loaded by `distro/scripts/release.sh`; credentials should never be pasted into a
 checked into `.env`, or passed as script arguments. The script and preflight must never print their
 values.
 
+The file may also contain `CLOUDLESS_PHYSICAL_QUALIFICATION_DIR`, a non-secret path to the private
+sealed hardware-evidence exports. The strict loader accepts the path as data and never evaluates it
+as shell syntax. Evidence archives can contain operational detail, so keep that directory private
+even though it contains no release credential.
+
 The offline archive signing-key backup remains separate from the R2 credential. Keep it encrypted,
 offline and readable only during signing. R2 compromise must not grant signing authority.
 

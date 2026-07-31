@@ -36,6 +36,8 @@ type Status struct {
 	AvailableSourceCommit string    `json:"availableSourceCommit,omitempty"`
 	ReleaseTitle          string    `json:"releaseTitle,omitempty"`
 	ReleaseSummary        string    `json:"releaseSummary,omitempty"`
+	QualificationStatus   string    `json:"qualificationStatus,omitempty"`
+	QualificationRequired bool      `json:"qualificationRequired,omitempty"`
 	Changelog             []string  `json:"changelog,omitempty"`
 	Message               string    `json:"message,omitempty"`
 	Progress              int       `json:"progress"`

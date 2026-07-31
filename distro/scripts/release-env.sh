@@ -36,7 +36,7 @@ load_cloudless_release_env() {
             value="${value:1:${#value}-2}"
         fi
         case "$key" in
-            CLOUDLESS_ARCHIVE_SECRET|CLOUDLESS_R2_ENDPOINT|CLOUDLESS_R2_BUCKET|AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY)
+            CLOUDLESS_ARCHIVE_SECRET|CLOUDLESS_R2_ENDPOINT|CLOUDLESS_R2_BUCKET|CLOUDLESS_PHYSICAL_QUALIFICATION_DIR|AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY)
                 export "$key=$value"
                 ;;
             *)

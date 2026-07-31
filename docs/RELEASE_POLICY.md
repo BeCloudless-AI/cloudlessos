@@ -17,6 +17,12 @@ required by [RELEASE_QUALIFICATION.md](./RELEASE_QUALIFICATION.md).
 5. Promote only from the same source commit. Stable publication must rerun the production gates and
    public verification. Any source change creates a new candidate and restarts the soak window.
 
+The release manifest always carries a signed physical-qualification descriptor. A pre-1.0 build may
+state `not-qualified` so development can continue without implying hardware support. A stable 1.0+
+release cannot be built unless `cloudless-qualify verify-set` proves every authoritative target ZIP
+belongs to that exact version and full source commit; the resulting descriptor is detached-signed
+and published with the release artifacts.
+
 Until the release tooling can promote byte-identical beta package objects into stable, the stable
 build is a separately signed build from the exact qualified commit. Its package hashes must be
 retained beside the candidate evidence and the stable smoke/rollback checks must be repeated. Exact

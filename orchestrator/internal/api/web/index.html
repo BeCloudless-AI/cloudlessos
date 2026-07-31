@@ -430,6 +430,10 @@
   .uc-card-message { margin-top: 12px; color: var(--ink-2); font-size: 11.5px; line-height: 1.5; }
   .uc-card-actions { margin-top: 14px; display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
   .uc-card-error { margin-top: 10px; color: var(--err); font-size: 10.5px; }
+  .uc-qualification { margin-top: 11px; padding: 9px 11px; display: flex; align-items: center; gap: 8px; border: 1px solid var(--hair); border-radius: 10px; color: var(--muted); background: var(--control); font-size: 10.5px; line-height: 1.4; }
+  .uc-qualification .ui-icon { width: 14px; height: 14px; flex: none; }
+  .uc-qualification.qualified { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 24%, var(--hair)); background: color-mix(in srgb, var(--ok) 7%, var(--control)); }
+  .uc-qualification.preview { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 24%, var(--hair)); background: color-mix(in srgb, var(--warn) 7%, var(--control)); }
   .uc-changes { margin: 12px 0 0; padding: 11px 12px 11px 27px; border-radius: 10px; color: var(--ink-2); background: var(--control); }
   .uc-changes li { font-size: 10.5px; line-height: 1.5; }
   .uc-progress { margin-top: 12px; }
@@ -4882,6 +4886,11 @@ function updateCenterProgress(job) {
   const detail = job.bytesTotal ? `${modelDownloadSize(job.bytesDone)} of ${modelDownloadSize(job.bytesTotal)}` : job.message || 'Working in the background';
   return `<div class="uc-progress"><div class="uc-progress-head"><span>${escapeHtml(detail)}</span><b>${percent ? percent + '%' : 'WORKING'}</b></div><div class="uc-progress-track" style="--progress:${percent || 8}%"><i></i></div></div>`;
 }
+function updateQualificationNote(system = {}) {
+  if (system.qualificationStatus === 'qualified') return `<div class="uc-qualification qualified">${uiIcon('check')}<span>Physical hardware qualification is complete for this exact release.</span></div>`;
+  if (system.qualificationStatus === 'not-qualified') return `<div class="uc-qualification preview">${uiIcon('alert')}<span>Pre-release build — the complete physical hardware matrix is not yet qualified.</span></div>`;
+  return '';
+}
 function updateCenterSystemCard(system = {}) {
   const state = system.state || 'idle', busy = updateCenterBusyState(state), available = state === 'available', reboot = state === 'reboot_required';
   const current = system.currentVersion || document.documentElement.dataset.cloudlessVersion || 'unknown';
@@ -4892,7 +4901,7 @@ function updateCenterSystemCard(system = {}) {
   let action = '';
   if (available) action = '<button class="btn primary" data-uc-system="apply">Install update</button>';
   else if (reboot) action = '<button class="btn primary" data-uc-system="reboot">Restart now</button>';
-  return `<article class="uc-card"><div class="uc-card-top"><span class="uc-card-icon">${uiIcon('download')}</span><span class="uc-card-copy"><b>CloudlessOS</b><span>INSTALLED ${escapeHtml(current)} · ${escapeHtml(system.channel || 'stable').toUpperCase()} CHANNEL${available ? ` · AVAILABLE ${escapeHtml(latest)}` : ''}</span></span><span class="uc-state ${available || reboot ? 'available' : busy ? 'available' : 'ready'}">${status}</span></div><div class="uc-card-message">${escapeHtml(system.releaseTitle || system.message || (available ? `CloudlessOS ${latest} is ready to install.` : 'Signed CloudlessOS components are up to date.'))}</div>${system.releaseSummary && available ? `<div class="uc-card-message">${escapeHtml(system.releaseSummary)}</div>` : ''}${changes}${progress}${system.error ? `<div class="uc-card-error">${escapeHtml(system.error)}</div>` : ''}${action ? `<div class="uc-card-actions">${action}</div>` : ''}</article>`;
+  return `<article class="uc-card"><div class="uc-card-top"><span class="uc-card-icon">${uiIcon('download')}</span><span class="uc-card-copy"><b>CloudlessOS</b><span>INSTALLED ${escapeHtml(current)} · ${escapeHtml(system.channel || 'stable').toUpperCase()} CHANNEL${available ? ` · AVAILABLE ${escapeHtml(latest)}` : ''}</span></span><span class="uc-state ${available || reboot ? 'available' : busy ? 'available' : 'ready'}">${status}</span></div><div class="uc-card-message">${escapeHtml(system.releaseTitle || system.message || (available ? `CloudlessOS ${latest} is ready to install.` : 'Signed CloudlessOS components are up to date.'))}</div>${system.releaseSummary && available ? `<div class="uc-card-message">${escapeHtml(system.releaseSummary)}</div>` : ''}${updateQualificationNote(system)}${changes}${progress}${system.error ? `<div class="uc-card-error">${escapeHtml(system.error)}</div>` : ''}${action ? `<div class="uc-card-actions">${action}</div>` : ''}</article>`;
 }
 function updateCenterDriverCard() {
   if (updateCenterData.driverOwner === 'nvidia-dgx') return `<article class="uc-card"><div class="uc-card-top"><span class="uc-card-icon">${uiIcon('machine')}</span><span class="uc-card-copy"><b>DGX OS and drivers</b><span>MANAGED BY NVIDIA</span></span><span class="uc-state ready">Vendor managed</span></div><div class="uc-card-message">Driver, firmware and DGX OS updates remain under NVIDIA’s qualified update path.</div><div class="uc-card-actions"><button class="btn" data-uc-driver="dgx">Open DGX Dashboard</button></div></article>`;
@@ -8770,6 +8779,7 @@ async function renderGeneralPage(c) {
         <div class="sys-update-top"><span class="sys-update-mark ${busy ? 'sys-update-spin' : ''}">${uiIcon(busy ? 'restart' : 'download')}</span>
           <div class="sys-update-copy"><div class="sys-update-title">${updateTitle}</div><div class="sys-update-version">Installed ${escapeHtml(current)} · ${escapeHtml(update.channel || 'stable')} channel${available && (state === 'available' || busy) ? ' · Available ' + escapeHtml(available) : ''}</div></div></div>
         <div class="sys-update-message">${escapeHtml(update.message || (update.configured ? 'Cloudless checks updates.becloudless.ai for signed system packages.' : 'The archive signing key must be initialized before over-the-air updates can be enabled.'))}</div>
+        ${updateQualificationNote(update)}
         ${state === 'available' && changelog.length ? `<div class="sys-update-changelog"><div class="sys-update-changelog-title">${escapeHtml(update.releaseTitle || `What’s new in ${available}`)}</div>${update.releaseSummary ? `<div class="sys-update-changelog-summary">${escapeHtml(update.releaseSummary)}</div>` : ''}<ul>${changelog.map(change => `<li>${escapeHtml(change)}</li>`).join('')}</ul></div>` : ''}
         ${showProgress ? `<div class="sys-update-progress"><div class="sys-update-progress-head"><span>Overall progress</span><strong>${progress}%</strong></div><div class="sys-update-progress-track" role="progressbar" aria-label="System update progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progress}"><div class="sys-update-progress-fill" style="width:${progress}%"></div></div></div>` : ''}
         ${update.error ? `<div class="sys-update-error">${escapeHtml(update.error)}</div>` : ''}

@@ -11,6 +11,7 @@ file="$work/release.env"
 printf '%s\n' \
     'CLOUDLESS_R2_ENDPOINT=https://example.invalid' \
     'CLOUDLESS_R2_BUCKET=test-bucket' \
+    'CLOUDLESS_PHYSICAL_QUALIFICATION_DIR=/private/qualification' \
     'AWS_ACCESS_KEY_ID=test-access' \
     'AWS_SECRET_ACCESS_KEY=test-secret' > "$file"
 chmod 600 "$file"
@@ -18,6 +19,7 @@ chmod 600 "$file"
 CLOUDLESS_RELEASE_ENV="$file" load_cloudless_release_env
 [ "$CLOUDLESS_R2_ENDPOINT" = "https://example.invalid" ]
 [ "$CLOUDLESS_R2_BUCKET" = "test-bucket" ]
+[ "$CLOUDLESS_PHYSICAL_QUALIFICATION_DIR" = "/private/qualification" ]
 [ "$AWS_ACCESS_KEY_ID" = "test-access" ]
 [ "$AWS_SECRET_ACCESS_KEY" = "test-secret" ]
 

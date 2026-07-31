@@ -31,6 +31,9 @@ func TestUpdateCenterIsFirstClassReconnectableSurface(t *testing.T) {
 		`uc-grid uc-system-grid`,
 		`filter(app => app.hasUpdate || !!activeOperationForApp(app.id))`,
 		`visibleApps.map(updateCenterAppCard)`,
+		`function updateQualificationNote(system = {})`,
+		`Physical hardware qualification is complete for this exact release.`,
+		`Pre-release build — the complete physical hardware matrix is not yet qualified.`,
 	} {
 		if !strings.Contains(html, required) {
 			t.Fatalf("Update Center UI is missing %q", required)

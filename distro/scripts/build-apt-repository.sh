@@ -16,6 +16,7 @@ DIFFUSION_MANIFEST="${CLOUDLESS_DIFFUSION_MANIFEST:-$ROOT/docs/cloudless-diffusi
 DGX_INSTALLER="${CLOUDLESS_DGX_INSTALLER:-$DISTRO/scripts/install-dgx-spark.sh}"
 RELEASE_GATES="${CLOUDLESS_RELEASE_GATES:-$DISTRO/out/release-gates.json}"
 SBOM="${CLOUDLESS_SBOM:-$DISTRO/out/security/cloudless-$VERSION.spdx.json}"
+PHYSICAL_QUALIFICATION="${CLOUDLESS_PHYSICAL_QUALIFICATION:-$DISTRO/out/qualification/cloudless-physical-qualification.json}"
 SOURCE_COMMIT="${CLOUDLESS_SOURCE_COMMIT:-$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || true)}"
 PACKAGES=(cloudless-orchestrator cloudless-shell cloudless-branding cloudless-hardware cloudless-firstboot cloudless-updater)
 read -r -a ARCHES <<< "${CLOUDLESS_ARCHES:-amd64 arm64}"
@@ -41,6 +42,7 @@ test -s "$MODEL_MANIFEST" || { echo "Missing model manifest: $MODEL_MANIFEST" >&
 test -s "$DIFFUSION_MANIFEST" || { echo "Missing diffusion manifest: $DIFFUSION_MANIFEST" >&2; exit 1; }
 test -s "$DGX_INSTALLER" || { echo "Missing DGX Spark installer: $DGX_INSTALLER" >&2; exit 1; }
 test -s "$RELEASE_GATES" || { echo "Missing release-gate attestation. Run distro/scripts/release.sh so every required gate executes before signing." >&2; exit 1; }
+test -s "$PHYSICAL_QUALIFICATION" || { echo "Missing physical qualification descriptor: $PHYSICAL_QUALIFICATION" >&2; exit 1; }
 [[ "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]] || {
     echo "A full Git source commit is required for a production release." >&2
     exit 1
@@ -54,9 +56,9 @@ if not isinstance(notes.get("title"), str) or not notes["title"].strip():
 if not isinstance(notes.get("changes"), list) or not notes["changes"] or not all(isinstance(item, str) and item.strip() for item in notes["changes"]):
     raise SystemExit("Release notes require at least one non-empty change")
 PY
-python3 - "$RELEASE_GATES" "$VERSION" "$CHANNEL" "$SOURCE_COMMIT" "$DISTRO/release/validation-matrix.json" <<'PY'
+python3 - "$RELEASE_GATES" "$VERSION" "$CHANNEL" "$SOURCE_COMMIT" "$DISTRO/release/validation-matrix.json" "$PHYSICAL_QUALIFICATION" <<'PY'
 import hashlib, json, sys
-path, version, channel, commit, matrix_path = sys.argv[1:]
+path, version, channel, commit, matrix_path, physical_path = sys.argv[1:]
 with open(path, encoding="utf-8") as handle:
     gates = json.load(handle)
 with open(matrix_path, "rb") as handle:
@@ -68,6 +70,24 @@ for field, expected in (("version", version), ("channel", channel), ("sourceComm
         raise SystemExit(f"release-gate {field} mismatch: expected {expected}, got {gates.get(field)}")
 if not gates.get("passedGates") or not gates.get("targets"):
     raise SystemExit("release-gate attestation is incomplete")
+physical = gates.get("physicalQualification")
+if not isinstance(physical, dict) or physical.get("schema") != "cloudless.physical-release.v1":
+    raise SystemExit("release-gate attestation is missing physical qualification identity")
+if physical.get("version") != version or physical.get("channel") != channel or physical.get("sourceCommit") != commit:
+    raise SystemExit("physical qualification identity does not match the release")
+required_physical = channel == "stable" and int(version.split(".", 1)[0]) >= 1
+if physical.get("required") != required_physical or physical.get("status") not in {"qualified", "not-qualified"}:
+    raise SystemExit("physical qualification policy is invalid")
+if required_physical and physical.get("status") != "qualified":
+    raise SystemExit("CloudlessOS 1.0+ stable releases require physical qualification")
+if physical.get("status") == "qualified":
+    qualification_set = physical.get("qualificationSet")
+    canonical = json.dumps(qualification_set, sort_keys=True, separators=(",", ":")).encode()
+    if not isinstance(qualification_set, dict) or hashlib.sha256(canonical).hexdigest() != physical.get("qualificationSetSha256"):
+        raise SystemExit("physical qualification set digest is invalid")
+with open(physical_path, encoding="utf-8") as handle:
+    if json.load(handle) != physical:
+        raise SystemExit("physical qualification descriptor changed after release gates were created")
 PY
 fingerprint="$(tr -d '[:space:]' < "$FINGERPRINT_FILE")"
 if [ "${CLOUDLESS_RELEASE_DRY_RUN:-0}" != "1" ]; then
@@ -269,8 +289,9 @@ install -m 0644 "$MODEL_MANIFEST" "$artifacts_dir/cloudless-models.json"
 install -m 0644 "$DIFFUSION_MANIFEST" "$artifacts_dir/cloudless-diffusion.json"
 install -m 0644 "$SBOM" "$artifacts_dir/cloudless-$VERSION.spdx.json"
 install -m 0644 "$work/cloudless-trust-inventory.json" "$artifacts_dir/cloudless-trust-inventory.json"
+install -m 0644 "$PHYSICAL_QUALIFICATION" "$artifacts_dir/cloudless-physical-qualification.json"
 artifacts_file="$work/artifacts.tsv"
-for artifact in install-dgx-spark.sh cloudless-apps-manifest.json cloudless-models.json cloudless-diffusion.json "cloudless-$VERSION.spdx.json" cloudless-trust-inventory.json; do
+for artifact in install-dgx-spark.sh cloudless-apps-manifest.json cloudless-models.json cloudless-diffusion.json "cloudless-$VERSION.spdx.json" cloudless-trust-inventory.json cloudless-physical-qualification.json; do
     file="$artifacts_dir/$artifact"
     signature="$file.asc"
     gpg --batch --yes --local-user "$fingerprint" --armor --detach-sign \
@@ -350,6 +371,7 @@ manifest = {
     },
     "artifacts": artifacts,
     "validation": validation,
+    "physicalQualification": validation["physicalQualification"],
 }
 with open(output, "w", encoding="utf-8") as handle:
     json.dump(manifest, handle, ensure_ascii=False, separators=(",", ":"))

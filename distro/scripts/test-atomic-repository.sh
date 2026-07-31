@@ -18,8 +18,11 @@ cat > "$work/test-notes.json" <<'EOF'
 {"title":"Test release","summary":"Signed test notes.","changes":["Shows verified release notes before installation."]}
 EOF
 matrix_sha="$(sha256sum "$ROOT/distro/release/validation-matrix.json" | awk '{print $1}')"
+cat > "$work/test-physical-qualification.json" <<EOF
+{"schema":"cloudless.physical-release.v1","status":"not-qualified","required":false,"version":"$TEST_VERSION","channel":"stable","sourceCommit":"0123456789abcdef0123456789abcdef01234567","matrixSha256":"$matrix_sha","preparedAt":"2000-01-01T00:00:00Z","reason":"Test release has no physical evidence."}
+EOF
 cat > "$work/test-release-gates.json" <<EOF
-{"schema":"cloudless.release-gates.v1","version":"$TEST_VERSION","channel":"stable","sourceCommit":"0123456789abcdef0123456789abcdef01234567","completedAt":"2000-01-01T00:00:00Z","matrixSha256":"$matrix_sha","targets":[{"platform":"generic","architecture":"amd64"},{"platform":"generic","architecture":"arm64"},{"platform":"dgx-spark","architecture":"arm64"}],"passedGates":["go-tests","go-vet","web-javascript","app-manifest-v2","backup-recovery","installer-preflight","platform-matrix","package-architecture","package-contents","package-lifecycle","release-isolation","release-preflight","secret-hygiene","service-hardening","sbom","trust-inventory","vulnerability-scan","updater-workload-continuity","atomic-repository"]}
+{"schema":"cloudless.release-gates.v1","version":"$TEST_VERSION","channel":"stable","sourceCommit":"0123456789abcdef0123456789abcdef01234567","completedAt":"2000-01-01T00:00:00Z","matrixSha256":"$matrix_sha","targets":[{"platform":"generic","architecture":"amd64"},{"platform":"generic","architecture":"arm64"},{"platform":"dgx-spark","architecture":"arm64"}],"passedGates":["go-tests","go-vet","web-javascript","app-manifest-v2","backup-recovery","installer-preflight","platform-matrix","package-architecture","package-contents","package-lifecycle","release-isolation","release-preflight","secret-hygiene","service-hardening","sbom","trust-inventory","vulnerability-scan","updater-workload-continuity","atomic-repository"],"physicalQualification":$(cat "$work/test-physical-qualification.json")}
 EOF
 
 CLOUDLESS_APT_REPO_OUT="$work/repository" \
@@ -29,6 +32,7 @@ CLOUDLESS_ARCHIVE_KEY="$work/test-keyring.pgp" \
 CLOUDLESS_ARCHIVE_FINGERPRINT_FILE="$work/test-fingerprint.txt" \
 CLOUDLESS_RELEASE_NOTES="$work/test-notes.json" \
 CLOUDLESS_RELEASE_GATES="$work/test-release-gates.json" \
+CLOUDLESS_PHYSICAL_QUALIFICATION="$work/test-physical-qualification.json" \
 CLOUDLESS_SBOM="$work/cloudless-$TEST_VERSION.spdx.json" \
 CLOUDLESS_SOURCE_COMMIT=0123456789abcdef0123456789abcdef01234567 \
     bash "$ROOT/distro/scripts/build-apt-repository.sh" "$TEST_VERSION" stable
@@ -43,6 +47,7 @@ grep -Fq '"architecture":"arm64"' "$repo/releases/$TEST_VERSION.json"
 grep -Fq '"schema":"cloudless.release.v2"' "$repo/releases/$TEST_VERSION.json"
 test -s "$repo/artifacts/$TEST_VERSION/cloudless-trust-inventory.json"
 test -s "$repo/artifacts/$TEST_VERSION/cloudless-trust-inventory.json.asc"
+test -s "$repo/artifacts/$TEST_VERSION/cloudless-physical-qualification.json.asc"
 grep -Fq '"schema":"cloudless.trust-inventory.v1"' "$repo/artifacts/$TEST_VERSION/cloudless-trust-inventory.json"
 grep -Fq '"sourceCommit":"0123456789abcdef0123456789abcdef01234567"' "$repo/releases/$TEST_VERSION.json"
 grep -Fq '"install-dgx-spark.sh"' "$repo/releases/$TEST_VERSION.json"
@@ -58,13 +63,15 @@ if len(release["packages"]) != 12 or release["rollbackPackages"]:
     raise SystemExit("first release package/rollback inventory is incomplete")
 if release["compatibility"]["matrixSha256"] != release["validation"]["matrixSha256"]:
     raise SystemExit("compatibility matrix is not bound to validation")
+if release["physicalQualification"] != release["validation"]["physicalQualification"]:
+    raise SystemExit("physical qualification is not bound to validation")
 root = pathlib.Path(sys.argv[2])
 for package in release["packages"]:
     data = (root / package["filename"]).read_bytes()
     if len(data) != package["size"] or hashlib.sha256(data).hexdigest() != package["sha256"]:
         raise SystemExit(f"package inventory mismatch: {package['filename']}")
 PY
-for artifact in install-dgx-spark.sh cloudless-apps-manifest.json cloudless-models.json cloudless-diffusion.json cloudless-trust-inventory.json "cloudless-$TEST_VERSION.spdx.json"; do
+for artifact in install-dgx-spark.sh cloudless-apps-manifest.json cloudless-models.json cloudless-diffusion.json cloudless-trust-inventory.json cloudless-physical-qualification.json "cloudless-$TEST_VERSION.spdx.json"; do
     gpgv --keyring "$work/test-keyring.pgp" \
         "$repo/artifacts/$TEST_VERSION/$artifact.asc" \
         "$repo/artifacts/$TEST_VERSION/$artifact"

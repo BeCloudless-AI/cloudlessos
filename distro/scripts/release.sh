@@ -16,7 +16,7 @@ usage() {
 case "$CHANNEL" in stable|beta) ;; *) usage; exit 2 ;; esac
 [[ "$VERSION" != *dev* ]] || { echo "Development versions cannot be published." >&2; exit 2; }
 
-for command in docker git gpg python3 realpath; do
+for command in docker find git gpg python3 realpath sort; do
     command -v "$command" >/dev/null || { echo "Missing required command: $command" >&2; exit 1; }
 done
 test -s "$SECRET_KEY" || { echo "Signing-key backup not found: $SECRET_KEY" >&2; exit 1; }
@@ -57,6 +57,25 @@ assert_source_unchanged() {
         exit 1
     }
 }
+
+physical_output="$ROOT/distro/out/qualification/cloudless-physical-qualification.json"
+physical_archives=()
+if [ -n "${CLOUDLESS_PHYSICAL_QUALIFICATION_DIR:-}" ]; then
+    test -d "$CLOUDLESS_PHYSICAL_QUALIFICATION_DIR" || {
+        echo "Physical qualification directory does not exist: $CLOUDLESS_PHYSICAL_QUALIFICATION_DIR" >&2
+        exit 1
+    }
+    mapfile -d '' physical_archives < <(
+        find "$CLOUDLESS_PHYSICAL_QUALIFICATION_DIR" -maxdepth 1 -type f -name '*.zip' -print0 | sort -z
+    )
+    [ "${#physical_archives[@]}" -gt 0 ] || {
+        echo "Physical qualification directory contains no sealed ZIP exports." >&2
+        exit 1
+    }
+fi
+python3 "$ROOT/distro/scripts/prepare-physical-qualification.py" \
+    "$VERSION" "$CHANNEL" "$full_commit" --output "$physical_output" "${physical_archives[@]}"
+
 echo "CloudlessOS production release"
 echo "  version: $VERSION"
 echo "  channel: $CHANNEL"

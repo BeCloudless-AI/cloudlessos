@@ -145,6 +145,36 @@ func TestValidateReleaseManifestRejectsWrongChannelOrPlatform(t *testing.T) {
 	}
 }
 
+func TestPhysicalQualificationPolicy(t *testing.T) {
+	commit := "0123456789abcdef0123456789abcdef01234567"
+	if err := validatePhysicalQualification(releaseManifest{Version: "0.9.9", Channel: "stable"}); err != nil {
+		t.Fatalf("legacy pre-1.0 release was rejected: %v", err)
+	}
+	if err := validatePhysicalQualification(releaseManifest{Version: "1.0.0", Channel: "stable"}); err == nil {
+		t.Fatal("stable 1.0 release without physical qualification was accepted")
+	}
+	qualified := releaseManifest{
+		Version: "1.0.0", Channel: "stable", SourceCommit: commit,
+		PhysicalQualification: releasePhysicalQualification{
+			Schema: "cloudless.physical-release.v1", Status: "qualified", Required: true,
+			Version: "1.0.0", Channel: "stable", SourceCommit: commit,
+			QualificationSetSHA256: strings.Repeat("a", 64),
+		},
+	}
+	if err := validatePhysicalQualification(qualified); err != nil {
+		t.Fatalf("complete physical qualification was rejected: %v", err)
+	}
+	qualified.PhysicalQualification.Status = "not-qualified"
+	if err := validatePhysicalQualification(qualified); err == nil {
+		t.Fatal("stable 1.0 release marked not-qualified was accepted")
+	}
+	qualified.PhysicalQualification.Status = "qualified"
+	qualified.PhysicalQualification.SourceCommit = strings.Repeat("f", 40)
+	if err := validatePhysicalQualification(qualified); err == nil {
+		t.Fatal("physical qualification from another commit was accepted")
+	}
+}
+
 func TestValidSourceCommitRequiresFullHexIdentity(t *testing.T) {
 	if !validSourceCommit("89abcdef0123456789abcdef0123456789abcdef") {
 		t.Fatal("full release commit was rejected")

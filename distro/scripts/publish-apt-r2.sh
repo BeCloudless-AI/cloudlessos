@@ -92,6 +92,19 @@ if not isinstance(compatibility, dict) or compatibility.get("schema") != "cloudl
     raise SystemExit("Signed release is missing its compatibility contract")
 if compatibility.get("matrixSha256") != validation.get("matrixSha256") or compatibility.get("targets") != validation.get("targets"):
     raise SystemExit("Signed release compatibility contract does not match its validation attestation")
+physical = release.get("physicalQualification")
+if physical != validation.get("physicalQualification") or not isinstance(physical, dict) or physical.get("schema") != "cloudless.physical-release.v1":
+    raise SystemExit("Signed release physical qualification does not match its validation attestation")
+required_physical = release.get("channel") == "stable" and int(str(release.get("version", "0")).split(".", 1)[0]) >= 1
+if physical.get("required") != required_physical or physical.get("status") not in {"qualified", "not-qualified"}:
+    raise SystemExit("Signed release physical qualification policy is invalid")
+if required_physical and physical.get("status") != "qualified":
+    raise SystemExit("Signed stable 1.0+ release is not physically qualified")
+if physical.get("status") == "qualified":
+    qualification_set = physical.get("qualificationSet")
+    canonical = json.dumps(qualification_set, sort_keys=True, separators=(",", ":")).encode()
+    if not isinstance(qualification_set, dict) or hashlib.sha256(canonical).hexdigest() != physical.get("qualificationSetSha256"):
+        raise SystemExit("Signed release physical qualification set digest is invalid")
 packages = release.get("packages")
 expected_packages = {
     (name, architecture)
@@ -126,6 +139,7 @@ if not isinstance(artifacts, list) or {item.get("name") for item in artifacts} !
     "install-dgx-spark.sh", "cloudless-apps-manifest.json",
     "cloudless-models.json", "cloudless-diffusion.json",
     "cloudless-trust-inventory.json",
+    "cloudless-physical-qualification.json",
     f"cloudless-{release.get('version')}.spdx.json",
 }:
     raise SystemExit("Signed release does not describe the complete standalone artifact set")
@@ -141,10 +155,14 @@ for item in artifacts:
         data = path.read_bytes()
         if len(data) != item[size_field] or hashlib.sha256(data).hexdigest() != item[hash_field]:
             raise SystemExit(f"Artifact integrity mismatch: {item[path_field]}")
+physical_artifact = next(item for item in artifacts if item.get("name") == "cloudless-physical-qualification.json")
+with open(base / physical_artifact["path"], encoding="utf-8") as handle:
+    if json.load(handle) != physical:
+        raise SystemExit("Physical qualification artifact does not match the signed release")
 PY
     local version artifact
     version="$(release_version)"
-    for artifact in install-dgx-spark.sh cloudless-apps-manifest.json cloudless-models.json cloudless-diffusion.json cloudless-trust-inventory.json "cloudless-$version.spdx.json"; do
+    for artifact in install-dgx-spark.sh cloudless-apps-manifest.json cloudless-models.json cloudless-diffusion.json cloudless-trust-inventory.json cloudless-physical-qualification.json "cloudless-$version.spdx.json"; do
         gpgv --keyring "$KEY" \
             "$REPO/artifacts/$version/$artifact.asc" \
             "$REPO/artifacts/$version/$artifact" >/dev/null 2>&1 || {

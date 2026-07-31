@@ -717,6 +717,11 @@ Implementation status (July 31, 2026):
   of versions or source commits. Its private manifest binds the authoritative physical matrix plus
   every archive's SHA-256 and size, so a release decision can prove that VM, generic NVIDIA and all
   required Spark-topology evidence came from one exact candidate.
+- Release generation now consumes that set rather than leaving it beside the build as informal
+  operator context. Every signed release publishes a detached-signed physical-qualification
+  descriptor bound into its gate attestation. Pre-1.0 builds disclose `not-qualified`; a stable
+  1.0+ generation fails before building unless all physical targets match its exact version and
+  full source commit.
 - [`OPERATIONS.md`](./OPERATIONS.md) indexes the install, DGX, update, recovery, cluster, terminal,
   privacy, diagnostics/support and qualification guides. Privacy documentation distinguishes local
   inference from explicit update, registry, Hugging Face, Tailscale, Cloudflare and browser traffic,

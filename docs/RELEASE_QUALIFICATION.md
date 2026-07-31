@@ -76,6 +76,25 @@ Collect read-only machine details and the locally generated, redacted support ZI
 sudo cloudless-qualify collect /var/lib/cloudless/qualification/0.2.7-01234567/dgx-spark-arm64-2
 ```
 
+While exercising the browser, terminal, applications, model lifecycle and (when applicable) Spark
+cluster controls, run the physical endurance recorder in another terminal:
+
+```bash
+sudo cloudless-qualify soak \
+  /var/lib/cloudless/qualification/0.2.7-01234567/dgx-spark-arm64-2 \
+  --duration-minutes 60 --interval-seconds 5
+```
+
+The recorder samples only bounded, non-secret summaries from the loopback Cloudless API and checks
+the authenticated terminal listener. It records engine/app/cluster/browser/terminal transitions,
+probe failures and boot identities without retaining URLs, prompts, logs, IP addresses, usernames,
+container images or credentials. `Ctrl+C` safely pauses the run; repeating the same command resumes
+from its mode-0600 checkpoint. A different candidate, duration, interval or endpoint fails closed
+unless `--discard-progress` is explicitly supplied. An interrupted run prevents the campaign from
+being sealed. The finished `physical-soak-*.json` can be attached to the applicable physical checks;
+it supplements screenshots and operator observations rather than turning unobserved behavior into
+an automatic pass.
+
 Record each observed check with a screenshot, exported operation result or log. Evidence is copied
 into the campaign, mode `0600`, and SHA-256 bound to its result:
 

@@ -744,6 +744,11 @@ Implementation status (July 31, 2026):
   QEMU-backed ARM64 package generation rather than relying only on source-level mocks.
 - Real interactive browser/terminal endurance, live multi-Spark churn and physical hardware
   matrices remain open; therefore the broader soak checklist is not marked complete yet.
+- The packaged qualification runner now includes a resumable `soak` command for that physical
+  work. It samples bounded loopback summaries while an operator exercises browser, terminal, app,
+  model and cluster flows, persists an interruption-safe mode-0600 checkpoint, records transition
+  and failure counts, excludes sensitive response fields and prevents sealing while a run is
+  incomplete. It produces evidence for human review; it does not self-attest a passing check.
 - `physical-validation-matrix.json` defines the exact VirtualBox, generic NVIDIA, single-Spark and
   every two-to-eight-Spark target, with common and cluster-specific required checks.
   [`RELEASE_QUALIFICATION.md`](./RELEASE_QUALIFICATION.md) defines the evidence directory, redaction

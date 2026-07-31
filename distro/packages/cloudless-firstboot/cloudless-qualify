@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import datetime as dt
+import fcntl
 import hashlib
 import json
 import os
@@ -16,6 +18,8 @@ import socket
 import subprocess
 import sys
 import tempfile
+import time
+import urllib.parse
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -24,6 +28,7 @@ SCHEMA = "cloudless.physical-evidence.v1"
 CHECK_SCHEMA = "cloudless.physical-check.v1"
 EXPORT_SCHEMA = "cloudless.physical-export.v1"
 SET_SCHEMA = "cloudless.physical-set.v1"
+SOAK_SCHEMA = "cloudless.physical-soak.v1"
 DEFAULT_MATRIX = Path("/usr/share/cloudless/physical-validation-matrix.json")
 DEFAULT_UPDATE_STATUS = Path("/var/lib/cloudless-updater/status.json")
 DEFAULT_BOOT_HEALTH = Path("/var/lib/cloudless/boot-health.json")
@@ -31,6 +36,7 @@ DEFAULT_QUALIFICATION_ROOT = Path("/var/lib/cloudless/qualification")
 ACTIVE_SCHEMA = "cloudless.physical-active-campaign.v1"
 MAX_EVIDENCE_BYTES = 64 * 1024 * 1024
 MAX_EXPORT_BYTES = 2 * 1024 * 1024 * 1024
+MAX_SOAK_SAMPLES = 10000
 VERSION_RE = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+(?:[-+~][0-9A-Za-z][0-9A-Za-z.+~_-]*)?$")
 COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 SECRET_PATTERNS = [
@@ -681,6 +687,271 @@ def collect_support_bundle(campaign: Path) -> Path:
     return destination
 
 
+def validated_soak_api_base(value: str) -> str:
+    parsed = urllib.parse.urlsplit(value.strip())
+    if (
+        parsed.scheme != "http"
+        or parsed.hostname not in {"127.0.0.1", "localhost", "::1"}
+        or parsed.username
+        or parsed.password
+        or parsed.path not in ("", "/")
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise ValueError("physical soak API must be an unauthenticated loopback HTTP endpoint")
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise ValueError("physical soak API port is invalid") from exc
+    if port is None or not 1 <= port <= 65535:
+        raise ValueError("physical soak API requires an explicit valid port")
+    return value.strip().rstrip("/")
+
+
+def soak_http_json(api_base: str, path: str, timeout: int = 5) -> object:
+    request = urllib.request.Request(api_base + path, headers={"Accept": "application/json"})
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        if response.status != 200:
+            raise OSError(f"HTTP {response.status}")
+        payload = response.read(1024 * 1024 + 1)
+    if len(payload) > 1024 * 1024:
+        raise ValueError("physical soak API response is too large")
+    return json.loads(payload)
+
+
+def collect_soak_sample(api_base: str, include_cluster: bool = True) -> dict:
+    sample: dict[str, object] = {"capturedAt": utc_now(), "bootId": current_boot_id(), "errors": []}
+    endpoints: dict[str, object] = {}
+    probes = [
+        ("health", "/api/health", 5),
+        ("engine", "/api/engine", 15),
+        ("apps", "/api/apps", 12),
+        ("browser", "/api/system/browser", 5),
+    ]
+    if include_cluster:
+        probes.append(("cluster", "/api/system/spark-cluster", 20))
+    for name, path, timeout in probes:
+        try:
+            endpoints[name] = soak_http_json(api_base, path, timeout)
+        except Exception as exc:  # retain only the failure class, never response text
+            sample["errors"].append({"probe": name, "kind": type(exc).__name__})
+
+    health = endpoints.get("health") if isinstance(endpoints.get("health"), dict) else {}
+    sample["health"] = {
+        "status": str(health.get("status", ""))[:32],
+        "dockerOK": bool(health.get("dockerOK", False)),
+    }
+
+    engine = endpoints.get("engine") if isinstance(endpoints.get("engine"), dict) else {}
+    startup = engine.get("startup") if isinstance(engine.get("startup"), dict) else {}
+    startup_update = startup.get("update") if isinstance(startup.get("update"), dict) else {}
+    sample["engine"] = {
+        "active": str(engine.get("active", ""))[:128],
+        "ready": bool(engine.get("ready", False)),
+        "unloaded": bool(engine.get("unloaded", False)),
+        "degraded": bool(engine.get("degraded", False)),
+        "operation": str(engine.get("operation", ""))[:64],
+        "phase": str(startup_update.get("phase", ""))[:64],
+        "operationFailed": bool(startup_update.get("error")),
+    }
+
+    apps = endpoints.get("apps") if isinstance(endpoints.get("apps"), list) else []
+    sample["apps"] = sorted(
+        [
+            {"name": str(item.get("name", ""))[:128], "state": str(item.get("state", ""))[:32]}
+            for item in apps
+            if isinstance(item, dict) and str(item.get("name", "")).startswith("cloudless-")
+        ],
+        key=lambda item: item["name"],
+    )
+
+    cluster = endpoints.get("cluster") if isinstance(endpoints.get("cluster"), dict) else {}
+    cluster_operation = cluster.get("operation") if isinstance(cluster.get("operation"), dict) else {}
+    sample["cluster"] = {
+        "configured": bool(cluster.get("configured", False)),
+        "healthy": bool(cluster.get("healthy", False)),
+        "computeHealthy": bool(cluster.get("computeHealthy", False)),
+        "nodeCount": int(cluster.get("nodeCount", 0) or 0),
+        "selectedNodes": len(cluster.get("selectedHosts", [])) if isinstance(cluster.get("selectedHosts"), list) else 0,
+        "operation": str(cluster_operation.get("action", ""))[:32],
+        "phase": str(cluster_operation.get("phase", ""))[:64],
+        "operationFailed": bool(cluster_operation.get("error")),
+    }
+
+    browser = endpoints.get("browser") if isinstance(endpoints.get("browser"), dict) else {}
+    sample["browser"] = {
+        "available": bool(browser.get("available", False)),
+        "running": bool(browser.get("running", False)),
+        "minimized": bool(browser.get("minimized", False)),
+        "profilePersistence": str(browser.get("profilePersistence", ""))[:32],
+    }
+    try:
+        with socket.create_connection(("127.0.0.1", 7681), timeout=2):
+            terminal_ready = True
+    except OSError as exc:
+        terminal_ready = False
+        sample["errors"].append({"probe": "terminal", "kind": type(exc).__name__})
+    sample["terminal"] = {"ready": terminal_ready}
+    return sample
+
+
+def soak_transition_counts(samples: list[dict]) -> dict[str, int]:
+    counts = {name: 0 for name in ("engine", "apps", "cluster", "browser", "terminal", "boot")}
+    for previous, current in zip(samples, samples[1:]):
+        for name in ("engine", "apps", "cluster", "browser", "terminal"):
+            if previous.get(name) != current.get(name):
+                counts[name] += 1
+        if previous.get("bootId") != current.get("bootId"):
+            counts["boot"] += 1
+    return counts
+
+
+@contextlib.contextmanager
+def physical_soak_lock(campaign: Path):
+    lock_path = campaign / ".physical-soak.lock"
+    flags = os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(lock_path, flags, 0o600)
+    except OSError as exc:
+        raise ValueError("physical soak lock must be a regular non-symlink file") from exc
+    handle = os.fdopen(descriptor, "w")
+    try:
+        os.fchmod(handle.fileno(), 0o600)
+        try:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise ValueError("another physical soak is already running for this campaign") from exc
+        yield
+    finally:
+        handle.close()
+
+
+def run_physical_soak(
+    campaign: Path,
+    matrix_path: Path,
+    duration_seconds: int,
+    interval_seconds: int,
+    api_base: str = "http://127.0.0.1:8765",
+    *,
+    discard_progress: bool = False,
+    sample_provider=None,
+    sleeper=time.sleep,
+    report=None,
+) -> Path:
+    with physical_soak_lock(campaign):
+        return _run_physical_soak_locked(
+            campaign,
+            matrix_path,
+            duration_seconds,
+            interval_seconds,
+            api_base,
+            discard_progress=discard_progress,
+            sample_provider=sample_provider,
+            sleeper=sleeper,
+            report=report,
+        )
+
+
+def _run_physical_soak_locked(
+    campaign: Path,
+    matrix_path: Path,
+    duration_seconds: int,
+    interval_seconds: int,
+    api_base: str = "http://127.0.0.1:8765",
+    *,
+    discard_progress: bool = False,
+    sample_provider=None,
+    sleeper=time.sleep,
+    report=None,
+) -> Path:
+    matrix = load_matrix(matrix_path)
+    target = campaign_target(campaign, matrix)
+    manifest = load_json(campaign / "campaign.json")
+    if manifest.get("matrixSha256") != sha256_file(matrix_path):
+        raise ValueError("campaign matrix digest does not match the authoritative matrix")
+    if (campaign / "qualification-result.json").exists():
+        raise ValueError("a sealed qualification campaign cannot start a physical soak")
+    if not 1 <= interval_seconds <= 300 or not interval_seconds <= duration_seconds <= 24 * 60 * 60:
+        raise ValueError("physical soak duration/interval must cover 1 second through 24 active hours")
+    required_samples = (duration_seconds + interval_seconds - 1) // interval_seconds + 1
+    if required_samples > MAX_SOAK_SAMPLES:
+        raise ValueError("physical soak would exceed the supported sample count")
+    api_base = validated_soak_api_base(api_base)
+    state_path = campaign / "evidence" / ".physical-soak-state.json"
+    if state_path.is_symlink() or (state_path.exists() and not state_path.is_file()):
+        raise ValueError("physical soak checkpoint must be a regular non-symlink file")
+    if state_path.exists() and state_path.stat().st_size > MAX_EVIDENCE_BYTES:
+        raise ValueError("physical soak checkpoint exceeds the supported size")
+    if discard_progress:
+        state_path.unlink(missing_ok=True)
+    identity = {
+        "campaignSha256": sha256_file(campaign / "campaign.json"),
+        "target": target["id"],
+        "version": manifest["version"],
+        "sourceCommit": manifest["sourceCommit"],
+        "durationSeconds": duration_seconds,
+        "intervalSeconds": interval_seconds,
+        "apiBase": api_base,
+    }
+    if state_path.exists():
+        state = load_json(state_path)
+        if state.get("schema") != SOAK_SCHEMA or any(state.get(key) != value for key, value in identity.items()):
+            raise ValueError("saved physical soak does not match this campaign or command; use --discard-progress")
+        samples = state.get("samples")
+        if not isinstance(samples, list) or len(samples) > required_samples:
+            raise ValueError("saved physical soak progress is malformed")
+        for sample in samples:
+            if not isinstance(sample, dict):
+                raise ValueError("saved physical soak progress contains an invalid sample")
+            reject_secrets(json.dumps(sample, sort_keys=True))
+    else:
+        state = {"schema": SOAK_SCHEMA, **identity, "startedAt": utc_now(), "samples": []}
+        atomic_json(state_path, state)
+        samples = state["samples"]
+    provider = sample_provider or (
+        lambda base: collect_soak_sample(base, include_cluster=int(target.get("nodes", 1)) >= 2)
+    )
+    while len(samples) < required_samples:
+        sample = provider(api_base)
+        if not isinstance(sample, dict):
+            raise ValueError("physical soak sample provider returned an invalid record")
+        reject_secrets(json.dumps(sample, sort_keys=True))
+        samples.append(sample)
+        state["samples"] = samples
+        state["observedActiveSeconds"] = min(duration_seconds, max(0, len(samples) - 1) * interval_seconds)
+        if len(json.dumps(state, sort_keys=True).encode()) > MAX_EVIDENCE_BYTES:
+            raise ValueError("physical soak checkpoint exceeds the supported size")
+        atomic_json(state_path, state)
+        if report:
+            report(len(samples), required_samples, sum(bool(item.get("errors")) for item in samples))
+        if len(samples) < required_samples:
+            sleeper(min(interval_seconds, duration_seconds - state["observedActiveSeconds"]))
+    transitions = soak_transition_counts(samples)
+    completed = {
+        **state,
+        "completedAt": utc_now(),
+        "summary": {
+            "samples": len(samples),
+            "successfulSamples": sum(not bool(item.get("errors")) for item in samples),
+            "failedSamples": sum(bool(item.get("errors")) for item in samples),
+            "uniqueBoots": len({str(item.get("bootId", "")) for item in samples if item.get("bootId")}),
+            "transitions": transitions,
+        },
+    }
+    output_stem = "physical-soak-" + re.sub(r"[^0-9TZ]", "", str(state["startedAt"]))
+    output = campaign / "evidence" / f"{output_stem}.json"
+    suffix = 2
+    while output.exists() or output.is_symlink():
+        output = campaign / "evidence" / f"{output_stem}-{suffix}.json"
+        suffix += 1
+    atomic_json(output, completed)
+    if output.stat().st_size > MAX_EVIDENCE_BYTES:
+        output.unlink(missing_ok=True)
+        raise ValueError("physical soak evidence exceeds the supported size")
+    state_path.unlink()
+    return output
+
+
 def validate_campaign(campaign: Path, matrix_path: Path) -> list[str]:
     errors: list[str] = []
     try:
@@ -695,6 +966,8 @@ def validate_campaign(campaign: Path, matrix_path: Path) -> list[str]:
         errors.append("campaign version is invalid")
     if not COMMIT_RE.fullmatch(str(manifest.get("sourceCommit", ""))):
         errors.append("campaign source commit is invalid")
+    if (campaign / "evidence" / ".physical-soak-state.json").exists():
+        errors.append("physical-soak: an interrupted endurance run must be resumed or discarded")
     boot_files = list((campaign / "boots").glob("*.json"))
     minimum_boots = int(matrix.get("minimumBootCycles", 10))
     if len(boot_files) < minimum_boots:
@@ -1064,6 +1337,18 @@ def main(argv: list[str] | None = None) -> int:
     collect.add_argument("campaign", type=Path)
     matrix_argument(collect)
 
+    soak = subparsers.add_parser(
+        "soak", help="capture resumable real-machine browser, terminal, app, model and cluster endurance"
+    )
+    soak.add_argument("campaign", type=Path)
+    soak.add_argument("--duration-minutes", type=int, default=60)
+    soak.add_argument("--interval-seconds", type=int, default=5)
+    soak.add_argument("--api-base", default="http://127.0.0.1:8765")
+    soak.add_argument(
+        "--discard-progress", action="store_true", help="discard an interrupted soak before starting"
+    )
+    matrix_argument(soak)
+
     status = subparsers.add_parser("status", help="validate and summarize a campaign")
     status.add_argument("campaign", type=Path)
     matrix_argument(status)
@@ -1136,6 +1421,31 @@ def main(argv: list[str] | None = None) -> int:
             except Exception as exc:  # report locally without hiding the machine collection
                 print(f"Support bundle collection failed: {exc}", file=sys.stderr)
                 return 1
+            return 0
+        if args.command == "soak":
+            def progress(done: int, total: int, failures: int) -> None:
+                percent = int(done * 100 / total)
+                print(
+                    f"\rPhysical soak {percent:3d}% — {done}/{total} samples, {failures} with probe failures",
+                    end="",
+                    flush=True,
+                )
+
+            try:
+                evidence = run_physical_soak(
+                    args.campaign,
+                    args.matrix,
+                    args.duration_minutes * 60,
+                    args.interval_seconds,
+                    args.api_base,
+                    discard_progress=args.discard_progress,
+                    report=progress,
+                )
+            except KeyboardInterrupt:
+                print("\nPhysical soak paused. Run the same command to resume from its last sample.")
+                return 130
+            print(f"\nPhysical soak evidence: {evidence}")
+            print("Use this evidence when recording browser/terminal, app, model and cluster checks.")
             return 0
         if args.command == "status":
             return print_status(args.campaign, args.matrix)

@@ -486,6 +486,101 @@ class PhysicalQualificationTest(unittest.TestCase):
                 campaign, self.matrix, "clean-install", "pass", "Install observed", [self.evidence]
             )
 
+    @staticmethod
+    def soak_sample(index, *, failed=False):
+        return {
+            "capturedAt": f"2026-07-31T00:00:0{index}Z",
+            "bootId": "00000000-0000-0000-0000-000000000001",
+            "errors": ([{"probe": "engine", "kind": "TimeoutError"}] if failed else []),
+            "health": {"status": "ok", "dockerOK": True},
+            "engine": {"active": "vllm", "ready": index > 0, "phase": "loading" if index == 0 else ""},
+            "apps": [{"name": "cloudless-hermes", "state": "running"}],
+            "cluster": {"configured": False, "healthy": False, "nodeCount": 0},
+            "browser": {"available": True, "running": index % 2 == 0, "minimized": False},
+            "terminal": {"ready": True},
+        }
+
+    def test_physical_soak_is_resumable_and_records_transition_summary(self):
+        campaign = self.begin()
+        calls = []
+
+        def interrupted(_):
+            calls.append(len(calls))
+            if len(calls) == 2:
+                raise RuntimeError("simulated interruption")
+            return self.soak_sample(0)
+
+        with self.assertRaisesRegex(RuntimeError, "simulated interruption"):
+            qualify.run_physical_soak(
+                campaign,
+                self.matrix,
+                2,
+                1,
+                sample_provider=interrupted,
+                sleeper=lambda _: None,
+            )
+        state = campaign / "evidence" / ".physical-soak-state.json"
+        self.assertTrue(state.is_file())
+        self.assertTrue(any("interrupted endurance" in error for error in qualify.validate_campaign(campaign, self.matrix)))
+
+        remaining = iter([self.soak_sample(1), self.soak_sample(2, failed=True)])
+        evidence = qualify.run_physical_soak(
+            campaign,
+            self.matrix,
+            2,
+            1,
+            sample_provider=lambda _: next(remaining),
+            sleeper=lambda _: None,
+        )
+        self.assertFalse(state.exists())
+        payload = json.loads(evidence.read_text(encoding="utf-8"))
+        self.assertEqual(payload["schema"], qualify.SOAK_SCHEMA)
+        self.assertEqual(payload["summary"]["samples"], 3)
+        self.assertEqual(payload["summary"]["failedSamples"], 1)
+        self.assertEqual(payload["summary"]["transitions"]["engine"], 1)
+        self.assertEqual(payload["summary"]["transitions"]["browser"], 2)
+
+    def test_physical_soak_rejects_remote_api_and_secret_bearing_samples(self):
+        campaign = self.begin()
+        with self.assertRaisesRegex(ValueError, "loopback"):
+            qualify.run_physical_soak(
+                campaign, self.matrix, 1, 1, "https://example.com", sleeper=lambda _: None
+            )
+        with self.assertRaisesRegex(ValueError, "credential"):
+            qualify.run_physical_soak(
+                campaign,
+                self.matrix,
+                1,
+                1,
+                sample_provider=lambda _: {"capturedAt": "now", "errors": [], "note": "password=secret-value"},
+                sleeper=lambda _: None,
+            )
+
+    def test_physical_soak_rejects_concurrent_runner_and_lock_symlink(self):
+        campaign = self.begin()
+        with qualify.physical_soak_lock(campaign):
+            with self.assertRaisesRegex(ValueError, "already running"):
+                qualify.run_physical_soak(
+                    campaign,
+                    self.matrix,
+                    1,
+                    1,
+                    sample_provider=lambda _: self.soak_sample(0),
+                    sleeper=lambda _: None,
+                )
+        lock = campaign / ".physical-soak.lock"
+        lock.unlink()
+        lock.symlink_to(self.evidence)
+        with self.assertRaisesRegex(ValueError, "non-symlink"):
+            qualify.run_physical_soak(
+                campaign,
+                self.matrix,
+                1,
+                1,
+                sample_provider=lambda _: self.soak_sample(0),
+                sleeper=lambda _: None,
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

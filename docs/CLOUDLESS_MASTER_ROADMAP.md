@@ -755,9 +755,12 @@ Implementation status (July 31, 2026):
 - Every signed generation now carries a strict `cloudless.security-readiness.v1` descriptor. The
   release pipeline rejects stale, future-dated, unmonitored, malformed or credential-bearing
   operational attestations, binds accepted evidence into the exact-commit release gates and signed
-  manifest, and fails closed for 1.0+ stable without it. Establishing and monitoring the public
-  contact and escalation role remains an operational pre-1.0 task; the tooling cannot truthfully
-  perform that human responsibility itself.
+  manifest, and fails closed for 1.0+ stable without it. The installed updater independently
+  enforces the same version/channel/commit identity, public-contact shape, response target and
+  30-day verification-at-publication window after verifying the signed by-hash manifest; legacy
+  pre-1.0 signed releases remain readable. Establishing and monitoring the public contact and
+  escalation role remains an operational pre-1.0 task; the tooling cannot truthfully perform that
+  human responsibility itself.
 
 Done gate:
 

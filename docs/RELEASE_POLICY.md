@@ -68,6 +68,9 @@ The release pipeline enforces this boundary. Every signed generation carries a d
 public `mailto:` or HTTPS disclosure route, an escalation role and an acknowledgement target no
 longer than three business days. The descriptor is embedded in the exact-commit release gates and
 signed manifest, so publication cannot silently claim readiness or reuse stale evidence.
+Clients independently enforce the same contract after verifying the archive-signed by-hash release
+manifest. A 1.0+ stable update with missing, mismatched or non-operational readiness evidence is not
+offered even if its surrounding repository metadata is otherwise valid.
 
 ## Telemetry and privacy
 

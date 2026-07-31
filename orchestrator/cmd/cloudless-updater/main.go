@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -79,11 +80,13 @@ type releaseManifest struct {
 	Version               string                       `json:"version"`
 	Channel               string                       `json:"channel"`
 	SourceCommit          string                       `json:"sourceCommit"`
+	PublishedAt           string                       `json:"publishedAt"`
 	Title                 string                       `json:"title"`
 	Summary               string                       `json:"summary"`
 	Changes               []string                     `json:"changes"`
 	Compatibility         releaseCompatibility         `json:"compatibility"`
 	PhysicalQualification releasePhysicalQualification `json:"physicalQualification"`
+	SecurityReadiness     releaseSecurityReadiness     `json:"securityReadiness"`
 }
 
 type releasePhysicalQualification struct {
@@ -94,6 +97,20 @@ type releasePhysicalQualification struct {
 	Channel                string `json:"channel"`
 	SourceCommit           string `json:"sourceCommit"`
 	QualificationSetSHA256 string `json:"qualificationSetSha256"`
+}
+
+type releaseSecurityReadiness struct {
+	Schema                      string `json:"schema"`
+	Status                      string `json:"status"`
+	Required                    bool   `json:"required"`
+	Version                     string `json:"version"`
+	Channel                     string `json:"channel"`
+	SourceCommit                string `json:"sourceCommit"`
+	Monitored                   bool   `json:"monitored"`
+	SecurityContact             string `json:"securityContact"`
+	EscalationOwner             string `json:"escalationOwner"`
+	VerifiedAt                  string `json:"verifiedAt"`
+	AcknowledgementBusinessDays int    `json:"acknowledgementBusinessDays"`
 }
 
 type releaseCompatibility struct {
@@ -821,6 +838,9 @@ func validateReleaseManifest(release, manifest []byte, version, channel string) 
 	if err := validatePhysicalQualification(parsed); err != nil {
 		return releaseManifest{}, err
 	}
+	if err := validateSecurityReadiness(parsed); err != nil {
+		return releaseManifest{}, err
+	}
 	if strings.TrimSpace(parsed.Title) == "" || len(parsed.Changes) == 0 {
 		return releaseManifest{}, errors.New("release notes are incomplete")
 	}
@@ -863,6 +883,57 @@ func validatePhysicalQualification(release releaseManifest) error {
 		if _, err := hex.DecodeString(physical.QualificationSetSHA256); err != nil {
 			return errors.New("release physical qualification set identity is malformed")
 		}
+	}
+	return nil
+}
+
+func validateSecurityReadiness(release releaseManifest) error {
+	major := 0
+	if fields := strings.SplitN(release.Version, ".", 2); len(fields) > 0 {
+		major, _ = strconv.Atoi(fields[0])
+	}
+	required := release.Channel == "stable" && major >= 1
+	readiness := release.SecurityReadiness
+	if readiness.Schema == "" {
+		if required {
+			return errors.New("stable CloudlessOS 1.0+ release is missing security readiness")
+		}
+		return nil // Legacy pre-1.0 signed releases did not carry this descriptor.
+	}
+	if readiness.Schema != "cloudless.security-readiness.v1" ||
+		readiness.Version != release.Version || readiness.Channel != release.Channel ||
+		readiness.SourceCommit != release.SourceCommit || readiness.Required != required {
+		return errors.New("release security readiness identity is invalid")
+	}
+	if readiness.Status != "operational" && readiness.Status != "not-operational" {
+		return errors.New("release security readiness status is invalid")
+	}
+	if required && readiness.Status != "operational" {
+		return errors.New("stable CloudlessOS 1.0+ release has no operational security response owner")
+	}
+	if readiness.Status != "operational" {
+		return nil
+	}
+	contact, err := url.Parse(readiness.SecurityContact)
+	validMail := err == nil && contact.Scheme == "mailto" && strings.Contains(contact.Opaque, "@") && contact.RawQuery == "" && contact.Fragment == ""
+	validHTTPS := err == nil && contact.Scheme == "https" && contact.Host != "" && contact.User == nil
+	owner := strings.TrimSpace(readiness.EscalationOwner)
+	if !readiness.Monitored || owner == "" || len(owner) > 120 || len(readiness.SecurityContact) > 254 || (!validMail && !validHTTPS) {
+		return errors.New("release operational security response evidence is incomplete")
+	}
+	if readiness.AcknowledgementBusinessDays < 1 || readiness.AcknowledgementBusinessDays > 3 {
+		return errors.New("release security acknowledgement target is invalid")
+	}
+	verified, err := time.Parse(time.RFC3339, readiness.VerifiedAt)
+	if err != nil {
+		return errors.New("release security verification timestamp is invalid")
+	}
+	published, err := time.Parse(time.RFC3339, release.PublishedAt)
+	if err != nil {
+		return errors.New("release publication timestamp is invalid")
+	}
+	if verified.After(published.Add(5*time.Minute)) || published.Sub(verified) > 30*24*time.Hour {
+		return errors.New("release security verification is outside the allowed 30-day publication window")
 	}
 	return nil
 }

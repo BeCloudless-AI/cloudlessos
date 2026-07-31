@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -172,6 +173,87 @@ func TestPhysicalQualificationPolicy(t *testing.T) {
 	qualified.PhysicalQualification.SourceCommit = strings.Repeat("f", 40)
 	if err := validatePhysicalQualification(qualified); err == nil {
 		t.Fatal("physical qualification from another commit was accepted")
+	}
+}
+
+func TestSecurityReadinessPolicy(t *testing.T) {
+	commit := "0123456789abcdef0123456789abcdef01234567"
+	if err := validateSecurityReadiness(releaseManifest{Version: "0.9.9", Channel: "stable"}); err != nil {
+		t.Fatalf("legacy pre-1.0 release was rejected: %v", err)
+	}
+	if err := validateSecurityReadiness(releaseManifest{Version: "1.0.0", Channel: "stable"}); err == nil {
+		t.Fatal("stable 1.0 release without security readiness was accepted")
+	}
+	release := releaseManifest{
+		Version: "1.0.0", Channel: "stable", SourceCommit: commit,
+		PublishedAt: "2026-07-31T12:00:00Z",
+		SecurityReadiness: releaseSecurityReadiness{
+			Schema: "cloudless.security-readiness.v1", Status: "operational", Required: true,
+			Version: "1.0.0", Channel: "stable", SourceCommit: commit, Monitored: true,
+			SecurityContact: "mailto:security@becloudless.ai", EscalationOwner: "CloudlessOS release owner",
+			VerifiedAt: "2026-07-30T12:00:00Z", AcknowledgementBusinessDays: 3,
+		},
+	}
+	if err := validateSecurityReadiness(release); err != nil {
+		t.Fatalf("complete security readiness was rejected: %v", err)
+	}
+	for name, mutate := range map[string]func(*releaseManifest){
+		"not operational": func(value *releaseManifest) { value.SecurityReadiness.Status = "not-operational" },
+		"unmonitored":     func(value *releaseManifest) { value.SecurityReadiness.Monitored = false },
+		"credentialed URL": func(value *releaseManifest) {
+			value.SecurityReadiness.SecurityContact = "https://user:pass@example.com/security"
+		},
+		"stale":         func(value *releaseManifest) { value.SecurityReadiness.VerifiedAt = "2026-06-01T00:00:00Z" },
+		"future":        func(value *releaseManifest) { value.SecurityReadiness.VerifiedAt = "2026-08-01T00:00:00Z" },
+		"slow response": func(value *releaseManifest) { value.SecurityReadiness.AcknowledgementBusinessDays = 4 },
+		"other commit":  func(value *releaseManifest) { value.SecurityReadiness.SourceCommit = strings.Repeat("f", 40) },
+	} {
+		t.Run(name, func(t *testing.T) {
+			candidate := release
+			mutate(&candidate)
+			if err := validateSecurityReadiness(candidate); err == nil {
+				t.Fatalf("invalid security readiness %q was accepted", name)
+			}
+		})
+	}
+}
+
+func TestValidateReleaseManifestEnforcesOneZeroReadiness(t *testing.T) {
+	commit := "0123456789abcdef0123456789abcdef01234567"
+	manifest := releaseManifest{
+		Schema: "cloudless.release.v2", Version: "1.0.0", Channel: "stable", SourceCommit: commit,
+		PublishedAt: "2026-07-31T12:00:00Z", Title: "CloudlessOS 1.0", Changes: []string{"Ready."},
+		Compatibility: releaseCompatibility{Schema: "cloudless.compatibility.v1", Targets: []releaseTarget{{Platform: platform.Detect(), Architecture: platform.Architecture()}}},
+		PhysicalQualification: releasePhysicalQualification{
+			Schema: "cloudless.physical-release.v1", Status: "qualified", Required: true,
+			Version: "1.0.0", Channel: "stable", SourceCommit: commit,
+			QualificationSetSHA256: strings.Repeat("a", 64),
+		},
+		SecurityReadiness: releaseSecurityReadiness{
+			Schema: "cloudless.security-readiness.v1", Status: "operational", Required: true,
+			Version: "1.0.0", Channel: "stable", SourceCommit: commit, Monitored: true,
+			SecurityContact: "https://www.becloudless.ai/security", EscalationOwner: "CloudlessOS release owner",
+			VerifiedAt: "2026-07-30T12:00:00Z", AcknowledgementBusinessDays: 3,
+		},
+	}
+	payload, err := json.Marshal(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hash := sha256.Sum256(payload)
+	release := []byte(fmt.Sprintf("SHA256:\n %x %d cloudless-release.json\n", hash, len(payload)))
+	if _, err := validateReleaseManifest(release, payload, "1.0.0", "stable"); err != nil {
+		t.Fatalf("complete 1.0 manifest was rejected: %v", err)
+	}
+	manifest.SecurityReadiness = releaseSecurityReadiness{}
+	payload, err = json.Marshal(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hash = sha256.Sum256(payload)
+	release = []byte(fmt.Sprintf("SHA256:\n %x %d cloudless-release.json\n", hash, len(payload)))
+	if _, err := validateReleaseManifest(release, payload, "1.0.0", "stable"); err == nil {
+		t.Fatal("signed 1.0 manifest without security readiness was accepted")
 	}
 }
 

@@ -30,8 +30,9 @@ daemon_pid=
 desktop_pid=
 browser_pid=
 terminal_pid=
+broker_pid=
 cleanup() {
-  for pid in "$daemon_pid" "$desktop_pid" "$browser_pid" "$terminal_pid"; do
+  for pid in "$daemon_pid" "$desktop_pid" "$browser_pid" "$terminal_pid" "$broker_pid"; do
     [[ -n "$pid" ]] || continue
     kill "$pid" 2>/dev/null || true
     wait "$pid" 2>/dev/null || true
@@ -76,6 +77,42 @@ SH
 chmod 0755 "$work/chromium"
 chown cloudless:cloudless "$work/chromium"
 install -o cloudless -g cloudless -m 0660 /dev/null "$work/browser.log"
+
+cat >"$work/broker.py" <<'PY'
+import json
+import os
+import socket
+import sys
+
+path, log_path = sys.argv[1:]
+try:
+    os.unlink(path)
+except FileNotFoundError:
+    pass
+server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+server.bind(path)
+os.chmod(path, 0o666)
+server.listen(8)
+while True:
+    client, _ = server.accept()
+    with client:
+        request = json.loads(client.makefile("rb").readline())
+        with open(log_path, "a", encoding="utf-8") as handle:
+            handle.write(request.get("action", "") + "|" + request.get("value", "") + "\n")
+        client.sendall(b'{"ok":true}\n')
+PY
+install -m 0666 /dev/null "$work/privileged.log"
+python3 "$work/broker.py" "$work/privileged.sock" "$work/privileged.log" \
+  >/tmp/cloudless-session-broker.log 2>&1 &
+broker_pid=$!
+for _ in $(seq 1 100); do
+  [[ -S "$work/privileged.sock" ]] && break
+  sleep 0.05
+done
+[[ -S "$work/privileged.sock" ]] || {
+  cat /tmp/cloudless-session-broker.log >&2
+  exit 1
+}
 
 cat >"$work/terminal.py" <<'PY'
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -136,6 +173,8 @@ start_daemon() {
     CLOUDLESS_ADDR=127.0.0.1:18765 \
     CLOUDLESS_GATEWAY_ADDR=127.0.0.1:18766 \
     CLOUDLESS_STATE_DIR="$work/state" \
+    CLOUDLESS_PRIVILEGED_SOCKET="$work/privileged.sock" \
+    TZ=Etc/UTC \
     CLOUDLESS_NO_PROVISION=1 \
     /usr/lib/cloudless/cloudlessd >/tmp/cloudless-session-daemon.log 2>&1 &
   daemon_pid=$!
@@ -218,6 +257,24 @@ wait_http /api/health
 wait_file_contains "$work/actions.log" "xrandr --output DP-0 --mode 1920x1080"
 [[ ! -e "$work/state/display-change-pending.json" ]]
 
+# Apply the same mode again and explicitly confirm it. The confirmed preference
+# must survive independently from the transient desktop-agent connection.
+confirmed_change="$(python3 "$work/request.py" POST /api/system/display \
+  '{"output":"DP-0","width":1280,"height":720}' display)"
+confirmation_token="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["token"])' <<<"$confirmed_change")"
+python3 "$work/request.py" POST /api/system/display/confirm \
+  "{\"token\":\"$confirmation_token\"}" display-confirm >/dev/null
+grep -Eq '"width":[[:space:]]*1280' "$work/state/state.json"
+grep -Eq '"height":[[:space:]]*720' "$work/state/state.json"
+
+# Region selection crosses the real daemon-to-broker protocol. The disposable
+# broker records the requested IANA zone without changing its host container.
+profile="$(python3 "$work/request.py" POST /api/profile \
+  '{"name":"Qualification","region":"AE"}')"
+grep -Fq '"region":"AE"' <<<"$profile"
+grep -Fq '"country":"AE"' <<<"$profile"
+wait_file_contains "$work/privileged.log" "timezone.set|Asia/Dubai"
+
 # Browser profile and terminal process are graphical-session resources, not
 # daemon children. Both remain the same after cloudlessd restarts.
 python3 "$work/request.py" POST /api/system/browser \
@@ -227,4 +284,11 @@ wait_file_contains "$work/browser.log" "https://example.com/after-restart"
 terminal_after="$(python3 "$work/request.py" GET /terminal/)"
 [[ "$terminal_after" == "$terminal_before" ]]
 
-echo "Installed daemon, desktop agent, browser and terminal session integration passed."
+# Exercise both destructive UI routes against the broker without powering off
+# the disposable qualification container.
+python3 "$work/request.py" POST /api/system/reboot '{}' reboot >/dev/null
+python3 "$work/request.py" POST /api/system/shutdown '{}' shutdown >/dev/null
+wait_file_contains "$work/privileged.log" "power.restart|"
+wait_file_contains "$work/privileged.log" "power.shutdown|"
+
+echo "Installed display, locale, power, keyboard, browser and terminal integration passed."

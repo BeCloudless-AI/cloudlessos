@@ -160,6 +160,12 @@ Implementation status (July 31, 2026):
   generations, and now also proves the boot auditor in both architecture packages. Physical repeated
   boot/install qualification is still required before the remaining P2 items and the P2 done gate
   can close.
+- The disposable installed-session rehearsal now drives the packaged daemon, desktop agent, browser,
+  terminal and a protocol-compatible privileged broker together. It proves virtual typing, browser
+  profile reuse, terminal continuity, unconfirmed display rollback after daemon restart, confirmed
+  resolution persistence, UAE-to-`Asia/Dubai` timezone dispatch, and both restart and shutdown broker
+  actions without powering off the test container. AMD64 and QEMU/ARM64 package lifecycle jobs run
+  this same contract; clean-install physical evidence is still required before checking the item.
 
 ## P3 — Stabilize the Cloudless desktop experience
 

@@ -68,6 +68,8 @@ import grp
 import json
 import os
 import socket
+import threading
+import time
 
 path = "/run/cloudless/engine.sock"
 os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -80,10 +82,12 @@ server.bind(path)
 os.chown(path, 0, grp.getgrnam("cloudless-control").gr_gid)
 os.chmod(path, 0o660)
 server.listen(16)
-while True:
-    connection, _ = server.accept()
+def handle(connection):
     try:
         request = json.loads(connection.makefile("rb").readline())
+        if request.get("action") == "image.remote-manifest" and os.path.exists("/tmp/cloudless-hold-recipe-check"):
+            while os.path.exists("/tmp/cloudless-hold-recipe-check"):
+                time.sleep(0.05)
         response = {"done": True}
         if request.get("action") == "container.list":
             response["containers"] = [{
@@ -99,6 +103,10 @@ while True:
         connection.sendall((json.dumps(response) + "\n").encode())
     finally:
         connection.close()
+
+while True:
+    connection, _ = server.accept()
+    threading.Thread(target=handle, args=(connection,), daemon=True).start()
 PY
   cat >/tmp/cloudless-fake-model.py <<'PY'
 from hashlib import sha256
@@ -191,8 +199,93 @@ raise SystemExit("active model continuity failed: " + last)
 PY
   }
 
+  begin_interrupted_recipe_check() {
+    touch /tmp/cloudless-hold-recipe-check
+    python3 <<'PY' > /tmp/cloudless-recipe-operation-id
+import json
+import urllib.request
+
+digest = "2" * 64
+revision = "3" * 40
+draft = {
+    "name": "Package continuity recipe",
+    "description": "A constrained recipe used to qualify durable preparation across package transitions.",
+    "platform": "generic",
+    "source": {"url": "", "revision": "", "files": {}},
+    "engine": {
+        "type": "vllm", "image": f"qualification/vllm@sha256:{digest}",
+        "servedModelName": "cloudless", "containerPort": 8890, "apiPath": "/v1",
+        "proxyHost": "host.docker.internal", "restartPolicy": "no", "arguments": [],
+    },
+    "model": {
+        "id": "qualification/model", "revision": revision, "quantization": "none",
+        "dtype": "auto", "kvCacheDtype": "auto", "maxContext": 32768, "maxSequences": 1,
+        "gpuMemoryUtilization": 0.5, "tensorParallel": 1, "pipelineParallel": 1,
+        "trustRemoteCode": False,
+    },
+    "distributed": {
+        "nodes": 1, "backend": "nccl", "masterPort": 25000, "interface": "",
+        "hca": "", "ibGidIndex": 0, "workerAlias": "cloudless-recipe-worker",
+        "selectedNodes": [],
+    },
+    "runtime": {
+        "adapter": "managed-container-v1", "workingDir": ".", "timeoutMinutes": 480,
+        "prerequisites": [], "environment": {"HF_HUB_DISABLE_XET": "1"},
+        "lifecycle": {
+            "build": {"program": "", "args": []}, "download": {"program": "", "args": []},
+            "start": {"program": "", "args": []}, "stop": {"program": "", "args": []},
+        },
+    },
+    "health": {
+        "scheme": "http", "host": "127.0.0.1", "port": 8890, "path": "/health",
+        "timeoutSeconds": 7200, "intervalSeconds": 3,
+    },
+}
+
+def request(path, payload):
+    data = json.dumps(payload).encode()
+    req = urllib.request.Request("http://127.0.0.1:18775" + path, data=data,
+                                 headers={"Content-Type": "application/json"}, method="POST")
+    with urllib.request.urlopen(req, timeout=5) as response:
+        return json.load(response)
+
+recipe = request("/api/recipes", draft)
+operation = request(f"/api/recipes/{recipe['id']}/check", {})
+print(operation["operationId"])
+PY
+    recipe_operation_id="$(tr -d '[:space:]' < /tmp/cloudless-recipe-operation-id)"
+    test -n "$recipe_operation_id"
+    assert_durable_recipe_check "$recipe_operation_id"
+  }
+
+  assert_durable_recipe_check() {
+    python3 - "$1" <<'PY'
+import json
+import sys
+import time
+import urllib.request
+
+operation_id = sys.argv[1]
+deadline = time.time() + 10
+last = ""
+while time.time() < deadline:
+    try:
+        with urllib.request.urlopen("http://127.0.0.1:18775/api/recipes", timeout=2) as response:
+            payload = json.load(response)
+        operation = next((item for item in payload.get("operations", []) if item.get("id") == operation_id), None)
+        if operation and operation.get("phase") in {"checking", "recovering"}:
+            raise SystemExit(0)
+        last = repr(operation)
+    except Exception as exc:
+        last = repr(exc)
+    time.sleep(0.1)
+raise SystemExit("durable recipe preparation was not preserved: " + last)
+PY
+  }
+
   start_continuity_daemon
   assert_active_model
+  begin_interrupted_recipe_check
 
   # Upgrade while the old daemon and its model endpoint are live, then restart
   # into the candidate binary and prove the exact cache-backed runtime again.
@@ -200,9 +293,11 @@ PY
   grep -Fq '"qualification":"preserve-me"' /var/lib/cloudless/qualification-preserve.json
   cmp "$legacy_cache/hub/models--qualification--model/blobs/weights" "$migrated"
   assert_active_model
+  assert_durable_recipe_check "$recipe_operation_id"
   stop_continuity_daemon
   start_continuity_daemon
   assert_active_model
+  assert_durable_recipe_check "$recipe_operation_id"
 
   desktop_socket=/run/cloudless-desktop/qualification.sock
   install -d -o root -g cloudless -m 0770 /run/cloudless-desktop
@@ -251,9 +346,12 @@ PY
   grep -Fq '"qualification":"preserve-me"' /var/lib/cloudless/qualification-preserve.json
   cmp "$legacy_cache/hub/models--qualification--model/blobs/weights" "$migrated"
   assert_active_model
+  assert_durable_recipe_check "$recipe_operation_id"
   stop_continuity_daemon
   start_continuity_daemon
   assert_active_model
+  assert_durable_recipe_check "$recipe_operation_id"
+  rm -f /tmp/cloudless-hold-recipe-check
   stop_continuity_daemon
   cleanup_continuity
   trap - EXIT

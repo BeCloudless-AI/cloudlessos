@@ -99,7 +99,10 @@ Implementation status (July 31, 2026):
   non-terminal durable recipe operation. A new generation is accepted only when the same engine is
   still ready and every captured operation remains present and non-failed after `cloudlessd`
   restarts. Otherwise the updater restores the prior packages and applies the same continuity gate
-  to the rollback. Unit tests cover preserved, failed and disappeared workloads; the destructive
+  to the rollback. Unit tests cover preserved, failed and disappeared workloads. The disposable
+  Debian lifecycle now also pauses a real constrained recipe Check at immutable-image verification,
+  upgrades and rolls back all six packages, restarts each daemon generation and proves that the same
+  durable operation remains recoverable while the cache-backed model stays ready. The destructive
   package rehearsal on physical targets remains outstanding.
 - A required `secret-hygiene` release gate scans all tracked and non-ignored source files without
   echoing matches. The least-privilege storage, revocation and local environment procedure is in

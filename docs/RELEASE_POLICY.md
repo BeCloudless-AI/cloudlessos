@@ -8,7 +8,7 @@ required by [RELEASE_QUALIFICATION.md](./RELEASE_QUALIFICATION.md).
 
 1. Cut a release candidate from a pushed, immutable source commit and publish it to `beta`.
 2. Retain its source commit, signed release manifest, package hashes, SBOM, vulnerability reports,
-   CI run and physical qualification directory together.
+   local qualification run and physical qualification directory together.
 3. Run the complete automated matrix and the physical matrix applicable to the changed surfaces.
    A security, signature, boot, rollback, data-integrity or supported-inference failure cannot be
    waived as a known limitation.
@@ -28,12 +28,12 @@ belongs to that exact version and full source commit; the resulting descriptor i
 and published with the release artifacts.
 
 The release manifest also carries a signed `cloudless.ci-qualification.v1` descriptor. For a stable
-1.0+ release, the release tool queries GitHub for a successful `CloudlessOS qualification` run on
-the exact full source commit. It requires all seven production jobs and retained package, visual
+1.0+ release, the release tool runs the local qualification matrix against the exact full source
+commit. It requires all seven production groups and retained, digest-verified package, visual
 regression and lifecycle-soak artifacts from that same run attempt. The evidence is embedded in the
 release gates, detached-signed as a standalone artifact and independently checked by the publisher
-and installed updater. Missing, failed, expired or cross-commit CI evidence blocks the release.
-Pre-1.0 and beta generations may explicitly state `not-qualified` without claiming CI coverage.
+and installed updater. Missing, failed, changed or cross-commit local evidence blocks the release.
+Pre-1.0 generations may explicitly state `not-qualified` without claiming automated coverage.
 
 Stable signing consumes the exact package and common standalone-artifact bytes from the publicly
 verified beta generation. It measures the seven days from the public by-hash object's server
@@ -94,7 +94,7 @@ must not add telemetry, crash upload or remote diagnostics without:
 
 ## 1.0 decision
 
-CloudlessOS may be called 1.0 only when the exact-commit signed CI evidence, full automated and
+CloudlessOS may be called 1.0 only when the exact-commit signed local qualification evidence, full automated and
 physical matrices are green, a
 rollback rehearsal succeeds, the beta soak completes, remaining limitations are visible in-product,
 the security contact is monitored and the response ownership above is operational.

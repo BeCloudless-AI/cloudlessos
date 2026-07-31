@@ -1,12 +1,12 @@
 #!/usr/bin/python3
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import tempfile
 import unittest
 from pathlib import Path
-from unittest import mock
 
 
 SCRIPT = Path(__file__).with_name("prepare-ci-qualification.py")
@@ -19,118 +19,101 @@ SPEC.loader.exec_module(MODULE)
 class CIQualificationTests(unittest.TestCase):
     commit = "a" * 40
     version = "1.0.0"
-    run_id = 12345
-    attempt = 2
+    run_id = 1730000000000000000
+    attempt = 1
 
     def fixture(self, mutate=None) -> Path:
         root = Path(tempfile.mkdtemp())
-        run = {
-            "id": self.run_id, "run_attempt": self.attempt, "head_sha": self.commit,
-            "path": MODULE.WORKFLOW_PATH, "name": MODULE.WORKFLOW_NAME,
-            "status": "completed", "conclusion": "success", "event": "push",
-            "html_url": "https://github.com/becloudless/cloudlessos/actions/runs/12345",
-            "updated_at": "2026-07-31T12:00:00Z",
+
+        def retained(name: str, content: bytes) -> dict:
+            (root / name).write_bytes(content)
+            return {"sha256": hashlib.sha256(content).hexdigest(), "size": len(content)}
+
+        jobs = []
+        for index, name in enumerate(sorted(MODULE.REQUIRED_JOBS)):
+            filename = f"job-{index}.log"
+            jobs.append({"name": name, "status": "success", "log": filename, **retained(filename, name.encode())})
+        artifacts = []
+        for prefix in sorted(MODULE.ARTIFACT_PREFIXES):
+            logical = f"{prefix}-{self.run_id}-{self.attempt}"
+            filename = f"{logical}.tar.gz"
+            artifacts.append({"name": logical, "file": filename, **retained(filename, logical.encode())})
+        document = {
+            "schema": MODULE.EVIDENCE_SCHEMA,
+            "sourceCommit": self.commit,
+            "runId": self.run_id,
+            "runAttempt": self.attempt,
+            "startedAt": "2026-07-31T12:00:00Z",
+            "completedAt": "2026-07-31T12:30:00Z",
+            "jobs": jobs,
+            "artifacts": artifacts,
         }
-        jobs = [{"name": name, "status": "completed", "conclusion": "success"} for name in MODULE.REQUIRED_JOBS]
-        artifacts = [{"name": f"{prefix}-{self.run_id}-{self.attempt}", "expired": False} for prefix in MODULE.ARTIFACT_PREFIXES]
-        documents = {"runs.json": {"workflow_runs": [run]}, "jobs.json": {"jobs": jobs}, "artifacts.json": {"artifacts": artifacts}}
         if mutate:
-            mutate(documents)
-        for name, document in documents.items():
-            (root / name).write_text(json.dumps(document), encoding="utf-8")
-        return root
+            mutate(document, root)
+        path = root / "evidence.json"
+        path.write_text(json.dumps(document), encoding="utf-8")
+        return path
 
     def test_pre_one_without_evidence_is_explicit(self):
-        result = MODULE.prepare("0.2.6", "stable", self.commit, "", None)
+        result = MODULE.prepare("0.2.6", "stable", self.commit, None)
         self.assertEqual(result["status"], "not-qualified")
         self.assertFalse(result["required"])
 
-    def test_github_cli_accepts_wsl_windows_executable(self):
-        def which(name):
-            return None if name == "gh" else "/mnt/c/Tools/gh.exe"
+    def test_one_requires_local_evidence(self):
+        with self.assertRaisesRegex(ValueError, "retained local qualification evidence"):
+            MODULE.prepare(self.version, "stable", self.commit, None)
 
-        with mock.patch.object(MODULE.shutil, "which", side_effect=which), mock.patch.object(
-            MODULE.os, "access", return_value=True
-        ):
-            self.assertEqual(MODULE.github_cli(), "/mnt/c/Tools/gh.exe")
-
-    def test_exact_commit_matrix_and_artifacts_qualify(self):
-        result = MODULE.prepare(self.version, "stable", self.commit, "becloudless/cloudlessos", self.fixture())
+    def test_exact_commit_local_matrix_and_artifacts_qualify(self):
+        result = MODULE.prepare(self.version, "stable", self.commit, self.fixture())
         self.assertEqual(result["status"], "qualified")
         self.assertTrue(result["required"])
+        self.assertEqual(result["workflow"], MODULE.LOCAL_RUNNER)
         self.assertEqual(result["runId"], self.run_id)
         self.assertEqual(len(result["jobs"]), 7)
         self.assertEqual(len(result["artifacts"]), 3)
+        self.assertEqual(len(result["jobEvidence"]), 7)
+        self.assertEqual(len(result["artifactEvidence"]), 3)
 
     def test_wrong_commit_is_rejected(self):
-        fixture = self.fixture(lambda docs: docs["runs.json"]["workflow_runs"][0].update(head_sha="b" * 40))
-        with self.assertRaisesRegex(ValueError, "exactly one"):
-            MODULE.prepare(self.version, "stable", self.commit, "becloudless/cloudlessos", fixture)
+        fixture = self.fixture(lambda doc, _: doc.update(sourceCommit="b" * 40))
+        with self.assertRaisesRegex(ValueError, "exact source commit"):
+            MODULE.prepare(self.version, "stable", self.commit, fixture)
 
     def test_failed_or_missing_job_is_rejected(self):
-        def mutate(docs):
-            docs["jobs.json"]["jobs"][0]["conclusion"] = "failure"
+        fixture = self.fixture(lambda doc, _: doc["jobs"][0].update(status="failure"))
         with self.assertRaisesRegex(ValueError, "did not succeed"):
-            MODULE.prepare(self.version, "stable", self.commit, "becloudless/cloudlessos", self.fixture(mutate))
+            MODULE.prepare(self.version, "stable", self.commit, fixture)
 
-    def test_expired_or_missing_artifact_is_rejected(self):
-        def mutate(docs):
-            docs["artifacts.json"]["artifacts"][0]["expired"] = True
-        with self.assertRaisesRegex(ValueError, "missing retained evidence"):
-            MODULE.prepare(self.version, "stable", self.commit, "becloudless/cloudlessos", self.fixture(mutate))
+    def test_changed_job_log_is_rejected(self):
+        def mutate(doc, root):
+            (root / doc["jobs"][0]["log"]).write_text("changed", encoding="utf-8")
 
-    def test_live_collection_explains_missing_exact_commit_run(self):
-        with mock.patch.object(MODULE, "gh_json", return_value={"workflow_runs": []}):
-            with self.assertRaisesRegex(ValueError, "gh workflow run multiarch.yml"):
-                MODULE.live_evidence("becloudless/cloudlessos", self.commit)
+        with self.assertRaisesRegex(ValueError, "size changed|digest changed"):
+            MODULE.prepare(self.version, "stable", self.commit, self.fixture(mutate))
 
-    def test_live_collection_explains_zero_job_startup_failure(self):
-        run = {
-            "id": 99,
-            "head_sha": self.commit,
-            "path": MODULE.WORKFLOW_PATH,
-            "name": MODULE.WORKFLOW_NAME,
-            "status": "completed",
-            "conclusion": "startup_failure",
-            "html_url": "https://github.com/becloudless/cloudlessos/actions/runs/99",
-        }
-        documents = [
-            {"workflow_runs": [run]},
-            {"total_count": 0, "jobs": []},
-        ]
-        with mock.patch.object(MODULE, "gh_json", side_effect=documents) as query:
-            with self.assertRaisesRegex(ValueError, "before creating any jobs") as error:
-                MODULE.live_evidence("becloudless/cloudlessos", self.commit)
-        self.assertIn("billing/spending", str(error.exception))
-        self.assertIn("actions/runs/99", str(error.exception))
-        self.assertEqual(query.call_count, 2)
+    def test_missing_or_changed_artifact_is_rejected(self):
+        def mutate(doc, root):
+            (root / doc["artifacts"][0]["file"]).unlink()
 
-    def test_live_collection_reports_latest_failed_run(self):
-        runs = {
-            "workflow_runs": [
-                {
-                    "id": 101,
-                    "head_sha": self.commit,
-                    "path": MODULE.WORKFLOW_PATH,
-                    "name": MODULE.WORKFLOW_NAME,
-                    "status": "completed",
-                    "conclusion": "failure",
-                    "html_url": "https://github.com/becloudless/cloudlessos/actions/runs/101",
-                },
-                {
-                    "id": 100,
-                    "head_sha": self.commit,
-                    "path": MODULE.WORKFLOW_PATH,
-                    "name": MODULE.WORKFLOW_NAME,
-                    "status": "completed",
-                    "conclusion": "cancelled",
-                    "html_url": "https://github.com/becloudless/cloudlessos/actions/runs/100",
-                },
-            ]
-        }
-        with mock.patch.object(MODULE, "gh_json", return_value=runs):
-            with self.assertRaisesRegex(ValueError, "concluded failure.*actions/runs/101"):
-                MODULE.live_evidence("becloudless/cloudlessos", self.commit)
+        with self.assertRaisesRegex(ValueError, "missing"):
+            MODULE.prepare(self.version, "stable", self.commit, self.fixture(mutate))
+
+    def test_symlink_evidence_is_rejected(self):
+        def mutate(doc, root):
+            row = doc["jobs"][0]
+            path = root / row["log"]
+            target = root / "target.log"
+            target.write_bytes(path.read_bytes())
+            path.unlink()
+            path.symlink_to(target)
+
+        with self.assertRaisesRegex(ValueError, "not a regular file"):
+            MODULE.prepare(self.version, "stable", self.commit, self.fixture(mutate))
+
+    def test_path_traversal_is_rejected(self):
+        fixture = self.fixture(lambda doc, _: doc["jobs"][0].update(log="../job.log"))
+        with self.assertRaisesRegex(ValueError, "plain file names"):
+            MODULE.prepare(self.version, "stable", self.commit, fixture)
 
 
 if __name__ == "__main__":

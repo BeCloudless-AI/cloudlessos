@@ -210,7 +210,7 @@ sudo cloudless-qualify verify-export \
 Export refuses incomplete or changed campaigns, unsafe paths, symlinks and oversized payloads. It
 writes through a private temporary file, verifies every member against the export inventory and the
 sealed campaign evidence root, and only then atomically publishes the final mode-0600 ZIP. Retain
-that ZIP beside the CI artifacts for the exact release commit.
+that ZIP beside the local qualification artifacts for the exact release commit.
 
 After every matrix target has produced an export, verify them together. This rejects a missing or
 duplicate target and, critically, rejects evidence mixed across versions or source commits:
@@ -223,23 +223,22 @@ sudo cloudless-qualify verify-set \
 
 The resulting mode-0600 `cloudless.physical-set.v1` manifest binds the authoritative matrix digest,
 exact version, full source commit and SHA-256/size of every target archive. Retain it with the
-archives and CI artifacts. A partial collection is useful while testing, but it is not release
+archives and local qualification artifacts. A partial collection is useful while testing, but it is not release
 qualification and cannot produce this manifest.
 
-The production release command collects CI evidence directly from GitHub; operators do not create
-or edit its descriptor. For stable 1.0+, the exact commit must have a successful
-`.github/workflows/multiarch.yml` run whose seven required jobs completed successfully and whose
-run-specific package, visual-regression and lifecycle-soak artifacts have not expired. The resulting
-mode-0600 `cloudless.ci-qualification.v1` document is bound into the release gates and signed artifact
-set. Local fixture input exists only in the unit-test command and is not accepted by the production
-release entry point.
+The production release command runs the complete exact-commit qualification locally; CloudlessOS
+does not use or require GitHub Actions. `distro/scripts/run-local-qualification.sh` executes the
+seven source, platform, package, visual and soak groups before signing. Each group has a retained
+log, and the package, screenshot and soak bundles have their SHA-256 and size recorded. Evidence is
+accepted only when every file is a regular, non-symlink file, every digest still matches and the
+full source commit is the checked-out clean commit. The resulting mode-0600
+`cloudless.ci-qualification.v1` document is bound into the release gates and signed artifact set.
 
-If GitHub rejects a run before scheduling jobs, the release command reports the exact run URL and
-distinguishes that `startup_failure` from a normal failed job or a commit that was never dispatched.
-A zero-job startup failure must be resolved in the repository's Actions access or the owner
-account's Actions billing/spending settings after validating the workflow with `actionlint`; it
-cannot be waived with local tests. The collector accepts both native `gh` and WSL's authenticated
-`gh.exe`, so this diagnosis works from the supported Windows/WSL release workstation.
+Do not hand-edit this descriptor. `bash distro/scripts/release.sh VERSION CHANNEL` creates it after
+the local matrix succeeds. A failed or interrupted group leaves diagnostic material under
+`distro/out/qualification/local-runs/.incomplete-*` but cannot produce a qualified descriptor or
+reach signing. Stable 1.0+ remains fail-closed without all seven groups and all three retained,
+digest-verified evidence bundles.
 
 Run the tooling contract validator before and after a qualification campaign:
 
@@ -247,7 +246,7 @@ Run the tooling contract validator before and after a qualification campaign:
 bash distro/scripts/test-qualification-contract.sh
 ```
 
-The current workflow validates the matrix shape, but humans must still execute and review the
+The local runner validates the automated matrix, but humans must still execute and review the
 physical campaign. A release manager may reject incomplete evidence; an ordinary known-limitations
 note cannot waive a failed security, rollback, boot or data-integrity check.
 

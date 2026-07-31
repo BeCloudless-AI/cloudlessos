@@ -235,7 +235,7 @@ if qualification.get("status") not in {"qualified", "not-qualified"}:
 if required and qualification.get("status") != "qualified":
     raise SystemExit("CloudlessOS 1.0+ stable releases require exact-commit CI qualification")
 if qualification.get("status") == "qualified":
-    if qualification.get("workflow") != ".github/workflows/multiarch.yml":
+    if qualification.get("runner") != "cloudless-local-release" or qualification.get("workflow") != "distro/scripts/run-local-qualification.sh":
         raise SystemExit("CI qualification workflow is invalid")
     if not isinstance(qualification.get("runId"), int) or qualification["runId"] <= 0 or not isinstance(qualification.get("runAttempt"), int) or qualification["runAttempt"] <= 0:
         raise SystemExit("CI qualification run identity is invalid")
@@ -246,6 +246,12 @@ if qualification.get("status") == "qualified":
     artifacts = {f"{prefix}-{run_id}-{attempt}" for prefix in ("package-qualification", "visual-regression", "lifecycle-soak")}
     if set(qualification.get("artifacts", [])) != artifacts:
         raise SystemExit("CI qualification evidence inventory is incomplete")
+    for field, expected in (("jobEvidence", jobs), ("artifactEvidence", artifacts)):
+        records = qualification.get(field)
+        if not isinstance(records, list) or {item.get("name") for item in records if isinstance(item, dict)} != expected:
+            raise SystemExit(f"CI qualification retained {field} inventory is incomplete")
+        if any(not isinstance(item.get("file"), str) or "/" in item["file"] or "\\" in item["file"] or len(item.get("sha256", "")) != 64 or not isinstance(item.get("size"), int) or item["size"] <= 0 for item in records):
+            raise SystemExit(f"CI qualification retained {field} identity is invalid")
 PY
 
 matrix_sha="$(sha256sum "$MATRIX" | awk '{print $1}')"

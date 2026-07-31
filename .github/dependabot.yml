@@ -19,13 +19,3 @@ updates:
       timezone: Etc/UTC
     open-pull-requests-limit: 5
     labels: [dependencies, security]
-
-  - package-ecosystem: github-actions
-    directory: /
-    schedule:
-      interval: weekly
-      day: monday
-      time: "01:30"
-      timezone: Etc/UTC
-    open-pull-requests-limit: 5
-    labels: [dependencies, security]

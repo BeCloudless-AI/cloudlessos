@@ -87,17 +87,6 @@ fi
 python3 "$ROOT/distro/scripts/prepare-security-readiness.py" \
     "$VERSION" "$CHANNEL" "$full_commit" --output "$security_output" "${security_arguments[@]}"
 ci_output="$ROOT/distro/out/qualification/cloudless-ci-qualification.json"
-ci_arguments=()
-if [ "$CHANNEL" = stable ] && [ "${VERSION%%.*}" -ge 1 ]; then
-    command -v gh >/dev/null || {
-        echo "GitHub CLI is required to verify the exact-commit CI qualification for a 1.0+ stable release." >&2
-        exit 1
-    }
-    github_repository="$(gh repo view --json nameWithOwner --jq .nameWithOwner)"
-    ci_arguments+=(--repository "$github_repository")
-fi
-python3 "$ROOT/distro/scripts/prepare-ci-qualification.py" \
-    "$VERSION" "$CHANNEL" "$full_commit" --output "$ci_output" "${ci_arguments[@]}"
 
 echo "CloudlessOS production release"
 echo "  version: $VERSION"
@@ -129,54 +118,9 @@ run_publisher() {
         bash distro/scripts/publish-apt-r2.sh "$CHANNEL"
 }
 
-echo "==> Go tests"
-docker run --rm -v "$ROOT:/src" -w /src/orchestrator \
-    cloudless-release-builder go test ./...
-echo "==> Updater workload continuity and rollback transaction"
-docker run --rm -v "$ROOT:/src" -w /src/orchestrator \
-    cloudless-release-builder go test ./cmd/cloudless-updater -run '^TestApplyRollsBackWhenActiveWorkloadIsLost$'
-echo "==> Go static analysis"
-docker run --rm -v "$ROOT:/src" -w /src/orchestrator \
-    cloudless-release-builder go vet ./...
-echo "==> Release environment loader"
-bash "$ROOT/distro/scripts/test-configure-release-env.sh"
-bash "$ROOT/distro/scripts/test-release-env.sh"
-echo "==> Production release preflight"
-bash "$ROOT/distro/scripts/test-release-preflight.sh"
-echo "==> Security response readiness contract"
-python3 "$ROOT/distro/scripts/test-security-readiness.py"
-echo "==> Exact-commit CI qualification contract"
-python3 "$ROOT/distro/scripts/test-ci-qualification.py"
-echo "==> Source secret hygiene"
-bash "$ROOT/distro/scripts/test-secret-hygiene.sh"
-echo "==> Host service and repository trust hardening"
-bash "$ROOT/distro/scripts/test-service-hardening.sh"
-echo "==> Reviewed recipe and compatibility trust inventory"
-bash "$ROOT/distro/scripts/test-trust-inventory.sh"
-echo "==> SBOM and vulnerability-policy tests"
-bash "$ROOT/distro/scripts/test-sbom.sh"
-echo "==> Encrypted backup and incident-response rehearsal"
-bash "$ROOT/distro/scripts/test-incident-response.sh"
-echo "==> Release test isolation"
-bash "$ROOT/distro/scripts/test-release-isolation.sh"
-echo "==> Beta-to-stable promotion verification"
-python3 "$ROOT/distro/scripts/test-beta-promotion.py"
-bash "$ROOT/distro/scripts/test-prepare-beta-promotion.sh"
-echo "==> Browser JavaScript syntax"
-docker run --rm -v "$ROOT:/src" -w /src \
-    node:22-bookworm node distro/scripts/test-web-js.js
-echo "==> Installer preflight behavior"
-bash "$ROOT/distro/scripts/test-preinstall.sh"
-echo "==> Building and validating the $VERSION release candidates for AMD64 and ARM64"
-docker run --rm -e CLOUDLESS_VERSION="$VERSION" -v "$ROOT:/src" -w /src \
-    cloudless-package-builder bash distro/scripts/test-architectures.sh
-echo "==> Validating release package contents (reusing the candidates just built)"
-docker run --rm -e CLOUDLESS_VERSION="$VERSION" -e CLOUDLESS_SKIP_PACKAGE_BUILD=1 -v "$ROOT:/src" -w /src \
-    cloudless-package-builder bash distro/scripts/test-packages.sh
-echo "==> Isolated Debian install, upgrade and rollback"
-for architecture in amd64 arm64; do
-    CLOUDLESS_TEST_ARCH="$architecture" bash "$ROOT/distro/scripts/test-package-lifecycle.sh"
-done
+echo "==> Local exact-commit qualification (no hosted CI)"
+bash "$ROOT/distro/scripts/run-local-qualification.sh" \
+    "$VERSION" "$CHANNEL" "$full_commit" "$ci_output"
 echo "==> Generating SPDX SBOM for the exact release candidates"
 rm -rf "$ROOT/distro/out/security"
 mkdir -p "$ROOT/distro/out/security"

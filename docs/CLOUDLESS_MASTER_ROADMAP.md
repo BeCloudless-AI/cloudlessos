@@ -599,7 +599,7 @@ Implementation status (July 31, 2026):
   public/Tailscale access, recipes/containers, signed updates and Spark peers. Physical VM/Spark
   restore evidence remains unfinished, so the combined operations item above intentionally remains
   open.
-- Dependabot proposes weekly, separately reviewable Go module, recipe-indexer npm and GitHub Actions
+- Dependabot proposes weekly, separately reviewable Go module and recipe-indexer npm
   updates. Every proposal passes the same vulnerability, multi-architecture, recovery and soak
   gates; automated merging remains disabled.
 - Tailscale installation no longer downloads and executes a root shell script. Cloudless writes the
@@ -687,7 +687,7 @@ Done gate:
 
 ## P9 — Release qualification and supportability
 
-- [ ] Build a CI matrix for AMD64/ARM64, unit/integration/API concurrency, frontend syntax and visual
+- [ ] Retain a complete local qualification matrix for AMD64/ARM64, unit/integration/API concurrency, frontend syntax and visual
   regression, package installation, upgrade and rollback.
 - [x] Maintain a physical test matrix for VirtualBox, generic NVIDIA PCs, one Spark and two-to-eight
   Spark subsets.
@@ -701,14 +701,15 @@ Done gate:
 
 Implementation status (July 31, 2026):
 
-- The single `CloudlessOS qualification` workflow now runs the full Go suite under the race
+- The single local release qualification runner now runs the full Go suite under the race
   detector, `go vet`, AMD64/ARM64 cross-compilation, browser JavaScript parsing, release/security
   policy tests and the encrypted recovery rehearsal.
 - A three-target platform matrix validates generic AMD64, generic ARM64 and DGX Spark ARM64
   behavior. A package job builds both Debian generations and inspects their payload contracts.
-- Windows CI captures the responsive visual smoke matrix and retains the screenshots. The lifecycle
-  soak repeats job/operation stores plus selected application, inference, recipe Abort, rollback
-  and reboot-recovery tests three times on each push and 25 times every Monday. It also repeats
+- The Windows/WSL release workstation captures the responsive visual smoke matrix and retains the
+  screenshots. The lifecycle soak repeats job/operation stores plus selected application,
+  inference, recipe Abort, rollback and reboot-recovery tests three times for each release
+  qualification; release-candidate operators run the same runner with 25 repeats. It also repeats
   browser/terminal session contracts, update idempotency, resumable downloads and the complete
   two-to-eight-Spark state/recovery suite. The process-level browser-agent soak now additionally
   proves unavailable-browser retry without request loss, singleton-agent locking, immediate
@@ -721,37 +722,33 @@ Implementation status (July 31, 2026):
   rollback, starts the packaged desktop agent as `cloudless`, proves root is rejected by its
   exact-UID boundary and proves `cloudlessd` is admitted. `package-lifecycle` is a mandatory
   signed-release gate. The exact current AMD64 transition passed locally on July 31, 2026; the
-  ARM64 binaries cross-build locally and the existing QEMU-enabled CI job executes the same
-  lifecycle because this workstation does not have ARM64 binfmt registered.
+  ARM64 binaries cross-build locally and the QEMU-enabled local package runner executes the same
+  lifecycle when ARM64 binfmt is registered.
 - Package qualification now retains the exact AMD64/ARM64 Debian generation plus build, payload,
   upgrade and rollback logs for 30 days even when the job fails. Visual captures and lifecycle-soak
   JSONL/process logs use run-specific artifact names and the same 30-day review window. The source
   policy gate rejects removal of any of these three evidence classes.
-- Release signing now verifies GitHub's exact-commit `CloudlessOS qualification` run instead of
-  trusting a local statement that CI passed. For stable 1.0+, all seven required jobs must succeed
-  and the run-specific package, visual-regression and lifecycle-soak artifacts must still exist.
+- Release signing now verifies exact-commit local qualification evidence instead of trusting an
+  operator statement that tests passed. For stable 1.0+, all seven required jobs must succeed and
+  the run-specific package, visual-regression and lifecycle-soak artifacts must still exist with
+  their recorded SHA-256 and size.
   The generated `cloudless.ci-qualification.v1` descriptor is embedded in the release gates,
   detached-signed, published, checked again before R2 promotion and independently enforced by the
-  installed updater. Pre-1.0 releases remain explicit `not-qualified`. A current retained green run
-  is still required before the 1.0 gate can be closed.
-- Hosted CI diagnostics now distinguish a commit with no dispatch, an ordinary failed run and a
-  GitHub `startup_failure` that creates zero jobs. The collector links the exact rejected run,
-  accepts the authenticated `gh.exe` exposed to the supported WSL release environment, and points
-  the operator to Actions access/billing before workflow syntax. The current master workflow passes
-  official `actionlint`, is active with Actions enabled, but GitHub run `30631775752` was rejected in
-  one second with zero jobs on July 31, 2026. This is external operational evidence, not a green
-  matrix, so the CI checklist remains open and the 1.0 release gate remains fail-closed.
+  installed updater. A current retained green local run is still required before the 1.0 gate can
+  be closed. GitHub Actions workflows were removed because qualification must not depend on a paid
+  hosted service.
 - The lifecycle soak now includes a process-level burst of browser requests interrupted by an
   agent restart, proving no request is discarded and the same persistent profile is reused. It
   also drives 64 simultaneous local terminal-proxy sessions alongside 64 rejected remote attempts,
   and churns healthy, failed, reconnected and fully disconnected state across every selected
   cluster size from two through eight for 100 cycles per test invocation. Its API matrix also binds
   seven cluster failure domains to all nine durable non-terminal inference phases and proves the
-  UI retains an Abort path without reporting the degraded cluster as ready. Pushes repeat this under
-  the race detector three times and the weekly schedule repeats it 25 times. A source-policy check
-  prevents these exact contracts from being silently removed from the soak workflow. Every run,
-  including a failure, now retains its commit/ref/count metadata, JSONL Go race-test events and
-  process-level browser log as a 30-day CI artifact.
+  UI retains an Abort path without reporting the degraded cluster as ready. Normal local
+  qualification repeats this under the race detector three times; release-candidate qualification
+  uses 25 repeats. A source-policy check prevents these exact contracts from being silently removed
+  from the local runner. Successful runs retain commit/count metadata, JSONL Go race-test events and
+  the process-level browser log in a digest-bound artifact; interrupted runs retain diagnostics but
+  cannot create qualification evidence.
 - Upgrade/rollback qualification no longer treats retained model bytes as sufficient. The
   disposable package lifecycle migrates a legacy cache before upgrading, runs a deterministic
   OpenAI model endpoint as `cloudlessd` whose readiness depends on reading that exact host-cache
@@ -865,12 +862,12 @@ prevent safe engineering work that can be completed and tested locally.
 
 Engineering track:
 
-1. Retain the AMD64 and QEMU/ARM64 CI evidence from the installed-session integration rehearsal;
+1. Retain the AMD64 and QEMU/ARM64 local evidence from the installed-session integration rehearsal;
    the package lifecycle now exercises the daemon, desktop agent, browser and terminal together.
-2. Retain the AMD64 and QEMU/ARM64 CI evidence for active-model upgrade/rollback continuity; the
+2. Retain the AMD64 and QEMU/ARM64 local evidence for active-model upgrade/rollback continuity; the
    deterministic package rehearsal now covers the migrated host cache and real readiness contract.
-3. Retain the first green `lifecycle-soak` CI artifact from the browser restart, concurrent terminal
-   and two-to-eight-Spark churn workflow, then retain a weekly 25-repeat artifact for the release
+3. Retain the first green local `lifecycle-soak` artifact from the browser restart, concurrent
+   terminal and two-to-eight-Spark churn runner, then retain a 25-repeat artifact for the release
    candidate.
 4. Retain a physical VM/Spark restore rehearsal using the encrypted control-plane backup.
 

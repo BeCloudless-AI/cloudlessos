@@ -66,9 +66,15 @@ grep -Fq 'qualificationPhaseGateOwnerUID uint32 = 0' "$ROOT/orchestrator/interna
 grep -Fq 'qualificationRollbackRequested()' "$ROOT/orchestrator/internal/api/server.go"
 python3 "$ROOT/distro/scripts/test-physical-release.py"
 
-workflow="$ROOT/.github/workflows/multiarch.yml"
-grep -Fq 'name: package-qualification-${{ github.run_id }}-${{ github.run_attempt }}' "$workflow"
-grep -Fq 'distro/out/packages/*.deb' "$workflow"
-grep -Fq 'name: visual-regression-${{ github.run_id }}-${{ github.run_attempt }}' "$workflow"
-test "$(grep -Fc 'retention-days: 30' "$workflow")" -ge 3
-echo "CI retains package, visual and lifecycle-soak evidence for 30 days."
+runner="$ROOT/distro/scripts/run-local-qualification.sh"
+grep -Fq 'package-qualification-$run_id-$attempt' "$runner"
+grep -Fq 'name "*_${VERSION}_*.deb"' "$runner"
+grep -Fq 'Expected exactly 12 AMD64/ARM64 release candidates' "$runner"
+grep -Fq 'visual-regression-$run_id-$attempt' "$runner"
+grep -Fq 'lifecycle-soak-$run_id-$attempt' "$runner"
+grep -Fq 'prepare-ci-qualification.py' "$runner"
+if [ -d "$ROOT/.github/workflows" ] && find "$ROOT/.github/workflows" -type f \( -name '*.yml' -o -name '*.yaml' \) -print -quit | grep -q .; then
+    echo "Hosted GitHub Actions workflows must remain disabled." >&2
+    exit 1
+fi
+echo "Local exact-commit qualification retains hashed package, visual and lifecycle-soak evidence."

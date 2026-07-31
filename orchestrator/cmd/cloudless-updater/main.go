@@ -136,17 +136,27 @@ type releaseSecurityReadiness struct {
 }
 
 type releaseCIQualification struct {
-	Schema       string   `json:"schema"`
-	Status       string   `json:"status"`
-	Required     bool     `json:"required"`
-	Version      string   `json:"version"`
-	Channel      string   `json:"channel"`
-	SourceCommit string   `json:"sourceCommit"`
-	Workflow     string   `json:"workflow"`
-	RunID        int64    `json:"runId"`
-	RunAttempt   int64    `json:"runAttempt"`
-	Jobs         []string `json:"jobs"`
-	Artifacts    []string `json:"artifacts"`
+	Schema           string              `json:"schema"`
+	Status           string              `json:"status"`
+	Required         bool                `json:"required"`
+	Version          string              `json:"version"`
+	Channel          string              `json:"channel"`
+	SourceCommit     string              `json:"sourceCommit"`
+	Runner           string              `json:"runner"`
+	Workflow         string              `json:"workflow"`
+	RunID            int64               `json:"runId"`
+	RunAttempt       int64               `json:"runAttempt"`
+	Jobs             []string            `json:"jobs"`
+	Artifacts        []string            `json:"artifacts"`
+	JobEvidence      []releaseCIEvidence `json:"jobEvidence"`
+	ArtifactEvidence []releaseCIEvidence `json:"artifactEvidence"`
+}
+
+type releaseCIEvidence struct {
+	Name   string `json:"name"`
+	File   string `json:"file"`
+	SHA256 string `json:"sha256"`
+	Size   int64  `json:"size"`
 }
 
 type releaseCompatibility struct {
@@ -1126,7 +1136,7 @@ func validateCIQualification(release releaseManifest) error {
 	if qualification.Status != "qualified" {
 		return nil
 	}
-	if qualification.Workflow != ".github/workflows/multiarch.yml" || qualification.RunID <= 0 || qualification.RunAttempt <= 0 {
+	if qualification.Runner != "cloudless-local-release" || qualification.Workflow != "distro/scripts/run-local-qualification.sh" || qualification.RunID <= 0 || qualification.RunAttempt <= 0 {
 		return errors.New("release CI workflow evidence is invalid")
 	}
 	requiredJobs := map[string]bool{
@@ -1160,6 +1170,32 @@ func validateCIQualification(release releaseManifest) error {
 	}
 	if len(qualification.Artifacts) != len(requiredArtifacts) {
 		return errors.New("release CI artifact evidence is incomplete")
+	}
+	if err := validateRetainedCIEvidence(qualification.JobEvidence, requiredJobs); err != nil {
+		return fmt.Errorf("release CI job evidence is invalid: %w", err)
+	}
+	if err := validateRetainedCIEvidence(qualification.ArtifactEvidence, requiredArtifacts); err != nil {
+		return fmt.Errorf("release CI artifact evidence is invalid: %w", err)
+	}
+	return nil
+}
+
+func validateRetainedCIEvidence(records []releaseCIEvidence, required map[string]bool) error {
+	seen := make(map[string]bool, len(records))
+	for _, record := range records {
+		if _, ok := required[record.Name]; !ok || seen[record.Name] {
+			return errors.New("unexpected or duplicate retained record")
+		}
+		if record.File == "" || filepath.Base(record.File) != record.File || len(record.SHA256) != sha256.Size*2 || record.Size <= 0 {
+			return errors.New("retained record identity is malformed")
+		}
+		if _, err := hex.DecodeString(record.SHA256); err != nil {
+			return errors.New("retained record digest is malformed")
+		}
+		seen[record.Name] = true
+	}
+	if len(seen) != len(required) {
+		return errors.New("retained record inventory is incomplete")
 	}
 	return nil
 }

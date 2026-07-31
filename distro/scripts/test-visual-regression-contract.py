@@ -4,7 +4,7 @@ from pathlib import Path
 
 root = Path(__file__).resolve().parents[2]
 baseline_path = root / "scripts" / "visual-baseline.json"
-workflow_path = root / ".github" / "workflows" / "multiarch.yml"
+runner_path = root / "distro" / "scripts" / "run-local-qualification.sh"
 script_path = root / "scripts" / "visual-regression.ps1"
 
 baseline = json.loads(baseline_path.read_text(encoding="utf-8-sig"))
@@ -49,12 +49,12 @@ for name, capture in by_name.items():
     if any(not isinstance(value, int) or value < 0 or value > 255 for value in signature):
         raise SystemExit(f"{name} has an invalid luminance sample")
 
-workflow = workflow_path.read_text(encoding="utf-8")
-if "run: ./scripts/visual-regression.ps1\n" not in workflow:
-    raise SystemExit("CI must run the full visual-regression matrix without -Quick")
-for required in ("name: visual-regression", "path: artifacts/visual-regression", "if-no-files-found: error"):
-    if required not in workflow:
-        raise SystemExit(f"visual artifact retention is missing {required!r}")
+runner = runner_path.read_text(encoding="utf-8")
+if "visual-regression.ps1" not in runner or "-Quick" in runner:
+    raise SystemExit("local qualification must run the full visual-regression matrix without -Quick")
+for required in ("visual-regression-", "visual.log", "tar.gz"):
+    if required not in runner:
+        raise SystemExit(f"local visual artifact retention is missing {required!r}")
 
 script = script_path.read_text(encoding="utf-8-sig")
 for required in (
@@ -67,4 +67,4 @@ for required in (
     if required not in script:
         raise SystemExit(f"visual comparison implementation is missing {required!r}")
 
-print("Visual baseline contract covers 17 full-matrix surfaces with a bounded comparison threshold.")
+print("Local visual qualification covers 17 full-matrix surfaces with a bounded comparison threshold and retained artifact.")

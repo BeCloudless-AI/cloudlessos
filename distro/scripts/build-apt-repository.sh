@@ -140,7 +140,7 @@ for field, expected in (("version", version), ("channel", channel), ("sourceComm
 if required_ci and ci.get("status") != "qualified":
     raise SystemExit("CloudlessOS 1.0+ stable releases require exact-commit CI qualification")
 if ci.get("status") == "qualified":
-    if ci.get("workflow") != ".github/workflows/multiarch.yml" or not isinstance(ci.get("runId"), int) or ci["runId"] <= 0 or not isinstance(ci.get("runAttempt"), int) or ci["runAttempt"] <= 0:
+    if ci.get("runner") != "cloudless-local-release" or ci.get("workflow") != "distro/scripts/run-local-qualification.sh" or not isinstance(ci.get("runId"), int) or ci["runId"] <= 0 or not isinstance(ci.get("runAttempt"), int) or ci["runAttempt"] <= 0:
         raise SystemExit("CI qualification workflow evidence is invalid")
     jobs = {"Source, concurrency and security policies", "generic / amd64", "generic / arm64", "dgx-spark / arm64", "AMD64 and ARM64 package payloads", "Interface capture smoke test", "Durable lifecycle soak"}
     if set(ci.get("jobs", [])) != jobs:
@@ -148,6 +148,12 @@ if ci.get("status") == "qualified":
     artifacts = {f"{prefix}-{ci['runId']}-{ci['runAttempt']}" for prefix in ("package-qualification", "visual-regression", "lifecycle-soak")}
     if set(ci.get("artifacts", [])) != artifacts:
         raise SystemExit("CI qualification evidence is incomplete")
+    for field, expected in (("jobEvidence", jobs), ("artifactEvidence", artifacts)):
+        records = ci.get(field)
+        if not isinstance(records, list) or {item.get("name") for item in records if isinstance(item, dict)} != expected:
+            raise SystemExit(f"CI qualification retained {field} inventory is incomplete")
+        if any(not isinstance(item.get("file"), str) or "/" in item["file"] or "\\" in item["file"] or len(item.get("sha256", "")) != 64 or not isinstance(item.get("size"), int) or item["size"] <= 0 for item in records):
+            raise SystemExit(f"CI qualification retained {field} identity is invalid")
 with open(ci_path, encoding="utf-8") as handle:
     if json.load(handle) != ci:
         raise SystemExit("CI qualification descriptor changed after release gates were created")

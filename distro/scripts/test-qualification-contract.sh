@@ -58,7 +58,7 @@ if failure_targets != {"dgx-spark-arm64-2"}:
 print("Physical qualification contract covers VM, NVIDIA and every one-to-eight-Spark topology.")
 PY
 python3 "$ROOT/distro/scripts/test-physical-qualification.py"
-python3 "$ROOT/distro/packages/cloudless-firstboot/cloudless-qualify" --help | grep -Fq '{begin,boot,boot-active,record,collect,soak,update-rollback,backup-restore,status,plan,next,export,verify-export,verify-set}'
+python3 "$ROOT/distro/packages/cloudless-firstboot/cloudless-qualify" --help | grep -Fq '{begin,boot,boot-active,record,collect,soak,update-rollback,backup-restore,cluster-failure,status,plan,next,export,verify-export,verify-set}'
 python3 "$ROOT/distro/scripts/test-physical-release.py"
 
 workflow="$ROOT/.github/workflows/multiarch.yml"

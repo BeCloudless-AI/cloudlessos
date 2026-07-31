@@ -353,8 +353,8 @@ Implementation status (July 31, 2026):
   node's utilization, memory, storage, temperature, power and link status.
 - [x] Prevent disconnect while distributed work owns remote resources unless cleanup is completed
   or explicitly left as a visible degraded obligation.
-- [ ] Test packet loss, address changes, coordinator loss, worker loss, reboot, role reversal and
-  partial cleanup at every inference lifecycle phase.
+- [ ] Complete retained physical evidence for packet loss, address changes, coordinator loss,
+  worker loss, reboot, role reversal and partial cleanup at every inference lifecycle phase.
 - [x] Add the DGX Dashboard entry and NVIDIA branding only when the DGX capability is detected.
 - [x] Maintain a validated recipe/profile library for supported distributed configurations rather
   than assuming arbitrary upstream scripts are production-ready.
@@ -403,6 +403,12 @@ Implementation status (July 31, 2026):
   An abort or unload already in progress cannot recursively expose Abort. This matrix is repeated in
   the race-enabled lifecycle soak; the roadmap item remains open until the same phase/failure matrix
   has recorded physical multi-Spark evidence.
+- The packaged `cloudless-qualify cluster-failure` runner now turns that same authoritative 7x9
+  matrix into resumable physical rehearsals. It observes the durable phase and hashed operation
+  identity, checkpoints before fault injection, requires fail-closed readiness plus Abort, and only
+  passes after healthy recovery or a safe unload. Rejected role reversal instead requires retained
+  rejection evidence while proving the healthy workload was not disturbed. Interrupted cases block
+  campaign sealing; no peer identities, addresses, messages or logs enter the generated evidence.
 - Automatic distributed inference now passes through a versioned reviewed-profile allow-list. The
   initial profile pins Qwen 3.6 35B A3B to its immutable Hugging Face revision, vLLM, ARM64 DGX Spark
   unified memory, the measured two-node topology, 32K context and the stable `cloudless` model alias.

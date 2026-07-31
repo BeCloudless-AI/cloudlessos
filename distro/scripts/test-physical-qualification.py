@@ -105,6 +105,40 @@ class PhysicalQualificationTest(unittest.TestCase):
             boot_health_path=self.boot_health(boot_id),
         )
 
+    def cluster_sample(self, phase="", *, ready=True, degraded=False, can_abort=False, unloaded=False):
+        operation_hash = "a" * 24 if phase else ""
+        return {
+            "capturedAt": "2026-07-31T00:00:00Z",
+            "bootId": "00000000-0000-0000-0000-000000000001",
+            "cluster": {
+                "configured": True,
+                "healthy": not degraded,
+                "computeHealthy": not degraded,
+                "nodeCount": 2,
+                "computeNodeCount": 2 if not degraded else 1,
+                "selectedNodes": 1,
+                "operation": "",
+                "phase": "",
+                "rollbackRequired": False,
+                "operationFailed": False,
+            },
+            "engine": {
+                "executionMode": "cluster",
+                "active": True,
+                "ready": ready,
+                "unloaded": unloaded,
+                "degraded": degraded,
+                "operation": "loading" if phase else "idle",
+                "canAbort": can_abort,
+                "durableOperation": {
+                    "idHash": operation_hash,
+                    "action": "switch" if phase else "",
+                    "phase": phase,
+                    "failed": False,
+                },
+            },
+        }
+
     def test_complete_campaign_and_tamper_detection(self):
         campaign = self.begin()
         for number in range(10):
@@ -879,6 +913,69 @@ class PhysicalQualificationTest(unittest.TestCase):
             "backup-and-restore: an interrupted rehearsal must be resumed or discarded",
             errors,
         )
+
+    def test_cluster_failure_rehearsal_covers_authoritative_seven_by_nine_matrix(self):
+        campaign = self.begin("dgx-spark-arm64-2", "aarch64", "dgx-spark")
+        qualify.activate_campaign(campaign, self.root)
+        matrix = qualify.load_matrix(self.matrix)
+        for failure in matrix["clusterFailureDomains"]:
+            for phase in matrix["inferenceLifecyclePhases"]:
+                baseline = self.cluster_sample()
+                observed = self.cluster_sample(phase, ready=True)
+                if failure == "role-reversal-rejected":
+                    responses = iter([baseline, observed, observed])
+                    rejection = self.evidence
+                else:
+                    degraded = self.cluster_sample(phase, ready=False, degraded=True, can_abort=True)
+                    recovered = self.cluster_sample(phase, ready=False, unloaded=True)
+                    responses = iter([baseline, observed, degraded, recovered])
+                    rejection = None
+                output = qualify.run_cluster_failure_rehearsal(
+                    campaign,
+                    self.matrix,
+                    failure,
+                    phase,
+                    rejection_evidence=rejection,
+                    snapshot_provider=lambda responses=responses: next(responses),
+                    sleeper=lambda _: None,
+                    reporter=lambda _: None,
+                    wait_attempts=4,
+                    qualification_root_path=self.root,
+                )
+                self.assertTrue(output.is_file())
+                check = f"cluster-failure--{failure}--{phase}"
+                self.assertEqual(qualify.load_json(campaign / "checks" / f"{check}.json")["status"], "pass")
+        results = list((campaign / "checks").glob("cluster-failure--*.json"))
+        self.assertEqual(len(results), 63)
+        retained = "\n".join(path.read_text(encoding="utf-8") for path in results)
+        self.assertNotIn("peerHost", retained)
+        self.assertNotIn("selectedHosts", retained)
+
+    def test_interrupted_cluster_failure_rehearsal_prevents_campaign_sealing(self):
+        campaign = self.begin("dgx-spark-arm64-2", "aarch64", "dgx-spark")
+        checkpoint = campaign / "evidence" / ".cluster-failure-state.json"
+        checkpoint.write_text(
+            json.dumps({"schema": qualify.CLUSTER_FAILURE_REHEARSAL_SCHEMA, "stage": "waiting-degradation"}),
+            encoding="utf-8",
+        )
+        self.assertIn(
+            "cluster-failure: an interrupted rehearsal must be resumed or discarded",
+            qualify.validate_campaign(campaign, self.matrix),
+        )
+
+    def test_cluster_failure_rehearsal_rejects_non_matrix_target(self):
+        campaign = self.begin()
+        qualify.activate_campaign(campaign, self.root)
+        with self.assertRaisesRegex(ValueError, "failure-matrix target"):
+            qualify.run_cluster_failure_rehearsal(
+                campaign,
+                self.matrix,
+                "packet-loss",
+                "loading",
+                snapshot_provider=lambda: self.cluster_sample(),
+                sleeper=lambda _: None,
+                qualification_root_path=self.root,
+            )
 
 
 if __name__ == "__main__":

@@ -33,6 +33,7 @@ SET_SCHEMA = "cloudless.physical-set.v1"
 SOAK_SCHEMA = "cloudless.physical-soak.v1"
 UPDATE_REHEARSAL_SCHEMA = "cloudless.physical-update-rehearsal.v1"
 BACKUP_REHEARSAL_SCHEMA = "cloudless.physical-backup-rehearsal.v1"
+CLUSTER_FAILURE_REHEARSAL_SCHEMA = "cloudless.physical-cluster-failure-rehearsal.v1"
 DEFAULT_MATRIX = Path("/usr/share/cloudless/physical-validation-matrix.json")
 DEFAULT_UPDATE_STATUS = Path("/var/lib/cloudless-updater/status.json")
 DEFAULT_BOOT_HEALTH = Path("/var/lib/cloudless/boot-health.json")
@@ -487,6 +488,16 @@ def print_plan(campaign: Path, matrix_path: Path, *, only_next: bool = False, as
         if check == "ten-boot-cycles":
             print("Managed campaigns record healthy boots automatically after the graphical audit.")
             print(f"Manual fallback: sudo cloudless-qualify boot {quoted_campaign}")
+        elif check.startswith("cluster-failure--"):
+            _, failure, phase = check.split("--", 2)
+            command = (
+                f"sudo cloudless-qualify cluster-failure {quoted_campaign} "
+                f"{shlex.quote(failure)} {shlex.quote(phase)}"
+            )
+            if failure == "role-reversal-rejected":
+                command += " --rejection-evidence /path/to/redacted-rejection-proof"
+            print("Start this observer, then follow its fault-injection and recovery prompts:")
+            print(f"  {command}")
         else:
             print("After collecting redacted evidence:")
             print(
@@ -1547,6 +1558,232 @@ def run_backup_restore_rehearsal(
         raise ValueError("saved backup rehearsal stage is invalid")
 
 
+def cluster_failure_snapshot(api_base: str) -> dict:
+    """Capture only the stable, non-identifying cluster failure contract."""
+    engine = soak_http_json(api_base, "/api/engine", 15)
+    cluster = soak_http_json(api_base, "/api/system/spark-cluster", 20)
+    if not isinstance(engine, dict) or not isinstance(cluster, dict):
+        raise ValueError("Cloudless returned a malformed cluster qualification response")
+    operation = engine.get("operationJournal") if isinstance(engine.get("operationJournal"), dict) else {}
+    cluster_operation = cluster.get("operation") if isinstance(cluster.get("operation"), dict) else {}
+    operation_id = str(operation.get("id", ""))
+    return {
+        "capturedAt": utc_now(),
+        "bootId": current_boot_id(),
+        "cluster": {
+            "configured": bool(cluster.get("configured", False)),
+            "healthy": bool(cluster.get("healthy", False)),
+            "computeHealthy": bool(cluster.get("computeHealthy", False)),
+            "nodeCount": bounded_soak_int(cluster.get("nodeCount"), 8),
+            "computeNodeCount": bounded_soak_int(cluster.get("computeNodeCount"), 8),
+            "selectedNodes": len(cluster.get("selectedHosts", []))
+            if isinstance(cluster.get("selectedHosts"), list)
+            else 0,
+            "operation": str(cluster_operation.get("action", ""))[:32],
+            "phase": str(cluster_operation.get("phase", ""))[:64],
+            "rollbackRequired": bool(cluster_operation.get("rollbackRequired", False)),
+            "operationFailed": bool(cluster_operation.get("error")),
+        },
+        "engine": {
+            "executionMode": str(engine.get("executionMode", ""))[:16],
+            "active": bool(str(engine.get("active", ""))),
+            "ready": bool(engine.get("ready", False)),
+            "unloaded": bool(engine.get("unloaded", False)),
+            "degraded": bool(engine.get("degraded", False)),
+            "operation": str(engine.get("operation", ""))[:32],
+            "canAbort": bool(engine.get("canAbort", False)),
+            "durableOperation": {
+                "idHash": hashlib.sha256(operation_id.encode()).hexdigest()[:24] if operation_id else "",
+                "action": str(operation.get("action", ""))[:32],
+                "phase": str(operation.get("phase", ""))[:64],
+                "failed": bool(operation.get("error")),
+            },
+        },
+    }
+
+
+def wait_for_cluster_failure_state(predicate, snapshot_provider, attempts, sleeper, reporter, label) -> dict:
+    last: dict | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            sample = snapshot_provider()
+            if not isinstance(sample, dict):
+                raise ValueError("cluster qualification snapshot is malformed")
+            last = sample
+            if predicate(sample):
+                return sample
+        except (OSError, ValueError, json.JSONDecodeError):
+            pass
+        if attempt == 1 or attempt % 20 == 0:
+            reporter(f"{label} ({attempt}/{attempts})")
+        sleeper(1)
+    raise ValueError(f"timed out while {label.lower()}")
+
+
+def cluster_baseline_ready(sample: dict, expected_nodes: int) -> bool:
+    cluster = sample.get("cluster", {})
+    engine = sample.get("engine", {})
+    return bool(
+        cluster.get("configured")
+        and cluster.get("healthy")
+        and cluster.get("computeHealthy")
+        and cluster.get("nodeCount") == expected_nodes
+        and cluster.get("selectedNodes") == expected_nodes - 1
+        and engine.get("executionMode") == "cluster"
+        and engine.get("active")
+        and engine.get("ready")
+        and not engine.get("degraded")
+    )
+
+
+def run_cluster_failure_rehearsal(
+    campaign_path: Path,
+    matrix_path: Path,
+    failure: str,
+    phase: str,
+    api_base: str = "http://127.0.0.1:8765",
+    *,
+    discard_progress: bool = False,
+    rejection_evidence: Path | None = None,
+    snapshot_provider=None,
+    sleeper=time.sleep,
+    reporter=print,
+    wait_attempts: int = 1800,
+    qualification_root_path: Path | None = None,
+) -> Path:
+    with qualification_activity_lock(campaign_path):
+        matrix = load_matrix(matrix_path)
+        target = campaign_target(campaign_path, matrix)
+        campaign = load_json(campaign_path / "campaign.json")
+        if not target.get("failureMatrix"):
+            raise ValueError("cluster failure rehearsal requires the representative failure-matrix target")
+        if failure not in matrix.get("clusterFailureDomains", []):
+            raise ValueError(f"unknown cluster failure domain: {failure}")
+        if phase not in matrix.get("inferenceLifecyclePhases", []):
+            raise ValueError(f"unknown inference lifecycle phase: {phase}")
+        if campaign.get("matrixSha256") != sha256_file(matrix_path):
+            raise ValueError("campaign matrix digest does not match the authoritative matrix")
+        if (campaign_path / "qualification-result.json").exists():
+            raise ValueError("a sealed qualification campaign cannot run a cluster failure rehearsal")
+        active_path, _ = active_campaign(qualification_root_path)
+        if active_path != campaign_path.resolve():
+            raise ValueError("cluster failure rehearsal requires this exact campaign to be active")
+        api_base = validated_soak_api_base(api_base)
+        if not 1 <= wait_attempts <= 7200:
+            raise ValueError("cluster failure wait must be between 1 second and two hours")
+        if failure == "role-reversal-rejected" and rejection_evidence is None:
+            raise ValueError("role reversal qualification requires --rejection-evidence from the rejected action")
+
+        state_path = campaign_path / "evidence" / ".cluster-failure-state.json"
+        if state_path.is_symlink() or (state_path.exists() and not state_path.is_file()):
+            raise ValueError("cluster failure checkpoint must be a regular non-symlink file")
+        if discard_progress:
+            state_path.unlink(missing_ok=True)
+        check = f"cluster-failure--{failure}--{phase}"
+        identity = {
+            "campaignSha256": sha256_file(campaign_path / "campaign.json"),
+            "target": target["id"],
+            "version": campaign["version"],
+            "sourceCommit": campaign["sourceCommit"],
+            "failure": failure,
+            "phase": phase,
+            "apiBase": api_base,
+            "check": check,
+        }
+        provider = snapshot_provider or (lambda: cluster_failure_snapshot(api_base))
+        if state_path.exists():
+            state = load_json(state_path)
+            if state.get("schema") != CLUSTER_FAILURE_REHEARSAL_SCHEMA or any(
+                state.get(key) != value for key, value in identity.items()
+            ):
+                raise ValueError("saved cluster failure rehearsal does not match this campaign or command")
+        else:
+            baseline = wait_for_cluster_failure_state(
+                lambda sample: cluster_baseline_ready(sample, int(target["nodes"])),
+                provider, wait_attempts, sleeper, reporter, "Waiting for a healthy distributed-model baseline",
+            )
+            state = {
+                "schema": CLUSTER_FAILURE_REHEARSAL_SCHEMA,
+                **identity,
+                "startedAt": utc_now(),
+                "stage": "waiting-phase",
+                "baseline": baseline,
+            }
+            atomic_json(state_path, state)
+
+        if state.get("stage") == "waiting-phase":
+            reporter(f"Start or switch a distributed model; waiting for its {phase!r} durable phase.")
+            observed = wait_for_cluster_failure_state(
+                lambda sample: sample.get("engine", {}).get("durableOperation", {}).get("phase") == phase
+                and bool(sample.get("engine", {}).get("durableOperation", {}).get("idHash")),
+                provider, wait_attempts, sleeper, reporter, f"Waiting for inference phase {phase}",
+            )
+            state["phaseObserved"] = observed
+            state["operationIdHash"] = observed["engine"]["durableOperation"]["idHash"]
+            state["stage"] = "waiting-rejection" if failure == "role-reversal-rejected" else "waiting-degradation"
+            atomic_json(state_path, state)
+
+        operation_hash = str(state.get("operationIdHash", ""))
+        if not re.fullmatch(r"[0-9a-f]{24}", operation_hash):
+            raise ValueError("saved cluster failure operation identity is malformed")
+
+        if state.get("stage") == "waiting-rejection":
+            reporter("Attempt the role reversal now. Cloudless must reject it without disturbing the healthy workload.")
+            rejected = wait_for_cluster_failure_state(
+                lambda sample: cluster_baseline_ready(sample, int(target["nodes"]))
+                and sample.get("engine", {}).get("durableOperation", {}).get("idHash") == operation_hash,
+                provider, wait_attempts, sleeper, reporter, "Verifying the rejected role reversal left the cluster healthy",
+            )
+            state["rejected"] = rejected
+            state["stage"] = "complete"
+        elif state.get("stage") == "waiting-degradation":
+            reporter(check_guidance(check))
+            degraded = wait_for_cluster_failure_state(
+                lambda sample: sample.get("engine", {}).get("durableOperation", {}).get("idHash") == operation_hash
+                and not sample.get("engine", {}).get("ready")
+                and (sample.get("engine", {}).get("degraded") or not sample.get("cluster", {}).get("computeHealthy"))
+                and sample.get("engine", {}).get("canAbort"),
+                provider, wait_attempts, sleeper, reporter, "Waiting for truthful fail-closed degradation with Abort available",
+            )
+            state["degraded"] = degraded
+            state["stage"] = "waiting-recovery"
+            atomic_json(state_path, state)
+
+        if state.get("stage") == "waiting-recovery":
+            reporter("Restore the failed cable, node, address, or cleanup path now. Abort is also a valid safe recovery.")
+            recovered = wait_for_cluster_failure_state(
+                lambda sample: sample.get("cluster", {}).get("healthy")
+                and sample.get("cluster", {}).get("computeHealthy")
+                and sample.get("cluster", {}).get("nodeCount") == int(target["nodes"])
+                and not sample.get("cluster", {}).get("rollbackRequired")
+                and not sample.get("engine", {}).get("degraded")
+                and (sample.get("engine", {}).get("ready") or sample.get("engine", {}).get("unloaded")),
+                provider, wait_attempts, sleeper, reporter, "Waiting for healthy recovery or a verified safe unload",
+            )
+            state["recovered"] = recovered
+            state["stage"] = "complete"
+
+        if state.get("stage") != "complete":
+            raise ValueError("saved cluster failure rehearsal stage is invalid")
+        state["completedAt"] = utc_now()
+        reject_secrets(json.dumps(state, sort_keys=True))
+        output = campaign_path / "evidence" / f"{check}.json"
+        atomic_json(output, state)
+        evidence = [output]
+        if rejection_evidence is not None:
+            evidence.append(rejection_evidence)
+        record_check(
+            campaign_path,
+            matrix_path,
+            check,
+            "pass",
+            f"Observed {failure} during {phase}; Cloudless preserved a truthful and recoverable cluster state.",
+            evidence,
+        )
+        state_path.unlink(missing_ok=True)
+        return output
+
+
 def validate_campaign(campaign: Path, matrix_path: Path) -> list[str]:
     errors: list[str] = []
     try:
@@ -1567,6 +1804,8 @@ def validate_campaign(campaign: Path, matrix_path: Path) -> list[str]:
         errors.append("update-and-rollback: an interrupted rehearsal must be resumed or discarded")
     if (campaign / "evidence" / ".backup-restore-state.json").exists():
         errors.append("backup-and-restore: an interrupted rehearsal must be resumed or discarded")
+    if (campaign / "evidence" / ".cluster-failure-state.json").exists():
+        errors.append("cluster-failure: an interrupted rehearsal must be resumed or discarded")
     boot_files = list((campaign / "boots").glob("*.json"))
     minimum_boots = int(matrix.get("minimumBootCycles", 10))
     if len(boot_files) < minimum_boots:
@@ -1999,6 +2238,21 @@ def main(argv: list[str] | None = None) -> int:
     )
     matrix_argument(backup_restore)
 
+    cluster_failure = subparsers.add_parser(
+        "cluster-failure",
+        help="capture a resumable fail-closed and recovery rehearsal for one Spark failure/phase case",
+    )
+    cluster_failure.add_argument("campaign", type=Path)
+    cluster_failure.add_argument("failure")
+    cluster_failure.add_argument("phase")
+    cluster_failure.add_argument("--api-base", default="http://127.0.0.1:8765")
+    cluster_failure.add_argument("--wait-minutes", type=int, default=30)
+    cluster_failure.add_argument("--rejection-evidence", type=Path)
+    cluster_failure.add_argument(
+        "--discard-progress", action="store_true", help="discard an interrupted cluster rehearsal"
+    )
+    matrix_argument(cluster_failure)
+
     status = subparsers.add_parser("status", help="validate and summarize a campaign")
     status.add_argument("campaign", type=Path)
     matrix_argument(status)
@@ -2119,6 +2373,23 @@ def main(argv: list[str] | None = None) -> int:
                 print("Backup and restore are verified. Restart from the Cloudless power menu, then repeat this command.")
             else:
                 print(f"Backup-and-restore qualification passed and was recorded: {evidence}")
+            return 0
+        if args.command == "cluster-failure":
+            try:
+                evidence = run_cluster_failure_rehearsal(
+                    args.campaign,
+                    args.matrix,
+                    args.failure,
+                    args.phase,
+                    args.api_base,
+                    discard_progress=args.discard_progress,
+                    rejection_evidence=args.rejection_evidence,
+                    wait_attempts=args.wait_minutes * 60,
+                )
+            except KeyboardInterrupt:
+                print("\nCluster rehearsal paused. Run the same command to resume from its checkpoint.")
+                return 130
+            print(f"Cluster failure qualification passed and was recorded: {evidence}")
             return 0
         if args.command == "status":
             return print_status(args.campaign, args.matrix)

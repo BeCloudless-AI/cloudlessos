@@ -160,6 +160,12 @@ Implementation status (July 31, 2026):
   healthy boot-audit result for that exact ID with the full graphical ownership chain ready, and the
   audit snapshot is embedded into the tamper-evident campaign. Recording from a recovery TTY after
   a black-screen boot cannot advance the required ten-cycle gate.
+- Qualification campaigns under `/var/lib/cloudless/qualification` now activate one digest-bound
+  campaign pointer. A packaged one-shot service records each distinct boot only after the graphical
+  audit succeeds, and only while the installed version, signed source commit, platform target and
+  authoritative matrix still match. Duplicate, failed, substituted and sealed campaigns fail
+  closed; a verified export removes the active pointer. The generated firstboot package and its
+  post-install service enablement pass the package payload contract.
 - The embedded launch animation is keyed to the kernel boot ID, so browser reloads cannot replay it
   while every new OS boot does. The desktop is initialized underneath it first; DGX Spark disables
   the costly animation by default and exposes the existing per-display override with a warning.
@@ -825,8 +831,9 @@ Engineering track:
 
 Operator/physical qualification track:
 
-1. Run the new graphical-boot audit through ten clean VirtualBox install/boot/restart cycles and
-   retain Settings status plus `cloudless-diagnostics` evidence for every failed or repaired boot.
+1. Start a managed qualification campaign, then run the graphical-boot audit through ten clean
+   VirtualBox install/boot/restart cycles. Healthy cycles are recorded automatically; retain
+   Settings status plus `cloudless-diagnostics` evidence for every failed or repaired boot.
 2. Repeat the graphical qualification on representative NVIDIA hardware and DGX Spark appliance
    mode, verifying the per-boot splash and Spark's reduced-motion default on the real display stack.
 3. Exercise update and rollback continuity with a loaded model and an interrupted durable recipe

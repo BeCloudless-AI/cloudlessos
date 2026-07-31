@@ -71,8 +71,10 @@ source_job() {
     bash "$ROOT/distro/scripts/test-prepare-beta-promotion.sh"
     bash "$ROOT/distro/scripts/test-secret-hygiene.sh"
     bash "$ROOT/distro/scripts/test-service-hardening.sh"
-    bash "$ROOT/distro/scripts/test-trust-inventory.sh"
-    bash "$ROOT/distro/scripts/test-sbom.sh"
+    docker run --rm -v "$ROOT:/src" -w /src \
+        cloudless-release-builder bash distro/scripts/test-trust-inventory.sh
+    docker run --rm -v "$ROOT:/src" -w /src \
+        cloudless-release-builder bash distro/scripts/test-sbom.sh
     bash "$ROOT/distro/scripts/scan-vulnerabilities.sh" --check
     bash "$ROOT/distro/scripts/test-incident-response.sh"
     bash "$ROOT/distro/scripts/test-qualification-contract.sh"

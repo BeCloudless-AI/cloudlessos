@@ -540,19 +540,58 @@ func sshCommand(host, username string, password bool) (string, []string) {
 	args := []string{"-o", "ConnectTimeout=8", "-o", "StrictHostKeyChecking=yes", "-o", "UserKnownHostsFile=" + knownPath, username + "@" + host}
 	if password {
 		// sshpass options must be followed by the command it should execute.
-		// Previously this returned `sshpass -e -o ...`, so sshpass parsed the
-		// SSH options itself and every password login failed before SSH ran.
-		return "sshpass", append([]string{"-e", "ssh"}, args...)
+		// Descriptor 3 carries the one-shot password. It must never enter argv
+		// or SSHPASS, where another process could recover it from /proc.
+		return "sshpass", append([]string{"-d", "3", "ssh"}, args...)
 	}
 	args = append([]string{"-i", keyPath, "-o", "IdentitiesOnly=yes"}, args...)
 	return "ssh", args
+}
+
+func runWithSecretFD(ctx context.Context, secret string, stdin []byte, name string, args ...string) (string, error) {
+	if secret == "" || len(secret) > 4096 {
+		return "", errors.New("peer administrator password must contain 1 through 4096 bytes")
+	}
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		return "", fmt.Errorf("create protected credential pipe: %w", err)
+	}
+	cmd := commandContext(ctx, name, args...)
+	cmd.ExtraFiles = []*os.File{reader} // first inherited descriptor is fd 3
+	if stdin != nil {
+		cmd.Stdin = bytes.NewReader(stdin)
+	}
+	written := make(chan error, 1)
+	go func() {
+		_, writeErr := writer.Write([]byte(secret + "\n"))
+		closeErr := writer.Close()
+		if writeErr != nil {
+			written <- writeErr
+		} else {
+			written <- closeErr
+		}
+	}()
+	out, commandErr := cmd.CombinedOutput()
+	_ = reader.Close()
+	writeErr := <-written
+	text := strings.TrimSpace(strings.ReplaceAll(string(out), secret, "[REDACTED]"))
+	if commandErr != nil {
+		if text == "" {
+			text = commandErr.Error()
+		}
+		return text, fmt.Errorf("%s", text)
+	}
+	if writeErr != nil {
+		return text, fmt.Errorf("write protected credential: %w", writeErr)
+	}
+	return text, nil
 }
 
 func remote(ctx context.Context, host, username, password, command string, stdin []byte) (string, error) {
 	program, args := sshCommand(host, username, password != "")
 	args = append(args, command)
 	if password != "" {
-		return run(ctx, []string{"SSHPASS=" + password}, stdin, program, args...)
+		return runWithSecretFD(ctx, password, stdin, program, args...)
 	}
 	return run(ctx, nil, stdin, program, args...)
 }

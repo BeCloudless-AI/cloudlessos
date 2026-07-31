@@ -65,6 +65,9 @@ from the kiosk.
   authentication is enabled.
 - Gateway keys are displayed once and stored only as hashes. Hugging Face and cluster credentials
   use dedicated private files or one-shot request handling and are excluded from diagnostics.
+- One-time Spark administrator passwords are passed to `sshpass` through an inherited, short-lived
+  file descriptor. They never enter the child process argument vector or environment, and any
+  accidental password echo in command failure output is redacted before it reaches a job or log.
 - Release credentials live outside the repository and outside R2. The archive signing key remains
   offline except for an intentional signing operation.
 

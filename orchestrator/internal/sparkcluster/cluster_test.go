@@ -1,6 +1,7 @@
 package sparkcluster
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strconv"
@@ -34,13 +35,36 @@ func TestSSHPasswordCommandInvokesSSHThroughSSHPass(t *testing.T) {
 		t.Fatalf("program = %q", program)
 	}
 	joined := strings.Join(args, " ")
-	if !strings.HasPrefix(joined, "-e ssh ") || !strings.Contains(joined, "ledomaine@192.168.50.94") {
+	if !strings.HasPrefix(joined, "-d 3 ssh ") || !strings.Contains(joined, "ledomaine@192.168.50.94") {
 		t.Fatalf("password SSH args = %q", joined)
+	}
+	if strings.Contains(joined, "SSHPASS") {
+		t.Fatalf("password SSH command exposes an environment credential: %q", joined)
 	}
 	program, args = sshCommand("spark.local", "cloudless", false)
 	joined = strings.Join(args, " ")
 	if program != "ssh" || strings.Contains(joined, "sshpass") || !strings.Contains(joined, "-i "+keyPath) || !strings.Contains(joined, "IdentitiesOnly=yes") {
 		t.Fatalf("key SSH command = %q %#v", program, args)
+	}
+}
+
+func TestProtectedPasswordPipeUsesFD3AndRedactsFailures(t *testing.T) {
+	out, err := runWithSecretFD(
+		context.Background(), "not-in-argv-or-env", nil, "sh", "-c",
+		`IFS= read -r value <&3; test "$value" = "not-in-argv-or-env"; printf accepted`,
+	)
+	if err != nil || out != "accepted" {
+		t.Fatalf("protected pipe = %q, %v", out, err)
+	}
+	out, err = runWithSecretFD(
+		context.Background(), "must-be-redacted", nil, "sh", "-c",
+		`IFS= read -r value <&3; printf '%s' "$value" >&2; exit 7`,
+	)
+	if err == nil || strings.Contains(out, "must-be-redacted") || strings.Contains(err.Error(), "must-be-redacted") {
+		t.Fatalf("credential escaped redaction: output=%q error=%v", out, err)
+	}
+	if !strings.Contains(out, "[REDACTED]") {
+		t.Fatalf("redacted failure output = %q", out)
 	}
 }
 

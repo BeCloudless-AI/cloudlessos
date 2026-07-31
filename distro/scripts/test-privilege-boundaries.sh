@@ -93,6 +93,12 @@ if grep -En 'run\([^)]*"netplan"|os\.(WriteFile|Remove)\([^)]*configPath' "$clus
 fi
 grep -Fq 'ConfigureClusterNetwork(ctx, links, nodeIndex)' "$cluster"
 grep -Fq 'ActionClusterNetworkRemove' "$cluster"
+grep -Fq 'return "sshpass", append([]string{"-d", "3", "ssh"}' "$cluster"
+grep -Fq 'cmd.ExtraFiles = []*os.File{reader}' "$cluster"
+if grep -Fq 'SSHPASS=' "$cluster"; then
+  echo "Spark administrator passwords must not be exposed through the process environment." >&2
+  exit 1
+fi
 
 model_cache="$ORCHESTRATOR/internal/modelcache/migration.go"
 engine_service="$ROOT/distro/packages/cloudless-orchestrator/cloudless-engine.service"

@@ -512,6 +512,10 @@ Implementation status (July 31, 2026):
   model-client identity as its container environment. It no longer writes a second fixed
   `cloudless` API-key placeholder into the application's database, and empty identities fail before
   any provider mutation.
+- Spark enrollment, address repair and disconnect still accept an administrator password only for
+  the explicit operation, but password-assisted SSH no longer publishes it through `SSHPASS`.
+  `sshpass` reads it from a one-shot inherited descriptor, command failures redact an accidental
+  echo, and the privilege-boundary contract rejects reintroducing an environment credential.
 - Passwordless Jupyter workbenches are admitted only when the signed catalog classifies them as
   local-only, non-shareable `code-execution-ui` surfaces. Changing LAN/public exposure, removing
   local-only confinement or relabeling the risk now invalidates the manifest before provisioning.

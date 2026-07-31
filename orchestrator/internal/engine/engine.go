@@ -13,6 +13,7 @@ type RunSpec struct {
 	Env          map[string]string // environment variables
 	Labels       map[string]string // orchestrator-owned lifecycle labels
 	Volumes      map[string]string // hostPath-or-named-volume -> containerPath
+	SecretFiles  map[string]string // protected host file -> fixed read-only container path
 	GPUs         string            // "all", "0", ... or "" for no GPU
 	Network      string            // docker network to join (container-name DNS), or ""
 	NetworkAlias string            // extra DNS alias on the network (e.g. "cloudless-ai")

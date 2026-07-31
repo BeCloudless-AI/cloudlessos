@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/cloudless/orchestrator/internal/catalog"
 	"github.com/cloudless/orchestrator/internal/jobs"
@@ -98,7 +99,11 @@ func (s *Server) restartManagedContainerRecipeAfterBoot(ctx context.Context, job
 			}
 		}
 		token, _ := s.state.HuggingFaceToken()
-		spec, err := managedContainerRecipeSpec(recipe, image, runtimeName, operation.ID, token)
+		tokenPath := ""
+		if strings.TrimSpace(token) != "" {
+			tokenPath = s.state.HuggingFaceTokenPath()
+		}
+		spec, err := managedContainerRecipeSpec(recipe, image, runtimeName, operation.ID, tokenPath)
 		if err != nil {
 			return err
 		}

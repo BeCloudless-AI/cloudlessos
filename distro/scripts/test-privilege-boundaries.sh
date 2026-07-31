@@ -155,4 +155,18 @@ if grep -REn '(s\.eng|i\.server\.eng|[^[:alnum:]_]eng)\.Output\(' \
   exit 1
 fi
 
+for source in \
+  "$ORCHESTRATOR/internal/api/models.go" \
+  "$ORCHESTRATOR/internal/api/recipe_managed_container.go" \
+  "$ORCHESTRATOR/internal/provision/promotion.go"
+do
+  grep -Fq 'HF_TOKEN_PATH' "$source"
+  if grep -Fq 'env["HF_TOKEN"]' "$source"; then
+    echo "Managed model containers must mount the protected Hugging Face token file, not persist its value in Docker environment metadata." >&2
+    exit 1
+  fi
+done
+grep -Fq 'SecretFiles  map[string]string' "$ORCHESTRATOR/internal/engine/engine.go"
+grep -Fq 'container secret must be owner-only' "$ORCHESTRATOR/internal/engine/policy.go"
+
 echo "Delegated privilege boundaries are enforced."

@@ -135,6 +135,20 @@ func TestRunArgsSupportsEntrypointOverride(t *testing.T) {
 	}
 }
 
+func TestRunArgsMountsSecretsWithoutEmbeddingTheirValue(t *testing.T) {
+	args := strings.Join(runArgs(RunSpec{
+		Name: "cloudless-model", Image: "vllm",
+		Env:         map[string]string{"HF_TOKEN_PATH": HuggingFaceTokenContainerPath},
+		SecretFiles: map[string]string{"/var/lib/cloudless/huggingface-token": HuggingFaceTokenContainerPath},
+	}), " ")
+	if !strings.Contains(args, "--mount type=bind,src=/var/lib/cloudless/huggingface-token,dst=/run/secrets/cloudless-huggingface-token,readonly") {
+		t.Fatalf("protected secret mount missing: %q", args)
+	}
+	if !strings.Contains(args, "-e HF_TOKEN_PATH=/run/secrets/cloudless-huggingface-token") || strings.Contains(args, "HF_TOKEN=") {
+		t.Fatalf("credential environment is unsafe: %q", args)
+	}
+}
+
 func TestTransientArgsRemoveRestartAndDetachedMode(t *testing.T) {
 	args := transientArgs(RunSpec{
 		Name:       "cloudless-helper",

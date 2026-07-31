@@ -884,6 +884,13 @@ func (s *Store) HuggingFaceToken() (string, error) {
 	return strings.TrimSpace(string(data)), nil
 }
 
+// HuggingFaceTokenPath returns the protected token file used for read-only
+// container secret mounts. Callers must still check HuggingFaceToken first so
+// an absent account never creates an empty credential mount.
+func (s *Store) HuggingFaceTokenPath() string {
+	return filepath.Join(s.Dir(), "huggingface-token")
+}
+
 // SetHuggingFaceToken atomically stores a Hub credential with owner-only
 // permissions. It is never placed in the normal JSON state store.
 func (s *Store) SetHuggingFaceToken(token string) error {

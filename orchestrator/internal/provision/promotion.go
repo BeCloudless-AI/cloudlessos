@@ -174,18 +174,21 @@ func downloadPromotionTarget(ctx context.Context, eng engine.Engine, st *state.S
 	_ = eng.Remove(ctx, name)
 	python := "import os; from huggingface_hub import snapshot_download; snapshot_download(os.environ['CLOUDLESS_MODEL_ID'])"
 	env := map[string]string{"CLOUDLESS_MODEL_ID": target}
+	secrets := map[string]string{}
 	if token, _ := st.HuggingFaceToken(); strings.TrimSpace(token) != "" {
-		env["HF_TOKEN"] = strings.TrimSpace(token)
+		env["HF_TOKEN_PATH"] = engine.HuggingFaceTokenContainerPath
+		secrets[st.HuggingFaceTokenPath()] = engine.HuggingFaceTokenContainerPath
 	}
 	result := make(chan error, 1)
 	go func() {
 		_, err := eng.RunTransient(ctx, engine.RunSpec{
-			Name:       name,
-			Image:      image,
-			Env:        env,
-			Volumes:    map[string]string{modelcache.Root(): "/root/.cache/huggingface"},
-			EntryPoint: "python3",
-			Args:       []string{"-c", python},
+			Name:        name,
+			Image:       image,
+			Env:         env,
+			SecretFiles: secrets,
+			Volumes:     map[string]string{modelcache.Root(): "/root/.cache/huggingface"},
+			EntryPoint:  "python3",
+			Args:        []string{"-c", python},
 		})
 		result <- err
 	}()

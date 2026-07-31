@@ -544,6 +544,9 @@ func runArgs(spec RunSpec) []string {
 	for _, h := range sortedKeys(spec.Volumes) {
 		args = append(args, "-v", fmt.Sprintf("%s:%s", h, spec.Volumes[h]))
 	}
+	for _, source := range sortedKeys(spec.SecretFiles) {
+		args = append(args, "--mount", fmt.Sprintf("type=bind,src=%s,dst=%s,readonly", source, spec.SecretFiles[source]))
+	}
 	if strings.TrimSpace(spec.EntryPoint) != "" {
 		args = append(args, "--entrypoint", spec.EntryPoint)
 	}

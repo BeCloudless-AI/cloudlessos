@@ -516,6 +516,10 @@ Implementation status (July 31, 2026):
   the explicit operation, but password-assisted SSH no longer publishes it through `SSHPASS`.
   `sshpass` reads it from a one-shot inherited descriptor, command failures redact an accidental
   echo, and the privilege-boundary contract rejects reintroducing an environment credential.
+- The normal model downloader, first-model promotion path and constrained managed-recipe runtime
+  no longer put the connected Hugging Face token in a Docker environment. They use the official
+  `HF_TOKEN_PATH` contract with a broker-validated, owner-only, read-only token-file mount. Arbitrary
+  secret sources, destinations, symlinks and weak file modes fail before container creation.
 - Passwordless Jupyter workbenches are admitted only when the signed catalog classifies them as
   local-only, non-shareable `code-execution-ui` surfaces. Changing LAN/public exposure, removing
   local-only confinement or relabeling the risk now invalidates the manifest before provisioning.

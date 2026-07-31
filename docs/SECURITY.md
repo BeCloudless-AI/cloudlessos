@@ -68,6 +68,10 @@ from the kiosk.
 - One-time Spark administrator passwords are passed to `sshpass` through an inherited, short-lived
   file descriptor. They never enter the child process argument vector or environment, and any
   accidental password echo in command failure output is redacted before it reaches a job or log.
+- Managed model downloads, first-model promotion and sandboxed container recipes mount the
+  owner-only Hugging Face credential as a fixed read-only secret file and set only `HF_TOKEN_PATH`.
+  The engine broker admits exactly that host path and container destination, rejects symlinks and
+  group/world-readable files, and never persists the token value in Docker environment metadata.
 - Release credentials live outside the repository and outside R2. The archive signing key remains
   offline except for an intentional signing operation.
 

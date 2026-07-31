@@ -43,6 +43,11 @@ func ValidateRunSpec(spec RunSpec) error {
 			return err
 		}
 	}
+	for source, target := range spec.SecretFiles {
+		if err := validateSecretFile(source, target); err != nil {
+			return err
+		}
+	}
 	for name := range spec.Env {
 		if !environmentName.MatchString(name) {
 			return fmt.Errorf("environment name %q is invalid", name)
@@ -88,6 +93,27 @@ func ValidateRunSpec(spec RunSpec) error {
 		if strings.ContainsRune(arg, '\x00') {
 			return errors.New("container argument contains an invalid byte")
 		}
+	}
+	return nil
+}
+
+const HuggingFaceTokenContainerPath = "/run/secrets/cloudless-huggingface-token"
+
+func validateSecretFile(source, target string) error {
+	source, target = strings.TrimSpace(source), strings.TrimSpace(target)
+	expectedSource := filepath.Join(envPath("CLOUDLESS_STATE_DIR", "/var/lib/cloudless"), "huggingface-token")
+	if source != expectedSource || target != HuggingFaceTokenContainerPath {
+		return errors.New("container secret is outside the Cloudless credential boundary")
+	}
+	info, err := os.Lstat(source)
+	if err != nil {
+		return fmt.Errorf("inspect container secret: %w", err)
+	}
+	if !info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
+		return errors.New("container secret must be a regular non-symlink file")
+	}
+	if info.Mode().Perm()&0o077 != 0 {
+		return errors.New("container secret must be owner-only")
 	}
 	return nil
 }

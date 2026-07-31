@@ -780,19 +780,22 @@ func (s *Server) runModelDownload(ctx context.Context, cancel context.CancelFunc
 	result := make(chan error, 1)
 	go func() {
 		env := map[string]string{"CLOUDLESS_MODEL_ID": repo}
+		secrets := map[string]string{}
 		if revision != "" {
 			env["CLOUDLESS_MODEL_REVISION"] = revision
 		}
 		if token != "" {
-			env["HF_TOKEN"] = token
+			env["HF_TOKEN_PATH"] = engine.HuggingFaceTokenContainerPath
+			secrets[s.state.HuggingFaceTokenPath()] = engine.HuggingFaceTokenContainerPath
 		}
 		_, err := s.eng.RunTransient(ctx, engine.RunSpec{
-			Name:       containerName,
-			Image:      img,
-			Env:        env,
-			Volumes:    map[string]string{modelcache.Root(): "/root/.cache/huggingface"},
-			EntryPoint: "python3",
-			Args:       []string{"-c", py},
+			Name:        containerName,
+			Image:       img,
+			Env:         env,
+			SecretFiles: secrets,
+			Volumes:     map[string]string{modelcache.Root(): "/root/.cache/huggingface"},
+			EntryPoint:  "python3",
+			Args:        []string{"-c", py},
 		})
 		result <- err
 	}()

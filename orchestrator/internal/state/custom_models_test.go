@@ -49,6 +49,9 @@ func TestHuggingFaceTokenUsesPrivateSeparateFile(t *testing.T) {
 		t.Fatal("Hugging Face token leaked into state.json")
 	}
 	secretPath := filepath.Join(dir, "huggingface-token")
+	if store.HuggingFaceTokenPath() != secretPath {
+		t.Fatalf("token path = %q, want %q", store.HuggingFaceTokenPath(), secretPath)
+	}
 	info, err := os.Stat(secretPath)
 	if err != nil {
 		t.Fatal(err)

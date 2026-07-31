@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/cloudless/orchestrator/internal/catalog"
@@ -257,7 +258,11 @@ func (s *Server) runManagedContainerRecipe(job *jobs.Job, recipe localrecipes.Re
 		return
 	}
 	token, _ := s.state.HuggingFaceToken()
-	spec, err := managedContainerRecipeSpec(recipe, recipe.Engine.Image, runtimeName, operationID, token)
+	tokenPath := ""
+	if strings.TrimSpace(token) != "" {
+		tokenPath = s.state.HuggingFaceTokenPath()
+	}
+	spec, err := managedContainerRecipeSpec(recipe, recipe.Engine.Image, runtimeName, operationID, tokenPath)
 	if err != nil {
 		rollback(err)
 		return

@@ -26,6 +26,36 @@ func TestRunSpecPolicyAcceptsManagedRuntime(t *testing.T) {
 	}
 }
 
+func TestRunSpecPolicyAllowsOnlyProtectedHuggingFaceSecret(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("CLOUDLESS_STATE_DIR", root)
+	token := filepath.Join(root, "huggingface-token")
+	if err := os.WriteFile(token, []byte("hf_test\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	spec := RunSpec{
+		Name: "cloudless-model", Image: "example/image:1",
+		SecretFiles: map[string]string{token: HuggingFaceTokenContainerPath},
+	}
+	if err := ValidateRunSpec(spec); err != nil {
+		t.Fatalf("protected token rejected: %v", err)
+	}
+
+	if err := os.Chmod(token, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidateRunSpec(spec); err == nil || !strings.Contains(err.Error(), "owner-only") {
+		t.Fatalf("weak token mode error = %v", err)
+	}
+	if err := os.Chmod(token, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	spec.SecretFiles = map[string]string{token: "/tmp/token"}
+	if err := ValidateRunSpec(spec); err == nil || !strings.Contains(err.Error(), "credential boundary") {
+		t.Fatalf("arbitrary secret target error = %v", err)
+	}
+}
+
 func TestRunSpecPolicyRejectsHostAuthority(t *testing.T) {
 	base := RunSpec{Name: "cloudless-test", Image: "example/image:1"}
 	tests := []struct {

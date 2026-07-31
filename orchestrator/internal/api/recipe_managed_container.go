@@ -13,7 +13,7 @@ import (
 // managedContainerRecipeSpec is the sole translation boundary from editable
 // recipe metadata to a runtime command. No recipe-provided executable,
 // entrypoint, host path, network namespace, capability, or socket crosses it.
-func managedContainerRecipeSpec(recipe localrecipes.Recipe, immutableImage, name, operationID, hfToken string) (engine.RunSpec, error) {
+func managedContainerRecipeSpec(recipe localrecipes.Recipe, immutableImage, name, operationID, hfTokenPath string) (engine.RunSpec, error) {
 	if err := localrecipes.ValidateManagedContainerRecipe(recipe); err != nil {
 		return engine.RunSpec{}, err
 	}
@@ -59,14 +59,17 @@ func managedContainerRecipeSpec(recipe localrecipes.Recipe, immutableImage, name
 	env["HF_HOME"] = "/root/.cache/huggingface"
 	env["XDG_CACHE_HOME"] = "/root/.cache/huggingface"
 	env["VLLM_CONFIG_ROOT"] = "/root/.cache/huggingface/vllm"
-	if hfToken != "" {
-		env["HF_TOKEN"] = hfToken
+	secrets := map[string]string{}
+	if hfTokenPath != "" {
+		env["HF_TOKEN_PATH"] = engine.HuggingFaceTokenContainerPath
+		secrets[hfTokenPath] = engine.HuggingFaceTokenContainerPath
 	}
 	return engine.RunSpec{
-		Name:  name,
-		Image: immutableImage,
-		Ports: map[int]int{recipe.Engine.ContainerPort: recipe.Engine.ContainerPort},
-		Env:   env,
+		Name:        name,
+		Image:       immutableImage,
+		Ports:       map[int]int{recipe.Engine.ContainerPort: recipe.Engine.ContainerPort},
+		Env:         env,
+		SecretFiles: secrets,
 		Labels: map[string]string{
 			"cloudless.recipe.operation": operationID,
 			"cloudless.recipe.id":        recipe.ID,

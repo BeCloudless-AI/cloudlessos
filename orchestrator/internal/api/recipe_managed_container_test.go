@@ -35,7 +35,7 @@ func managedContainerRecipeForTest() localrecipes.Recipe {
 
 func TestManagedContainerRecipeSpecOwnsSecurityAndContract(t *testing.T) {
 	recipe := managedContainerRecipeForTest()
-	spec, err := managedContainerRecipeSpec(recipe, "sha256:"+strings.Repeat("c", 64), "cloudless-recipe-test", "operation-test", "account-token")
+	spec, err := managedContainerRecipeSpec(recipe, "sha256:"+strings.Repeat("c", 64), "cloudless-recipe-test", "operation-test", "/var/lib/cloudless/huggingface-token")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,9 +53,12 @@ func TestManagedContainerRecipeSpecOwnsSecurityAndContract(t *testing.T) {
 	if spec.Labels["cloudless.recipe.operation"] != "operation-test" {
 		t.Fatalf("operation ownership label missing: %#v", spec.Labels)
 	}
-	if spec.Env["HF_TOKEN"] != "account-token" || spec.Env["HF_HOME"] != "/root/.cache/huggingface" ||
+	if spec.Env["HF_TOKEN"] != "" || spec.Env["HF_TOKEN_PATH"] != "/run/secrets/cloudless-huggingface-token" || spec.Env["HF_HOME"] != "/root/.cache/huggingface" ||
 		spec.Env["HF_CACHE"] != "" || spec.Env["SAFE"] != "yes" {
 		t.Fatalf("credential/environment mediation failed: %#v", spec.Env)
+	}
+	if spec.SecretFiles["/var/lib/cloudless/huggingface-token"] != "/run/secrets/cloudless-huggingface-token" || len(spec.SecretFiles) != 1 {
+		t.Fatalf("protected token mount missing: %#v", spec.SecretFiles)
 	}
 	command := strings.Join(spec.Args, " ")
 	for _, expected := range []string{

@@ -623,7 +623,8 @@ func TestRecipeCommandsPropagateOwnershipToLocalAndPeerHelpers(t *testing.T) {
 func TestPrepareRecipeModelPinMakesBothDownloadsImmutable(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "prepare-dspark-model-cache.sh")
-	source := `docker run --rm -i \
+	source := `: "${HF_DOWNLOAD_WORKERS:=1}"
+docker run --rm -i \
     -e DSPARK_MODEL="$DSPARK_MODEL" \
     -e HF_DOWNLOAD_WORKERS="$HF_DOWNLOAD_WORKERS" \
     image -c 'snapshot_download(os.environ["DSPARK_MODEL"], max_workers=1)'
@@ -646,8 +647,12 @@ docker run --rm -i \
 	if strings.Count(text, `DSPARK_MODEL_REVISION="$DSPARK_MODEL_REVISION"`) != 2 {
 		t.Fatalf("model revision was not passed into both containers:\n%s", text)
 	}
-	if strings.Count(text, `HF_TOKEN="${HF_TOKEN:-}"`) != 2 {
-		t.Fatalf("the optional Hugging Face account was not passed into both containers:\n%s", text)
+	if strings.Contains(text, `HF_TOKEN="${HF_TOKEN:-}"`) || strings.Count(text, `"${hf_token_args[@]}"`) != 2 {
+		t.Fatalf("the optional Hugging Face account was not mounted into both containers:\n%s", text)
+	}
+	if !strings.Contains(text, `HF_TOKEN_PATH=/run/secrets/cloudless-huggingface-token`) ||
+		!strings.Contains(text, `:/run/secrets/cloudless-huggingface-token:ro`) {
+		t.Fatalf("the Hugging Face token mount is not fixed and read-only:\n%s", text)
 	}
 	if strings.Count(text, `revision=os.environ["DSPARK_MODEL_REVISION"]`) != 2 {
 		t.Fatalf("model revision was not applied to both downloads:\n%s", text)

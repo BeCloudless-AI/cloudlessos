@@ -104,15 +104,21 @@ func TestReviewedRecipeDockerArgumentsFailClosed(t *testing.T) {
 		PreparedImageReference: "sha256:" + strings.Repeat("a", 64),
 	}
 	checkout := filepath.Join(t.TempDir(), recipe.ID)
+	stateDir := t.TempDir()
+	tokenPath := filepath.Join(stateDir, "huggingface-token")
+	if err := os.WriteFile(tokenPath, []byte("hf_test"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
 	allowed := [][]string{
 		{"compose", "-f", filepath.Join(checkout, "docker-compose.dspark.yml"), "up", "-d"},
 		{"run", "--rm", "-v", "cloudless-hf:/cache/huggingface", recipe.Engine.Image, "true"},
 		{"run", "--rm", "-v", cacheRoot + ":/cache/huggingface", recipe.Engine.Image, "true"},
+		{"run", "--rm", "-v", tokenPath + ":" + HuggingFaceTokenContainerPath + ":ro", recipe.Engine.Image, "true"},
 		{"volume", "create", "cloudless-hf"},
 	}
 	for _, args := range allowed {
-		if err := authorizeReviewedDockerArgs(operation, checkout, args); err != nil {
+		if err := authorizeReviewedDockerArgs(operation, checkout, stateDir, args); err != nil {
 			t.Fatalf("expected %q to be admitted: %v", args, err)
 		}
 	}
@@ -124,12 +130,13 @@ func TestReviewedRecipeDockerArgumentsFailClosed(t *testing.T) {
 		{[]string{"run", "--privileged", recipe.Engine.Image}, "forbidden"},
 		{[]string{"run", "-v", "/:/host", recipe.Engine.Image}, "model storage"},
 		{[]string{"run", "-v", "/run/docker.sock:/run/docker.sock", recipe.Engine.Image}, "forbidden"},
+		{[]string{"run", "-v", tokenPath + ":/tmp/token:ro", recipe.Engine.Image}, "model storage"},
 		{[]string{"run", "attacker.invalid/root:latest"}, "authenticated operation"},
 		{[]string{"compose", "-f", "/tmp/attacker.yml", "up"}, "escapes"},
 		{[]string{"system", "prune", "-af"}, "not admitted"},
 	}
 	for _, tt := range rejected {
-		if err := authorizeReviewedDockerArgs(operation, checkout, tt.args); err == nil || !strings.Contains(err.Error(), tt.want) {
+		if err := authorizeReviewedDockerArgs(operation, checkout, stateDir, tt.args); err == nil || !strings.Contains(err.Error(), tt.want) {
 			t.Fatalf("authorizeReviewedDockerArgs(%q) = %v, want %q", tt.args, err, tt.want)
 		}
 	}

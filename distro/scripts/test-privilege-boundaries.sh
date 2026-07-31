@@ -157,6 +157,7 @@ fi
 
 for source in \
   "$ORCHESTRATOR/internal/api/models.go" \
+  "$ORCHESTRATOR/internal/api/local_recipes.go" \
   "$ORCHESTRATOR/internal/api/recipe_managed_container.go" \
   "$ORCHESTRATOR/internal/provision/promotion.go"
 do
@@ -168,5 +169,7 @@ do
 done
 grep -Fq 'SecretFiles  map[string]string' "$ORCHESTRATOR/internal/engine/engine.go"
 grep -Fq 'container secret must be owner-only' "$ORCHESTRATOR/internal/engine/policy.go"
+grep -Fq 'admittedReviewedSecretMount' "$ORCHESTRATOR/internal/engine/reviewed_recipe_policy.go"
+grep -Fq 'parts[2] != "ro"' "$ORCHESTRATOR/internal/engine/reviewed_recipe_policy.go"
 
 echo "Delegated privilege boundaries are enforced."

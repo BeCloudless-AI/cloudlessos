@@ -520,6 +520,9 @@ Implementation status (July 31, 2026):
   no longer put the connected Hugging Face token in a Docker environment. They use the official
   `HF_TOKEN_PATH` contract with a broker-validated, owner-only, read-only token-file mount. Arbitrary
   secret sources, destinations, symlinks and weak file modes fail before container creation.
+- The remaining signed `source-scripts-v1` compatibility adapter uses the same protected file
+  contract for its local download helper. Its root broker admits only the exact Cloudless token
+  path, fixed container destination and read-only mode; public-model runs omit the mount entirely.
 - Passwordless Jupyter workbenches are admitted only when the signed catalog classifies them as
   local-only, non-shareable `code-execution-ui` surfaces. Changing LAN/public exposure, removing
   local-only confinement or relabeling the risk now invalidates the manifest before provisioning.

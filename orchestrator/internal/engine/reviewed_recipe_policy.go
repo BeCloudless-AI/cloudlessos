@@ -85,7 +85,7 @@ func (p ReviewedRecipePolicy) authenticate(spec ReviewedRecipeDockerSpec) (recip
 	if err := authorizeReviewedEnvironment(operation, spec.Environment); err != nil {
 		return recipeops.Operation{}, err
 	}
-	if err := authorizeReviewedDockerArgs(operation, checkout, spec.Args); err != nil {
+	if err := authorizeReviewedDockerArgs(operation, checkout, stateDir, spec.Args); err != nil {
 		return recipeops.Operation{}, err
 	}
 	return operation, nil
@@ -167,7 +167,7 @@ func reviewedGitOutput(checkout string, args ...string) ([]byte, error) {
 	return append([]byte(nil), output.buffer.Bytes()...), nil
 }
 
-func authorizeReviewedDockerArgs(operation recipeops.Operation, checkout string, args []string) error {
+func authorizeReviewedDockerArgs(operation recipeops.Operation, checkout, stateDir string, args []string) error {
 	if len(args) == 0 || len(args) > 256 {
 		return errors.New("reviewed recipe Docker command is empty or too large")
 	}
@@ -203,7 +203,7 @@ func authorizeReviewedDockerArgs(operation recipeops.Operation, checkout string,
 	case "build":
 		return authorizeReviewedBuild(operation, checkout, args[1:])
 	case "run", "create":
-		return authorizeReviewedRun(operation, args)
+		return authorizeReviewedRun(operation, stateDir, args)
 	case "volume":
 		return authorizeReviewedVolume(args[1:])
 	case "rm":
@@ -357,7 +357,7 @@ func authorizeReviewedBuild(operation recipeops.Operation, checkout string, args
 	return nil
 }
 
-func authorizeReviewedRun(operation recipeops.Operation, args []string) error {
+func authorizeReviewedRun(operation recipeops.Operation, stateDir string, args []string) error {
 	image := ""
 	name := ""
 	network := ""
@@ -369,8 +369,9 @@ func authorizeReviewedRun(operation recipeops.Operation, args []string) error {
 				return errors.New("reviewed volume is missing")
 			}
 			i++
-			source := strings.SplitN(args[i], ":", 2)[0]
-			if !strings.HasPrefix(source, "cloudless-") && !admittedReviewedModelCache(source) {
+			mount := args[i]
+			source := strings.SplitN(mount, ":", 2)[0]
+			if !strings.HasPrefix(source, "cloudless-") && !admittedReviewedModelCache(source) && !admittedReviewedSecretMount(mount, stateDir) {
 				return errors.New("reviewed recipe may mount only Cloudless-owned model storage")
 			}
 		case "-e", "--env", "--entrypoint", "--label":
@@ -430,6 +431,16 @@ func authorizeReviewedRun(operation recipeops.Operation, args []string) error {
 		return errors.New("host networking is reserved for the bounded Cloudless contract probe")
 	}
 	return nil
+}
+
+func admittedReviewedSecretMount(mount, stateDir string) bool {
+	parts := strings.Split(mount, ":")
+	if len(parts) != 3 || parts[0] != filepath.Join(filepath.Clean(stateDir), "huggingface-token") ||
+		parts[1] != HuggingFaceTokenContainerPath || parts[2] != "ro" {
+		return false
+	}
+	info, err := os.Lstat(parts[0])
+	return err == nil && info.Mode().IsRegular() && info.Mode()&os.ModeSymlink == 0 && info.Mode().Perm()&0o077 == 0
 }
 
 func requireContainedPath(path, root string) error {

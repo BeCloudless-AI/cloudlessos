@@ -828,11 +828,22 @@ func prepareRecipeModelPin(recipe localrecipes.Recipe, checkout string) error {
 		return err
 	}
 	managed := string(data)
+	tokenSetup := `: "${HF_DOWNLOAD_WORKERS:=1}"
+`
+	if strings.Count(managed, tokenSetup) != 1 {
+		return errors.New("reviewed model download credential setup changed")
+	}
+	managed = strings.Replace(managed, tokenSetup, tokenSetup+`
+hf_token_args=()
+if [ -n "${HF_TOKEN_PATH:-}" ]; then
+  hf_token_args=(-v "${HF_TOKEN_PATH}:/run/secrets/cloudless-huggingface-token:ro" -e HF_TOKEN_PATH=/run/secrets/cloudless-huggingface-token)
+fi
+`, 1)
 	replacements := []struct {
 		old, new string
 		count    int
 	}{
-		{"    -e DSPARK_MODEL=\"$DSPARK_MODEL\" \\\n", "    -e DSPARK_MODEL=\"$DSPARK_MODEL\" \\\n    -e DSPARK_MODEL_REVISION=\"$DSPARK_MODEL_REVISION\" \\\n    -e HF_TOKEN=\"${HF_TOKEN:-}\" \\\n", 2},
+		{"    -e DSPARK_MODEL=\"$DSPARK_MODEL\" \\\n", "    -e DSPARK_MODEL=\"$DSPARK_MODEL\" \\\n    -e DSPARK_MODEL_REVISION=\"$DSPARK_MODEL_REVISION\" \\\n    \"${hf_token_args[@]}\" \\\n", 2},
 		{"snapshot_download(os.environ[\"DSPARK_MODEL\"], max_workers=", "snapshot_download(os.environ[\"DSPARK_MODEL\"], revision=os.environ[\"DSPARK_MODEL_REVISION\"], max_workers=", 1},
 		{"snapshot_download(os.environ[\"DSPARK_MODEL\"], local_files_only=True)", "snapshot_download(os.environ[\"DSPARK_MODEL\"], revision=os.environ[\"DSPARK_MODEL_REVISION\"], local_files_only=True)", 1},
 	}
@@ -952,12 +963,16 @@ set -euo pipefail
 : "${DSPARK_VLLM_IMAGE:?DSPARK_VLLM_IMAGE is required}"
 : "${HF_CACHE:?HF_CACHE is required}"
 mkdir -p "$HF_CACHE"
+hf_token_args=()
+if [ -n "${HF_TOKEN_PATH:-}" ]; then
+  hf_token_args=(-v "${HF_TOKEN_PATH}:/run/secrets/cloudless-huggingface-token:ro" -e HF_TOKEN_PATH=/run/secrets/cloudless-huggingface-token)
+fi
 docker run --rm --entrypoint python \
   -v "$HF_CACHE:/cache/huggingface" \
   -e HF_HOME=/cache/huggingface \
   -e HF_HUB_OFFLINE=0 -e HF_HUB_DISABLE_XET=1 \
-  -e DSPARK_MODEL -e DSPARK_MODEL_REVISION -e HF_TOKEN="${HF_TOKEN:-}" \
-  "$DSPARK_VLLM_IMAGE" -c 'import hashlib, os, pathlib; from huggingface_hub import HfApi, snapshot_download; model=os.environ["DSPARK_MODEL"]; revision=os.environ["DSPARK_MODEL_REVISION"]; token=os.environ.get("HF_TOKEN") or None; snapshot=pathlib.Path(snapshot_download(model, revision=revision, token=token, max_workers=8)); info=HfApi(token=token).model_info(model, revision=revision, files_metadata=True); missing=[item.rfilename for item in info.siblings if item.size is not None and (not (snapshot/item.rfilename).is_file() or (snapshot/item.rfilename).stat().st_size != item.size)]; assert not missing, "incomplete pinned snapshot: "+", ".join(missing[:8]); marker=hashlib.sha256((model+"\0"+revision).encode()).hexdigest(); path=pathlib.Path(os.environ["HF_HOME"])/".cloudless-complete"/marker; path.parent.mkdir(parents=True, exist_ok=True); path.write_text(model+"@"+revision+"\n")'
+  -e DSPARK_MODEL -e DSPARK_MODEL_REVISION "${hf_token_args[@]}" \
+  "$DSPARK_VLLM_IMAGE" -c 'import hashlib, os, pathlib; from huggingface_hub import HfApi, snapshot_download; model=os.environ["DSPARK_MODEL"]; revision=os.environ["DSPARK_MODEL_REVISION"]; snapshot=pathlib.Path(snapshot_download(model, revision=revision, max_workers=8)); info=HfApi().model_info(model, revision=revision, files_metadata=True); missing=[item.rfilename for item in info.siblings if item.size is not None and (not (snapshot/item.rfilename).is_file() or (snapshot/item.rfilename).stat().st_size != item.size)]; assert not missing, "incomplete pinned snapshot: "+", ".join(missing[:8]); marker=hashlib.sha256((model+"\0"+revision).encode()).hexdigest(); path=pathlib.Path(os.environ["HF_HOME"])/".cloudless-complete"/marker; path.parent.mkdir(parents=True, exist_ok=True); path.write_text(model+"@"+revision+"\n")'
 `
 	if err := os.WriteFile(filepath.Join(checkout, "start-deepseek-v4-flash.sh"), []byte(start), 0o700); err != nil {
 		return err
@@ -1397,6 +1412,9 @@ func (s *Server) runRecipeModelDownload(ctx context.Context, job *jobs.Job, oper
 		stagedEnv[key] = value
 	}
 	stagedEnv["HF_CACHE"] = stagingVolume
+	if strings.TrimSpace(token) != "" {
+		stagedEnv["HF_TOKEN_PATH"] = s.state.HuggingFaceTokenPath()
+	}
 	if manifest, err := verifyRecipeModelCache(ctx, s.eng, stagedRecipe); err == nil {
 		job.ProgressBytes("resuming-model", "A previously verified download is ready to promote.", manifest.Bytes, manifest.Bytes)
 		if err := promoteStagedRecipeModel(ctx, s.eng, job, recipe, stagedRecipe, manifest); err != nil {
@@ -1731,13 +1749,12 @@ func (s *Server) runLocalRecipe(job *jobs.Job, recipe localrecipes.Recipe, opera
 		s.finishRecipeOperation(job, operationID, fmt.Errorf("record compose project ownership: %w", err))
 		return
 	}
-	// Reuse the account connected in Model Manager for recipe downloads. Add it
-	// only to the command environment, after the on-disk recipe environment was
-	// written, so the credential is never copied into the checkout or to peers.
+	// Reuse the account connected in Model Manager for recipe downloads. The
+	// value stays in its protected state file; only its path reaches the local
+	// download helper, which mounts it read-only at the fixed container path.
 	hfToken := ""
 	if token, tokenErr := s.state.HuggingFaceToken(); tokenErr == nil && token != "" {
 		hfToken = token
-		env["HF_TOKEN"] = token
 	}
 	var peers []recipePeer
 	if recipe.Distributed.Nodes > 1 {

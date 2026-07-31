@@ -751,8 +751,13 @@ Implementation status (July 31, 2026):
 - [`RELEASE_POLICY.md`](./RELEASE_POLICY.md) requires an immutable-commit beta candidate, a
   seven-day soak, complete retained evidence and repeated stable verification; retains two stable
   rollback generations for at least 90 days; defines pre-1.0 triage targets for each support tier;
-  and prohibits new telemetry without explicit opt-in, disclosure and retention controls. It also
-  records an operationally monitored security contact as a remaining pre-1.0 gap.
+  and prohibits new telemetry without explicit opt-in, disclosure and retention controls.
+- Every signed generation now carries a strict `cloudless.security-readiness.v1` descriptor. The
+  release pipeline rejects stale, future-dated, unmonitored, malformed or credential-bearing
+  operational attestations, binds accepted evidence into the exact-commit release gates and signed
+  manifest, and fails closed for 1.0+ stable without it. Establishing and monitoring the public
+  contact and escalation role remains an operational pre-1.0 task; the tooling cannot truthfully
+  perform that human responsibility itself.
 
 Done gate:
 

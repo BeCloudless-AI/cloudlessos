@@ -140,6 +140,7 @@ if not isinstance(artifacts, list) or {item.get("name") for item in artifacts} !
     "cloudless-models.json", "cloudless-diffusion.json",
     "cloudless-trust-inventory.json",
     "cloudless-physical-qualification.json",
+    "cloudless-security-readiness.json",
     f"cloudless-{release.get('version')}.spdx.json",
 }:
     raise SystemExit("Signed release does not describe the complete standalone artifact set")
@@ -159,6 +160,22 @@ physical_artifact = next(item for item in artifacts if item.get("name") == "clou
 with open(base / physical_artifact["path"], encoding="utf-8") as handle:
     if json.load(handle) != physical:
         raise SystemExit("Physical qualification artifact does not match the signed release")
+security = release.get("securityReadiness")
+validation_security = validation.get("securityReadiness")
+if not isinstance(security, dict) or security != validation_security or security.get("schema") != "cloudless.security-readiness.v1":
+    raise SystemExit("Signed release has invalid security readiness evidence")
+required_security = release.get("channel") == "stable" and int(release.get("version", "0").split(".", 1)[0]) >= 1
+if security.get("required") != required_security or security.get("status") not in {"operational", "not-operational"}:
+    raise SystemExit("Signed release has invalid security readiness policy")
+for field in ("version", "channel", "sourceCommit"):
+    if security.get(field) != release.get(field):
+        raise SystemExit(f"Signed release security readiness {field} mismatch")
+if required_security and security.get("status") != "operational":
+    raise SystemExit("CloudlessOS 1.0+ stable release lacks operational security ownership")
+security_artifact = next(item for item in artifacts if item.get("name") == "cloudless-security-readiness.json")
+with open(base / security_artifact["path"], encoding="utf-8") as handle:
+    if json.load(handle) != security:
+        raise SystemExit("Security readiness artifact does not match the signed release")
 promotion = release.get("promotion")
 if promotion is not None:
     if release.get("channel") != "stable" or promotion.get("schema") != "cloudless.beta-promotion.v1":
@@ -172,7 +189,7 @@ if promotion is not None:
             raise SystemExit(f"Stable package is not byte-identical to beta: {item['name']}/{item['architecture']}")
     promoted_artifacts = {item["name"]: item for item in promotion.get("artifacts", [])}
     for item in artifacts:
-        if item["name"] == "cloudless-physical-qualification.json":
+        if item["name"] in {"cloudless-physical-qualification.json", "cloudless-security-readiness.json"}:
             continue
         promoted = promoted_artifacts.get(item["name"])
         if not promoted or item["sha256"] != promoted.get("sha256") or item["size"] != promoted.get("size"):
@@ -180,7 +197,7 @@ if promotion is not None:
 PY
     local version artifact
     version="$(release_version)"
-    for artifact in install-dgx-spark.sh cloudless-apps-manifest.json cloudless-models.json cloudless-diffusion.json cloudless-trust-inventory.json cloudless-physical-qualification.json "cloudless-$version.spdx.json"; do
+    for artifact in install-dgx-spark.sh cloudless-apps-manifest.json cloudless-models.json cloudless-diffusion.json cloudless-trust-inventory.json cloudless-physical-qualification.json cloudless-security-readiness.json "cloudless-$version.spdx.json"; do
         gpgv --keyring "$KEY" \
             "$REPO/artifacts/$version/$CHANNEL/$artifact.asc" \
             "$REPO/artifacts/$version/$CHANNEL/$artifact" >/dev/null 2>&1 || {

@@ -11,6 +11,7 @@ PACKAGES="${CLOUDLESS_PACKAGE_OUT:-$ROOT/distro/out/packages}"
 SECURITY_OUT="${CLOUDLESS_SECURITY_OUT:-$ROOT/distro/out/security}"
 SBOM="${CLOUDLESS_SBOM:-$SECURITY_OUT/cloudless-$VERSION.spdx.json}"
 PHYSICAL_QUALIFICATION="${CLOUDLESS_PHYSICAL_QUALIFICATION:-$ROOT/distro/out/qualification/cloudless-physical-qualification.json}"
+SECURITY_READINESS="${CLOUDLESS_SECURITY_READINESS:-$ROOT/distro/out/qualification/cloudless-security-readiness.json}"
 
 [ -n "$VERSION" ] || { echo "Usage: $0 VERSION [stable|beta]" >&2; exit 2; }
 case "$CHANNEL" in stable|beta) ;; *) echo "Invalid channel: $CHANNEL" >&2; exit 2 ;; esac
@@ -30,7 +31,8 @@ fi
 [[ "$commit" =~ ^[0-9a-f]{40}$ ]] || { echo "Invalid source commit" >&2; exit 1; }
 
 python3 - "$MATRIX" <<'PY'
-import json, sys
+import datetime as dt, json, sys
+from urllib.parse import urlparse
 with open(sys.argv[1], encoding="utf-8") as handle:
     matrix = json.load(handle)
 if matrix.get("schema") != "cloudless.release-validation.v1":
@@ -168,15 +170,61 @@ if physical.get("status") == "qualified":
         raise SystemExit("physical qualification set identity does not match the release")
 PY
 
+echo "==> Validating security operations readiness"
+test -s "$SECURITY_READINESS" || { echo "Missing security readiness descriptor" >&2; exit 1; }
+python3 - "$SECURITY_READINESS" "$VERSION" "$CHANNEL" "$commit" <<'PY'
+import json, sys
+path, version, channel, commit = sys.argv[1:]
+with open(path, encoding="utf-8") as handle:
+    readiness = json.load(handle)
+required = channel == "stable" and int(version.split(".", 1)[0]) >= 1
+if readiness.get("schema") != "cloudless.security-readiness.v1":
+    raise SystemExit("invalid security readiness descriptor schema")
+for field, expected in (
+    ("version", version), ("channel", channel), ("sourceCommit", commit), ("required", required),
+):
+    if readiness.get(field) != expected:
+        raise SystemExit(f"security readiness {field} mismatch")
+if readiness.get("status") not in {"operational", "not-operational"}:
+    raise SystemExit("security readiness status is invalid")
+if required and readiness.get("status") != "operational":
+    raise SystemExit("CloudlessOS 1.0+ stable releases require operational security response ownership")
+if readiness.get("status") == "operational":
+    if readiness.get("monitored") is not True or not readiness.get("securityContact") or not readiness.get("escalationOwner"):
+        raise SystemExit("operational security readiness is incomplete")
+    contact = urlparse(readiness["securityContact"])
+    valid_contact = (
+        (contact.scheme == "mailto" and "@" in contact.path and not contact.query and not contact.fragment) or
+        (contact.scheme == "https" and bool(contact.netloc) and not contact.username and not contact.password)
+    )
+    if not valid_contact:
+        raise SystemExit("operational security contact is invalid")
+    try:
+        verified = dt.datetime.fromisoformat(readiness.get("verifiedAt", "").replace("Z", "+00:00"))
+        if verified.tzinfo is None:
+            raise ValueError("timezone missing")
+        verified = verified.astimezone(dt.timezone.utc)
+    except (AttributeError, ValueError):
+        raise SystemExit("security verification timestamp is invalid")
+    now = dt.datetime.now(dt.timezone.utc)
+    if verified > now + dt.timedelta(minutes=5) or now - verified > dt.timedelta(days=30):
+        raise SystemExit("security verification timestamp is outside the allowed 30-day window")
+    target = readiness.get("acknowledgementBusinessDays")
+    if not isinstance(target, int) or isinstance(target, bool) or not 1 <= target <= 3:
+        raise SystemExit("security acknowledgement target exceeds release policy")
+PY
+
 matrix_sha="$(sha256sum "$MATRIX" | awk '{print $1}')"
 mkdir -p "$(dirname "$OUT")"
-python3 - "$OUT.tmp" "$VERSION" "$CHANNEL" "$commit" "$matrix_sha" "$MATRIX" "$PHYSICAL_QUALIFICATION" <<'PY'
+python3 - "$OUT.tmp" "$VERSION" "$CHANNEL" "$commit" "$matrix_sha" "$MATRIX" "$PHYSICAL_QUALIFICATION" "$SECURITY_READINESS" <<'PY'
 import datetime, json, os, sys
-output, version, channel, commit, matrix_sha, matrix_path, physical_path = sys.argv[1:]
+output, version, channel, commit, matrix_sha, matrix_path, physical_path, security_path = sys.argv[1:]
 with open(matrix_path, encoding="utf-8") as handle:
     matrix = json.load(handle)
 with open(physical_path, encoding="utf-8") as handle:
     physical = json.load(handle)
+with open(security_path, encoding="utf-8") as handle:
+    security = json.load(handle)
 document = {
     "schema": "cloudless.release-gates.v1",
     "version": version,
@@ -187,6 +235,7 @@ document = {
     "targets": matrix["targets"],
     "passedGates": matrix["requiredGates"],
     "physicalQualification": physical,
+    "securityReadiness": security,
 }
 with open(output, "w", encoding="utf-8") as handle:
     json.dump(document, handle, ensure_ascii=False, separators=(",", ":"))

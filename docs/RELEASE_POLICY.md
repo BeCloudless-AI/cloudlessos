@@ -62,6 +62,13 @@ business days. These are engineering targets, not a paid uptime or availability 
 1.0, Cloudless must publish a monitored security contact and an escalation owner; absent those,
 CloudlessOS remains a pre-release product.
 
+The release pipeline enforces this boundary. Every signed generation carries a detached-signed
+`cloudless.security-readiness.v1` descriptor. Pre-1.0 generations may state `not-operational`, but a
+1.0+ stable promotion requires an operator attestation verified within the previous 30 days, a
+public `mailto:` or HTTPS disclosure route, an escalation role and an acknowledgement target no
+longer than three business days. The descriptor is embedded in the exact-commit release gates and
+signed manifest, so publication cannot silently claim readiness or reuse stale evidence.
+
 ## Telemetry and privacy
 
 CloudlessOS has no product analytics or automatic support-bundle uploader. Enabling update checks,

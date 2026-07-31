@@ -36,6 +36,25 @@ sealed hardware-evidence exports. The strict loader accepts the path as data and
 as shell syntax. Evidence archives can contain operational detail, so keep that directory private
 even though it contains no release credential.
 
+For a 1.0+ stable release the file must also contain
+`CLOUDLESS_SECURITY_CONTACT_ATTESTATION`, the path to a mode-0600 operational attestation:
+
+```json
+{
+  "schema": "cloudless.security-contact-attestation.v1",
+  "monitored": true,
+  "securityContact": "mailto:security@becloudless.ai",
+  "escalationOwner": "CloudlessOS release owner",
+  "verifiedAt": "2026-07-31T12:00:00Z",
+  "acknowledgementBusinessDays": 3
+}
+```
+
+The timestamp must be no more than 30 days old. The release tooling validates the document
+strictly, publishes its non-secret operational facts, binds them into the release gates and signed
+manifest, and detached-signs the resulting descriptor. Pre-1.0 releases explicitly publish
+`not-operational` when no attestation is supplied; a 1.0+ stable release fails closed.
+
 The offline archive signing-key backup remains separate from the R2 credential. Keep it encrypted,
 offline and readable only during signing. R2 compromise must not grant signing authority.
 

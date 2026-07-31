@@ -150,3 +150,8 @@ signature verification, platform isolation, SBOM generation, vulnerability polic
 permission tests, diagnostic redaction or backup/restore rehearsal fails. Critical/high findings
 require remediation or an explicit time-bounded security exception; an ordinary known-limitations
 note is not sufficient.
+
+Every release also publishes a detached-signed security-readiness descriptor. For 1.0+ stable this
+must prove a monitored public disclosure route, a named escalation role, a response target of at
+most three business days and operator verification within 30 days. Missing, stale, future-dated,
+unmonitored, credential-bearing or structurally unknown evidence fails before signing.

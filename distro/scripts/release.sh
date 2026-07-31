@@ -75,6 +75,17 @@ if [ -n "${CLOUDLESS_PHYSICAL_QUALIFICATION_DIR:-}" ]; then
 fi
 python3 "$ROOT/distro/scripts/prepare-physical-qualification.py" \
     "$VERSION" "$CHANNEL" "$full_commit" --output "$physical_output" "${physical_archives[@]}"
+security_output="$ROOT/distro/out/qualification/cloudless-security-readiness.json"
+security_arguments=()
+if [ -n "${CLOUDLESS_SECURITY_CONTACT_ATTESTATION:-}" ]; then
+    test -s "$CLOUDLESS_SECURITY_CONTACT_ATTESTATION" || {
+        echo "Security-contact attestation does not exist: $CLOUDLESS_SECURITY_CONTACT_ATTESTATION" >&2
+        exit 1
+    }
+    security_arguments+=(--attestation "$CLOUDLESS_SECURITY_CONTACT_ATTESTATION")
+fi
+python3 "$ROOT/distro/scripts/prepare-security-readiness.py" \
+    "$VERSION" "$CHANNEL" "$full_commit" --output "$security_output" "${security_arguments[@]}"
 
 echo "CloudlessOS production release"
 echo "  version: $VERSION"
@@ -119,6 +130,8 @@ echo "==> Release environment loader"
 bash "$ROOT/distro/scripts/test-release-env.sh"
 echo "==> Production release preflight"
 bash "$ROOT/distro/scripts/test-release-preflight.sh"
+echo "==> Security response readiness contract"
+python3 "$ROOT/distro/scripts/test-security-readiness.py"
 echo "==> Source secret hygiene"
 bash "$ROOT/distro/scripts/test-secret-hygiene.sh"
 echo "==> Host service and repository trust hardening"

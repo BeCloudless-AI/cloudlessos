@@ -27,6 +27,7 @@ ARTIFACTS = {
     "cloudless-diffusion.json",
     "cloudless-trust-inventory.json",
     "cloudless-physical-qualification.json",
+    "cloudless-security-readiness.json",
 }
 REQUIRED_GATES = {
     "go-tests", "go-vet", "web-javascript", "app-manifest-v2", "backup-recovery",
@@ -100,6 +101,13 @@ def verify(args: argparse.Namespace) -> dict:
         raise ValueError("beta physical qualification identity mismatch")
     if physical.get("required") is not False or physical.get("status") not in {"qualified", "not-qualified"}:
         raise ValueError("beta physical qualification policy is invalid")
+    security = release.get("securityReadiness")
+    if not isinstance(security, dict) or security != validation.get("securityReadiness"):
+        raise ValueError("beta security readiness is not bound to its gate attestation")
+    if security.get("version") != args.version or security.get("channel") != "beta" or security.get("sourceCommit") != args.source_commit:
+        raise ValueError("beta security readiness identity mismatch")
+    if security.get("required") is not False or security.get("status") not in {"operational", "not-operational"}:
+        raise ValueError("beta security readiness policy is invalid")
     published = parse_time(release.get("publishedAt"))
     available = parse_time(args.publicly_available_at) if args.publicly_available_at else published
     if available < published - dt.timedelta(minutes=5):

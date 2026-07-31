@@ -25,7 +25,7 @@ for arch in amd64 arm64; do
         printf '%s/%s\n' "$package" "$arch" > "$package_dir/$package/${package}_${version}_${arch}.deb"
     done
 done
-for artifact in install-dgx-spark.sh cloudless-apps-manifest.json cloudless-models.json cloudless-diffusion.json cloudless-trust-inventory.json cloudless-physical-qualification.json "cloudless-$version.spdx.json"; do
+for artifact in install-dgx-spark.sh cloudless-apps-manifest.json cloudless-models.json cloudless-diffusion.json cloudless-trust-inventory.json cloudless-physical-qualification.json cloudless-security-readiness.json "cloudless-$version.spdx.json"; do
     printf 'payload/%s\n' "$artifact" > "$artifact_dir/$artifact"
     gpg --batch --yes --local-user "$fingerprint" --armor --detach-sign \
         --output "$artifact_dir/$artifact.asc" "$artifact_dir/$artifact"
@@ -55,6 +55,8 @@ for path in sorted(item for item in artifact_root.iterdir() if not item.name.end
                       "signatureSize": signature_size})
 physical = {"schema": "cloudless.physical-release.v1", "status": "not-qualified", "required": False,
             "version": version, "channel": "beta", "sourceCommit": commit}
+security = {"schema": "cloudless.security-readiness.v1", "status": "not-operational", "required": False,
+            "version": version, "channel": "beta", "sourceCommit": commit}
 targets = [{"platform": "generic", "architecture": "amd64"},
            {"platform": "generic", "architecture": "arm64"},
            {"platform": "dgx-spark", "architecture": "arm64"}]
@@ -65,12 +67,13 @@ gates = ["go-tests", "go-vet", "web-javascript", "app-manifest-v2", "backup-reco
          "updater-workload-continuity", "atomic-repository"]
 validation = {"schema": "cloudless.release-gates.v1", "version": version, "channel": "beta",
               "sourceCommit": commit, "matrixSha256": "b" * 64, "passedGates": gates,
-              "targets": targets, "physicalQualification": physical}
+              "targets": targets, "physicalQualification": physical, "securityReadiness": security}
 release = {"schema": "cloudless.release.v2", "version": version, "channel": "beta",
            "sourceCommit": commit, "publishedAt": "2026-01-01T00:00:00Z", "packages": packages,
            "rollbackPackages": [], "artifacts": artifacts, "validation": validation,
            "compatibility": {"schema": "cloudless.compatibility.v1", "matrixSha256": "b" * 64,
-                             "targets": targets}, "physicalQualification": physical}
+                             "targets": targets}, "physicalQualification": physical,
+           "securityReadiness": security}
 manifest = root / "apt/dists/beta/cloudless-release.json"
 manifest.parent.mkdir(parents=True, exist_ok=True)
 manifest.write_text(json.dumps(release, separators=(",", ":")) + "\n", encoding="utf-8")
@@ -104,7 +107,7 @@ CLOUDLESS_PROMOTION_MIN_AGE_SECONDS=0 \
     bash "$ROOT/distro/scripts/prepare-beta-promotion.sh" "$version" "$commit" "$work/output" >/dev/null 2>&1
 test -s "$work/output/cloudless-beta-promotion.json"
 test "$(find "$work/output/packages" -type f | wc -l | tr -d '[:space:]')" = 12
-test "$(find "$work/output/artifacts" -type f | wc -l | tr -d '[:space:]')" = 14
+test "$(find "$work/output/artifacts" -type f | wc -l | tr -d '[:space:]')" = 16
 
 printf 'tampered\n' >> "$artifact_dir/cloudless-models.json"
 if CLOUDLESS_APT_PUBLIC_URL="http://127.0.0.1:$port/apt" \

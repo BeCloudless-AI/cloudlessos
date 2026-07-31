@@ -32,6 +32,7 @@ EXPORT_SCHEMA = "cloudless.physical-export.v1"
 SET_SCHEMA = "cloudless.physical-set.v1"
 SOAK_SCHEMA = "cloudless.physical-soak.v1"
 UPDATE_REHEARSAL_SCHEMA = "cloudless.physical-update-rehearsal.v1"
+BACKUP_REHEARSAL_SCHEMA = "cloudless.physical-backup-rehearsal.v1"
 DEFAULT_MATRIX = Path("/usr/share/cloudless/physical-validation-matrix.json")
 DEFAULT_UPDATE_STATUS = Path("/var/lib/cloudless-updater/status.json")
 DEFAULT_BOOT_HEALTH = Path("/var/lib/cloudless/boot-health.json")
@@ -889,23 +890,35 @@ def soak_transition_counts(samples: list[dict]) -> dict[str, int]:
 
 
 @contextlib.contextmanager
-def physical_soak_lock(campaign: Path):
-    lock_path = campaign / ".physical-soak.lock"
+def qualification_activity_lock(campaign: Path):
+    lock_root = Path(
+        os.environ.get("CLOUDLESS_QUALIFICATION_LOCK_ROOT", "/run/lock/cloudless-qualification")
+    )
+    lock_root.mkdir(parents=True, mode=0o700, exist_ok=True)
+    if lock_root.is_symlink() or not lock_root.is_dir():
+        raise ValueError("qualification activity lock root must be a real directory")
+    os.chmod(lock_root, 0o700)
+    lock_name = hashlib.sha256(str(campaign.resolve()).encode()).hexdigest()[:24] + ".lock"
+    lock_path = lock_root / lock_name
     flags = os.O_CREAT | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0)
     try:
         descriptor = os.open(lock_path, flags, 0o600)
     except OSError as exc:
-        raise ValueError("physical soak lock must be a regular non-symlink file") from exc
+        raise ValueError("qualification activity lock must be a regular non-symlink file") from exc
     handle = os.fdopen(descriptor, "w")
     try:
         os.fchmod(handle.fileno(), 0o600)
         try:
             fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as exc:
-            raise ValueError("another physical soak is already running for this campaign") from exc
+            raise ValueError("another qualification activity is already running for this campaign") from exc
         yield
     finally:
         handle.close()
+
+
+def physical_soak_lock(campaign: Path):
+    return qualification_activity_lock(campaign)
 
 
 def run_physical_soak(
@@ -920,7 +933,7 @@ def run_physical_soak(
     sleeper=time.sleep,
     report=None,
 ) -> Path:
-    with physical_soak_lock(campaign):
+    with qualification_activity_lock(campaign):
         return _run_physical_soak_locked(
             campaign,
             matrix_path,
@@ -1149,6 +1162,30 @@ def run_update_rollback_rehearsal(
     reporter=print,
     qualification_root_path: Path | None = None,
 ) -> Path:
+    with qualification_activity_lock(campaign_path):
+        return _run_update_rollback_rehearsal(
+            campaign_path,
+            matrix_path,
+            api_base,
+            updater,
+            discard_progress=discard_progress,
+            runner=runner,
+            reporter=reporter,
+            qualification_root_path=qualification_root_path,
+        )
+
+
+def _run_update_rollback_rehearsal(
+    campaign_path: Path,
+    matrix_path: Path,
+    api_base: str = "http://127.0.0.1:8765",
+    updater: Path = Path("/usr/lib/cloudless/cloudless-updater"),
+    *,
+    discard_progress: bool = False,
+    runner=run_qualification_updater,
+    reporter=print,
+    qualification_root_path: Path | None = None,
+) -> Path:
     matrix = load_matrix(matrix_path)
     campaign_target(campaign_path, matrix)
     campaign = load_json(campaign_path / "campaign.json")
@@ -1237,7 +1274,10 @@ def run_update_rollback_rehearsal(
         if result != 0:
             raise ValueError("the normal candidate upgrade failed after the rollback rehearsal")
         validate_update_rehearsal_continuity(baseline, after_upgrade)
-        if after_upgrade["update"]["currentVersion"] != campaign["version"]:
+        if (
+            after_upgrade["update"]["currentVersion"] != campaign["version"]
+            or after_upgrade["update"]["currentSourceCommit"] != campaign["sourceCommit"]
+        ):
             raise ValueError("the candidate version was not installed after the rollback rehearsal")
         state["upgrade"] = after_upgrade
         state["stage"] = "complete"
@@ -1258,6 +1298,255 @@ def run_update_rollback_rehearsal(
     raise ValueError("saved update rehearsal stage is invalid")
 
 
+def run_qualification_backup(command: list[str], passphrase_file: Path, timeout_seconds: int = 20 * 60) -> int:
+    environment = {
+        "PATH": os.environ.get("PATH", "/usr/sbin:/usr/bin:/sbin:/bin"),
+        "HOME": "/root",
+        "LANG": "C.UTF-8",
+        "LC_ALL": "C.UTF-8",
+        "CLOUDLESS_BACKUP_PASSPHRASE_FILE": str(passphrase_file),
+    }
+    process = subprocess.Popen(
+        command,
+        env=environment,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+    try:
+        return process.wait(timeout=timeout_seconds)
+    except subprocess.TimeoutExpired as exc:
+        os.killpg(process.pid, signal.SIGTERM)
+        try:
+            process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            os.killpg(process.pid, signal.SIGKILL)
+            process.wait()
+        raise ValueError("Cloudless backup command exceeded its bounded qualification window") from exc
+
+
+def create_private_passphrase(path: Path) -> None:
+    path.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
+    if path.parent.is_symlink() or not path.parent.is_dir():
+        raise ValueError("backup rehearsal runtime directory must be a real directory")
+    os.chmod(path.parent, 0o700)
+    flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(path, flags, 0o600)
+    with os.fdopen(descriptor, "w", encoding="ascii") as handle:
+        handle.write(os.urandom(32).hex())
+        handle.write("\n")
+        handle.flush()
+        os.fsync(handle.fileno())
+        os.fchmod(handle.fileno(), 0o600)
+
+
+def private_regular_file(path: Path, label: str) -> os.stat_result:
+    if path.is_symlink() or not path.is_file():
+        raise ValueError(f"{label} must be a regular non-symlink file")
+    info = path.stat()
+    if info.st_mode & 0o077:
+        raise ValueError(f"{label} must not be group/world accessible")
+    return info
+
+
+def wait_for_backup_sample(
+    api_base: str, include_cluster: bool, attempts: int = 30, sleeper=time.sleep
+) -> dict:
+    last_error: Exception | None = None
+    for _ in range(attempts):
+        try:
+            sample = collect_soak_sample(api_base, include_cluster=include_cluster)
+            if sample.get("health", {}).get("status") == "ok":
+                return sample
+            last_error = ValueError("Cloudless health is not ready")
+        except Exception as exc:
+            last_error = exc
+        sleeper(2)
+    raise ValueError("Cloudless did not recover after the backup/restore operation") from last_error
+
+
+def run_backup_restore_rehearsal(
+    campaign_path: Path,
+    matrix_path: Path,
+    api_base: str = "http://127.0.0.1:8765",
+    backup_tool: Path = Path("/usr/sbin/cloudless-backup"),
+    *,
+    backup_root: Path = Path("/var/backups/cloudless"),
+    runtime_root: Path = Path("/run/cloudless"),
+    canary_root: Path = Path("/var/lib/cloudless"),
+    discard_progress: bool = False,
+    runner=run_qualification_backup,
+    reporter=print,
+    qualification_root_path: Path | None = None,
+) -> Path | None:
+    with qualification_activity_lock(campaign_path):
+        matrix = load_matrix(matrix_path)
+        target = campaign_target(campaign_path, matrix)
+        campaign = load_json(campaign_path / "campaign.json")
+        if campaign.get("matrixSha256") != sha256_file(matrix_path):
+            raise ValueError("campaign matrix digest does not match the authoritative matrix")
+        if (campaign_path / "qualification-result.json").exists():
+            raise ValueError("a sealed qualification campaign cannot run a backup rehearsal")
+        active_path, _ = active_campaign(qualification_root_path)
+        if active_path != campaign_path.resolve():
+            raise ValueError("backup rehearsal requires this exact campaign to be active")
+        api_base = validated_soak_api_base(api_base)
+        if backup_tool.is_symlink() or not backup_tool.is_file() or not os.access(backup_tool, os.X_OK):
+            raise ValueError("qualification backup tool must be a regular non-symlink executable")
+
+        campaign_digest = sha256_file(campaign_path / "campaign.json")
+        stem = campaign_digest[:16]
+        state_path = campaign_path / "evidence" / ".backup-restore-state.json"
+        backup_path = backup_root / f"qualification-{stem}.cloudless-backup"
+        passphrase_path = runtime_root / f"qualification-backup-{stem}.pass"
+        canary_path = canary_root / f".qualification-restore-canary-{stem}.json"
+        for parent, label in (
+            (backup_root, "backup rehearsal directory"),
+            (canary_root, "backup rehearsal canary directory"),
+        ):
+            parent.mkdir(parents=True, mode=0o700, exist_ok=True)
+            if parent.is_symlink() or not parent.is_dir():
+                raise ValueError(f"{label} must be a real directory")
+        if state_path.is_symlink() or (state_path.exists() and not state_path.is_file()):
+            raise ValueError("backup rehearsal checkpoint must be a regular non-symlink file")
+        if state_path.exists() and state_path.stat().st_size > MAX_EVIDENCE_BYTES:
+            raise ValueError("backup rehearsal checkpoint exceeds the supported size")
+        if discard_progress:
+            state_path.unlink(missing_ok=True)
+            backup_path.unlink(missing_ok=True)
+            passphrase_path.unlink(missing_ok=True)
+            canary_path.unlink(missing_ok=True)
+
+        identity = {
+            "campaignSha256": campaign_digest,
+            "target": campaign["target"]["id"],
+            "version": campaign["version"],
+            "sourceCommit": campaign["sourceCommit"],
+            "apiBase": api_base,
+            "backupTool": str(backup_tool),
+        }
+        include_cluster = int(target.get("nodes", 1)) >= 2
+        if state_path.exists():
+            state = load_json(state_path)
+            if state.get("schema") != BACKUP_REHEARSAL_SCHEMA or any(
+                state.get(key) != value for key, value in identity.items()
+            ):
+                raise ValueError("saved backup rehearsal does not match this campaign or command")
+        else:
+            if backup_path.exists() or backup_path.is_symlink() or canary_path.exists() or canary_path.is_symlink():
+                raise ValueError("backup rehearsal artifacts already exist; use --discard-progress")
+            canary = {
+                "schema": "cloudless.qualification-restore-canary.v1",
+                "campaignSha256": campaign_digest,
+                "createdAt": utc_now(),
+                "nonce": os.urandom(32).hex(),
+            }
+            atomic_json(canary_path, canary)
+            os.chmod(canary_path, 0o600)
+            baseline = wait_for_backup_sample(api_base, include_cluster)
+            state = {
+                "schema": BACKUP_REHEARSAL_SCHEMA,
+                **identity,
+                "startedAt": utc_now(),
+                "initialBootId": current_boot_id(),
+                "stage": "backup-started",
+                "canarySha256": sha256_file(canary_path),
+                "baseline": baseline,
+            }
+            reject_secrets(json.dumps(state, sort_keys=True))
+            atomic_json(state_path, state)
+
+        reject_secrets(json.dumps(state, sort_keys=True))
+        expected_canary = str(state.get("canarySha256", ""))
+        if not re.fullmatch(r"[0-9a-f]{64}", expected_canary):
+            raise ValueError("saved backup rehearsal canary identity is malformed")
+        current_boot = current_boot_id()
+        canary_restored = canary_path.is_file() and not canary_path.is_symlink() and sha256_file(canary_path) == expected_canary
+
+        if state.get("stage") in {"backup-started", "backup-created"}:
+            if (
+                state.get("stage") == "backup-started"
+                and current_boot != state.get("initialBootId")
+                and canary_restored
+                and backup_path.exists()
+                and not backup_path.is_symlink()
+            ):
+                private_regular_file(backup_path, "qualification backup")
+                state["backup"] = {
+                    "filename": backup_path.name,
+                    "sha256": sha256_file(backup_path),
+                    "bytes": backup_path.stat().st_size,
+                }
+                state["stage"] = "awaiting-reboot"
+                state["restoreBootId"] = state.get("initialBootId")
+                state["recoveredAfterInterruption"] = True
+            else:
+                if not passphrase_path.exists():
+                    create_private_passphrase(passphrase_path)
+                private_regular_file(passphrase_path, "backup rehearsal passphrase")
+                if not backup_path.exists():
+                    reporter("Creating and verifying an encrypted control-plane backup...")
+                    if runner([str(backup_tool), "create", str(backup_path)], passphrase_path) != 0:
+                        raise ValueError("encrypted qualification backup creation failed")
+                private_regular_file(backup_path, "qualification backup")
+                if runner([str(backup_tool), "verify", str(backup_path)], passphrase_path) != 0:
+                    raise ValueError("encrypted qualification backup verification failed")
+                state["backup"] = {
+                    "filename": backup_path.name,
+                    "sha256": sha256_file(backup_path),
+                    "bytes": backup_path.stat().st_size,
+                }
+                state["stage"] = "backup-created"
+                atomic_json(state_path, state)
+                atomic_json(
+                    canary_path,
+                    {
+                        "schema": "cloudless.qualification-restore-canary.v1",
+                        "campaignSha256": campaign_digest,
+                        "mutatedAt": utc_now(),
+                    },
+                )
+                reporter("Restoring the encrypted backup and verifying the qualification canary...")
+                if runner([str(backup_tool), "restore", str(backup_path), "--yes"], passphrase_path) != 0:
+                    raise ValueError("encrypted qualification backup restore failed")
+                if not canary_path.is_file() or canary_path.is_symlink() or sha256_file(canary_path) != expected_canary:
+                    raise ValueError("backup restore did not recover the original control-plane canary")
+                state["afterRestore"] = wait_for_backup_sample(api_base, include_cluster)
+                state["restoreBootId"] = current_boot_id()
+                state["stage"] = "awaiting-reboot"
+                atomic_json(state_path, state)
+                passphrase_path.unlink(missing_ok=True)
+
+        if state.get("stage") == "awaiting-reboot":
+            if current_boot_id() == state.get("restoreBootId"):
+                reporter("Backup restore passed. Restart CloudlessOS, then run this same command again.")
+                return None
+            if not canary_path.is_file() or canary_path.is_symlink() or sha256_file(canary_path) != expected_canary:
+                raise ValueError("the restored control-plane canary did not survive reboot")
+            state["afterReboot"] = wait_for_backup_sample(api_base, include_cluster)
+            state["rebootBootId"] = current_boot_id()
+            state["stage"] = "complete"
+            state["completedAt"] = utc_now()
+            reject_secrets(json.dumps(state, sort_keys=True))
+            output = campaign_path / "evidence" / f"backup-restore-{campaign['version']}.json"
+            atomic_json(output, state)
+            record_check(
+                campaign_path,
+                matrix_path,
+                "backup-and-restore",
+                "pass",
+                "Encrypted control-plane backup, restore and post-reboot verification passed.",
+                [output],
+            )
+            state_path.unlink(missing_ok=True)
+            backup_path.unlink(missing_ok=True)
+            passphrase_path.unlink(missing_ok=True)
+            canary_path.unlink(missing_ok=True)
+            return output
+        raise ValueError("saved backup rehearsal stage is invalid")
+
+
 def validate_campaign(campaign: Path, matrix_path: Path) -> list[str]:
     errors: list[str] = []
     try:
@@ -1276,6 +1565,8 @@ def validate_campaign(campaign: Path, matrix_path: Path) -> list[str]:
         errors.append("physical-soak: an interrupted endurance run must be resumed or discarded")
     if (campaign / "evidence" / ".update-rollback-state.json").exists():
         errors.append("update-and-rollback: an interrupted rehearsal must be resumed or discarded")
+    if (campaign / "evidence" / ".backup-restore-state.json").exists():
+        errors.append("backup-and-restore: an interrupted rehearsal must be resumed or discarded")
     boot_files = list((campaign / "boots").glob("*.json"))
     minimum_boots = int(matrix.get("minimumBootCycles", 10))
     if len(boot_files) < minimum_boots:
@@ -1694,6 +1985,20 @@ def main(argv: list[str] | None = None) -> int:
     )
     matrix_argument(update_rollback)
 
+    backup_restore = subparsers.add_parser(
+        "backup-restore",
+        help="exercise encrypted control-plane backup, restore and post-reboot recovery",
+    )
+    backup_restore.add_argument("campaign", type=Path)
+    backup_restore.add_argument("--api-base", default="http://127.0.0.1:8765")
+    backup_restore.add_argument(
+        "--backup-tool", type=Path, default=Path("/usr/sbin/cloudless-backup")
+    )
+    backup_restore.add_argument(
+        "--discard-progress", action="store_true", help="discard an interrupted backup rehearsal"
+    )
+    matrix_argument(backup_restore)
+
     status = subparsers.add_parser("status", help="validate and summarize a campaign")
     status.add_argument("campaign", type=Path)
     matrix_argument(status)
@@ -1801,6 +2106,19 @@ def main(argv: list[str] | None = None) -> int:
                 discard_progress=args.discard_progress,
             )
             print(f"Update-and-rollback qualification passed and was recorded: {evidence}")
+            return 0
+        if args.command == "backup-restore":
+            evidence = run_backup_restore_rehearsal(
+                args.campaign,
+                args.matrix,
+                args.api_base,
+                args.backup_tool,
+                discard_progress=args.discard_progress,
+            )
+            if evidence is None:
+                print("Backup and restore are verified. Restart from the Cloudless power menu, then repeat this command.")
+            else:
+                print(f"Backup-and-restore qualification passed and was recorded: {evidence}")
             return 0
         if args.command == "status":
             return print_status(args.campaign, args.matrix)

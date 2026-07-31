@@ -578,6 +578,13 @@ Implementation status (July 31, 2026):
   and retained in a collision-safe rollback directory instead of leaving stale configuration live.
   The rehearsal covers unsafe source links, absent-path restoration, same-second rollback creation
   and overlapping-operation rejection.
+- Physical qualification now has a resumable encrypted backup/restore workflow. It generates a
+  one-time passphrase only in root-private runtime storage, backs up a campaign-bound canary,
+  mutates and restores it, then requires a different kernel boot ID and healthy control plane before
+  recording a pass. The activity lock lives outside the restored state tree, interrupted checkpoints
+  prevent sealing, and retained evidence contains hashes and bounded health summaries rather than
+  passphrases, command output or the encrypted archive itself. Real VM/Spark execution remains the
+  final evidence gate.
 - [`BACKUP_AND_INCIDENT_RESPONSE.md`](./BACKUP_AND_INCIDENT_RESPONSE.md) documents offline
   passphrase handling, post-restore validation and response playbooks for compromised API keys,
   public/Tailscale access, recipes/containers, signed updates and Spark peers. Physical VM/Spark

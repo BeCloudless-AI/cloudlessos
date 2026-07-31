@@ -114,6 +114,22 @@ owner-only checkpoint, and repeating the command resumes without needlessly repe
 rollback or upgrade. The check is recorded as passed only after both transactions satisfy the
 contract. Use `--discard-progress` only when intentionally abandoning an incomplete rehearsal.
 
+Exercise encrypted backup/restore separately:
+
+```bash
+sudo cloudless-qualify backup-restore \
+  /var/lib/cloudless/qualification/0.2.7-01234567/dgx-spark-arm64-2
+```
+
+The runner creates a one-time root-private passphrase under `/run`, creates and verifies the
+packaged AES-256 backup, changes a campaign-bound control-plane canary, restores the backup and
+proves the original canary returned. It never records the passphrase, backup contents, command
+output, hostname or rollback directory. After the restore it asks you to restart from Cloudless's
+power menu. Repeat the same command after the desktop returns; a different kernel boot ID plus the
+restored canary and healthy local API complete and record the check. The activity lock lives outside
+the replaced state, while the checkpoint is intentionally included in and recovered from the
+backup; the restore cannot invalidate mutual exclusion and an interrupted command can resume.
+
 Record each observed check with a screenshot, exported operation result or log. Evidence is copied
 into the campaign, mode `0600`, and SHA-256 bound to its result:
 

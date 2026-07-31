@@ -2,6 +2,7 @@
 import importlib.machinery
 import importlib.util
 import json
+import os
 import shutil
 import tempfile
 import unittest
@@ -23,12 +24,17 @@ class PhysicalQualificationTest(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
+        self.environment = mock.patch.dict(
+            os.environ, {"CLOUDLESS_QUALIFICATION_LOCK_ROOT": str(self.root / "locks")}
+        )
+        self.environment.start()
         self.matrix = self.root / "matrix.json"
         shutil.copyfile(ROOT / "distro/release/physical-validation-matrix.json", self.matrix)
         self.evidence = self.root / "proof.txt"
         self.evidence.write_text("Operator-observed qualification evidence\n", encoding="utf-8")
 
     def tearDown(self):
+        self.environment.stop()
         self.temp.cleanup()
 
     def begin(self, target="virtualbox-amd64", architecture="x86_64", kind="virtualbox"):
@@ -639,7 +645,7 @@ class PhysicalQualificationTest(unittest.TestCase):
                     sample_provider=lambda _: self.soak_sample(0),
                     sleeper=lambda _: None,
                 )
-        lock = campaign / ".physical-soak.lock"
+        lock = next((self.root / "locks").glob("*.lock"))
         lock.unlink()
         lock.symlink_to(self.evidence)
         with self.assertRaisesRegex(ValueError, "non-symlink"):
@@ -789,6 +795,88 @@ class PhysicalQualificationTest(unittest.TestCase):
         errors = qualify.validate_campaign(campaign, self.matrix)
         self.assertIn(
             "update-and-rollback: an interrupted rehearsal must be resumed or discarded",
+            errors,
+        )
+
+    def test_backup_restore_rehearsal_requires_reboot_then_records_evidence(self):
+        campaign = self.begin()
+        qualify.activate_campaign(campaign, self.root)
+        backup_tool = self.root / "cloudless-backup"
+        backup_tool.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        backup_tool.chmod(0o700)
+        backup_root = self.root / "backups"
+        runtime_root = self.root / "run"
+        canary_root = self.root / "state"
+        captured = {}
+        commands = []
+
+        def runner(command, passphrase):
+            commands.append(command[1])
+            self.assertEqual(passphrase.stat().st_mode & 0o077, 0)
+            backup = Path(command[2])
+            canary = next(canary_root.glob(".qualification-restore-canary-*.json"))
+            checkpoint = campaign / "evidence" / ".backup-restore-state.json"
+            if command[1] == "create":
+                captured["canary"] = canary.read_bytes()
+                captured["checkpoint"] = checkpoint.read_bytes()
+                backup.write_bytes(b"encrypted qualification archive")
+                backup.chmod(0o600)
+            elif command[1] == "restore":
+                canary.write_bytes(captured["canary"])
+                checkpoint.write_bytes(captured["checkpoint"])
+            return 0
+
+        sample = self.soak_sample(0)
+        with mock.patch.object(qualify, "current_boot_id", return_value="boot-before"), mock.patch.object(
+            qualify, "wait_for_backup_sample", return_value=sample
+        ):
+            result = qualify.run_backup_restore_rehearsal(
+                campaign,
+                self.matrix,
+                backup_tool=backup_tool,
+                backup_root=backup_root,
+                runtime_root=runtime_root,
+                canary_root=canary_root,
+                runner=runner,
+                reporter=lambda _: None,
+                qualification_root_path=self.root,
+            )
+        self.assertIsNone(result)
+        self.assertEqual(commands, ["create", "verify", "restore"])
+        self.assertFalse((campaign / "checks" / "backup-and-restore.json").exists())
+
+        with mock.patch.object(qualify, "current_boot_id", return_value="boot-after"), mock.patch.object(
+            qualify, "wait_for_backup_sample", return_value=self.soak_sample(1)
+        ):
+            evidence = qualify.run_backup_restore_rehearsal(
+                campaign,
+                self.matrix,
+                backup_tool=backup_tool,
+                backup_root=backup_root,
+                runtime_root=runtime_root,
+                canary_root=canary_root,
+                runner=lambda *_: self.fail("backup command must not repeat after restore"),
+                reporter=lambda _: None,
+                qualification_root_path=self.root,
+            )
+        self.assertTrue(evidence.is_file())
+        self.assertEqual(
+            qualify.load_json(campaign / "checks" / "backup-and-restore.json")["status"],
+            "pass",
+        )
+        self.assertFalse(any(backup_root.glob("qualification-*.cloudless-backup")))
+        self.assertFalse(any(canary_root.glob(".qualification-restore-canary-*.json")))
+
+    def test_interrupted_backup_rehearsal_prevents_campaign_sealing(self):
+        campaign = self.begin()
+        checkpoint = campaign / "evidence" / ".backup-restore-state.json"
+        checkpoint.write_text(
+            json.dumps({"schema": qualify.BACKUP_REHEARSAL_SCHEMA, "stage": "backup-started"}),
+            encoding="utf-8",
+        )
+        errors = qualify.validate_campaign(campaign, self.matrix)
+        self.assertIn(
+            "backup-and-restore: an interrupted rehearsal must be resumed or discarded",
             errors,
         )
 

@@ -37,7 +37,26 @@ const (
 	defaultAPTBaseURL = "https://updates.becloudless.ai/apt"
 	archiveKeyring    = "/usr/share/keyrings/cloudless-archive-keyring.pgp"
 	controlPlaneURL   = "http://127.0.0.1:8765"
+	qualificationRoot = "/var/lib/cloudless/qualification"
 )
+
+type qualificationPointer struct {
+	Schema         string `json:"schema"`
+	Campaign       string `json:"campaign"`
+	CampaignSHA256 string `json:"campaignSha256"`
+	Target         string `json:"target"`
+	Version        string `json:"version"`
+	SourceCommit   string `json:"sourceCommit"`
+}
+
+type qualificationCampaign struct {
+	Schema       string `json:"schema"`
+	Version      string `json:"version"`
+	SourceCommit string `json:"sourceCommit"`
+	Target       struct {
+		ID string `json:"id"`
+	} `json:"target"`
+}
 
 type workloadSnapshot struct {
 	ReadyEngine        string
@@ -59,20 +78,22 @@ type recipeContinuityState struct {
 }
 
 var (
-	updaterConfigured       = osupdate.Configured
-	updaterCandidates       = candidates
-	updaterRun              = run
-	updaterRunEnv           = runEnv
-	updaterCopyDebs         = copyDebs
-	updaterCaptureWorkload  = captureWorkload
-	updaterWaitContinuity   = waitForWorkloadContinuity
-	updaterRollback         = rollback
-	updaterControlPlaneURL  = controlPlaneURL
-	updaterContinuityWindow = 90 * time.Second
-	updaterRollbackRoot     = "/var/lib/cloudless-updater/rollback"
-	updaterCurrentDir       = "/var/lib/cloudless-updater/current"
-	updaterAPTCacheDir      = "/var/cache/apt/archives"
-	updaterStagedDir        = "/var/lib/cloudless-updater/staged"
+	updaterConfigured        = osupdate.Configured
+	updaterCandidates        = candidates
+	updaterRun               = run
+	updaterRunEnv            = runEnv
+	updaterCopyDebs          = copyDebs
+	updaterCaptureWorkload   = captureWorkload
+	updaterWaitContinuity    = waitForWorkloadContinuity
+	updaterRollback          = rollback
+	updaterControlPlaneURL   = controlPlaneURL
+	updaterContinuityWindow  = 90 * time.Second
+	updaterRollbackRoot      = "/var/lib/cloudless-updater/rollback"
+	updaterCurrentDir        = "/var/lib/cloudless-updater/current"
+	updaterAPTCacheDir       = "/var/cache/apt/archives"
+	updaterStagedDir         = "/var/lib/cloudless-updater/staged"
+	updaterQualificationRoot = qualificationRoot
+	updaterEffectiveUID      = os.Geteuid
 )
 
 type releaseManifest struct {
@@ -140,10 +161,10 @@ type releaseTarget struct {
 
 func main() {
 	if len(os.Args) != 2 {
-		fatalf("usage: cloudless-updater check|apply|status|nvidia-check|nvidia-apply|nvidia-status")
+		fatalf("usage: cloudless-updater check|apply|qualification-rollback|status|nvidia-check|nvidia-apply|nvidia-status")
 	}
 	command := os.Args[1]
-	audited := command == "check" || command == "apply" || command == "nvidia-check" || command == "nvidia-apply"
+	audited := command == "check" || command == "apply" || command == "qualification-rollback" || command == "nvidia-check" || command == "nvidia-apply"
 	if audited {
 		auditUpdater(command, "started", "")
 	}
@@ -153,6 +174,8 @@ func main() {
 		err = check()
 	case "apply":
 		err = apply()
+	case "qualification-rollback":
+		err = qualificationRollback()
 	case "status":
 		var status osupdate.Status
 		status, err = osupdate.Read()
@@ -489,6 +512,102 @@ func apply() error {
 }
 
 func applyLocked() error {
+	return applyWithMode("", "", false)
+}
+
+func readQualificationJSON(path string, limit int64, target any) ([]byte, error) {
+	descriptor, err := syscall.Open(path, syscall.O_RDONLY|syscall.O_CLOEXEC|syscall.O_NOFOLLOW, 0)
+	if err != nil {
+		return nil, err
+	}
+	handle := os.NewFile(uintptr(descriptor), path)
+	defer handle.Close()
+	info, err := handle.Stat()
+	if err != nil || !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("qualification identity is not a regular file: %s", path)
+	}
+	payload, err := io.ReadAll(io.LimitReader(handle, limit+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(payload)) == 0 || int64(len(payload)) > limit {
+		return nil, fmt.Errorf("qualification identity has an invalid size: %s", path)
+	}
+	if err := json.Unmarshal(payload, target); err != nil {
+		return nil, fmt.Errorf("qualification identity is malformed: %w", err)
+	}
+	return payload, nil
+}
+
+func qualificationRollbackPreflight() (qualificationCampaign, error) {
+	if updaterEffectiveUID() != 0 {
+		return qualificationCampaign{}, errors.New("qualification rollback requires root")
+	}
+	rootInfo, err := os.Lstat(updaterQualificationRoot)
+	if err != nil || !rootInfo.IsDir() || rootInfo.Mode()&os.ModeSymlink != 0 {
+		return qualificationCampaign{}, errors.New("qualification rollback requires a real qualification root")
+	}
+	root, err := filepath.EvalSymlinks(updaterQualificationRoot)
+	if err != nil {
+		return qualificationCampaign{}, fmt.Errorf("resolve qualification root: %w", err)
+	}
+	var pointer qualificationPointer
+	_, err = readQualificationJSON(filepath.Join(root, "active-campaign.json"), 64<<10, &pointer)
+	if err != nil {
+		return qualificationCampaign{}, fmt.Errorf("read active qualification campaign: %w", err)
+	}
+	if pointer.Schema != "cloudless.physical-active-campaign.v1" {
+		return qualificationCampaign{}, errors.New("active qualification campaign has an unsupported schema")
+	}
+	relative := filepath.Clean(pointer.Campaign)
+	if relative == "." || relative == ".." || relative != pointer.Campaign || filepath.IsAbs(relative) || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		return qualificationCampaign{}, errors.New("active qualification campaign path is unsafe")
+	}
+	campaignPath := filepath.Join(root, relative)
+	campaignInfo, err := os.Lstat(campaignPath)
+	if err != nil || !campaignInfo.IsDir() || campaignInfo.Mode()&os.ModeSymlink != 0 {
+		return qualificationCampaign{}, errors.New("active qualification campaign is not a real directory")
+	}
+	resolvedCampaign, err := filepath.EvalSymlinks(campaignPath)
+	if err != nil {
+		return qualificationCampaign{}, fmt.Errorf("resolve active qualification campaign: %w", err)
+	}
+	withinRoot, err := filepath.Rel(root, resolvedCampaign)
+	if err != nil || withinRoot == "." || withinRoot == ".." || strings.HasPrefix(withinRoot, ".."+string(filepath.Separator)) || filepath.IsAbs(withinRoot) {
+		return qualificationCampaign{}, errors.New("active qualification campaign escapes the qualification root")
+	}
+	var campaign qualificationCampaign
+	payload, err := readQualificationJSON(filepath.Join(resolvedCampaign, "campaign.json"), 1<<20, &campaign)
+	if err != nil {
+		return qualificationCampaign{}, fmt.Errorf("read qualification campaign: %w", err)
+	}
+	if campaign.Schema != "cloudless.physical-evidence.v1" || strings.TrimSpace(campaign.Version) == "" || !validSourceCommit(campaign.SourceCommit) {
+		return qualificationCampaign{}, errors.New("active qualification campaign identity is invalid")
+	}
+	digest := sha256.Sum256(payload)
+	if hex.EncodeToString(digest[:]) != pointer.CampaignSHA256 {
+		return qualificationCampaign{}, errors.New("active qualification campaign identity has changed")
+	}
+	if pointer.Target != campaign.Target.ID || pointer.Version != campaign.Version || pointer.SourceCommit != campaign.SourceCommit {
+		return qualificationCampaign{}, errors.New("active qualification pointer does not match its campaign")
+	}
+	if _, err := os.Lstat(filepath.Join(resolvedCampaign, "qualification-result.json")); err == nil {
+		return qualificationCampaign{}, errors.New("active qualification campaign is already sealed")
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return qualificationCampaign{}, fmt.Errorf("inspect qualification result: %w", err)
+	}
+	return campaign, nil
+}
+
+func qualificationRollback() error {
+	campaign, err := qualificationRollbackPreflight()
+	if err != nil {
+		return err
+	}
+	return withLock(func() error { return applyWithMode(campaign.Version, campaign.SourceCommit, true) })
+}
+
+func applyWithMode(expectedVersion, expectedSourceCommit string, forceRollback bool) error {
 	status := currentStatus("installing", "Preparing the CloudlessOS update…")
 	if !status.Configured {
 		status.State = "not_configured"
@@ -520,6 +639,19 @@ func applyLocked() error {
 		status.CheckedAt = time.Now().UTC().Format(time.RFC3339)
 		status.Progress = 100
 		return osupdate.Write(status)
+	}
+	if forceRollback && (status.AvailableVersion != expectedVersion || status.AvailableSourceCommit != expectedSourceCommit) {
+		return failStatus(
+			status,
+			"Qualification rollback refused because the available update is not the active campaign",
+			fmt.Errorf(
+				"active campaign expects %q at %s, but the signed repository offers %q at %s",
+				expectedVersion,
+				expectedSourceCommit,
+				status.AvailableVersion,
+				status.AvailableSourceCommit,
+			),
+		)
 	}
 
 	args := []string{"install", "-y", "--only-upgrade"}
@@ -568,6 +700,13 @@ func applyLocked() error {
 	if err != nil {
 		return failStatus(status, "The update could not safely snapshot the current AI workload", err)
 	}
+	if forceRollback && (workload.ReadyEngine == "" || len(workload.RecipeOperationIDs) == 0) {
+		return failStatus(
+			status,
+			"Qualification rollback requires an active model and a durable preparation operation",
+			errors.New("start a model and a recipe preparation before running the qualification rollback"),
+		)
+	}
 	if _, err := updaterRunEnv(ctx, []string{"DEBIAN_FRONTEND=noninteractive", "NEEDRESTART_MODE=a"}, "apt-get", args...); err != nil {
 		return failStatus(status, "Package installation failed", err)
 	}
@@ -576,7 +715,11 @@ func applyLocked() error {
 		return err
 	}
 	_, _ = updaterRun(ctx, "systemctl", "try-restart", "cloudlessd.service")
-	if err := updaterWaitContinuity(updaterControlPlaneURL, workload, updaterContinuityWindow); err != nil {
+	continuityErr := updaterWaitContinuity(updaterControlPlaneURL, workload, updaterContinuityWindow)
+	if forceRollback && continuityErr == nil {
+		continuityErr = errors.New("qualification requested a deliberate rollback after the candidate continuity probe passed")
+	}
+	if err := continuityErr; err != nil {
 		if !rollbackAvailable {
 			return failStatus(status, "The update failed its workload continuity check and this legacy installation had no rollback generation", err)
 		}

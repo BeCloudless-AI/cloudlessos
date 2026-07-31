@@ -12,6 +12,7 @@ import json
 import os
 import platform
 import re
+import signal
 import shlex
 import shutil
 import socket
@@ -30,6 +31,7 @@ CHECK_SCHEMA = "cloudless.physical-check.v1"
 EXPORT_SCHEMA = "cloudless.physical-export.v1"
 SET_SCHEMA = "cloudless.physical-set.v1"
 SOAK_SCHEMA = "cloudless.physical-soak.v1"
+UPDATE_REHEARSAL_SCHEMA = "cloudless.physical-update-rehearsal.v1"
 DEFAULT_MATRIX = Path("/usr/share/cloudless/physical-validation-matrix.json")
 DEFAULT_UPDATE_STATUS = Path("/var/lib/cloudless-updater/status.json")
 DEFAULT_BOOT_HEALTH = Path("/var/lib/cloudless/boot-health.json")
@@ -1032,6 +1034,230 @@ def _run_physical_soak_locked(
     return output
 
 
+def update_rehearsal_snapshot(api_base: str) -> tuple[dict, dict]:
+    engine = soak_http_json(api_base, "/api/engine", 15)
+    recipes = soak_http_json(api_base, "/api/recipes", 15)
+    update = soak_http_json(api_base, "/api/system/update", 10)
+    if not isinstance(engine, dict) or not isinstance(recipes, dict) or not isinstance(update, dict):
+        raise ValueError("Cloudless returned an invalid update-rehearsal state")
+    operations = []
+    for item in recipes.get("operations", []):
+        if not isinstance(item, dict):
+            continue
+        operation_id = str(item.get("id", ""))
+        phase = str(item.get("phase", ""))[:64]
+        kind = str(item.get("kind", ""))[:32]
+        if not operation_id or not phase:
+            continue
+        operations.append(
+            {
+                "idHash": hashlib.sha256(operation_id.encode()).hexdigest()[:24],
+                "kind": kind,
+                "phase": phase,
+            }
+        )
+    operations.sort(key=lambda item: item["idHash"])
+    snapshot = {
+        "capturedAt": utc_now(),
+        "bootId": current_boot_id(),
+        "engine": {
+            "active": str(engine.get("active", ""))[:128],
+            "ready": bool(engine.get("ready", False)),
+            "unloaded": bool(engine.get("unloaded", False)),
+        },
+        "operations": operations,
+        "update": {
+            "state": str(update.get("state", ""))[:32],
+            "currentVersion": str(update.get("currentVersion", ""))[:64],
+            "currentSourceCommit": str(update.get("currentSourceCommit", ""))[:40],
+            "availableVersion": str(update.get("availableVersion", ""))[:64],
+            "availableSourceCommit": str(update.get("availableSourceCommit", ""))[:40],
+            "progress": bounded_soak_int(update.get("progress"), 100),
+            "rebootRequired": bool(update.get("rebootRequired", False)),
+        },
+    }
+    reject_secrets(json.dumps(snapshot, sort_keys=True))
+    return snapshot, update
+
+
+def validate_update_rehearsal_baseline(snapshot: dict, campaign: dict) -> None:
+    engine = snapshot["engine"]
+    if not engine["ready"] or engine["unloaded"] or not engine["active"]:
+        raise ValueError("load a model before starting the update-and-rollback rehearsal")
+    tracked = [
+        operation
+        for operation in snapshot["operations"]
+        if operation["phase"] not in {"active", "stopped", "failed", "aborted", ""}
+    ]
+    if not tracked:
+        raise ValueError("start a durable recipe preparation before starting the rehearsal")
+    snapshot["operations"] = tracked
+    update = snapshot["update"]
+    if update["availableVersion"] != campaign["version"]:
+        raise ValueError(
+            f"the signed updater offers {update['availableVersion'] or 'no candidate'}, "
+            f"not campaign version {campaign['version']}"
+        )
+    if update["availableSourceCommit"] != campaign["sourceCommit"]:
+        raise ValueError("the signed updater candidate does not match the campaign source commit")
+    if update["currentVersion"] == campaign["version"]:
+        raise ValueError("the campaign version is already installed; a prior generation is required")
+
+
+def validate_update_rehearsal_continuity(baseline: dict, current: dict) -> None:
+    before = baseline["engine"]
+    after = current["engine"]
+    if not after["ready"] or after["unloaded"] or after["active"] != before["active"]:
+        raise ValueError("the active model was not preserved across the package transaction")
+    current_operations = {item["idHash"]: item["phase"] for item in current["operations"]}
+    for operation in baseline["operations"]:
+        phase = current_operations.get(operation["idHash"])
+        if phase is None:
+            raise ValueError("a durable recipe preparation disappeared during the package transaction")
+        if phase in {"failed", "aborted", "stopped"}:
+            raise ValueError(f"a durable recipe preparation ended as {phase}")
+
+
+def run_qualification_updater(command: list[str], timeout_seconds: int = 35 * 60) -> int:
+    process = subprocess.Popen(
+        command,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+    )
+    try:
+        return process.wait(timeout=timeout_seconds)
+    except subprocess.TimeoutExpired as exc:
+        os.killpg(process.pid, signal.SIGTERM)
+        try:
+            process.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            os.killpg(process.pid, signal.SIGKILL)
+            process.wait()
+        raise ValueError("Cloudless updater exceeded its bounded qualification window") from exc
+
+
+def run_update_rollback_rehearsal(
+    campaign_path: Path,
+    matrix_path: Path,
+    api_base: str = "http://127.0.0.1:8765",
+    updater: Path = Path("/usr/lib/cloudless/cloudless-updater"),
+    *,
+    discard_progress: bool = False,
+    runner=run_qualification_updater,
+    reporter=print,
+    qualification_root_path: Path | None = None,
+) -> Path:
+    matrix = load_matrix(matrix_path)
+    campaign_target(campaign_path, matrix)
+    campaign = load_json(campaign_path / "campaign.json")
+    if campaign.get("matrixSha256") != sha256_file(matrix_path):
+        raise ValueError("campaign matrix digest does not match the authoritative matrix")
+    if (campaign_path / "qualification-result.json").exists():
+        raise ValueError("a sealed qualification campaign cannot run an update rehearsal")
+    active_path, _ = active_campaign(qualification_root_path)
+    if active_path != campaign_path.resolve():
+        raise ValueError("update rehearsal requires this exact campaign to be active")
+    api_base = validated_soak_api_base(api_base)
+    if updater.is_symlink() or not updater.is_file() or not os.access(updater, os.X_OK):
+        raise ValueError("qualification updater must be a regular non-symlink executable")
+    state_path = campaign_path / "evidence" / ".update-rollback-state.json"
+    if state_path.is_symlink() or (state_path.exists() and not state_path.is_file()):
+        raise ValueError("update rehearsal checkpoint must be a regular non-symlink file")
+    if state_path.exists() and state_path.stat().st_size > MAX_EVIDENCE_BYTES:
+        raise ValueError("update rehearsal checkpoint exceeds the supported size")
+    if discard_progress:
+        state_path.unlink(missing_ok=True)
+    identity = {
+        "campaignSha256": sha256_file(campaign_path / "campaign.json"),
+        "target": campaign["target"]["id"],
+        "version": campaign["version"],
+        "sourceCommit": campaign["sourceCommit"],
+        "apiBase": api_base,
+        "updater": str(updater),
+    }
+    if state_path.exists():
+        state = load_json(state_path)
+        if state.get("schema") != UPDATE_REHEARSAL_SCHEMA or any(
+            state.get(key) != value for key, value in identity.items()
+        ):
+            raise ValueError("saved update rehearsal does not match this campaign or command")
+    else:
+        baseline, _ = update_rehearsal_snapshot(api_base)
+        validate_update_rehearsal_baseline(baseline, campaign)
+        state = {
+            "schema": UPDATE_REHEARSAL_SCHEMA,
+            **identity,
+            "startedAt": utc_now(),
+            "stage": "rollback-started",
+            "baseline": baseline,
+        }
+        atomic_json(state_path, state)
+
+    baseline = state.get("baseline")
+    if not isinstance(baseline, dict):
+        raise ValueError("saved update rehearsal baseline is malformed")
+    reject_secrets(json.dumps(state, sort_keys=True))
+    if state.get("stage") == "rollback-started":
+        after_rollback, raw_update = update_rehearsal_snapshot(api_base)
+        rollback_already_finished = (
+            raw_update.get("state") == "failed"
+            and "deliberate rollback" in str(raw_update.get("error", ""))
+            and after_rollback["update"]["currentVersion"] == baseline["update"]["currentVersion"]
+        )
+        result = 1
+        if not rollback_already_finished:
+            reporter("Installing the candidate, verifying continuity, then deliberately restoring the previous packagesâ€¦")
+            result = runner([str(updater), "qualification-rollback"])
+            after_rollback, raw_update = update_rehearsal_snapshot(api_base)
+        if result == 0 or raw_update.get("state") != "failed" or "deliberate rollback" not in str(raw_update.get("error", "")):
+            raise ValueError("the updater did not complete the deliberate qualification rollback")
+        validate_update_rehearsal_continuity(baseline, after_rollback)
+        if (
+            after_rollback["update"]["currentVersion"] != baseline["update"]["currentVersion"]
+            or after_rollback["update"]["currentSourceCommit"]
+            != baseline["update"]["currentSourceCommit"]
+        ):
+            raise ValueError("the previous CloudlessOS version was not restored")
+        state["rollback"] = after_rollback
+        state["stage"] = "upgrade-started"
+        atomic_json(state_path, state)
+
+    if state.get("stage") == "upgrade-started":
+        after_upgrade, _ = update_rehearsal_snapshot(api_base)
+        result = 0
+        if (
+            after_upgrade["update"]["currentVersion"] != campaign["version"]
+            or after_upgrade["update"]["currentSourceCommit"] != campaign["sourceCommit"]
+        ):
+            reporter("Installing the candidate normally and re-checking the same active workloadâ€¦")
+            result = runner([str(updater), "apply"])
+            after_upgrade, _ = update_rehearsal_snapshot(api_base)
+        if result != 0:
+            raise ValueError("the normal candidate upgrade failed after the rollback rehearsal")
+        validate_update_rehearsal_continuity(baseline, after_upgrade)
+        if after_upgrade["update"]["currentVersion"] != campaign["version"]:
+            raise ValueError("the candidate version was not installed after the rollback rehearsal")
+        state["upgrade"] = after_upgrade
+        state["stage"] = "complete"
+        state["completedAt"] = utc_now()
+        reject_secrets(json.dumps(state, sort_keys=True))
+        output = campaign_path / "evidence" / f"update-rollback-{campaign['version']}.json"
+        atomic_json(output, state)
+        state_path.unlink()
+        record_check(
+            campaign_path,
+            matrix_path,
+            "update-and-rollback",
+            "pass",
+            "Automated active-model rollback and candidate-upgrade continuity rehearsal passed.",
+            [output],
+        )
+        return output
+    raise ValueError("saved update rehearsal stage is invalid")
+
+
 def validate_campaign(campaign: Path, matrix_path: Path) -> list[str]:
     errors: list[str] = []
     try:
@@ -1048,6 +1274,8 @@ def validate_campaign(campaign: Path, matrix_path: Path) -> list[str]:
         errors.append("campaign source commit is invalid")
     if (campaign / "evidence" / ".physical-soak-state.json").exists():
         errors.append("physical-soak: an interrupted endurance run must be resumed or discarded")
+    if (campaign / "evidence" / ".update-rollback-state.json").exists():
+        errors.append("update-and-rollback: an interrupted rehearsal must be resumed or discarded")
     boot_files = list((campaign / "boots").glob("*.json"))
     minimum_boots = int(matrix.get("minimumBootCycles", 10))
     if len(boot_files) < minimum_boots:
@@ -1452,6 +1680,20 @@ def main(argv: list[str] | None = None) -> int:
     )
     matrix_argument(soak)
 
+    update_rollback = subparsers.add_parser(
+        "update-rollback",
+        help="exercise active-model candidate rollback and upgrade continuity",
+    )
+    update_rollback.add_argument("campaign", type=Path)
+    update_rollback.add_argument("--api-base", default="http://127.0.0.1:8765")
+    update_rollback.add_argument(
+        "--updater", type=Path, default=Path("/usr/lib/cloudless/cloudless-updater")
+    )
+    update_rollback.add_argument(
+        "--discard-progress", action="store_true", help="discard an interrupted rehearsal checkpoint"
+    )
+    matrix_argument(update_rollback)
+
     status = subparsers.add_parser("status", help="validate and summarize a campaign")
     status.add_argument("campaign", type=Path)
     matrix_argument(status)
@@ -1549,6 +1791,16 @@ def main(argv: list[str] | None = None) -> int:
                 return 130
             print(f"\nPhysical soak evidence: {evidence}")
             print("Use this evidence when recording browser/terminal, app, model and cluster checks.")
+            return 0
+        if args.command == "update-rollback":
+            evidence = run_update_rollback_rehearsal(
+                args.campaign,
+                args.matrix,
+                args.api_base,
+                args.updater,
+                discard_progress=args.discard_progress,
+            )
+            print(f"Update-and-rollback qualification passed and was recorded: {evidence}")
             return 0
         if args.command == "status":
             return print_status(args.campaign, args.matrix)

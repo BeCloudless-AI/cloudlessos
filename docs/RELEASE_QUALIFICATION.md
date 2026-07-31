@@ -96,6 +96,24 @@ being sealed. The finished `physical-soak-*.json` can be attached to the applica
 it supplements screenshots and operator observations rather than turning unobserved behavior into
 an automatic pass.
 
+For the destructive package-continuity check, first load a model, begin a durable recipe
+preparation and confirm that the exact campaign candidate is visible in Settings. Then run:
+
+```bash
+sudo cloudless-qualify update-rollback \
+  /var/lib/cloudless/qualification/0.2.7-01234567/dgx-spark-arm64-2
+```
+
+This is intentionally not a normal update shortcut. It is admitted only for an active, unsealed
+qualification campaign and the candidate version/source commit must exactly match that campaign.
+The runner installs the candidate, proves workload continuity, deliberately invokes the real
+package rollback path, verifies that the previous generation and same active workload returned,
+then installs the candidate normally and verifies continuity again. Operation IDs are retained only
+as hashes; updater output and errors are not copied into evidence. An interruption leaves an
+owner-only checkpoint, and repeating the command resumes without needlessly repeating a completed
+rollback or upgrade. The check is recorded as passed only after both transactions satisfy the
+contract. Use `--discard-progress` only when intentionally abandoning an incomplete rehearsal.
+
 Record each observed check with a screenshot, exported operation result or log. Evidence is copied
 into the campaign, mode `0600`, and SHA-256 bound to its result:
 

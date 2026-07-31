@@ -678,6 +678,120 @@ class PhysicalQualificationTest(unittest.TestCase):
         self.assertEqual(sample["locale"]["timezone"], "Asia/Dubai")
         self.assertTrue(sample["input"]["physicalMouse"])
 
+    def test_update_rollback_rehearsal_records_verified_continuity(self):
+        campaign = self.begin()
+        qualify.activate_campaign(campaign, self.root)
+        updater = self.root / "cloudless-updater"
+        updater.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        updater.chmod(0o700)
+        commit = "0123456789abcdef0123456789abcdef01234567"
+
+        def snapshot(version, source_commit, available, phase, *, state="available", error=""):
+            public = {
+                "capturedAt": "2026-07-31T00:00:00Z",
+                "bootId": "00000000-0000-0000-0000-000000000001",
+                "engine": {"active": "vllm", "ready": True, "unloaded": False},
+                "operations": [
+                    {
+                        "idHash": "a" * 24,
+                        "kind": "run",
+                        "phase": phase,
+                    }
+                ],
+                "update": {
+                    "state": state,
+                    "currentVersion": version,
+                    "currentSourceCommit": source_commit,
+                    "availableVersion": available,
+                    "availableSourceCommit": commit if available else "",
+                    "progress": 100,
+                    "rebootRequired": False,
+                },
+            }
+            return public, {"state": state, "error": error}
+
+        baseline = snapshot("1.2.2", "1" * 40, "1.2.3-rc1", "preparing")
+        rollback = snapshot(
+            "1.2.2",
+            "1" * 40,
+            "1.2.3-rc1",
+            "recovering",
+            state="failed",
+            error="qualification requested a deliberate rollback after the candidate continuity probe passed",
+        )
+        upgrade = snapshot("1.2.3-rc1", commit, "", "active", state="updated")
+        responses = iter([baseline, baseline, rollback, rollback, upgrade])
+        commands = []
+
+        def runner(command):
+            commands.append(command)
+            return 1 if command[-1] == "qualification-rollback" else 0
+
+        with mock.patch.object(
+            qualify, "update_rehearsal_snapshot", side_effect=lambda _: next(responses)
+        ):
+            evidence = qualify.run_update_rollback_rehearsal(
+                campaign,
+                self.matrix,
+                updater=updater,
+                runner=runner,
+                reporter=lambda _: None,
+                qualification_root_path=self.root,
+            )
+        self.assertEqual(
+            commands,
+            [[str(updater), "qualification-rollback"], [str(updater), "apply"]],
+        )
+        self.assertTrue(evidence.is_file())
+        self.assertFalse((campaign / "evidence" / ".update-rollback-state.json").exists())
+        result = qualify.load_json(campaign / "checks" / "update-and-rollback.json")
+        self.assertEqual("pass", result["status"])
+
+    def test_update_rollback_rehearsal_rejects_wrong_candidate_identity(self):
+        campaign = self.begin()
+        qualify.activate_campaign(campaign, self.root)
+        updater = self.root / "cloudless-updater"
+        updater.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+        updater.chmod(0o700)
+        baseline = {
+            "capturedAt": "2026-07-31T00:00:00Z",
+            "bootId": "00000000-0000-0000-0000-000000000001",
+            "engine": {"active": "vllm", "ready": True, "unloaded": False},
+            "operations": [{"idHash": "a" * 24, "kind": "run", "phase": "preparing"}],
+            "update": {
+                "state": "available",
+                "currentVersion": "1.2.2",
+                "currentSourceCommit": "1" * 40,
+                "availableVersion": "1.2.3-rc1",
+                "availableSourceCommit": "f" * 40,
+                "progress": 100,
+                "rebootRequired": False,
+            },
+        }
+        with mock.patch.object(qualify, "update_rehearsal_snapshot", return_value=(baseline, {})):
+            with self.assertRaisesRegex(ValueError, "source commit"):
+                qualify.run_update_rollback_rehearsal(
+                    campaign,
+                    self.matrix,
+                    updater=updater,
+                    runner=lambda _: self.fail("updater must not run"),
+                    reporter=lambda _: None,
+                    qualification_root_path=self.root,
+                )
+
+    def test_interrupted_update_rehearsal_prevents_campaign_sealing(self):
+        campaign = self.begin()
+        checkpoint = campaign / "evidence" / ".update-rollback-state.json"
+        checkpoint.write_text(
+            json.dumps({"schema": qualify.UPDATE_REHEARSAL_SCHEMA, "stage": "rollback-started"}),
+            encoding="utf-8",
+        )
+        errors = qualify.validate_campaign(campaign, self.matrix)
+        self.assertIn(
+            "update-and-rollback: an interrupted rehearsal must be resumed or discarded",
+            errors,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

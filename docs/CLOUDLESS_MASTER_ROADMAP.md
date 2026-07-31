@@ -104,6 +104,13 @@ Implementation status (July 31, 2026):
   upgrades and rolls back all six packages, restarts each daemon generation and proves that the same
   durable operation remains recoverable while the cache-backed model stays ready. The destructive
   package rehearsal on physical targets remains outstanding.
+- The packaged qualification runner now drives that destructive rehearsal without a test-only
+  repository or hidden environment switch. A root-only updater mode is admitted only by an active,
+  unsealed campaign for the exact signed candidate; it verifies workload continuity, deliberately
+  takes the production rollback path, verifies restoration, then applies the candidate normally.
+  The resumable evidence record hashes operation identities and fails closed unless the same active
+  model and durable preparation survive both transactions. Physical execution is still required
+  before the P1 checkbox can close.
 - A required `secret-hygiene` release gate scans all tracked and non-ignored source files without
   echoing matches. The least-privilege storage, revocation and local environment procedure is in
   [`SECURE_RELEASE_CREDENTIALS.md`](./SECURE_RELEASE_CREDENTIALS.md). Credentials previously exposed

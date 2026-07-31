@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -517,5 +518,124 @@ func TestApplyRollsBackWhenActiveWorkloadIsLost(t *testing.T) {
 	}
 	if strings.Contains(strings.Join(commands, "\n"), "lightdm") {
 		t.Fatal("failed generation restarted the kiosk")
+	}
+}
+
+func TestQualificationRollbackPreflightBindsActiveUnsealedCampaign(t *testing.T) {
+	root := t.TempDir()
+	campaignDir := filepath.Join(root, "candidate")
+	if err := os.Mkdir(campaignDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	campaignPayload := []byte(`{"schema":"cloudless.physical-evidence.v1","target":{"id":"virtualbox-amd64"},"version":"0.2.7","sourceCommit":"0123456789abcdef0123456789abcdef01234567"}`)
+	if err := os.WriteFile(filepath.Join(campaignDir, "campaign.json"), campaignPayload, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	digest := sha256.Sum256(campaignPayload)
+	pointer := fmt.Sprintf(
+		`{"schema":"cloudless.physical-active-campaign.v1","campaign":"candidate","campaignSha256":"%x","target":"virtualbox-amd64","version":"0.2.7","sourceCommit":"0123456789abcdef0123456789abcdef01234567"}`,
+		digest,
+	)
+	if err := os.WriteFile(filepath.Join(root, "active-campaign.json"), []byte(pointer), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	originalRoot, originalEUID := updaterQualificationRoot, updaterEffectiveUID
+	updaterQualificationRoot = root
+	updaterEffectiveUID = func() int { return 0 }
+	t.Cleanup(func() {
+		updaterQualificationRoot = originalRoot
+		updaterEffectiveUID = originalEUID
+	})
+
+	campaign, err := qualificationRollbackPreflight()
+	if err != nil || campaign.Version != "0.2.7" {
+		t.Fatalf("qualificationRollbackPreflight() = %#v, %v", campaign, err)
+	}
+	if err := os.WriteFile(filepath.Join(campaignDir, "qualification-result.json"), []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := qualificationRollbackPreflight(); err == nil || !strings.Contains(err.Error(), "already sealed") {
+		t.Fatalf("sealed campaign preflight = %v", err)
+	}
+}
+
+func TestQualificationApplyDeliberatelyExercisesRollbackAfterContinuityPasses(t *testing.T) {
+	statusPath := filepath.Join(t.TempDir(), "status.json")
+	t.Setenv("CLOUDLESS_UPDATE_STATUS", statusPath)
+	t.Setenv("CLOUDLESS_PLATFORM", "generic")
+
+	originalConfigured := updaterConfigured
+	originalCandidates := updaterCandidates
+	originalRun := updaterRun
+	originalRunEnv := updaterRunEnv
+	originalCopyDebs := updaterCopyDebs
+	originalCapture := updaterCaptureWorkload
+	originalWait := updaterWaitContinuity
+	originalRollback := updaterRollback
+	originalRollbackRoot := updaterRollbackRoot
+	originalCurrentDir := updaterCurrentDir
+	originalCacheDir := updaterAPTCacheDir
+	originalStagedDir := updaterStagedDir
+	t.Cleanup(func() {
+		updaterConfigured = originalConfigured
+		updaterCandidates = originalCandidates
+		updaterRun = originalRun
+		updaterRunEnv = originalRunEnv
+		updaterCopyDebs = originalCopyDebs
+		updaterCaptureWorkload = originalCapture
+		updaterWaitContinuity = originalWait
+		updaterRollback = originalRollback
+		updaterRollbackRoot = originalRollbackRoot
+		updaterCurrentDir = originalCurrentDir
+		updaterAPTCacheDir = originalCacheDir
+		updaterStagedDir = originalStagedDir
+	})
+
+	updaterConfigured = func() bool { return true }
+	updaterCandidates = func(_ context.Context, status osupdate.Status) (osupdate.Status, error) {
+		status.CurrentVersion = "0.2.6"
+		status.AvailableVersion = "0.2.7"
+		status.AvailableSourceCommit = "0123456789abcdef0123456789abcdef01234567"
+		status.Packages = []osupdate.Package{{Name: "cloudless-orchestrator", Installed: "0.2.6", Candidate: "0.2.7"}}
+		return status, nil
+	}
+	updaterRun = func(context.Context, string, ...string) (string, error) { return "", nil }
+	updaterRunEnv = func(context.Context, []string, string, ...string) (string, error) { return "", nil }
+	updaterCopyDebs = func(string, string) error { return nil }
+	updaterCaptureWorkload = func(context.Context, string) (workloadSnapshot, error) {
+		return workloadSnapshot{ReadyEngine: "vllm", RecipeOperationIDs: []string{"run-1"}}, nil
+	}
+	var continuityChecks, rollbacks int
+	updaterWaitContinuity = func(string, workloadSnapshot, time.Duration) error {
+		continuityChecks++
+		return nil
+	}
+	updaterRollback = func(context.Context, string) error {
+		rollbacks++
+		return nil
+	}
+	work := t.TempDir()
+	updaterRollbackRoot = filepath.Join(work, "rollback")
+	updaterCurrentDir = filepath.Join(work, "current")
+	updaterAPTCacheDir = filepath.Join(work, "cache")
+	updaterStagedDir = filepath.Join(work, "staged")
+
+	err := applyWithMode(
+		"0.2.7",
+		"0123456789abcdef0123456789abcdef01234567",
+		true,
+	)
+	if err == nil || !strings.Contains(err.Error(), "was rolled back") {
+		t.Fatalf("qualification apply = %v", err)
+	}
+	if continuityChecks != 2 || rollbacks != 1 {
+		t.Fatalf("continuity checks=%d, rollbacks=%d", continuityChecks, rollbacks)
+	}
+	status, readErr := osupdate.Read()
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if !strings.Contains(status.Error, "deliberate rollback") {
+		t.Fatalf("qualification rollback reason was not retained: %#v", status)
 	}
 }

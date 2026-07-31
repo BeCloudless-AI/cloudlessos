@@ -9,6 +9,19 @@ fi
 adduser cloudlessd cloudless >/dev/null 2>&1 || true
 install -d -m 0750 -o cloudlessd -g cloudless-control /var/lib/cloudless /var/lib/cloudless/builds
 install -d -m 2750 -o cloudlessd -g cloudless /var/lib/cloudless/models-cache
+
+# Releases before the unprivileged daemon migration created cluster identity
+# and recipe metadata as root. Preserve their contents while transferring only
+# Cloudless control-plane paths to the service account that now reads them.
+for state_path in cluster recipes; do
+    install -d -m 0700 -o cloudlessd -g cloudless-control "/var/lib/cloudless/$state_path"
+    chown -R cloudlessd:cloudless-control "/var/lib/cloudless/$state_path"
+done
+find /var/lib/cloudless/cluster -type d -exec chmod 0700 {} +
+find /var/lib/cloudless/cluster -type f -exec chmod 0600 {} +
+if [ -f /var/lib/cloudless/cluster/id_ed25519.pub ]; then
+    chmod 0644 /var/lib/cloudless/cluster/id_ed25519.pub
+fi
 systemctl daemon-reload >/dev/null 2>&1 || true
 systemctl enable cloudless-privileged.service >/dev/null 2>&1 || true
 systemctl enable cloudless-engine.service >/dev/null 2>&1 || true

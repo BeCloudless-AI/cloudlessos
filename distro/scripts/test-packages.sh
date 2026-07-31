@@ -144,6 +144,9 @@ grep -Fq 'Requires=cloudless-engine.service' "$DISTRO/packages/cloudless-orchest
 grep -Fqx 'User=cloudlessd' "$DISTRO/packages/cloudless-orchestrator/cloudlessd.service"
 grep -Fqx 'Group=cloudless-control' "$DISTRO/packages/cloudless-orchestrator/cloudlessd.service"
 grep -Fqx 'SupplementaryGroups=cloudless' "$DISTRO/packages/cloudless-orchestrator/cloudlessd.service"
+grep -Fqx 'AmbientCapabilities=CAP_NET_RAW' "$DISTRO/packages/cloudless-orchestrator/cloudlessd.service"
+grep -Fqx 'CapabilityBoundingSet=CAP_NET_RAW' "$DISTRO/packages/cloudless-orchestrator/cloudlessd.service"
+grep -Fq 'chown -R cloudlessd:cloudless-control' "$DISTRO/packages/cloudless-orchestrator/postinst"
 if grep -Fq '/run/docker.sock' "$DISTRO/packages/cloudless-orchestrator/cloudlessd.service"; then
     echo "cloudlessd must not retain Docker socket access after engine delegation" >&2
     exit 1

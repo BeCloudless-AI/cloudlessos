@@ -302,9 +302,21 @@ PY
   assert_active_model
   begin_interrupted_recipe_check
 
+  # Simulate control-plane data created by the former root daemon. The
+  # candidate postinst must migrate it without deleting the enrolled cluster.
+  install -d -o root -g root -m 0700 /var/lib/cloudless/cluster
+  printf '{"role":"coordinator","peerHost":"192.0.2.10"}\n' >/var/lib/cloudless/cluster/state.json
+  printf 'legacy-private-key\n' >/var/lib/cloudless/cluster/id_ed25519
+  chown root:root /var/lib/cloudless/cluster/state.json /var/lib/cloudless/cluster/id_ed25519
+  chmod 0600 /var/lib/cloudless/cluster/state.json /var/lib/cloudless/cluster/id_ed25519
+
   # Upgrade while the old daemon and its model endpoint are live, then restart
   # into the candidate binary and prove the exact cache-backed runtime again.
   install_generation "$candidate" "$expected_new"
+  test "$(stat -c '%U:%G:%a' /var/lib/cloudless/cluster)" = "cloudlessd:cloudless-control:700"
+  test "$(stat -c '%U:%G:%a' /var/lib/cloudless/cluster/state.json)" = "cloudlessd:cloudless-control:600"
+  test "$(stat -c '%U:%G:%a' /var/lib/cloudless/cluster/id_ed25519)" = "cloudlessd:cloudless-control:600"
+  runuser -u cloudlessd -- grep -Fq '192.0.2.10' /var/lib/cloudless/cluster/state.json
   grep -Fq '"qualification":"preserve-me"' /var/lib/cloudless/qualification-preserve.json
   cmp "$legacy_cache/hub/models--qualification--model/blobs/weights" "$migrated"
   assert_active_model

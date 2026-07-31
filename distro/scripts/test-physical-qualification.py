@@ -119,8 +119,13 @@ class PhysicalQualificationTest(unittest.TestCase):
         for number in range(10):
             self.record_healthy_boot(campaign, str(uuid.UUID(int=number + 1)))
         self.record_all(campaign, "virtualbox-amd64")
+        qualify.activate_campaign(campaign, self.root)
         archive = self.root / "qualified.zip"
-        self.assertEqual(qualify.export_campaign(campaign, self.matrix, archive), archive)
+        with mock.patch.dict(
+            qualify.os.environ, {"CLOUDLESS_QUALIFICATION_ROOT": str(self.root)}, clear=False
+        ):
+            self.assertEqual(qualify.export_campaign(campaign, self.matrix, archive), archive)
+        self.assertFalse((self.root / "active-campaign.json").exists())
         manifest = qualify.verify_export(archive)
         self.assertEqual(manifest["schema"], qualify.EXPORT_SCHEMA)
         self.assertEqual(manifest["target"], "virtualbox-amd64")
@@ -249,6 +254,70 @@ class PhysicalQualificationTest(unittest.TestCase):
                 boot_health_path=self.boot_health(boot, probes={"kioskBrowser": "waiting"}),
             )
         self.assertEqual(list((campaign / "boots").iterdir()), [])
+
+    def test_active_campaign_records_only_exact_verified_installed_boot(self):
+        campaign = self.begin()
+        pointer = qualify.activate_campaign(campaign, self.root)
+        self.assertTrue(pointer.is_file())
+        status = self.root / "status.json"
+        status.write_text(
+            json.dumps(
+                {
+                    "currentVersion": "1.2.3-rc1",
+                    "currentSourceCommit": "0123456789abcdef0123456789abcdef01234567",
+                }
+            ),
+            encoding="utf-8",
+        )
+        boot_id = str(uuid.UUID(int=88))
+        with mock.patch.object(qualify, "current_boot_id", return_value=boot_id):
+            active, created = qualify.record_active_boot(
+                self.root,
+                self.matrix,
+                status,
+                self.boot_health(boot_id),
+                machine_arch="x86_64",
+                machine_kind="virtualbox",
+            )
+            self.assertEqual(active, campaign.resolve())
+            self.assertTrue(created)
+            _, created = qualify.record_active_boot(
+                self.root,
+                self.matrix,
+                status,
+                self.boot_health(boot_id),
+                machine_arch="x86_64",
+                machine_kind="virtualbox",
+            )
+            self.assertFalse(created)
+
+        status.write_text(
+            json.dumps(
+                {
+                    "currentVersion": "1.2.3-rc1",
+                    "currentSourceCommit": "89abcdef0123456789abcdef0123456789abcdef",
+                }
+            ),
+            encoding="utf-8",
+        )
+        with self.assertRaisesRegex(ValueError, "source commit does not match"):
+            qualify.record_active_boot(
+                self.root,
+                self.matrix,
+                status,
+                self.boot_health(str(uuid.UUID(int=89))),
+                machine_arch="x86_64",
+                machine_kind="virtualbox",
+            )
+
+    def test_active_campaign_pointer_detects_substitution(self):
+        campaign = self.begin()
+        qualify.activate_campaign(campaign, self.root)
+        manifest = json.loads((campaign / "campaign.json").read_text(encoding="utf-8"))
+        manifest["operator"] = "Substituted operator"
+        (campaign / "campaign.json").write_text(json.dumps(manifest), encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "identity has changed"):
+            qualify.active_campaign(self.root)
 
     def test_embedded_graphical_boot_audit_is_revalidated(self):
         campaign = self.begin()

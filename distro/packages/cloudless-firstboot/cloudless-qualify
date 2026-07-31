@@ -27,6 +27,8 @@ SET_SCHEMA = "cloudless.physical-set.v1"
 DEFAULT_MATRIX = Path("/usr/share/cloudless/physical-validation-matrix.json")
 DEFAULT_UPDATE_STATUS = Path("/var/lib/cloudless-updater/status.json")
 DEFAULT_BOOT_HEALTH = Path("/var/lib/cloudless/boot-health.json")
+DEFAULT_QUALIFICATION_ROOT = Path("/var/lib/cloudless/qualification")
+ACTIVE_SCHEMA = "cloudless.physical-active-campaign.v1"
 MAX_EVIDENCE_BYTES = 64 * 1024 * 1024
 MAX_EXPORT_BYTES = 2 * 1024 * 1024 * 1024
 VERSION_RE = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+(?:[-+~][0-9A-Za-z][0-9A-Za-z.+~_-]*)?$")
@@ -231,6 +233,123 @@ def begin_campaign(
     return output
 
 
+def qualification_root(path: Path | None = None) -> Path:
+    root = path or Path(os.environ.get("CLOUDLESS_QUALIFICATION_ROOT", DEFAULT_QUALIFICATION_ROOT))
+    if root.is_symlink():
+        raise ValueError("qualification root must not be a symlink")
+    root.mkdir(parents=True, mode=0o700, exist_ok=True)
+    os.chmod(root, 0o700)
+    return root.resolve()
+
+
+def activate_campaign(campaign: Path, root: Path | None = None) -> Path:
+    root = qualification_root(root)
+    verify_campaign_layout(campaign)
+    campaign = campaign.resolve()
+    try:
+        relative = campaign.relative_to(root)
+    except ValueError as exc:
+        raise ValueError("automatic boot recording requires a campaign inside the qualification root") from exc
+    manifest_path = campaign / "campaign.json"
+    manifest = load_json(manifest_path)
+    pointer = root / "active-campaign.json"
+    atomic_json(
+        pointer,
+        {
+            "schema": ACTIVE_SCHEMA,
+            "campaign": relative.as_posix(),
+            "campaignSha256": sha256_file(manifest_path),
+            "target": manifest.get("target", {}).get("id"),
+            "version": manifest.get("version"),
+            "sourceCommit": manifest.get("sourceCommit"),
+            "activatedAt": utc_now(),
+        },
+    )
+    return pointer
+
+
+def active_campaign(root: Path | None = None, *, allow_sealed: bool = False) -> tuple[Path, dict]:
+    root = qualification_root(root)
+    pointer_path = root / "active-campaign.json"
+    if pointer_path.is_symlink() or not pointer_path.is_file():
+        raise ValueError("no automatic physical qualification campaign is active")
+    pointer = load_json(pointer_path)
+    if pointer.get("schema") != ACTIVE_SCHEMA:
+        raise ValueError("active qualification campaign has an unsupported schema")
+    relative = Path(str(pointer.get("campaign", "")))
+    if relative.is_absolute() or not relative.parts or ".." in relative.parts:
+        raise ValueError("active qualification campaign path is unsafe")
+    campaign = root / relative
+    verify_campaign_layout(campaign)
+    campaign = campaign.resolve()
+    try:
+        campaign.relative_to(root)
+    except ValueError as exc:
+        raise ValueError("active qualification campaign escapes the qualification root") from exc
+    manifest_path = campaign / "campaign.json"
+    manifest = load_json(manifest_path)
+    if sha256_file(manifest_path) != pointer.get("campaignSha256"):
+        raise ValueError("active qualification campaign identity has changed")
+    expected = (
+        pointer.get("target"),
+        pointer.get("version"),
+        pointer.get("sourceCommit"),
+    )
+    actual = (
+        manifest.get("target", {}).get("id"),
+        manifest.get("version"),
+        manifest.get("sourceCommit"),
+    )
+    if actual != expected:
+        raise ValueError("active qualification pointer does not match its campaign")
+    if not allow_sealed and (campaign / "qualification-result.json").exists():
+        raise ValueError("active qualification campaign is already sealed")
+    return campaign, manifest
+
+
+def deactivate_campaign(campaign: Path, root: Path | None = None) -> bool:
+    root = root or Path(os.environ.get("CLOUDLESS_QUALIFICATION_ROOT", DEFAULT_QUALIFICATION_ROOT))
+    if not root.exists():
+        return False
+    if root.is_symlink() or not root.is_dir():
+        raise ValueError("qualification root must be a real directory")
+    root = root.resolve()
+    pointer = root / "active-campaign.json"
+    if not pointer.exists():
+        return False
+    try:
+        active, _ = active_campaign(root, allow_sealed=True)
+    except ValueError as exc:
+        if "no automatic physical qualification campaign is active" in str(exc):
+            return False
+        raise
+    if active != campaign.resolve():
+        return False
+    pointer.unlink()
+    return True
+
+
+def record_active_boot(
+    root: Path | None = None,
+    matrix_path: Path = DEFAULT_MATRIX,
+    status_path: Path | None = None,
+    boot_health_path: Path | None = None,
+    *,
+    machine_arch: str | None = None,
+    machine_kind: str | None = None,
+) -> tuple[Path, bool]:
+    campaign, manifest = active_campaign(root)
+    matrix = load_matrix(matrix_path)
+    target = campaign_target(campaign, matrix)
+    if manifest.get("matrixSha256") != sha256_file(matrix_path):
+        raise ValueError("active campaign was created from a different qualification matrix")
+    verify_target_machine(target, machine_arch, machine_kind)
+    installed_commit = installed_source_commit(str(manifest.get("version", "")), status_path)
+    if installed_commit != manifest.get("sourceCommit"):
+        raise ValueError("installed source commit does not match the active qualification campaign")
+    return campaign, record_boot(campaign, boot_health_path=boot_health_path)
+
+
 def verify_campaign_layout(campaign: Path) -> None:
     if campaign.is_symlink() or not campaign.is_dir():
         raise ValueError("qualification campaign must be a real directory")
@@ -348,7 +467,8 @@ def print_plan(campaign: Path, matrix_path: Path, *, only_next: bool = False, as
                 print(f"  - {error}")
         quoted_campaign = shlex.quote(str(campaign))
         if check == "ten-boot-cycles":
-            print(f"After this boot: sudo cloudless-qualify boot {quoted_campaign}")
+            print("Managed campaigns record healthy boots automatically after the graphical audit.")
+            print(f"Manual fallback: sudo cloudless-qualify boot {quoted_campaign}")
         else:
             print("After collecting redacted evidence:")
             print(
@@ -749,6 +869,7 @@ def export_campaign(campaign: Path, matrix_path: Path, output: Path) -> Path:
         verify_export(temporary)
         os.chmod(temporary, 0o600)
         os.replace(temporary, output)
+        deactivate_campaign(campaign)
         return output
     finally:
         temporary.unlink(missing_ok=True)
@@ -920,6 +1041,17 @@ def main(argv: list[str] | None = None) -> int:
     boot.add_argument("campaign", type=Path)
     matrix_argument(boot)
 
+    boot_active = subparsers.add_parser(
+        "boot-active", help="record this boot for the active trusted qualification campaign"
+    )
+    boot_active.add_argument(
+        "--root",
+        type=Path,
+        default=Path(os.environ.get("CLOUDLESS_QUALIFICATION_ROOT", DEFAULT_QUALIFICATION_ROOT)),
+        help="trusted qualification campaign root",
+    )
+    matrix_argument(boot_active)
+
     record = subparsers.add_parser("record", help="record one physical check with evidence")
     record.add_argument("campaign", type=Path)
     record.add_argument("check")
@@ -967,12 +1099,28 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "begin":
             result = begin_campaign(args.matrix, args.target, args.version, args.commit, args.output, args.operator)
             print(f"Qualification campaign created at {result}")
-            print(f"Record this boot: sudo cloudless-qualify boot {result}")
+            root = Path(os.environ.get("CLOUDLESS_QUALIFICATION_ROOT", DEFAULT_QUALIFICATION_ROOT))
+            try:
+                result.resolve().relative_to(root.resolve())
+            except ValueError:
+                print(f"Record each boot manually: sudo cloudless-qualify boot {result}")
+            else:
+                activate_campaign(result, root)
+                print("Healthy graphical boots will now be recorded automatically after the boot audit.")
+                print(f"Record the current boot once now: sudo cloudless-qualify boot {result}")
             return 0
         if args.command == "boot":
             campaign_target(args.campaign, load_matrix(args.matrix))
             created = record_boot(args.campaign)
             print("Recorded this boot." if created else "This boot was already recorded.")
+            return 0
+        if args.command == "boot-active":
+            campaign, created = record_active_boot(args.root, args.matrix)
+            print(
+                f"Recorded verified boot for {campaign}."
+                if created
+                else f"Verified boot was already recorded for {campaign}."
+            )
             return 0
         if args.command == "record":
             record_check(args.campaign, args.matrix, args.check, args.status, args.note, args.evidence)

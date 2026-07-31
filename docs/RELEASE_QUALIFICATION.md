@@ -52,18 +52,23 @@ The updater retains the exact source commit only after verifying it against the 
 metadata. `begin` uses that identity only when its installed version exactly matches the requested
 version. For a fresh ISO that has not yet established updater identity, append the full
 40-character release commit after the version; abbreviated commits are never accepted.
-After every distinct cold boot or restart, wait for the Cloudless desktop to appear normally and
-then record the kernel-generated boot identity:
+When the output is under `/var/lib/cloudless/qualification`, `begin` activates that one campaign.
+On every subsequent cold boot or restart, the packaged qualification service runs only after the
+graphical boot audit succeeds and records the kernel-generated boot identity automatically. Record
+the already-running boot once immediately after `begin`:
 
 ```bash
 sudo cloudless-qualify boot /var/lib/cloudless/qualification/0.2.7-01234567/dgx-spark-arm64-2
 ```
 
-The command does not trust the boot ID alone. It reads the packaged boot auditor's result for that
-exact boot and refuses to count it unless `graphical.target`, LightDM, X, the Cloudless session,
+Neither the manual command nor the automatic service trusts the boot ID alone. Each reads the
+packaged boot auditor's result for that exact boot and refuses to count it unless
+`graphical.target`, LightDM, X, the Cloudless session,
 the kiosk browser, browser-profile ownership and the local API are all ready. Running the command
 from a recovery TTY after a black-screen boot therefore cannot advance the ten-cycle gate. Each
 accepted boot record embeds the immutable audit snapshot that proved the graphical ownership chain.
+The active pointer is SHA-256 bound to the campaign identity; recording also requires the installed
+version and signed source commit to match. A successful export deactivates the campaign.
 
 Collect read-only machine details and the locally generated, redacted support ZIP:
 

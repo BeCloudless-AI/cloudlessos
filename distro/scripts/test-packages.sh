@@ -119,10 +119,17 @@ dpkg-deb -f "$firstboot_deb" Depends | grep -Eq '(^|, )python3(,|$)'
 dpkg-deb -c "$firstboot_deb" | grep -F './usr/lib/cloudless/cloudless-boot-audit' >/dev/null
 dpkg-deb -c "$firstboot_deb" | grep -F './usr/lib/cloudless/cloudless-graphical-recovery' >/dev/null
 dpkg-deb -c "$firstboot_deb" | grep -F './lib/systemd/system/cloudless-graphical-recovery.service' >/dev/null
+dpkg-deb -c "$firstboot_deb" | grep -F './lib/systemd/system/cloudless-qualification-boot.service' >/dev/null
 grep -Fq 'ExecStart=/usr/lib/cloudless/cloudless-boot-audit' \
     "$DISTRO/packages/cloudless-firstboot/cloudless-firstboot.service"
 grep -Fq 'OnFailure=cloudless-graphical-recovery.service' \
     "$DISTRO/packages/cloudless-firstboot/cloudless-firstboot.service"
+grep -Fq 'ExecStart=/usr/bin/cloudless-qualify boot-active' \
+    "$DISTRO/packages/cloudless-firstboot/cloudless-qualification-boot.service"
+grep -Fq 'Requires=cloudless-firstboot.service' \
+    "$DISTRO/packages/cloudless-firstboot/cloudless-qualification-boot.service"
+grep -Fq 'systemctl enable cloudless-qualification-boot.service' \
+    "$DISTRO/packages/cloudless-firstboot/postinst"
 grep -Fq 'cloudless-graphical-recovery-' \
     "$DISTRO/packages/cloudless-firstboot/cloudless-graphical-recovery"
 restart_line="$(grep -n 'systemctl restart lightdm.service' "$DISTRO/packages/cloudless-firstboot/cloudless-repair" | head -n1 | cut -d: -f1)"

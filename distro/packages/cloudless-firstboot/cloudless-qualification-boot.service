@@ -1,0 +1,18 @@
+[Unit]
+Description=Record a verified CloudlessOS physical qualification boot
+After=cloudless-firstboot.service
+Requires=cloudless-firstboot.service
+ConditionPathExists=/var/lib/cloudless/qualification/active-campaign.json
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/cloudless-qualify boot-active
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=read-only
+ProtectSystem=strict
+ReadWritePaths=/var/lib/cloudless/qualification
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

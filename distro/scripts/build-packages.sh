@@ -126,6 +126,7 @@ install -Dm0755 "$DISTRO/packages/cloudless-firstboot/cloudless-qualify" "$PKG/u
 install -Dm0644 "$DISTRO/release/physical-validation-matrix.json" \
     "$PKG/usr/share/cloudless/physical-validation-matrix.json"
 install -Dm0644 "$DISTRO/packages/cloudless-firstboot/cloudless-firstboot.service" "$PKG/lib/systemd/system/cloudless-firstboot.service"
+install -Dm0644 "$DISTRO/packages/cloudless-firstboot/cloudless-qualification-boot.service" "$PKG/lib/systemd/system/cloudless-qualification-boot.service"
 install -Dm0644 "$DISTRO/packages/cloudless-firstboot/cloudless-graphical-recovery.service" "$PKG/lib/systemd/system/cloudless-graphical-recovery.service"
 install -Dm0755 "$DISTRO/packages/cloudless-firstboot/postinst" "$PKG/DEBIAN/postinst"
 finish_package "$PKG" cloudless-firstboot

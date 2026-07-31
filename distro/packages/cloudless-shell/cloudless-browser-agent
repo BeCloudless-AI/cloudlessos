@@ -7,15 +7,22 @@ export HOME="${HOME:-/home/cloudless}"
 export XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 export XDG_CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
 export PATH="/snap/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
-REQUESTS=/run/cloudless-browser/requests
-STATUS=/run/cloudless-browser/status.json
+REQUESTS="${CLOUDLESS_BROWSER_REQUESTS:-/run/cloudless-browser/requests}"
+STATUS="${CLOUDLESS_BROWSER_STATUS:-/run/cloudless-browser/status.json}"
+LOCK="${CLOUDLESS_BROWSER_LOCK:-/run/cloudless-browser/agent.lock}"
+POLL_SECONDS="${CLOUDLESS_BROWSER_POLL_SECONDS:-0.2}"
+LOCK_WAIT_SECONDS="${CLOUDLESS_BROWSER_LOCK_WAIT_SECONDS:-2}"
 KIOSK_WINDOW=
+case "$REQUESTS:$STATUS:$LOCK" in
+    /*:/*:/*) ;;
+    *) echo "Cloudless Browser runtime paths must be absolute" >&2; exit 1 ;;
+esac
 
 # Openbox autostart can be evaluated more than once while the graphical
 # session is being repaired or refreshed. Only one agent may consume browser
 # requests and manage the window layers.
-exec 9>/run/cloudless-browser/agent.lock
-flock -n 9 || exit 0
+exec 9>"$LOCK"
+flock -w "$LOCK_WAIT_SECONDS" 9 || exit 0
 
 discover_kiosk() {
     if [ -n "$KIOSK_WINDOW" ] && xprop -id "$KIOSK_WINDOW" WM_CLASS >/dev/null 2>&1; then
@@ -76,6 +83,7 @@ publish_status() {
         fi
     fi
     printf '{"running":%s,"minimized":%s}\n' "$running" "$minimized" >"$STATUS.tmp"
+    chmod 0660 "$STATUS.tmp"
     mv -f "$STATUS.tmp" "$STATUS"
 }
 
@@ -89,6 +97,16 @@ restore_browser() {
 }
 
 find_browser() {
+    if [ -n "${CLOUDLESS_BROWSER_BIN:-}" ]; then
+        case "$CLOUDLESS_BROWSER_BIN" in
+            /*/chromium|/*/chromium-browser|/*/google-chrome-stable|/*/firefox)
+                [ -x "$CLOUDLESS_BROWSER_BIN" ] || return 1
+                printf '%s\n' "$CLOUDLESS_BROWSER_BIN"
+                return 0
+                ;;
+            *) return 1 ;;
+        esac
+    fi
     for candidate in chromium chromium-browser google-chrome-stable firefox; do
         if command -v "$candidate" >/dev/null 2>&1; then command -v "$candidate"; return 0; fi
     done
@@ -100,12 +118,18 @@ while :; do
         [ -f "$request" ] || continue
         url="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8")).get("url", ""))' "$request" 2>/dev/null || true)"
         action="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8")).get("action", "open"))' "$request" 2>/dev/null || true)"
-        rm -f "$request"
-        case "$url" in http://*|https://*) ;; *) continue ;; esac
+        case "$url" in
+            http://*|https://*) ;;
+            *) rm -f "$request"; continue ;;
+        esac
         if [ "$action" = show ] && restore_browser; then
+            rm -f "$request"
             continue
         fi
         browser="$(find_browser || true)"
+        # Browser installation and Snap refreshes can be temporarily
+        # unavailable. Keep the request queued and retry instead of silently
+        # acknowledging an action that never happened.
         [ -n "$browser" ] || continue
         case "$(basename "$browser")" in
             firefox)
@@ -131,7 +155,11 @@ while :; do
                     --class=CloudlessBrowser 9>&- >/dev/null 2>&1 &
                 ;;
         esac
+        rm -f "$request"
     done
     publish_status
-    sleep 0.2
+    # Do not let the polling child retain the singleton lock after this agent
+    # receives SIGTERM; a repaired graphical session must be able to restart
+    # the agent immediately.
+    sleep "$POLL_SECONDS" 9>&-
 done

@@ -11,6 +11,23 @@ func TestApplyUnifiedMemory(t *testing.T) {
 	if gpus[0].MemTotalMB != 124609 || gpus[0].MemUsedMB != 5742 {
 		t.Fatalf("unified memory = %d/%d MB", gpus[0].MemUsedMB, gpus[0].MemTotalMB)
 	}
+	if gpus[0].MemAvailableMB != 118867 || gpus[0].MemReservedMB != 12288 ||
+		gpus[0].MemHeadroomMB != 106579 {
+		t.Fatalf("unified budget = %#v", gpus[0])
+	}
+}
+
+func TestNewMemoryBudgetDoesNotDoubleCountCache(t *testing.T) {
+	got := NewMemoryBudget(128*1024, 110*1024, 40*1024)
+	if got.ReservedMB != 12*1024 || got.WorkloadCapacityMB != 116*1024 {
+		t.Fatalf("capacity budget = %#v", got)
+	}
+	if got.WorkloadHeadroomMB != 98*1024 {
+		t.Fatalf("headroom double-counted reclaimable cache: %#v", got)
+	}
+	if got.ReclaimableMB != 40*1024 || got.SystemUsedMB != 18*1024 {
+		t.Fatalf("explanatory accounting = %#v", got)
+	}
 }
 
 func TestParseGPUsCSVSupportsPeerTelemetry(t *testing.T) {

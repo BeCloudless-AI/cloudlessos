@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/cloudless/orchestrator/internal/engine"
+	"github.com/cloudless/orchestrator/internal/securityaudit"
 	"github.com/cloudless/orchestrator/internal/state"
 )
 
@@ -30,6 +31,9 @@ func TestSupportBundleRedactsContainerLogs(t *testing.T) {
 		t.Fatal(err)
 	}
 	eng := bundleEngine{logs: "token=hf_private password=secret"}
+	securityaudit.New(store.Dir()).Append(securityaudit.Event{
+		Category: "gateway", Event: "auth", Outcome: "failed", Detail: "Bearer bundle-secret",
+	})
 	bundle, err := BuildBundle(context.Background(), eng, store, Report{Platform: "test", Arch: "amd64"})
 	if err != nil {
 		t.Fatal(err)
@@ -38,7 +42,9 @@ func TestSupportBundleRedactsContainerLogs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	foundAudit := false
 	for _, file := range archive.File {
+		foundAudit = foundAudit || file.Name == "security-audit.json"
 		reader, openErr := file.Open()
 		if openErr != nil {
 			t.Fatal(openErr)
@@ -51,6 +57,9 @@ func TestSupportBundleRedactsContainerLogs(t *testing.T) {
 		if strings.HasSuffix(file.Name, ".json") && !json.Valid(data) {
 			t.Fatalf("redaction corrupted JSON entry %s: %s", file.Name, data)
 		}
+	}
+	if !foundAudit {
+		t.Fatal("support bundle omitted the unified security audit")
 	}
 }
 
@@ -81,18 +90,53 @@ type bundleEngine struct {
 	containers []engine.Container
 }
 
-func (bundleEngine) Available(context.Context) error                           { return nil }
-func (bundleEngine) EnsureNetwork(context.Context, string) error               { return nil }
-func (bundleEngine) ConnectNetwork(context.Context, string, string) error      { return nil }
-func (bundleEngine) HasAlias(context.Context, string, string) (bool, error)    { return true, nil }
+func (bundleEngine) Available(context.Context) error                          { return nil }
+func (bundleEngine) EnsureNetwork(context.Context, string) error              { return nil }
+func (bundleEngine) EnsureVolume(context.Context, string) error               { return nil }
+func (bundleEngine) VolumeMountpoint(context.Context, string) (string, error) { return "", nil }
+func (bundleEngine) ListVolumes(context.Context) ([]string, error)            { return nil, nil }
+func (bundleEngine) RemoveVolume(context.Context, string) error               { return nil }
+func (bundleEngine) ConnectNetwork(context.Context, string, string) error     { return nil }
+func (bundleEngine) HasAlias(context.Context, string, string) (bool, error)   { return true, nil }
+func (bundleEngine) ContainerEnvironment(context.Context, string) (map[string]string, error) {
+	return nil, nil
+}
+func (bundleEngine) HermesConfigValue(context.Context, string, string) (string, error) {
+	return "", nil
+}
+func (bundleEngine) HasNVIDIARuntime(context.Context) (bool, error) { return true, nil }
+func (bundleEngine) ContainerNamesByLabel(context.Context, string, string) ([]string, error) {
+	return nil, nil
+}
+func (bundleEngine) ContainerNamesByAncestor(context.Context, string) ([]string, error) {
+	return nil, nil
+}
+func (bundleEngine) LogsTail(context.Context, string, int) (string, error)     { return "", nil }
 func (bundleEngine) Exec(context.Context, string, ...string) error             { return nil }
 func (bundleEngine) Pull(context.Context, string) error                        { return nil }
 func (bundleEngine) PullStream(context.Context, string, func(string)) error    { return nil }
 func (bundleEngine) Build(context.Context, string, string, func(string)) error { return nil }
 func (bundleEngine) RemoveImage(context.Context, string) error                 { return nil }
-func (bundleEngine) Run(context.Context, engine.RunSpec) (string, error)       { return "", nil }
-func (bundleEngine) Stop(context.Context, string) error                        { return nil }
-func (bundleEngine) Remove(context.Context, string) error                      { return nil }
+func (bundleEngine) InspectImage(context.Context, string) (engine.ImageInfo, error) {
+	return engine.ImageInfo{}, nil
+}
+func (bundleEngine) TagImage(context.Context, string, string) error { return nil }
+func (bundleEngine) RemoteImageManifest(context.Context, string) (string, error) {
+	return "", nil
+}
+func (bundleEngine) RemoteImageConfig(context.Context, string) (string, error) {
+	return "", nil
+}
+func (bundleEngine) ExportImage(context.Context, string, string) error { return nil }
+func (bundleEngine) ListImageDigests(context.Context) ([]engine.ImageDigestRef, error) {
+	return nil, nil
+}
+func (bundleEngine) Run(context.Context, engine.RunSpec) (string, error) { return "", nil }
+func (bundleEngine) RunTransient(context.Context, engine.RunSpec) (string, error) {
+	return "", nil
+}
+func (bundleEngine) Stop(context.Context, string) error   { return nil }
+func (bundleEngine) Remove(context.Context, string) error { return nil }
 
 func (e bundleEngine) List(context.Context) ([]engine.Container, error) {
 	if e.containers != nil {
@@ -105,4 +149,3 @@ func (e bundleEngine) Logs(context.Context, string) (string, error)             
 func (bundleEngine) ImageDigest(context.Context, string) (string, error)          { return "", nil }
 func (bundleEngine) RemoteDigest(context.Context, string) (string, error)         { return "", nil }
 func (bundleEngine) ContainerImageDigest(context.Context, string) (string, error) { return "", nil }
-func (bundleEngine) Output(context.Context, ...string) (string, error)            { return "", nil }

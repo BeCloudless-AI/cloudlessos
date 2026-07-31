@@ -8,10 +8,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/cloudless/orchestrator/internal/privileged"
 )
 
 type Status struct {
@@ -54,9 +57,17 @@ func (execCommands) Run(ctx context.Context, name string, args ...string) ([]byt
 	return output, nil
 }
 
-type Client struct{ commands commandRunner }
+type Client struct {
+	commands commandRunner
+	broker   privileged.Client
+}
 
-func New() *Client { return &Client{commands: execCommands{}} }
+func New() *Client {
+	return &Client{
+		commands: execCommands{},
+		broker:   privileged.Client{SocketPath: os.Getenv("CLOUDLESS_PRIVILEGED_SOCKET")},
+	}
+}
 
 type cliStatus struct {
 	Version      string   `json:"Version"`
@@ -149,8 +160,7 @@ func (c *Client) SetServe(ctx context.Context, enabled bool) error {
 }
 
 func (c *Client) Install(ctx context.Context) error {
-	_, err := c.commands.Run(ctx, "systemctl", "start", "--no-block", "cloudless-tailscale-install.service")
-	return err
+	return c.broker.Do(ctx, privileged.ActionTailscaleInstaller)
 }
 
 func cleanError(err error) string {

@@ -1,0 +1,60 @@
+{
+  "schema": "cloudless.physical-validation.v1",
+  "minimumBootCycles": 10,
+  "targets": [
+    {"id": "virtualbox-amd64", "platform": "virtualbox", "architecture": "amd64", "nodes": 1},
+    {"id": "generic-nvidia-amd64", "platform": "generic-nvidia", "architecture": "amd64", "nodes": 1},
+    {"id": "dgx-spark-arm64-1", "platform": "dgx-spark", "architecture": "arm64", "nodes": 1},
+    {"id": "dgx-spark-arm64-2", "platform": "dgx-spark", "architecture": "arm64", "nodes": 2, "failureMatrix": true},
+    {"id": "dgx-spark-arm64-3", "platform": "dgx-spark", "architecture": "arm64", "nodes": 3},
+    {"id": "dgx-spark-arm64-4", "platform": "dgx-spark", "architecture": "arm64", "nodes": 4},
+    {"id": "dgx-spark-arm64-5", "platform": "dgx-spark", "architecture": "arm64", "nodes": 5},
+    {"id": "dgx-spark-arm64-6", "platform": "dgx-spark", "architecture": "arm64", "nodes": 6},
+    {"id": "dgx-spark-arm64-7", "platform": "dgx-spark", "architecture": "arm64", "nodes": 7},
+    {"id": "dgx-spark-arm64-8", "platform": "dgx-spark", "architecture": "arm64", "nodes": 8}
+  ],
+  "requiredChecks": [
+    "clean-install",
+    "ten-boot-cycles",
+    "graphical-session",
+    "display-and-scale",
+    "locale-and-timezone",
+    "power-controls",
+    "virtual-keyboard",
+    "browser-and-terminal",
+    "app-lifecycle",
+    "model-load-switch-abort",
+    "update-and-rollback",
+    "backup-and-restore",
+    "support-bundle"
+  ],
+  "clusterChecks": [
+    "discover-and-enroll",
+    "fabric-and-ssh-preflight",
+    "selected-topology",
+    "distributed-model-load",
+    "peer-loss",
+    "disconnect-and-reconnect",
+    "cluster-credential-rebind"
+  ],
+  "clusterFailureDomains": [
+    "packet-loss",
+    "management-address-change",
+    "coordinator-loss",
+    "selected-worker-loss",
+    "coordinator-reboot",
+    "role-reversal-rejected",
+    "partial-cleanup"
+  ],
+  "inferenceLifecyclePhases": [
+    "pending",
+    "preparing",
+    "downloading",
+    "starting-workers",
+    "loading",
+    "optimizing",
+    "verifying",
+    "stopping",
+    "rollback"
+  ]
+}

@@ -16,6 +16,7 @@ import (
 	"github.com/cloudless/orchestrator/internal/customengine"
 	"github.com/cloudless/orchestrator/internal/engine"
 	"github.com/cloudless/orchestrator/internal/manifest"
+	"github.com/cloudless/orchestrator/internal/modelcache"
 	"github.com/cloudless/orchestrator/internal/state"
 )
 
@@ -172,17 +173,23 @@ func downloadPromotionTarget(ctx context.Context, eng engine.Engine, st *state.S
 	name := "cloudless-model-promotion"
 	_ = eng.Remove(ctx, name)
 	python := "import os; from huggingface_hub import snapshot_download; snapshot_download(os.environ['CLOUDLESS_MODEL_ID'])"
-	args := []string{"run", "--rm", "--name", name, "--entrypoint", "python3", "-e", "CLOUDLESS_MODEL_ID=" + target}
+	env := map[string]string{"CLOUDLESS_MODEL_ID": target}
 	if token, _ := st.HuggingFaceToken(); strings.TrimSpace(token) != "" {
-		args = append(args, "-e", "HF_TOKEN="+strings.TrimSpace(token))
+		env["HF_TOKEN"] = strings.TrimSpace(token)
 	}
-	args = append(args, "-v", "cloudless-hf:/root/.cache/huggingface", image, "-c", python)
 	result := make(chan error, 1)
-	go func() { _, err := eng.Output(ctx, args...); result <- err }()
-	root := ""
-	if value, err := eng.Output(ctx, "volume", "inspect", "cloudless-hf", "--format", "{{.Mountpoint}}"); err == nil {
-		root = strings.TrimSpace(value)
-	}
+	go func() {
+		_, err := eng.RunTransient(ctx, engine.RunSpec{
+			Name:       name,
+			Image:      image,
+			Env:        env,
+			Volumes:    map[string]string{modelcache.Root(): "/root/.cache/huggingface"},
+			EntryPoint: "python3",
+			Args:       []string{"-c", python},
+		})
+		result <- err
+	}()
+	root := modelcache.Root()
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 	for {

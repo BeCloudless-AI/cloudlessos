@@ -46,12 +46,22 @@ if [ -r /sys/devices/virtual/dmi/id/product_name ] &&
 fi
 $is_spark || { echo "DGX Spark was not detected. No changes were made." >&2; exit 1; }
 
-for command in curl gpg gpgv nvidia-smi nvidia-ctk docker; do
+for command in curl gpg gpgv nvidia-smi nvidia-ctk docker findmnt df; do
     command -v "$command" >/dev/null || {
         echo "Required DGX OS component is missing: $command. Update/repair DGX OS first." >&2
         exit 1
     }
 done
+root_options="$(findmnt -n -o OPTIONS / 2>/dev/null || true)"
+case ",$root_options," in
+    *,rw,*) ;;
+    *) echo "The DGX OS root filesystem is not writable. No changes were made." >&2; exit 1 ;;
+esac
+free_bytes="$(df -PB1 / | awk 'NR == 2 {print $4}')"
+if [ "${free_bytes:-0}" -lt $((10 * 1024 * 1024 * 1024)) ]; then
+    echo "At least 10 GiB of free system storage is required before installing CloudlessOS." >&2
+    exit 1
+fi
 nvidia-smi >/dev/null || { echo "The NVIDIA driver is not ready. No changes were made." >&2; exit 1; }
 docker info >/dev/null || { echo "Docker is not ready. No changes were made." >&2; exit 1; }
 nvidia-ctk cdi list 2>/dev/null | grep -q 'nvidia.com/gpu=all' || {
@@ -61,6 +71,11 @@ nvidia-ctk cdi list 2>/dev/null | grep -q 'nvidia.com/gpu=all' || {
 echo "DGX Spark detected."
 echo "DGX OS: $(tr '\n' ' ' < /etc/dgx-release 2>/dev/null || echo unknown)"
 echo "Driver: $(nvidia-smi --query-gpu=driver_version --format=csv,noheader | head -n1)"
+if [ -d /sys/firmware/efi ]; then echo "Firmware: UEFI"; else echo "Firmware: legacy BIOS"; fi
+echo "System storage free: $((free_bytes / 1024 / 1024 / 1024)) GiB"
+if [ "$free_bytes" -lt $((64 * 1024 * 1024 * 1024)) ]; then
+    echo "WARNING: Less than 64 GiB is free. Cloudless can install, but model storage will be limited."
+fi
 echo "Install mode: $MODE"
 if ! $CHECK_ONLY && ! $ASSUME_YES; then
     read -r -p "Install the CloudlessOS layer without replacing DGX OS? [y/N] " answer

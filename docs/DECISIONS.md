@@ -926,6 +926,12 @@ all detected **locally**, with **no IP/geo network lookup** (keeps the privacy p
 ## D35 — Open WebUI: optional account login + "manage in its admin panel"
 **Date:** 2026-06-24 · **Status:** Accepted (built)
 
+> **Security update (2026-07-31):** the default-account portion of this historical decision is
+> superseded. CloudlessOS no longer publishes, creates or displays `admin@localhost` / `admin` (or
+> any other fixed Open WebUI credential). When authentication is enabled, Open WebUI's normal
+> first-account flow creates the administrator. Public sharing remains blocked until authentication
+> is demonstrably enabled. The text below is retained only as the record of the earlier design.
+
 Open WebUI ran with `WEBUI_AUTH=False` (no login wall — fine for a single-user
 appliance). Added Cloudless settings to **require accounts** and to explain that the
 rest of OWUI is managed in OWUI's own admin panel, with default admin credentials.

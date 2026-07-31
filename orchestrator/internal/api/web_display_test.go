@@ -17,8 +17,13 @@ func TestEmbeddedWebIncludesResponsiveDisplaySettings(t *testing.T) {
 		"function automaticUIZoom()",
 		"function renderDisplayPage(c)",
 		"function openDisplayResolutionDialog(output, width, height)",
+		"function showDisplayKeepDialog(result, output, width, height)",
 		"'/api/system/display'",
+		"'/api/system/display/confirm'",
+		"'/api/system/display/revert'",
 		"'X-Cloudless-Action': 'display'",
+		"'display-confirm'",
+		"'display-revert'",
 	} {
 		if !strings.Contains(page, want) {
 			t.Fatalf("embedded UI is missing %q", want)

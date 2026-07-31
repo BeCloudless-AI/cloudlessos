@@ -24,15 +24,19 @@ import (
 	"github.com/cloudless/orchestrator/internal/capabilities"
 	"github.com/cloudless/orchestrator/internal/catalog"
 	"github.com/cloudless/orchestrator/internal/customengine"
+	"github.com/cloudless/orchestrator/internal/distributedprofiles"
 	"github.com/cloudless/orchestrator/internal/engine"
 	"github.com/cloudless/orchestrator/internal/hardware"
 	"github.com/cloudless/orchestrator/internal/jobs"
 	"github.com/cloudless/orchestrator/internal/localrecipes"
 	"github.com/cloudless/orchestrator/internal/manifest"
+	"github.com/cloudless/orchestrator/internal/modelcache"
 	"github.com/cloudless/orchestrator/internal/models"
 	"github.com/cloudless/orchestrator/internal/places"
 	"github.com/cloudless/orchestrator/internal/power"
+	"github.com/cloudless/orchestrator/internal/privileged"
 	"github.com/cloudless/orchestrator/internal/provision"
+	"github.com/cloudless/orchestrator/internal/recipeops"
 	"github.com/cloudless/orchestrator/internal/remoteaccess"
 	"github.com/cloudless/orchestrator/internal/sparkcluster"
 	"github.com/cloudless/orchestrator/internal/state"
@@ -44,18 +48,31 @@ var webFS embed.FS
 
 // Server wires the container engine, job manager, and state store to HTTP handlers.
 type Server struct {
-	eng           engine.Engine
-	jobs          *jobs.Manager
-	state         *state.Store
-	manifest      *manifest.Store
-	mfModels      *manifest.ModelsStore
-	mfDiff        *manifest.DiffusionStore
-	usage         *usage.Store
-	power         *power.Store
-	shutdown      func() error
-	gatewayRebind func(int) error
-	virtualKey    func(context.Context, string, string) error
-	virtualKeyMu  sync.Mutex
+	eng                  engine.Engine
+	jobs                 *jobs.Manager
+	state                *state.Store
+	manifest             *manifest.Store
+	mfModels             *manifest.ModelsStore
+	mfDiff               *manifest.DiffusionStore
+	usage                *usage.Store
+	power                *power.Store
+	shutdown             func() error
+	reboot               func() error
+	privilegedAction     func(context.Context, privileged.Action) error
+	privilegedValue      func(context.Context, privileged.Action, string) error
+	gatewayRebind        func(int) error
+	gatewaySecurityMu    sync.Mutex
+	gatewayLimiter       *gatewayRateLimiter
+	gatewaySourceLimiter *gatewayRateLimiter
+	gatewayAudit         *gatewayAuditLog
+	virtualKey           func(context.Context, string, string) error
+	virtualKeyMu         sync.Mutex
+	displayQuery         func(context.Context) (displaySnapshot, error)
+	displayApply         func(context.Context, string, int, int) error
+	displayMu            sync.Mutex
+	displayChange        *pendingDisplayChange
+	displayDelay         time.Duration
+	displayRecoveryDelay time.Duration
 
 	shutdownMu     sync.Mutex
 	shutdownQueued bool
@@ -72,19 +89,54 @@ type Server struct {
 	engineJobs   map[string]context.CancelFunc
 	recipeJobsMu sync.Mutex
 	recipeJobs   map[string]recipeJobControl
+	recipeGCMu   sync.Mutex
+	recipeGCLast time.Time
 
-	appOperations appOperationLocks // serialize only operations that touch the same app
-	recipes       *localrecipes.Store
-	remoteAccess  remoteaccess.Service
+	appOperations  appOperationLocks // serialize only operations that touch the same app
+	recipes        *localrecipes.Store
+	recipeOps      *recipeops.Store
+	recipeOpsErr   error
+	recipeFailures recipeFailureInjector
+	// recipeRevalidate is an internal-only seam for the lifecycle failure
+	// matrix. Production servers leave it nil and always execute the complete
+	// hardware/topology/content revalidation.
+	recipeRevalidate func(context.Context, localrecipes.Recipe, recipeops.Operation, string, map[string]string) error
+	// appHealthCheck is an internal-only seam for deterministic lifecycle tests.
+	// Production leaves it nil and performs the real container/HTTP checks.
+	appHealthCheck func(context.Context, catalog.App) error
+	// appConfigure is the matching post-install seam. Production leaves it nil
+	// and executes each app's real integration hook.
+	appConfigure func(context.Context, *jobs.Job, catalog.App) error
+	remoteAccess remoteaccess.Service
 }
 
 // NewServer constructs a Server backed by the given engine, state store and manifests.
 func NewServer(eng engine.Engine, st *state.Store, mf *manifest.Store, mfModels *manifest.ModelsStore, mfDiff *manifest.DiffusionStore, us *usage.Store, pw *power.Store) *Server {
-	return &Server{
+	recipeOps, recipeOpsErr := recipeops.Open(st.Dir())
+	privilegedClient := privileged.Client{SocketPath: os.Getenv("CLOUDLESS_PRIVILEGED_SOCKET")}
+	server := &Server{
 		eng: eng, jobs: jobs.NewManager(), state: st, manifest: mf, mfModels: mfModels,
-		mfDiff: mfDiff, usage: us, power: pw, shutdown: systemShutdown, virtualKey: emitSystemVirtualKey,
-		shutdownDelay: time.Second, recipes: localrecipes.New(st.Dir()), remoteAccess: remoteaccess.New(),
+		mfDiff: mfDiff, usage: us, power: pw,
+		shutdown:         func() error { return privilegedClient.Do(context.Background(), privileged.ActionPowerOff) },
+		reboot:           func() error { return privilegedClient.Do(context.Background(), privileged.ActionReboot) },
+		privilegedAction: privilegedClient.Do,
+		privilegedValue:  privilegedClient.DoValue,
+		virtualKey:       emitSystemVirtualKey,
+		shutdownDelay:    time.Second, displayDelay: 20 * time.Second, displayRecoveryDelay: time.Second,
+		recipes: localrecipes.New(st.Dir()), remoteAccess: remoteaccess.New(),
+		recipeOps: recipeOps, recipeOpsErr: recipeOpsErr,
+		gatewayLimiter: newGatewayRateLimiter(), gatewaySourceLimiter: newGatewayRateLimiterWith(120, 30),
+		gatewayAudit: newGatewayAuditLog(st.Dir()),
 	}
+	if recipeOps != nil && recipeOpsErr == nil {
+		if err := recipeOps.Prune(200, 90*24*time.Hour); err != nil {
+			log.Printf("[recipe-operations] prune history: %v", err)
+		}
+	}
+	server.startRecipeRecovery()
+	server.startModelDownloadRecovery()
+	server.recoverPendingDisplayChange()
+	return server
 }
 
 // SetGatewayRebind wires the daemon's listener manager into the settings API.
@@ -130,6 +182,7 @@ func (s *Server) Routes() http.Handler {
 	mux.Handle("GET /terminal/", cloudlessTerminalProxy())
 	mux.HandleFunc("GET /api/gpu", s.gpu)
 	mux.HandleFunc("GET /api/system", s.system)
+	mux.HandleFunc("GET /api/system/boot-health", s.bootHealth)
 	mux.HandleFunc("GET /api/system/input", s.systemInput)
 	mux.HandleFunc("POST /api/system/input/key", s.systemInputKey)
 	mux.HandleFunc("GET /api/capabilities", s.capabilities)
@@ -145,6 +198,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/system/tailscale/serve", s.tailscaleServe)
 	mux.HandleFunc("GET /api/system/display", s.displayGet)
 	mux.HandleFunc("POST /api/system/display", s.displaySet)
+	mux.HandleFunc("POST /api/system/display/confirm", s.displayConfirm)
+	mux.HandleFunc("POST /api/system/display/revert", s.displayRevert)
 	mux.HandleFunc("GET /api/system/update", s.systemUpdateGet)
 	mux.HandleFunc("POST /api/system/update/check", s.systemUpdateCheck)
 	mux.HandleFunc("POST /api/system/update/apply", s.systemUpdateApply)
@@ -162,6 +217,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/system/spark-cluster/discover", s.sparkClusterDiscover)
 	mux.HandleFunc("POST /api/system/spark-cluster/preflight", s.sparkClusterPreflight)
 	mux.HandleFunc("POST /api/system/spark-cluster/create", s.sparkClusterCreate)
+	mux.HandleFunc("POST /api/system/spark-cluster/selection", s.sparkClusterSelection)
+	mux.HandleFunc("POST /api/system/spark-cluster/rebind", s.sparkClusterRebind)
 	mux.HandleFunc("POST /api/system/spark-cluster/disconnect", s.sparkClusterDisconnect)
 	mux.HandleFunc("GET /api/sysload", s.sysload)
 	mux.HandleFunc("GET /api/profile", s.profileGet)
@@ -198,12 +255,17 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/models/download/cancel", s.modelDownloadCancel)
 	mux.HandleFunc("POST /api/models/uninstall", s.modelUninstall)
 	mux.HandleFunc("GET /api/recipes", s.localRecipesList)
+	mux.HandleFunc("GET /api/recipes/cache", s.localRecipeCacheStatus)
+	mux.HandleFunc("POST /api/recipes/cache/cleanup", s.localRecipeCacheCleanup)
 	mux.HandleFunc("POST /api/recipes", s.localRecipeCreate)
 	mux.HandleFunc("POST /api/recipes/import/preview", s.localRecipeImportPreview)
 	mux.HandleFunc("POST /api/recipes/import", s.localRecipeImport)
 	mux.HandleFunc("DELETE /api/recipes/{id}", s.localRecipeDelete)
 	mux.HandleFunc("PUT /api/recipes/{id}", s.localRecipeUpdate)
 	mux.HandleFunc("GET /api/recipes/{id}/source", s.localRecipeSource)
+	mux.HandleFunc("GET /api/recipes/{id}/inventory", s.localRecipeInventory)
+	mux.HandleFunc("GET /api/recipes/{id}/diagnostics/{operation}", s.localRecipeDiagnostics)
+	mux.HandleFunc("POST /api/recipes/{id}/cleanup/{operation}", s.localRecipeCleanupRetry)
 	mux.HandleFunc("POST /api/recipes/{id}/check", s.localRecipeCheck)
 	mux.HandleFunc("POST /api/recipes/{id}/run", s.localRecipeRun)
 	mux.HandleFunc("POST /api/recipes/{id}/abort", s.localRecipeAbort)
@@ -246,6 +308,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("DELETE /api/keys/{id}", s.keyDelete)
 	mux.HandleFunc("POST /api/gateway/lan", s.gatewayLanSet)
 	mux.HandleFunc("POST /api/gateway/tunnel", s.gatewayTunnelSet)
+	mux.HandleFunc("GET /api/gateway/audit", s.gatewayAuditGet)
+	mux.HandleFunc("GET /api/security/audit", s.securityAuditGet)
 	mux.HandleFunc("GET /api/apps/{id}/update", s.updateGet)
 	mux.HandleFunc("POST /api/apps/{id}/update", s.updateApply)
 	mux.HandleFunc("POST /api/assistant/chat", s.assistantChat)
@@ -383,7 +447,7 @@ func engineModelsResponseError(body io.Reader) error {
 // internal model identity. This is shared by recipes, bundled engines and
 // locally-built custom engines.
 func engineEndpointError(ctx context.Context) error {
-	url := fmt.Sprintf("http://127.0.0.1:%d/v1/models", catalog.EnginePort)
+	url := fmt.Sprintf("http://127.0.0.1:%d/v1/models", recipeStablePort)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return err
@@ -408,19 +472,25 @@ func engineReady(ctx context.Context) bool {
 }
 
 func (s *Server) engineState(w http.ResponseWriter, r *http.Request) {
-	ctx, cancel := context.WithTimeout(r.Context(), 6*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), 12*time.Second)
 	defer cancel()
 
 	active := s.activeEngine(ctx)
 	currentState := s.state.Get()
 	type eng struct {
-		ID       string `json:"id"`
-		Name     string `json:"name"`
-		Active   bool   `json:"active"`
-		Selected bool   `json:"selected"`
-		Custom   bool   `json:"custom,omitempty"`
-		Image    string `json:"image,omitempty"`
-		Base     string `json:"base,omitempty"`
+		ID               string `json:"id"`
+		Name             string `json:"name"`
+		Active           bool   `json:"active"`
+		Selected         bool   `json:"selected"`
+		Custom           bool   `json:"custom,omitempty"`
+		SupportLevel     string `json:"supportLevel"`
+		Image            string `json:"image,omitempty"`
+		Base             string `json:"base,omitempty"`
+		Architecture     string `json:"architecture,omitempty"`
+		ContractVersion  string `json:"contractVersion,omitempty"`
+		ValidationStatus string `json:"validationStatus,omitempty"`
+		LastValidated    string `json:"lastValidated,omitempty"`
+		LastError        string `json:"lastError,omitempty"`
 	}
 	selected := currentState.Engine
 	if selected == "" {
@@ -428,12 +498,17 @@ func (s *Server) engineState(w http.ResponseWriter, r *http.Request) {
 	}
 	list := []eng{}
 	for _, e := range customengine.All(s.state) {
-		item := eng{ID: e.ID, Name: e.Name, Active: e.ID == active, Selected: e.ID == selected, Custom: customengine.IsCustom(e.ID)}
+		item := eng{ID: e.ID, Name: e.Name, Active: e.ID == active, Selected: e.ID == selected, Custom: customengine.IsCustom(e.ID), SupportLevel: e.SupportLevel}
 		if item.Custom {
-			item.Image = e.Image
 			for _, def := range currentState.CustomEngines {
 				if def.ID == e.ID {
+					item.Image = def.Image
 					item.Base = def.Base
+					item.Architecture = def.Architecture
+					item.ContractVersion = def.ContractVersion
+					item.ValidationStatus = def.ValidationStatus
+					item.LastValidated = def.LastValidated
+					item.LastError = def.LastError
 					break
 				}
 			}
@@ -452,7 +527,44 @@ func (s *Server) engineState(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	ready := active != "" && engineReady(ctx)
+	clusterView := clusterCompute(ctx, totalVRAMGB(ctx))
+	endpointReady := active != "" && engineReady(ctx)
+	ready, clusterDegraded := clusterRuntimeReady(currentState.ExecutionMode, endpointReady, clusterView)
+	durableOperation := currentState.InferenceOperation
+	if startup == nil && durableOperation.ID != "" && durableOperation.Phase != "error" {
+		showRecovered := durableOperation.Action == "unload" || durableOperation.Action == "abort" || !ready
+		if showRecovered {
+			nodes := make([]jobs.NodeProgress, 0, len(durableOperation.Nodes))
+			for _, node := range durableOperation.Nodes {
+				nodes = append(nodes, jobs.NodeProgress{
+					Node: node.Node, Phase: node.Phase, Message: node.Message,
+					BytesDone: node.BytesDone, BytesTotal: node.BytesTotal,
+					Percent: node.Percent, ETASecs: node.ETASecs,
+				})
+			}
+			appID := "engine:" + durableOperation.TargetEngine
+			switch durableOperation.Action {
+			case "unload":
+				appID = "engine:unload"
+			case "abort":
+				appID = "engine:abort"
+			case "model":
+				appID = "model:" + durableOperation.TargetEngine
+			}
+			startup = &jobs.Snapshot{
+				ID: durableOperation.ID, AppID: appID,
+				Update: jobs.Update{
+					Phase: durableOperation.Phase, Message: durableOperation.Message,
+					Percent:   durableOperation.Percent,
+					ItemsDone: durableOperation.ItemsDone, ItemsTotal: durableOperation.ItemsTotal,
+					BytesDone: durableOperation.BytesDone, BytesTotal: durableOperation.BytesTotal,
+					Error:     durableOperation.Error,
+					StartedAt: durableOperation.Started, UpdatedAt: durableOperation.Updated,
+					Nodes: nodes,
+				},
+			}
+		}
+	}
 	if startup == nil && active != "" && !ready {
 		if app, ok := customengine.Get(s.state, active); ok {
 			if logs, err := s.eng.Logs(ctx, app.ContainerName()); err == nil {
@@ -483,9 +595,7 @@ func (s *Server) engineState(w http.ResponseWriter, r *http.Request) {
 					if peerErr == nil && len(downloading) > 0 {
 						phase = "peer-downloading"
 						bytesDone = peerBytes
-						if mount, mountErr := s.eng.Output(ctx, "volume", "inspect", "cloudless-hf", "--format", "{{.Mountpoint}}"); mountErr == nil {
-							bytesTotal = s.modelRepoBytes(ctx, modelID, strings.TrimSpace(mount)) * int64(len(peers))
-						}
+						bytesTotal = s.modelRepoBytes(ctx, modelID, modelcache.Root()) * int64(len(peers))
 						message = peerDownloadStatus(strings.Join(downloading, ", "), modelID, bytesDone, bytesTotal, 0)
 					} else if peerErr == nil && !allLoaded {
 						phase = "peer-loading"
@@ -506,17 +616,48 @@ func (s *Server) engineState(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	operation, operationJobID, canAbort := describeEngineOperation(startup, ready, currentState.EngineUnloaded)
+	if clusterDegraded {
+		operation, operationJobID, canAbort = describeClusterFailureOperation(durableOperation)
+		errorMessage := "The model endpoint may still answer, but Cloudless cannot prove that every selected node and fabric path is healthy. Open DGX Spark Cluster, recover the failed node, then reload the model."
+		if canAbort {
+			errorMessage = "The model operation is still active, but Cloudless cannot prove that every selected node and fabric path is healthy. Abort loading or recover the failed Spark before continuing."
+		}
+		startup = &jobs.Snapshot{
+			ID:    operationJobID,
+			AppID: "engine:" + active,
+			Update: jobs.Update{
+				Phase: "error", Done: true,
+				Message: "Distributed inference lost a selected Spark.",
+				Error:   errorMessage,
+			},
+		}
+	}
+	if durableOperation.ID != "" && durableOperation.Phase == "error" && !ready {
+		operation, operationJobID, canAbort = "error", durableOperation.ID, false
+		if startup == nil {
+			startup = &jobs.Snapshot{
+				ID: durableOperation.ID, AppID: "engine:" + durableOperation.TargetEngine,
+				Update: jobs.Update{
+					Phase: "error", Message: durableOperation.Message,
+					Error: durableOperation.Error, Done: true,
+					StartedAt: durableOperation.Started, UpdatedAt: durableOperation.Updated,
+				},
+			}
+		}
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"active":         active,
-		"ready":          ready,
-		"unloaded":       currentState.EngineUnloaded,
-		"engines":        list,
-		"startup":        startup,
-		"promotion":      currentState.ModelPromotion,
-		"operation":      operation,
-		"operationJobId": operationJobID,
-		"canAbort":       canAbort,
-		"cluster":        clusterCompute(ctx, totalVRAMGB(ctx)),
+		"active":           active,
+		"ready":            ready,
+		"unloaded":         currentState.EngineUnloaded,
+		"engines":          list,
+		"startup":          startup,
+		"promotion":        currentState.ModelPromotion,
+		"operationJournal": durableOperation,
+		"operation":        operation,
+		"operationJobId":   operationJobID,
+		"canAbort":         canAbort,
+		"cluster":          clusterView,
+		"degraded":         clusterDegraded,
 		"executionMode": func() string {
 			if currentState.ExecutionMode == "cluster" {
 				return "cluster"
@@ -544,6 +685,24 @@ func describeEngineOperation(startup *jobs.Snapshot, ready, unloaded bool) (oper
 	return "idle", "", false
 }
 
+// describeClusterFailureOperation preserves the user's recovery action when a
+// selected Spark disappears during a durable lifecycle operation. The cluster
+// is still reported as degraded, but an interrupted load/switch/restart remains
+// abortable even when the original in-memory job disappeared after a restart.
+func describeClusterFailureOperation(operation state.InferenceOperation) (uiOperation, jobID string, canAbort bool) {
+	if !inferenceOperationBlocksClusterMutation(operation) {
+		return "error", operation.ID, false
+	}
+	switch operation.Action {
+	case "abort":
+		return "aborting", operation.ID, false
+	case "unload":
+		return "unloading", operation.ID, false
+	default:
+		return "loading", operation.ID, true
+	}
+}
+
 // engineUnload releases accelerator memory without deleting the selected model
 // or its downloaded weights. The persisted unloaded flag prevents provisioning
 // from silently loading it again after a daemon restart.
@@ -553,6 +712,7 @@ func (s *Server) engineUnload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	job := s.jobs.Create("engine:unload")
+	s.observeInferenceJob(job, "unload", "", s.state.Get().InferenceRuntime())
 	go s.runEngineUnload(job)
 	writeJSON(w, http.StatusAccepted, map[string]string{"jobId": job.ID})
 }
@@ -568,6 +728,7 @@ func (s *Server) engineLoad(w http.ResponseWriter, _ *http.Request) {
 		return
 	}
 	job := s.jobs.Create("engine:" + target.ID)
+	s.observeInferenceJob(job, "load", target.ID, s.state.Get().InferenceRuntime())
 	go s.applyEngine(job, target)
 	writeJSON(w, http.StatusAccepted, map[string]string{"jobId": job.ID, "engine": target.ID})
 }
@@ -581,11 +742,14 @@ func (s *Server) engineAbort(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "model abort confirmation header required"})
 		return
 	}
-	if s.cancelEngineJobs() == 0 {
+	previous := s.state.Get()
+	canceled := s.cancelEngineJobs()
+	if canceled == 0 && (previous.InferenceOperation.ID == "" || previous.InferenceOperation.Phase == "error") {
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "no model launch is currently active"})
 		return
 	}
 	job := s.jobs.Create("engine:abort")
+	s.observeInferenceJob(job, "abort", "", previous.InferenceRuntime())
 	go s.runEngineUnload(job)
 	writeJSON(w, http.StatusAccepted, map[string]string{"jobId": job.ID})
 }
@@ -616,6 +780,103 @@ func (s *Server) cancelEngineJobs() int {
 		cancel()
 	}
 	return len(cancels)
+}
+
+func (s *Server) observeInferenceJob(job *jobs.Job, action, targetEngine string, previous state.InferenceRuntime) {
+	current := s.state.Get()
+	operation := state.InferenceOperation{
+		ID: job.ID, Action: action, TargetEngine: targetEngine,
+		TargetModel: resolveModel(current.Model), TargetMode: current.ExecutionMode,
+		Previous: previous, Phase: "pending", Message: "Queued",
+	}
+	if err := s.state.BeginInferenceOperation(operation); err != nil {
+		log.Printf("engine: persist %s operation: %v", action, err)
+	}
+	s.auditSecurity(gatewayAuditEvent{
+		Category: "engine", Event: action, Outcome: "started", Actor: "local-ui",
+		Target: targetEngine, OperationID: job.ID,
+	})
+	var auditOnce sync.Once
+	job.Observe(func(update jobs.Update) {
+		if update.Done {
+			auditOnce.Do(func() {
+				outcome := "succeeded"
+				if update.Error != "" || update.Phase == "error" {
+					outcome = "failed"
+				}
+				s.auditSecurity(gatewayAuditEvent{
+					Category: "engine", Event: action, Outcome: outcome, Actor: "cloudlessd",
+					Target: targetEngine, OperationID: job.ID, Detail: update.Error,
+				})
+			})
+		}
+		if update.Done && update.Phase != "error" {
+			if _, err := s.state.ClearInferenceOperation(job.ID); err != nil {
+				log.Printf("engine: clear %s operation: %v", action, err)
+			}
+			return
+		}
+		nodes := make([]state.InferenceNodeProgress, 0, len(update.Nodes))
+		for _, node := range update.Nodes {
+			nodes = append(nodes, state.InferenceNodeProgress{
+				Node: node.Node, Phase: node.Phase, Message: node.Message,
+				BytesDone: node.BytesDone, BytesTotal: node.BytesTotal,
+				Percent: node.Percent, ETASecs: node.ETASecs,
+			})
+		}
+		next := state.InferenceOperation{
+			ID: job.ID, Phase: update.Phase, Message: update.Message,
+			Percent: update.Percent, ItemsDone: update.ItemsDone, ItemsTotal: update.ItemsTotal,
+			BytesDone: update.BytesDone, BytesTotal: update.BytesTotal,
+			Error: update.Error, Nodes: nodes,
+		}
+		if _, err := s.state.UpdateInferenceOperation(next); err != nil {
+			log.Printf("engine: update %s operation: %v", action, err)
+		}
+	})
+}
+
+// rollbackInferenceRuntime restores the last atomically persisted runtime after
+// a failed local launch. Distributed and recipe-owned runtimes require their
+// own topology/review recovery, so they are restored as selected-but-unloaded
+// rather than guessed into a partially running state.
+// Caller must hold provision.EngineMu.
+func (s *Server) rollbackInferenceRuntime(ctx context.Context, operationID string) {
+	operation := s.state.Get().InferenceOperation
+	if operation.ID != operationID {
+		_ = s.state.SetEngineUnloaded(true)
+		return
+	}
+	previous := operation.Previous
+	safePrevious := previous
+	safePrevious.EngineUnloaded = true
+	if err := s.state.CommitInferenceRuntime(safePrevious); err != nil {
+		log.Printf("engine: persist safe rollback target: %v", err)
+		return
+	}
+	if previous.EngineUnloaded || previous.ExecutionMode == "cluster" || previous.LocalRecipeID != "" {
+		return
+	}
+	engineID := previous.Engine
+	if engineID == "" {
+		engineID = catalog.DefaultEngine()
+	}
+	target, ok := customengine.Get(s.state, engineID)
+	if !ok || !target.Engine {
+		return
+	}
+	_ = s.eng.Remove(ctx, target.ContainerName())
+	spec := s.managedEngineSpec(ctx, target, previous.Model, nil)
+	if override, ok := s.state.EngineCmd(engineID, resolveModel(previous.Model)); ok {
+		spec = s.managedEngineSpec(ctx, target, previous.Model, override)
+	}
+	if _, err := s.eng.Run(ctx, spec); err != nil {
+		log.Printf("engine: rollback %s failed: %v", engineID, err)
+		return
+	}
+	if err := s.state.CommitInferenceRuntime(previous); err != nil {
+		log.Printf("engine: commit restored runtime: %v", err)
+	}
 }
 
 func (s *Server) runEngineUnload(job *jobs.Job) {
@@ -663,12 +924,14 @@ func (s *Server) runEngineUnload(job *jobs.Job) {
 // engineSwitch stops the current engine and starts the chosen one, which inherits
 // the stable `cloudless-ai` alias — so every client follows automatically.
 func (s *Server) engineSwitch(w http.ResponseWriter, r *http.Request) {
+	previous := s.state.Get().InferenceRuntime()
 	app, ok := customengine.Get(s.state, r.PathValue("id"))
 	if !ok || !app.Engine {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "unknown engine"})
 		return
 	}
 	job := s.jobs.Create("engine:" + app.ID)
+	s.observeInferenceJob(job, "switch", app.ID, previous)
 	go s.runSwitch(job, app)
 	writeJSON(w, http.StatusAccepted, map[string]string{"jobId": job.ID, "engine": app.ID})
 }
@@ -676,6 +939,7 @@ func (s *Server) engineSwitch(w http.ResponseWriter, r *http.Request) {
 // engineRestart recreates the active engine container with its current catalog spec
 // (e.g. to pick up SGLang's --enable-metrics). Unlike a switch, it always recreates.
 func (s *Server) engineRestart(w http.ResponseWriter, r *http.Request) {
+	previous := s.state.Get().InferenceRuntime()
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	active := s.activeEngine(ctx)
 	cancel()
@@ -688,6 +952,7 @@ func (s *Server) engineRestart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	job := s.jobs.Create("engine:" + app.ID)
+	s.observeInferenceJob(job, "restart", app.ID, previous)
 	go s.applyEngine(job, app)
 	writeJSON(w, http.StatusAccepted, map[string]string{"jobId": job.ID, "engine": app.ID})
 }
@@ -707,6 +972,17 @@ func (s *Server) runSwitch(job *jobs.Job, target catalog.App) {
 // applyEngine makes `target` the only running engine, with the current model and
 // the stable alias, then waits until it's serving. Used by switch + model change.
 func (s *Server) applyEngine(job *jobs.Job, target catalog.App) {
+	s.applyEngineVerified(job, target, "", nil)
+}
+
+// applyEngineVerified binds a managed update to the exact image reference that
+// was checked and downloaded. The optional verifier runs after the stable API
+// is healthy but before the job is allowed to succeed.
+func (s *Server) applyEngineVerified(job *jobs.Job, target catalog.App, exactImage string, verify func(context.Context) error) {
+	customProfile := customengine.IsCustom(target.ID)
+	if customProfile {
+		_ = s.state.SetCustomEngineValidation(target.ID, "validating", "")
+	}
 	st := s.state.Get()
 	model := st.Model
 	modelID := resolveModel(model)
@@ -724,6 +1000,27 @@ func (s *Server) applyEngine(job *jobs.Job, target catalog.App) {
 	defer cancel()
 	s.registerEngineJob(job.ID, cancel)
 	defer s.unregisterEngineJob(job.ID)
+	var distributedProfile distributedprofiles.Profile
+	distributedImage := ""
+	if distributed {
+		cluster := clusterCompute(ctx, totalVRAMGB(ctx))
+		clusterNodes = cluster.Nodes
+		if !cluster.DistributedReady || clusterNodes < 2 {
+			job.Fail(errors.New("the Spark cluster is not healthy enough for distributed inference"))
+			return
+		}
+		var err error
+		distributedProfile, err = reviewedDistributedProfile(modelID, target.ID, clusterNodes)
+		if err != nil {
+			job.Fail(err)
+			return
+		}
+		distributedImage, err = s.reviewedDistributedImage(ctx, target, exactImage)
+		if err != nil {
+			job.Fail(err)
+			return
+		}
+	}
 	// Serialize runtime preparation and engine replacement with startup.
 	provision.EngineMu.Lock()
 	if hasModelRuntime && modelRuntime.RuntimeBuild != "" {
@@ -751,16 +1048,23 @@ func (s *Server) applyEngine(job *jobs.Job, target catalog.App) {
 		if launchReady {
 			return
 		}
+		if customProfile {
+			reason := job.Snapshot().Error
+			if reason == "" {
+				reason = "runtime did not pass the Cloudless API contract check"
+			}
+			_ = s.state.SetCustomEngineValidation(target.ID, "failed", reason)
+		}
 		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 45*time.Second)
 		defer cleanupCancel()
 		provision.EngineMu.Lock()
+		defer provision.EngineMu.Unlock()
 		_ = s.eng.Remove(cleanupCtx, "cloudless-cluster-engine-proxy")
 		_ = s.eng.Remove(cleanupCtx, target.ContainerName())
 		if distributed {
 			_ = sparkcluster.StopWorker(cleanupCtx)
 		}
-		_ = s.state.SetEngineUnloaded(true)
-		provision.EngineMu.Unlock()
+		s.rollbackInferenceRuntime(cleanupCtx, job.ID)
 	}()
 	if target.ID != "vllm" && st.ExecutionMode == "cluster" {
 		distributed = false
@@ -788,14 +1092,15 @@ func (s *Server) applyEngine(job *jobs.Job, target catalog.App) {
 	job.Progress("switching", startMessage, -1, -1)
 	var runErr error
 	if distributed {
-		cluster := clusterCompute(ctx, totalVRAMGB(ctx))
-		clusterNodes = max(2, cluster.Nodes)
-		if !cluster.DistributedReady {
+		managedSpec := s.managedEngineSpec(ctx, target, model, nil)
+		managedSpec.Image = distributedImage
+		managedSpec, runErr = distributedprofiles.Apply(managedSpec, distributedProfile)
+		if runErr != nil {
 			provision.EngineMu.Unlock()
-			job.Fail(errors.New("the Spark cluster is not healthy enough for distributed inference"))
+			job.Fail(runErr)
 			return
 		}
-		spec := sparkcluster.CoordinatorSpec(s.managedEngineSpec(ctx, target, model, nil))
+		spec := sparkcluster.CoordinatorSpec(managedSpec)
 		job.Progress("cluster", "Starting the coordinator on this Spark …", -1, -1)
 		_, runErr = s.eng.Run(ctx, spec)
 		if runErr != nil {
@@ -847,7 +1152,11 @@ func (s *Server) applyEngine(job *jobs.Job, target catalog.App) {
 		}
 	} else {
 		override, _ := s.state.EngineCmd(target.ID, modelID)
-		_, runErr = s.eng.Run(ctx, s.managedEngineSpec(ctx, target, model, override))
+		spec := s.managedEngineSpec(ctx, target, model, override)
+		if exactImage != "" {
+			spec.Image = exactImage
+		}
+		_, runErr = s.eng.Run(ctx, spec)
 	}
 	provision.EngineMu.Unlock()
 	if runErr != nil {
@@ -860,14 +1169,18 @@ func (s *Server) applyEngine(job *jobs.Job, target catalog.App) {
 		loadingMessage = "Loading " + resolveModel(model) + " locally on this Spark …"
 	}
 	job.Progress("loading", loadingMessage, -1, -1)
-	var peerTotal, peerLastBytes int64
-	var peerLastAt, nextPeerProbe time.Time
-	var peerBytesPerSecond float64
+	var peerTotal int64
+	var nextPeerProbe time.Time
+	peerLastBytes := map[string]int64{}
+	peerLastAt := map[string]time.Time{}
+	peerRates := map[string]float64{}
+	modelRoot := ""
 	if distributed {
 		totalCtx, totalCancel := context.WithTimeout(ctx, 8*time.Second)
 		token, _ := s.state.HuggingFaceToken()
 		peerTotal = huggingFaceModelBytes(totalCtx, modelID, token)
 		totalCancel()
+		modelRoot = s.modelVolumePath(ctx)
 	}
 	for {
 		if ctx.Err() != nil {
@@ -878,6 +1191,21 @@ func (s *Server) applyEngine(job *jobs.Job, target catalog.App) {
 		ready := engineReady(pctx)
 		pcancel()
 		if ready {
+			if verify != nil {
+				verifyCtx, verifyCancel := context.WithTimeout(context.Background(), 15*time.Second)
+				verifyErr := verify(verifyCtx)
+				verifyCancel()
+				if verifyErr != nil {
+					job.Fail(verifyErr)
+					return
+				}
+			}
+			if customProfile {
+				if err := s.state.SetCustomEngineValidation(target.ID, "compatible", ""); err != nil {
+					job.Fail(fmt.Errorf("record custom engine contract result: %w", err))
+					return
+				}
+			}
 			launchReady = true
 			job.Succeed("")
 			return
@@ -891,40 +1219,116 @@ func (s *Server) applyEngine(job *jobs.Job, target catalog.App) {
 				var peerBytes int64
 				var downloading, loading []string
 				allLoaded := true
+				nodeProgress := make([]jobs.NodeProgress, 0, len(peers)+1)
+				localName, _ := os.Hostname()
+				localBytes := s.modelRepoBytes(ctx, modelID, modelRoot)
+				localIncomplete := s.modelRepoIncomplete(ctx, modelID, modelRoot)
+				localStage := jobs.NodeProgress{
+					Node: localName, Phase: "loading", Message: "Coordinator is loading model weights",
+					BytesDone: localBytes, BytesTotal: peerTotal,
+				}
+				now := time.Now()
+				if lastAt := peerLastAt[localName]; !lastAt.IsZero() && localBytes > peerLastBytes[localName] {
+					instant := float64(localBytes-peerLastBytes[localName]) / now.Sub(lastAt).Seconds()
+					if peerRates[localName] == 0 {
+						peerRates[localName] = instant
+					} else {
+						peerRates[localName] = peerRates[localName]*0.7 + instant*0.3
+					}
+				}
+				peerLastBytes[localName], peerLastAt[localName] = localBytes, now
+				if localIncomplete > 0 {
+					downloading = append(downloading, localName)
+					localStage.Phase = "downloading"
+					localStage.Message = "Downloading model chunks"
+					if peerTotal > 0 {
+						localStage.Percent = min(99, int(localBytes*100/peerTotal))
+						if rate := peerRates[localName]; rate > 0 && localBytes < peerTotal {
+							localStage.ETASecs = int64(math.Ceil(float64(peerTotal-localBytes) / rate))
+						}
+					}
+				}
+				if localIncomplete == 0 {
+					logs, logErr := s.eng.Logs(ctx, target.ContainerName())
+					if logErr == nil {
+						done, total := modelCheckpointProgress(logs)
+						if total > 0 {
+							localStage.BytesDone, localStage.BytesTotal = int64(done), int64(total)
+							localStage.Percent = min(100, done*100/total)
+							if done >= total {
+								localStage.Phase = "optimizing"
+								localStage.Message = "Coordinator loaded weights and is optimizing"
+							}
+						}
+					}
+				}
+				if localStage.Phase == "loading" {
+					loading = append(loading, localName)
+					allLoaded = false
+				} else if localStage.Phase == "downloading" {
+					allLoaded = false
+				}
+				nodeProgress = append(nodeProgress, localStage)
+				var peerBytesPerSecond = peerRates[localName]
 				for _, peer := range peers {
 					peerBytes += peer.Bytes
+					if lastAt := peerLastAt[peer.Host]; !lastAt.IsZero() && peer.Bytes > peerLastBytes[peer.Host] {
+						instant := float64(peer.Bytes-peerLastBytes[peer.Host]) / now.Sub(lastAt).Seconds()
+						if peerRates[peer.Host] == 0 {
+							peerRates[peer.Host] = instant
+						} else {
+							peerRates[peer.Host] = peerRates[peer.Host]*0.7 + instant*0.3
+						}
+					}
+					peerLastBytes[peer.Host], peerLastAt[peer.Host] = peer.Bytes, now
+					peerBytesPerSecond += peerRates[peer.Host]
+					node := jobs.NodeProgress{Node: peer.Node, BytesDone: peer.Bytes, BytesTotal: peerTotal}
 					if peer.Incomplete > 0 {
 						downloading = append(downloading, peer.Node)
+						node.Phase = "downloading"
+						node.Message = "Downloading model chunks"
+						if peerTotal > 0 {
+							node.Percent = min(99, int(peer.Bytes*100/peerTotal))
+							if rate := peerRates[peer.Host]; rate > 0 && peer.Bytes < peerTotal {
+								node.ETASecs = int64(math.Ceil(float64(peerTotal-peer.Bytes) / rate))
+							}
+						}
 					}
 					if !peer.WeightsLoaded {
 						allLoaded = false
 						if peer.Incomplete == 0 {
 							loading = append(loading, peer.Node)
+							node.Phase = "loading"
+							node.Message = "Download complete; loading model weights"
 						}
-					}
-				}
-				now := time.Now()
-				if !peerLastAt.IsZero() && peerBytes > peerLastBytes {
-					instant := float64(peerBytes-peerLastBytes) / now.Sub(peerLastAt).Seconds()
-					if peerBytesPerSecond == 0 {
-						peerBytesPerSecond = instant
 					} else {
-						peerBytesPerSecond = peerBytesPerSecond*0.7 + instant*0.3
+						node.Phase = "ready"
+						node.Message = "Model weights loaded"
+						node.Percent = 100
 					}
+					nodeProgress = append(nodeProgress, node)
 				}
-				peerLastBytes, peerLastAt = peerBytes, now
-				clusterTotal := peerTotal * int64(len(peers))
+				clusterDone := peerBytes
+				if peerTotal > 0 {
+					clusterDone += min(localBytes, peerTotal)
+				} else {
+					clusterDone += localBytes
+				}
+				clusterTotal := peerTotal * int64(len(peers)+1)
 				if len(downloading) > 0 {
-					message := peerDownloadStatus(strings.Join(downloading, ", "), modelID, peerBytes, clusterTotal, peerBytesPerSecond)
-					job.ProgressBytes("peer-downloading", message, peerBytes, clusterTotal)
+					message := peerDownloadStatus(strings.Join(downloading, ", "), modelID, clusterDone, clusterTotal, peerBytesPerSecond)
+					job.ProgressNodes("peer-downloading", message, nodeProgress, clusterDone, clusterTotal)
 					time.Sleep(2 * time.Second)
 					continue
 				}
 				if !allLoaded {
-					job.ProgressBytes("peer-loading", strings.Join(loading, ", ")+" finished downloading and are loading model weights …", 0, 0)
+					job.ProgressNodes("peer-loading", strings.Join(loading, ", ")+" finished downloading and are loading model weights …", nodeProgress, clusterDone, clusterTotal)
 					time.Sleep(2 * time.Second)
 					continue
 				}
+				job.ProgressNodes("optimizing", fmt.Sprintf("All %d Sparks loaded the model. Optimizing distributed inference …", clusterNodes), nodeProgress, clusterDone, clusterTotal)
+				time.Sleep(2 * time.Second)
+				continue
 			}
 		}
 		if logs, err := s.eng.Logs(ctx, target.ContainerName()); err == nil {
@@ -1074,19 +1478,51 @@ func (s *Server) runInstall(job *jobs.Job, app catalog.App) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer cancel()
 
+	installedDependencies := make([]catalog.App, 0, len(dependencies))
+	rollbackDependencies := func(cause error) {
+		if len(installedDependencies) == 0 {
+			return
+		}
+		rollbackCtx, rollbackCancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		defer rollbackCancel()
+		for index := len(installedDependencies) - 1; index >= 0; index-- {
+			dependency := installedDependencies[index]
+			job.ProgressOperation("rolling-back", "Removing "+dependency.Name+" from the failed install", dependency.Name, operationPercent(index, len(targets), 0), index, len(targets))
+			if err := s.eng.Remove(rollbackCtx, dependency.ContainerName()); err != nil {
+				log.Printf("[install %s] rollback container %s after %v: %v", app.ID, dependency.ID, cause, err)
+			}
+			if err := s.eng.RemoveImage(rollbackCtx, s.imageFor(rollbackCtx, dependency)); err != nil {
+				log.Printf("[install %s] rollback image %s after %v: %v", app.ID, dependency.ID, cause, err)
+			}
+		}
+	}
+
 	for index, dependency := range dependencies {
-		if current, _ := s.eng.Find(ctx, dependency.ContainerName()); current != nil && current.State == "running" {
+		current, findErr := s.eng.Find(ctx, dependency.ContainerName())
+		if findErr != nil {
+			job.Fail(fmt.Errorf("inspect dependency %s: %w", dependency.Name, findErr))
+			return
+		}
+		if current != nil && current.State == "running" {
 			job.ProgressOperation("dependency", dependency.Name+" is already ready", dependency.Name, operationPercent(index+1, len(targets), 0), index+1, len(targets))
 			continue
 		}
 		job.ProgressOperation("dependency", "Preparing required service: "+dependency.Name, dependency.Name, operationPercent(index, len(targets), 5), index, len(targets))
 		if _, err := s.installOne(ctx, job, dependency, index, len(targets)); err != nil {
+			rollbackDependencies(err)
 			job.Fail(fmt.Errorf("dependency %s: %w", dependency.Name, err))
 			return
+		}
+		// A stopped/exited dependency existed before this operation. Its
+		// replacement now belongs to the user's pre-existing installation and
+		// must not be removed if the target app fails later.
+		if current == nil {
+			installedDependencies = append(installedDependencies, dependency)
 		}
 	}
 	id, err := s.installOne(ctx, job, app, len(targets)-1, len(targets))
 	if err != nil {
+		rollbackDependencies(err)
 		job.Fail(err)
 		return
 	}
@@ -1181,7 +1617,10 @@ func (s *Server) installOne(ctx context.Context, job *jobs.Job, app catalog.App,
 	// is ready locally, so background updates do not create download-length
 	// application outages.
 	_ = s.eng.Remove(ctx, app.ContainerName())
-	spec := s.appSpec(app)
+	spec, err := s.appSpecChecked(app)
+	if err != nil {
+		return "", fmt.Errorf("prepare %s configuration: %w", app.Name, err)
+	}
 	spec.Image = img // run the exact image we pulled (pinned digest when manifest applies)
 	id, err := s.eng.Run(ctx, spec)
 	if err != nil {
@@ -1191,6 +1630,10 @@ func (s *Server) installOne(ctx context.Context, job *jobs.Job, app catalog.App,
 	if err := s.waitForAppHealth(ctx, app); err != nil {
 		_ = s.eng.Remove(context.Background(), app.ContainerName())
 		return "", err
+	}
+	if err := s.configureInstalledApp(ctx, job, app); err != nil {
+		_ = s.eng.Remove(context.Background(), app.ContainerName())
+		return "", fmt.Errorf("configure %s: %w", app.Name, err)
 	}
 	job.ProgressOperation("component-ready", app.Name+" is ready", app.Name, operationPercent(item+1, total, 0), item+1, total)
 	return id, nil
@@ -1208,6 +1651,9 @@ func workbenchBuildMessage(name, line string) string {
 }
 
 func (s *Server) waitForAppHealth(parent context.Context, app catalog.App) error {
+	if s.appHealthCheck != nil {
+		return s.appHealthCheck(parent, app)
+	}
 	timeout := time.Duration(app.Health.TimeoutSeconds) * time.Second
 	if timeout <= 0 {
 		timeout = 60 * time.Second
@@ -1414,7 +1860,11 @@ func (s *Server) appReset(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			_ = s.eng.Remove(ctx, app.ContainerName())
-			spec := s.appSpec(app)
+			spec, err := s.appSpecChecked(app)
+			if err != nil {
+				job.Fail(err)
+				return
+			}
 			spec.Image = s.imageFor(ctx, app)
 			id, err := s.eng.Run(ctx, spec)
 			if err != nil {
@@ -1469,17 +1919,44 @@ func (s *Server) runAppUninstall(job *jobs.Job, app catalog.App) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 	job.ProgressOperation("removing", "Stopping and removing "+app.Name, app.Name, 25, 0, 2)
-	if err := s.eng.Remove(ctx, app.ContainerName()); err != nil {
-		job.Fail(fmt.Errorf("remove %s container: %w", app.Name, err))
+	if err := s.removeAppRuntime(ctx, app); err != nil {
+		job.Fail(fmt.Errorf("remove %s runtime: %w", app.Name, err))
 		return
 	}
 	job.ProgressOperation("cleaning-image", "Removing the downloaded "+app.Name+" image", app.Name, 70, 1, 2)
-	if err := s.eng.RemoveImage(ctx, app.Image); err != nil {
+	if err := s.eng.RemoveImage(ctx, s.imageFor(ctx, app)); err != nil {
 		job.Fail(fmt.Errorf("remove %s image: %w", app.Name, err))
 		return
 	}
 	job.ProgressOperation("removed", app.Name+" was removed; its persistent data was kept", app.Name, 100, 2, 2)
 	job.Succeed("")
+}
+
+// removeAppRuntime removes every ephemeral container Cloudless may have
+// created for an application. Persistent named volumes and state directories
+// are deliberately retained so reinstalling never destroys user data.
+func (s *Server) removeAppRuntime(ctx context.Context, app catalog.App) error {
+	container, err := s.eng.Find(ctx, app.ContainerName())
+	if err != nil {
+		return fmt.Errorf("inspect container %s: %w", app.ContainerName(), err)
+	}
+	if container != nil {
+		if err := s.eng.Remove(ctx, app.ContainerName()); err != nil {
+			return err
+		}
+	}
+	for _, sidecar := range []string{app.LanName(), app.TunnelName()} {
+		container, err = s.eng.Find(ctx, sidecar)
+		if err != nil {
+			return fmt.Errorf("inspect sidecar %s: %w", sidecar, err)
+		}
+		if container != nil {
+			if err := s.eng.Remove(ctx, sidecar); err != nil {
+				return fmt.Errorf("remove sidecar %s: %w", sidecar, err)
+			}
+		}
+	}
+	return nil
 }
 
 // appConfigDir is where an app's editable config files live in the state dir.
@@ -1505,12 +1982,25 @@ func (s *Server) configVolumes(app catalog.App) map[string]string {
 // volumes map so it never mutates the catalog's shared map (which would otherwise
 // accumulate config mounts for an app that has both data volumes and config files).
 func (s *Server) appSpec(app catalog.App) engine.RunSpec {
+	spec, err := s.appSpecChecked(app)
+	if err != nil {
+		log.Printf("config: prepare %s: %v", app.ID, err)
+		return app.Spec()
+	}
+	return spec
+}
+
+func (s *Server) appSpecChecked(app catalog.App) (engine.RunSpec, error) {
 	rs := app.Spec()
 	merged := map[string]string{}
 	for h, c := range rs.Volumes {
 		merged[h] = c
 	}
-	for h, c := range s.configVolumes(app) {
+	volumes, err := apps.ConfigVolumes(s.appConfigDir(app.ID), app)
+	if err != nil {
+		return engine.RunSpec{}, err
+	}
+	for h, c := range volumes {
 		merged[h] = c
 	}
 	if len(merged) > 0 {
@@ -1529,7 +2019,7 @@ func (s *Server) appSpec(app catalog.App) engine.RunSpec {
 		}
 		rs.Env = env
 	}
-	return rs
+	return rs, nil
 }
 
 func (s *Server) appConfigGet(w http.ResponseWriter, r *http.Request) {
@@ -1612,8 +2102,18 @@ func (s *Server) restartApp(w http.ResponseWriter, app catalog.App) {
 		defer rcancel()
 		job.Progress("switching", "Applying config…", -1, -1)
 		_ = s.eng.Remove(rctx, app.ContainerName())
-		if _, err := s.eng.Run(rctx, s.appSpec(app)); err != nil {
+		spec, err := s.appSpecChecked(app)
+		if err != nil {
+			job.Fail(fmt.Errorf("prepare %s configuration: %w", app.Name, err))
+			return
+		}
+		if _, err := s.eng.Run(rctx, spec); err != nil {
 			job.Fail(err)
+			return
+		}
+		if err := s.waitForAppHealth(rctx, app); err != nil {
+			_ = s.eng.Remove(context.Background(), app.ContainerName())
+			job.Fail(fmt.Errorf("restart %s: %w", app.Name, err))
 			return
 		}
 		job.Succeed("")
@@ -1753,7 +2253,16 @@ func (s *Server) appSettingsGet(w http.ResponseWriter, r *http.Request) {
 	for _, f := range app.Settings {
 		out = append(out, field{f.Key, f.Label, f.Help, f.Type, f.Options, f.Default, s.readField(app, f)})
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"fields": out, "admin": app.Admin})
+	admin := app.Admin
+	if admin != nil && admin.ManagedPassword != "" {
+		copy := *admin
+		if secret, err := apps.ManagedSecret(s.appConfigDir(app.ID), app.ID, admin.ManagedPassword); err == nil {
+			copy.Pass = secret
+		}
+		copy.ManagedPassword = ""
+		admin = &copy
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"fields": out, "admin": admin})
 }
 
 func (s *Server) appSettingsSet(w http.ResponseWriter, r *http.Request) {
@@ -1846,7 +2355,8 @@ func (s *Server) settingsModel(w http.ResponseWriter, r *http.Request) {
 	}
 	mode := "local"
 	if body.Mode == "cluster" {
-		if selected, ok := models.Get(model); ok && selected.SingleNodeOnly {
+		modelID := resolveModel(model)
+		if selected, ok := models.Get(modelID); ok && selected.SingleNodeOnly {
 			writeJSON(w, http.StatusConflict, map[string]string{"error": "this model currently has a reviewed single-Spark runtime only"})
 			return
 		}
@@ -1855,8 +2365,26 @@ func (s *Server) settingsModel(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusConflict, map[string]string{"error": "the Spark cluster is not healthy"})
 			return
 		}
+		engineCtx, engineCancel := context.WithTimeout(r.Context(), 5*time.Second)
+		activeEngine := s.activeEngine(engineCtx)
+		engineCancel()
+		if activeEngine == "" {
+			activeEngine = s.state.Get().Engine
+		}
+		if activeEngine == "" {
+			activeEngine = catalog.DefaultEngine()
+		}
+		if activeEngine != "vllm" {
+			writeJSON(w, http.StatusConflict, map[string]string{"error": "distributed inference currently requires the reviewed vLLM engine"})
+			return
+		}
+		if _, err := reviewedDistributedProfile(modelID, activeEngine, cluster.Nodes); err != nil {
+			writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
+			return
+		}
 		mode = "cluster"
 	}
+	previous := s.state.Get().InferenceRuntime()
 	_ = s.state.SetModel(model)
 	_ = s.state.SetExecutionMode(mode)
 
@@ -1872,6 +2400,7 @@ func (s *Server) settingsModel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	job := s.jobs.Create("model:" + app.ID)
+	s.observeInferenceJob(job, "model", app.ID, previous)
 	go s.applyEngine(job, app)
 	writeJSON(w, http.StatusAccepted, map[string]string{"jobId": job.ID, "mode": mode})
 }

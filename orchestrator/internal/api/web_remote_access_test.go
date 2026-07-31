@@ -33,6 +33,28 @@ func TestBrowserAndTailscaleAreNativeCloudlessTools(t *testing.T) {
 	}
 }
 
+func TestExternalPagesStayInTheCloudlessWindowModel(t *testing.T) {
+	content, err := webFS.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(content)
+	for _, want := range []string{
+		`if (anchor.target === '_blank' || target.origin !== location.origin)`,
+		`event.preventDefault()`,
+		`openSystemBrowser(target.href)`,
+		`button.classList.toggle('running',!!status.running)`,
+		`status.minimized?'Browser`,
+		`':'Browser`,
+		`syncBrowserLauncherTask(status)`,
+		`slot.querySelector('.ic').onclick=()=>openSystemBrowser('https://www.google.com','show')`,
+	} {
+		if !strings.Contains(page, want) {
+			t.Fatalf("external-page window contract is missing %q", want)
+		}
+	}
+}
+
 func TestSettingsActionButtonsKeepIconsAndLabelsAligned(t *testing.T) {
 	content, err := webFS.ReadFile("web/index.html")
 	if err != nil {

@@ -13,7 +13,9 @@ func TestStatusRoundTrip(t *testing.T) {
 	want := DefaultStatus()
 	want.State = "available"
 	want.CurrentVersion = "0.1.0"
+	want.CurrentSourceCommit = "0123456789abcdef0123456789abcdef01234567"
 	want.AvailableVersion = "0.1.1"
+	want.AvailableSourceCommit = "89abcdef0123456789abcdef0123456789abcdef"
 	want.ReleaseTitle = "A better update"
 	want.Changelog = []string{"Shows release notes before installation."}
 	want.Progress = 72
@@ -25,7 +27,7 @@ func TestStatusRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.State != want.State || got.AvailableVersion != want.AvailableVersion || got.ReleaseTitle != want.ReleaseTitle || len(got.Changelog) != 1 || got.Progress != want.Progress || len(got.Packages) != 1 {
+	if got.State != want.State || got.CurrentSourceCommit != want.CurrentSourceCommit || got.AvailableVersion != want.AvailableVersion || got.AvailableSourceCommit != want.AvailableSourceCommit || got.ReleaseTitle != want.ReleaseTitle || len(got.Changelog) != 1 || got.Progress != want.Progress || len(got.Packages) != 1 {
 		t.Fatalf("Read() = %#v, want %#v", got, want)
 	}
 }

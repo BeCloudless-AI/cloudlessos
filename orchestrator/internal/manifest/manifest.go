@@ -8,7 +8,9 @@ package manifest
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -31,12 +33,15 @@ const DefaultURL = "https://updates.becloudless.ai/manifests/cloudless-apps-mani
 // Cloudless APT releases. Custom development URLs can opt in with
 // CLOUDLESS_MANIFEST_REQUIRE_SIGNATURE=1.
 const DefaultKeyring = "/usr/share/cloudless/cloudless-archive-keyring.pgp"
+const DefaultCacheDir = "/var/cache/cloudless/manifests"
+
+const offlineCacheLifetime = 30 * 24 * time.Hour
 
 // DefaultModelsURL is the "Cloudless highlights" LLM manifest (override with CLOUDLESS_MODELS_URL).
-const DefaultModelsURL = "https://samuelcardillo.com/cloudless/cloudless-models.json"
+const DefaultModelsURL = "https://updates.becloudless.ai/manifests/cloudless-models.json"
 
 // DefaultDiffusionURL is the "Cloudless highlights" image-model manifest (CLOUDLESS_DIFFUSION_URL).
-const DefaultDiffusionURL = "https://samuelcardillo.com/cloudless/cloudless-diffusion.json"
+const DefaultDiffusionURL = "https://updates.becloudless.ai/manifests/cloudless-diffusion.json"
 
 // Pin is a validated image pin (apps + infra).
 type Pin struct {
@@ -170,26 +175,31 @@ func (s *Store) Get(ctx context.Context) (*Doc, error) {
 func (s *Store) fetch(ctx context.Context) (*Doc, error) {
 	cctx, cancel := context.WithTimeout(ctx, 8*time.Second)
 	defer cancel()
-	body, err := fetchBytes(cctx, s.url)
-	if err != nil {
-		return nil, err
-	}
-	if manifestSignatureRequired(s.url) {
-		signature, err := fetchBytes(cctx, s.url+".asc")
-		if err != nil {
-			return nil, fmt.Errorf("manifest signature: %w", err)
-		}
-		keyring := strings.TrimSpace(os.Getenv("CLOUDLESS_MANIFEST_KEYRING"))
-		if keyring == "" {
-			keyring = DefaultKeyring
-		}
-		if err := verifyManifestSignature(body, signature, keyring); err != nil {
-			return nil, fmt.Errorf("manifest signature verification failed: %w", err)
+	body, signature, _, remoteErr := fetchManifestCandidate(cctx, s.url)
+	if remoteErr == nil {
+		if d, err := decodeAppsManifest(body); err == nil {
+			_ = writeManifestCache(s.url, body, signature)
+			return d, nil
+		} else {
+			remoteErr = err
 		}
 	}
+	cached, _, _, cacheErr := readManifestCache(s.url)
+	if cacheErr == nil {
+		if d, err := decodeAppsManifest(cached); err == nil {
+			return d, nil
+		}
+	}
+	return nil, remoteErr
+}
+
+func decodeAppsManifest(body []byte) (*Doc, error) {
 	var d Doc
 	if err := json.Unmarshal(body, &d); err != nil {
 		return nil, fmt.Errorf("manifest decode: %w", err)
+	}
+	if d.ManifestVersion < 1 || d.ManifestVersion > 2 {
+		return nil, fmt.Errorf("unsupported apps manifest version %d", d.ManifestVersion)
 	}
 	return &d, nil
 }
@@ -212,6 +222,112 @@ func fetchBytes(ctx context.Context, url string) ([]byte, error) {
 		return nil, err
 	}
 	return body, nil
+}
+
+func manifestCacheDir() string {
+	if dir := strings.TrimSpace(os.Getenv("CLOUDLESS_MANIFEST_CACHE_DIR")); dir != "" {
+		return dir
+	}
+	return DefaultCacheDir
+}
+
+func manifestCachePaths(url string) (string, string) {
+	sum := sha256.Sum256([]byte(url))
+	base := filepath.Join(manifestCacheDir(), fmt.Sprintf("%x", sum[:]))
+	return base + ".json", base + ".asc"
+}
+
+func manifestKeyring() string {
+	if keyring := strings.TrimSpace(os.Getenv("CLOUDLESS_MANIFEST_KEYRING")); keyring != "" {
+		return keyring
+	}
+	return DefaultKeyring
+}
+
+// fetchManifestCandidate returns whether the payload has a verified detached
+// signature. Unsigned development/catalog mirrors remain display-only.
+func fetchManifestCandidate(ctx context.Context, url string) ([]byte, []byte, bool, error) {
+	body, err := fetchBytes(ctx, url)
+	if err != nil {
+		return nil, nil, false, err
+	}
+	if !manifestSignatureRequired(url) {
+		return body, nil, false, nil
+	}
+	signature, err := fetchBytes(ctx, url+".asc")
+	if err != nil {
+		return nil, nil, false, fmt.Errorf("manifest signature: %w", err)
+	}
+	if err := verifyManifestSignature(body, signature, manifestKeyring()); err != nil {
+		return nil, nil, false, fmt.Errorf("manifest signature verification failed: %w", err)
+	}
+	return body, signature, true, nil
+}
+
+func writeManifestCache(url string, body, signature []byte) error {
+	documentPath, signaturePath := manifestCachePaths(url)
+	if err := os.MkdirAll(filepath.Dir(documentPath), 0o755); err != nil {
+		return err
+	}
+	if err := atomicWrite(documentPath, body); err != nil {
+		return err
+	}
+	if len(signature) > 0 {
+		return atomicWrite(signaturePath, signature)
+	}
+	_ = os.Remove(signaturePath)
+	return nil
+}
+
+func atomicWrite(path string, body []byte) error {
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".manifest-*")
+	if err != nil {
+		return err
+	}
+	name := tmp.Name()
+	defer os.Remove(name)
+	if err := tmp.Chmod(0o644); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if _, err := tmp.Write(body); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(name, path)
+}
+
+func readManifestCache(url string) ([]byte, []byte, bool, error) {
+	documentPath, signaturePath := manifestCachePaths(url)
+	info, err := os.Stat(documentPath)
+	if err != nil {
+		return nil, nil, false, err
+	}
+	if time.Since(info.ModTime()) > offlineCacheLifetime {
+		return nil, nil, false, fmt.Errorf("cached manifest is older than %s", offlineCacheLifetime)
+	}
+	body, err := os.ReadFile(documentPath)
+	if err != nil {
+		return nil, nil, false, err
+	}
+	if !manifestSignatureRequired(url) {
+		return body, nil, false, nil
+	}
+	signature, err := os.ReadFile(signaturePath)
+	if err != nil {
+		return nil, nil, false, fmt.Errorf("cached manifest signature: %w", err)
+	}
+	if err := verifyManifestSignature(body, signature, manifestKeyring()); err != nil {
+		return nil, nil, false, fmt.Errorf("cached manifest signature verification failed: %w", err)
+	}
+	return body, signature, true, nil
 }
 
 func manifestSignatureRequired(url string) bool {
@@ -336,19 +452,21 @@ func (s *ModelsStore) Highlights(ctx context.Context) []models.Model {
 
 	cctx, cancel := context.WithTimeout(ctx, 8*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(cctx, http.MethodGet, s.url, nil)
-	if err == nil {
-		if resp, derr := http.DefaultClient.Do(req); derr == nil {
-			defer resp.Body.Close()
-			if resp.StatusCode == http.StatusOK {
-				var d ModelsDoc
-				if json.NewDecoder(resp.Body).Decode(&d) == nil && len(d.Highlights) > 0 {
-					s.mu.Lock()
-					s.doc, s.at = &d, time.Now()
-					s.mu.Unlock()
-					return d.Highlights
-				}
-			}
+	body, signature, trustedProfiles, err := fetchManifestCandidate(cctx, s.url)
+	d, decodeErr := decodeModelsManifest(body, trustedProfiles)
+	if err == nil && decodeErr == nil {
+		_ = writeManifestCache(s.url, body, signature)
+		s.mu.Lock()
+		s.doc, s.at = d, time.Now()
+		s.mu.Unlock()
+		return d.Highlights
+	}
+	if cached, _, trustedCache, cacheErr := readManifestCache(s.url); cacheErr == nil {
+		if d, cacheDecodeErr := decodeModelsManifest(cached, trustedCache); cacheDecodeErr == nil {
+			s.mu.Lock()
+			s.doc, s.at = d, time.Now()
+			s.mu.Unlock()
+			return d.Highlights
 		}
 	}
 	s.mu.Lock()
@@ -358,6 +476,28 @@ func (s *ModelsStore) Highlights(ctx context.Context) []models.Model {
 		return old.Highlights // stale-but-usable
 	}
 	return nil
+}
+
+func decodeModelsManifest(body []byte, trustedProfiles bool) (*ModelsDoc, error) {
+	if len(body) == 0 {
+		return nil, errors.New("empty model manifest")
+	}
+	var d ModelsDoc
+	if err := json.Unmarshal(body, &d); err != nil || len(d.Highlights) == 0 {
+		return nil, errors.New("invalid model manifest")
+	}
+	if d.ManifestVersion < 1 || d.ManifestVersion > 2 {
+		return nil, fmt.Errorf("unsupported model manifest version %d", d.ManifestVersion)
+	}
+	// Fit profiles affect launch decisions. Only schema v2+ manifests whose
+	// detached signature was verified may supply them. Unsigned mirrors remain
+	// useful for display metadata.
+	if d.ManifestVersion < 2 || !trustedProfiles {
+		for i := range d.Highlights {
+			d.Highlights[i].FitProfiles = nil
+		}
+	}
+	return &d, nil
 }
 
 // DiffusionDoc is the "Cloudless highlights" image-model manifest.
@@ -399,19 +539,21 @@ func (s *DiffusionStore) Highlights(ctx context.Context) []diffusion.Model {
 
 	cctx, cancel := context.WithTimeout(ctx, 8*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(cctx, http.MethodGet, s.url, nil)
-	if err == nil {
-		if resp, derr := http.DefaultClient.Do(req); derr == nil {
-			defer resp.Body.Close()
-			if resp.StatusCode == http.StatusOK {
-				var d DiffusionDoc
-				if json.NewDecoder(resp.Body).Decode(&d) == nil && len(d.Highlights) > 0 {
-					s.mu.Lock()
-					s.doc, s.at = &d, time.Now()
-					s.mu.Unlock()
-					return d.Highlights
-				}
-			}
+	body, signature, _, err := fetchManifestCandidate(cctx, s.url)
+	d, decodeErr := decodeDiffusionManifest(body)
+	if err == nil && decodeErr == nil {
+		_ = writeManifestCache(s.url, body, signature)
+		s.mu.Lock()
+		s.doc, s.at = d, time.Now()
+		s.mu.Unlock()
+		return d.Highlights
+	}
+	if cached, _, _, cacheErr := readManifestCache(s.url); cacheErr == nil {
+		if d, cacheDecodeErr := decodeDiffusionManifest(cached); cacheDecodeErr == nil {
+			s.mu.Lock()
+			s.doc, s.at = d, time.Now()
+			s.mu.Unlock()
+			return d.Highlights
 		}
 	}
 	s.mu.Lock()
@@ -421,4 +563,18 @@ func (s *DiffusionStore) Highlights(ctx context.Context) []diffusion.Model {
 		return old.Highlights
 	}
 	return nil
+}
+
+func decodeDiffusionManifest(body []byte) (*DiffusionDoc, error) {
+	if len(body) == 0 {
+		return nil, errors.New("empty diffusion manifest")
+	}
+	var d DiffusionDoc
+	if err := json.Unmarshal(body, &d); err != nil || len(d.Highlights) == 0 {
+		return nil, errors.New("invalid diffusion manifest")
+	}
+	if d.ManifestVersion != 1 {
+		return nil, fmt.Errorf("unsupported diffusion manifest version %d", d.ManifestVersion)
+	}
+	return &d, nil
 }

@@ -67,6 +67,13 @@ func ParseManifest(raw []byte) (ManifestDocument, error) {
 	byID := make(map[string]App, len(doc.Apps))
 	for i := range doc.Apps {
 		a := &doc.Apps[i]
+		if a.SupportLevel == "" {
+			if a.Verified {
+				a.SupportLevel = "supported"
+			} else {
+				a.SupportLevel = "preview"
+			}
+		}
 		if err := validateApp(*a); err != nil {
 			return doc, fmt.Errorf("apps[%d]: %w", i, err)
 		}
@@ -112,10 +119,17 @@ func ParseManifest(raw []byte) (ManifestDocument, error) {
 		if len(pack.Apps) == 0 {
 			return doc, fmt.Errorf("pack %s must contain at least one app", pack.ID)
 		}
+		if len(pack.Apps) < 2 {
+			return doc, fmt.Errorf("pack %s must contain at least two applications; publish a single product as an app", pack.ID)
+		}
 		seen := map[string]bool{}
 		for _, id := range pack.Apps {
-			if _, ok := byID[id]; !ok {
+			app, ok := byID[id]
+			if !ok {
 				return doc, fmt.Errorf("pack %s contains unknown app %s", pack.ID, id)
+			}
+			if !app.Hidden {
+				return doc, fmt.Errorf("pack %s component %s must be hidden from the standalone launcher", pack.ID, id)
 			}
 			if seen[id] {
 				return doc, fmt.Errorf("pack %s repeats app %s", pack.ID, id)
@@ -136,6 +150,15 @@ func validateApp(a App) error {
 	if strings.TrimSpace(a.Name) == "" {
 		return errors.New("name is required")
 	}
+	if !slices.Contains([]string{"experimental", "preview", "supported"}, a.SupportLevel) {
+		return fmt.Errorf("unsupported support level %q", a.SupportLevel)
+	}
+	if !a.Service && !a.Hidden {
+		if strings.TrimSpace(a.Category) == "" || strings.TrimSpace(a.Tagline) == "" ||
+			strings.TrimSpace(a.Long) == "" || len(a.Examples) < 3 {
+			return errors.New("visible applications require category, tagline, long description, and at least three examples")
+		}
+	}
 	if strings.TrimSpace(a.Image) == "" && len(a.ArchImages) == 0 && strings.TrimSpace(a.Build) == "" {
 		return errors.New("image, archImages, or build is required")
 	}
@@ -153,6 +176,14 @@ func validateApp(a App) error {
 			return errors.New("embedded apps must expose exactly one port")
 		}
 	}
+	if !a.Service && !a.Hidden {
+		if len(a.Ports) == 0 || !strings.HasPrefix(a.OpenPath, "/") {
+			return errors.New("visible applications require a launch port and absolute openPath")
+		}
+		if len(a.Volumes) == 0 && a.DataPath == "" && len(a.Config) == 0 {
+			return errors.New("visible applications require an explicit persistence contract")
+		}
+	}
 	if a.Resources.MemoryGB < 0 || a.Resources.DiskGB < 0 || a.Resources.VRAMGB < 0 || a.MinVRAMGB < 0 {
 		return errors.New("resource values must be non-negative")
 	}
@@ -164,6 +195,11 @@ func validateApp(a App) error {
 	}
 	if a.Health.Port < 0 || a.Health.Port > 65535 {
 		return errors.New("health port is invalid")
+	}
+	if a.Health.Port > 0 {
+		if _, ok := a.Ports[a.Health.Port]; !ok {
+			return errors.New("health port must be one of the app's published host ports")
+		}
 	}
 	if a.LLM != nil && a.LLM.Consumes {
 		if !slices.Contains([]string{"gateway", "direct"}, a.LLM.Route) {
@@ -180,7 +216,45 @@ func validateApp(a App) error {
 	if a.Exposure.Public == "opt-in" && !a.Exposure.RequireAuth {
 		return errors.New("public exposure requires authentication")
 	}
+	if a.Admin != nil && a.Admin.Pass != "" {
+		return errors.New("published applications must not embed a fixed administrator password")
+	}
+	for key, value := range a.Env {
+		normalizedKey := strings.ToUpper(strings.TrimSpace(key))
+		credentialShaped := strings.Contains(normalizedKey, "API_KEY") ||
+			strings.HasSuffix(normalizedKey, "_PASSWORD") ||
+			strings.HasSuffix(normalizedKey, "_SECRET")
+		if credentialShaped && strings.TrimSpace(value) != "" &&
+			!strings.HasPrefix(value, "cloudless-managed://") {
+			return fmt.Errorf("%s must be blank or use a cloudless-managed credential", key)
+		}
+		if strings.HasPrefix(value, "cloudless-managed://") {
+			name := strings.TrimSpace(strings.TrimPrefix(value, "cloudless-managed://"))
+			if !appIDPattern.MatchString(name) {
+				return fmt.Errorf("%s has invalid managed credential name %q", key, name)
+			}
+		}
+	}
+	if hasPasswordlessNotebookCommand(a.Command) {
+		if !a.LocalOnly || a.Exposure.LAN != "none" || a.Exposure.Public != "none" ||
+			a.Exposure.Risk != "code-execution-ui" {
+			return errors.New("passwordless notebook runtimes must be local-only, non-shareable code-execution surfaces")
+		}
+	}
 	return nil
+}
+
+func hasPasswordlessNotebookCommand(command []string) bool {
+	blankToken, blankPassword := false, false
+	for _, arg := range command {
+		switch strings.TrimSpace(arg) {
+		case "--ServerApp.token=":
+			blankToken = true
+		case "--ServerApp.password=":
+			blankPassword = true
+		}
+	}
+	return blankToken || blankPassword
 }
 
 func validateDependencyGraph(all []App) error {

@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -60,12 +61,20 @@ func (c InferenceContract) Normalized() InferenceContract {
 // by an advanced user. Base selects the signed Cloudless launch contract whose
 // command, volumes, ports and safety defaults the custom image inherits.
 type CustomEngine struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Image       string `json:"image"`
-	Base        string `json:"base"`
-	CommandMode string `json:"commandMode,omitempty"`
-	Created     string `json:"created"`
+	ID               string `json:"id"`
+	Name             string `json:"name"`
+	Image            string `json:"image"`
+	ResolvedImage    string `json:"resolvedImage,omitempty"`
+	ImageDigest      string `json:"imageDigest,omitempty"`
+	Architecture     string `json:"architecture,omitempty"`
+	Base             string `json:"base"`
+	CommandMode      string `json:"commandMode,omitempty"`
+	ProfileVersion   int    `json:"profileVersion,omitempty"`
+	ContractVersion  string `json:"contractVersion,omitempty"`
+	ValidationStatus string `json:"validationStatus,omitempty"` // registered | validating | compatible | failed
+	LastValidated    string `json:"lastValidated,omitempty"`
+	LastError        string `json:"lastError,omitempty"`
+	Created          string `json:"created"`
 }
 
 // ModelPromotion records the durable bootstrap-to-target model transition. It
@@ -85,6 +94,64 @@ type ModelPromotion struct {
 	Error       string `json:"error,omitempty"`
 	TargetReady bool   `json:"targetReady,omitempty"`
 	Attempts    int    `json:"attempts,omitempty"`
+}
+
+// ModelDownload is the durable portion of a Hugging Face cache operation.
+// Secrets and process-local cancellation handles are deliberately excluded.
+// Partial blobs remain in the shared cache and snapshot_download resumes them.
+type ModelDownload struct {
+	ModelID    string `json:"modelId"`
+	Phase      string `json:"phase"`
+	Message    string `json:"message,omitempty"`
+	BytesDone  int64  `json:"bytesDone,omitempty"`
+	BytesTotal int64  `json:"bytesTotal,omitempty"`
+	Started    string `json:"started,omitempty"`
+	Updated    string `json:"updated,omitempty"`
+	Error      string `json:"error,omitempty"`
+}
+
+// InferenceOperation journals a user-visible runtime transition. The desired
+// InferenceRuntime is already stored in State; Previous preserves a verified
+// rollback target when launch validation fails.
+type InferenceOperation struct {
+	ID           string                  `json:"id"`
+	Action       string                  `json:"action"` // load | unload | switch | restart | model | abort | cluster-fallback
+	TargetEngine string                  `json:"targetEngine,omitempty"`
+	TargetModel  string                  `json:"targetModel,omitempty"`
+	TargetMode   string                  `json:"targetMode,omitempty"`
+	Previous     InferenceRuntime        `json:"previous"`
+	Phase        string                  `json:"phase"`
+	Message      string                  `json:"message,omitempty"`
+	Percent      int                     `json:"percent,omitempty"`
+	ItemsDone    int                     `json:"itemsDone,omitempty"`
+	ItemsTotal   int                     `json:"itemsTotal,omitempty"`
+	BytesDone    int64                   `json:"bytesDone,omitempty"`
+	BytesTotal   int64                   `json:"bytesTotal,omitempty"`
+	Started      string                  `json:"started,omitempty"`
+	Updated      string                  `json:"updated,omitempty"`
+	Error        string                  `json:"error,omitempty"`
+	Nodes        []InferenceNodeProgress `json:"nodes,omitempty"`
+}
+
+type InferenceNodeProgress struct {
+	Node       string `json:"node"`
+	Phase      string `json:"phase"`
+	Message    string `json:"message,omitempty"`
+	BytesDone  int64  `json:"bytesDone,omitempty"`
+	BytesTotal int64  `json:"bytesTotal,omitempty"`
+	Percent    int    `json:"percent,omitempty"`
+	ETASecs    int64  `json:"etaSeconds,omitempty"`
+}
+
+type ManagedEngineArtifact struct {
+	EngineID         string `json:"engineId"`
+	Image            string `json:"image"`
+	DownloadedDigest string `json:"downloadedDigest,omitempty"`
+	ActiveDigest     string `json:"activeDigest,omitempty"`
+	Source           string `json:"source,omitempty"`
+	Channel          string `json:"channel,omitempty"`
+	Verified         bool   `json:"verified,omitempty"`
+	Updated          string `json:"updated"`
 }
 
 // APIKey is a user-generated credential for the Cloudless Proxy (the OpenAI-compatible
@@ -125,30 +192,48 @@ func NormalizeAPIKeyScope(scope string) string {
 
 // State is the persisted state.
 type State struct {
-	FirstSeen      string                  `json:"firstSeen"`                // RFC3339; when the daemon first initialized this store
-	Onboarded      bool                    `json:"onboarded"`                // user has completed first-run onboarding
-	Engine         string                  `json:"engine,omitempty"`         // selected inference engine ("" = default)
-	Model          string                  `json:"model,omitempty"`          // selected model ("" = catalog default)
-	EngineUnloaded bool                    `json:"engineUnloaded,omitempty"` // selected model stays cached but no inference engine holds accelerator memory
-	ExecutionMode  string                  `json:"executionMode,omitempty"`  // local | cluster; empty is local
-	LocalRecipeID  string                  `json:"localRecipeId,omitempty"`  // reviewed local recipe owning the active engine
-	Pinned         []string                `json:"pinned,omitempty"`         // app ids pinned to the dashboard "fast launch"
-	PinnedSet      bool                    `json:"pinnedSet,omitempty"`      // user has customized pins (else use catalog default)
-	LocalNet       bool                    `json:"localNet"`                 // serve apps on the local network (LAN)
-	LocalNetSet    bool                    `json:"localNetSet,omitempty"`    // user has chosen (else default ON)
-	Profile        Profile                 `json:"profile"`                  // user-controlled profile
-	APIKeys        []APIKey                `json:"apiKeys,omitempty"`        // Cloudless Proxy credentials
-	Display        DisplayPreference       `json:"display,omitempty"`        // preferred display output and mode
-	InferenceAPI   InferenceContract       `json:"inferenceApi,omitempty"`   // stable client-facing API port and model alias
-	CustomModels   map[string]models.Model `json:"customModels,omitempty"`   // user-imported Hugging Face repositories
-	ModelPromotion ModelPromotion          `json:"modelPromotion,omitempty"` // verified bootstrap/full-model lifecycle
-	InstalledPacks []string                `json:"installedPacks,omitempty"` // optional capability packs installed by Cloudless
-	CustomEngines  []CustomEngine          `json:"customEngines,omitempty"`  // user-built inference images
+	FirstSeen              string                           `json:"firstSeen"`                        // RFC3339; when the daemon first initialized this store
+	Onboarded              bool                             `json:"onboarded"`                        // user has completed first-run onboarding
+	Engine                 string                           `json:"engine,omitempty"`                 // selected inference engine ("" = default)
+	Model                  string                           `json:"model,omitempty"`                  // selected model ("" = catalog default)
+	EngineUnloaded         bool                             `json:"engineUnloaded,omitempty"`         // selected model stays cached but no inference engine holds accelerator memory
+	ExecutionMode          string                           `json:"executionMode,omitempty"`          // local | cluster; empty is local
+	LocalRecipeID          string                           `json:"localRecipeId,omitempty"`          // reviewed local recipe owning the active engine
+	Pinned                 []string                         `json:"pinned,omitempty"`                 // app ids pinned to the dashboard "fast launch"
+	PinnedSet              bool                             `json:"pinnedSet,omitempty"`              // user has customized pins (else use catalog default)
+	LocalNet               bool                             `json:"localNet"`                         // serve apps on the local network (LAN)
+	LocalNetSet            bool                             `json:"localNetSet,omitempty"`            // user has chosen (else default ON)
+	Profile                Profile                          `json:"profile"`                          // user-controlled profile
+	APIKeys                []APIKey                         `json:"apiKeys,omitempty"`                // Cloudless Proxy credentials
+	Display                DisplayPreference                `json:"display,omitempty"`                // preferred display output and mode
+	InferenceAPI           InferenceContract                `json:"inferenceApi,omitempty"`           // stable client-facing API port and model alias
+	CustomModels           map[string]models.Model          `json:"customModels,omitempty"`           // user-imported Hugging Face repositories
+	ModelPromotion         ModelPromotion                   `json:"modelPromotion,omitempty"`         // verified bootstrap/full-model lifecycle
+	ModelDownloads         map[string]ModelDownload         `json:"modelDownloads,omitempty"`         // resumable Hugging Face cache operations
+	InferenceOperation     InferenceOperation               `json:"inferenceOperation,omitempty"`     // durable engine/model transition
+	ManagedEngineArtifacts map[string]ManagedEngineArtifact `json:"managedEngineArtifacts,omitempty"` // downloaded and activated runtime identity
+	InstalledPacks         []string                         `json:"installedPacks,omitempty"`         // optional capability packs installed by Cloudless
+	CustomEngines          []CustomEngine                   `json:"customEngines,omitempty"`          // user-built inference images
 
 	// EngineCmds holds user-edited launch commands, keyed "engineID\x00modelID".
 	// The value is the container command (args after the image) to use when that
 	// model is launched on that engine, overriding the catalog default.
 	EngineCmds map[string][]string `json:"engineCmds,omitempty"`
+}
+
+// InferenceRuntime is the subset of state that must change atomically when an
+// engine is promoted or rolled back. Keeping it as one transaction prevents a
+// crash from persisting a new model with an old engine or a half-set recipe.
+type InferenceRuntime struct {
+	Engine         string `json:"engine,omitempty"`
+	Model          string `json:"model,omitempty"`
+	EngineUnloaded bool   `json:"engineUnloaded,omitempty"`
+	ExecutionMode  string `json:"executionMode,omitempty"`
+	LocalRecipeID  string `json:"localRecipeId,omitempty"`
+}
+
+func (s State) InferenceRuntime() InferenceRuntime {
+	return InferenceRuntime{Engine: s.Engine, Model: s.Model, EngineUnloaded: s.EngineUnloaded, ExecutionMode: s.ExecutionMode, LocalRecipeID: s.LocalRecipeID}
 }
 
 // CustomEngineList returns a detached snapshot of registered local builds.
@@ -170,6 +255,25 @@ func (s *Store) UpsertCustomEngine(def CustomEngine) error {
 	}
 	s.st.CustomEngines = append(s.st.CustomEngines, def)
 	return s.save()
+}
+
+// SetCustomEngineValidation records the result of the runtime contract probe
+// without changing the immutable image/profile identity.
+func (s *Store) SetCustomEngineValidation(id, status, validationError string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.st.CustomEngines {
+		if s.st.CustomEngines[i].ID != id {
+			continue
+		}
+		s.st.CustomEngines[i].ValidationStatus = status
+		s.st.CustomEngines[i].LastError = validationError
+		if status == "compatible" || status == "failed" {
+			s.st.CustomEngines[i].LastValidated = now()
+		}
+		return s.save()
+	}
+	return fmt.Errorf("unknown custom engine %q", id)
 }
 
 // DeleteCustomEngine removes a registered build without deleting its Docker
@@ -336,6 +440,29 @@ func (s *Store) SetLocalRecipe(id string) error {
 	return s.save()
 }
 
+// CommitInferenceRuntime atomically persists every field that identifies the
+// active inference runtime. Callers must not promote these fields one setter at
+// a time.
+func (s *Store) CommitInferenceRuntime(runtime InferenceRuntime) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	previous := s.st.InferenceRuntime()
+	s.st.Engine = runtime.Engine
+	s.st.Model = runtime.Model
+	s.st.EngineUnloaded = runtime.EngineUnloaded
+	s.st.ExecutionMode = runtime.ExecutionMode
+	s.st.LocalRecipeID = runtime.LocalRecipeID
+	if err := s.save(); err != nil {
+		s.st.Engine = previous.Engine
+		s.st.Model = previous.Model
+		s.st.EngineUnloaded = previous.EngineUnloaded
+		s.st.ExecutionMode = previous.ExecutionMode
+		s.st.LocalRecipeID = previous.LocalRecipeID
+		return err
+	}
+	return nil
+}
+
 // SetModel records the selected model and persists.
 func (s *Store) SetModel(model string) error {
 	s.mu.Lock()
@@ -355,6 +482,96 @@ func (s *Store) SetModelPromotion(p ModelPromotion) error {
 		p.Started = p.Updated
 	}
 	s.st.ModelPromotion = p
+	return s.save()
+}
+
+func (s *Store) ModelDownloads() []ModelDownload {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]ModelDownload, 0, len(s.st.ModelDownloads))
+	for _, download := range s.st.ModelDownloads {
+		out = append(out, download)
+	}
+	return out
+}
+
+func (s *Store) SetModelDownload(download ModelDownload) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.st.ModelDownloads == nil {
+		s.st.ModelDownloads = make(map[string]ModelDownload)
+	}
+	download.Updated = now()
+	if download.Started == "" {
+		download.Started = download.Updated
+	}
+	s.st.ModelDownloads[download.ModelID] = download
+	return s.save()
+}
+
+func (s *Store) RemoveModelDownload(modelID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.st.ModelDownloads, modelID)
+	return s.save()
+}
+
+func (s *Store) BeginInferenceOperation(operation InferenceOperation) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	operation.Updated = now()
+	if operation.Started == "" {
+		operation.Started = operation.Updated
+	}
+	s.st.InferenceOperation = operation
+	return s.save()
+}
+
+// UpdateInferenceOperation ignores stale writers. This matters when Abort
+// supersedes a launch: the canceled launch goroutine must not overwrite the
+// newer abort journal after it observes context cancellation.
+func (s *Store) UpdateInferenceOperation(operation InferenceOperation) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if operation.ID == "" || s.st.InferenceOperation.ID != operation.ID {
+		return false, nil
+	}
+	operation.Started = s.st.InferenceOperation.Started
+	operation.Previous = s.st.InferenceOperation.Previous
+	operation.Action = s.st.InferenceOperation.Action
+	operation.TargetEngine = s.st.InferenceOperation.TargetEngine
+	operation.TargetModel = s.st.InferenceOperation.TargetModel
+	operation.TargetMode = s.st.InferenceOperation.TargetMode
+	operation.Updated = now()
+	s.st.InferenceOperation = operation
+	return true, s.save()
+}
+
+func (s *Store) ClearInferenceOperation(id string) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if id == "" || s.st.InferenceOperation.ID != id {
+		return false, nil
+	}
+	s.st.InferenceOperation = InferenceOperation{}
+	return true, s.save()
+}
+
+func (s *Store) ManagedEngineArtifact(engineID string) (ManagedEngineArtifact, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	artifact, ok := s.st.ManagedEngineArtifacts[engineID]
+	return artifact, ok
+}
+
+func (s *Store) SetManagedEngineArtifact(artifact ManagedEngineArtifact) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.st.ManagedEngineArtifacts == nil {
+		s.st.ManagedEngineArtifacts = make(map[string]ManagedEngineArtifact)
+	}
+	artifact.Updated = now()
+	s.st.ManagedEngineArtifacts[artifact.EngineID] = artifact
 	return s.save()
 }
 

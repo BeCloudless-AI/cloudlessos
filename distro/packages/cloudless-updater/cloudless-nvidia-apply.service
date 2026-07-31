@@ -9,3 +9,7 @@ Before=shutdown.target
 Type=oneshot
 ExecStart=/usr/lib/cloudless/cloudless-updater nvidia-apply
 TimeoutStartSec=45min
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+UMask=0077

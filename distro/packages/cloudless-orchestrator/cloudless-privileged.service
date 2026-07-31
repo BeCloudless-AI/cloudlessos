@@ -1,0 +1,33 @@
+[Unit]
+Description=CloudlessOS privileged action broker
+After=dbus.service
+Before=cloudlessd.service
+
+[Service]
+Type=simple
+ExecStart=/usr/lib/cloudless/cloudless-privileged
+Restart=on-failure
+RestartSec=2
+RuntimeDirectory=cloudless
+RuntimeDirectoryMode=0755
+User=root
+Group=root
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/etc/netplan -/run/systemd/system -/run/systemd/network -/run/NetworkManager/conf.d -/run/NetworkManager/system-connections /run/udev
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

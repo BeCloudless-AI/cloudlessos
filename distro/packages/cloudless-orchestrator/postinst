@@ -1,7 +1,17 @@
 #!/bin/sh
 set -e
 install -d -m 0750 /var/lib/cloudless
+getent group cloudless-control >/dev/null || addgroup --system cloudless-control
+getent group cloudless >/dev/null || addgroup --system cloudless
+if ! getent passwd cloudlessd >/dev/null; then
+    adduser --system --no-create-home --home /nonexistent --shell /usr/sbin/nologin --ingroup cloudless-control cloudlessd
+fi
+adduser cloudlessd cloudless >/dev/null 2>&1 || true
+install -d -m 0750 -o cloudlessd -g cloudless-control /var/lib/cloudless /var/lib/cloudless/builds
+install -d -m 2750 -o cloudlessd -g cloudless /var/lib/cloudless/models-cache
 systemctl daemon-reload >/dev/null 2>&1 || true
+systemctl enable cloudless-privileged.service >/dev/null 2>&1 || true
+systemctl enable cloudless-engine.service >/dev/null 2>&1 || true
 systemctl enable cloudlessd.service >/dev/null 2>&1 || true
 # Install the official Tailscale client on the next normal boot, outside dpkg's
 # lock. It remains logged out and shares nothing until the user opts in.

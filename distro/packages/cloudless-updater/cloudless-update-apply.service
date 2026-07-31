@@ -9,3 +9,6 @@ Before=shutdown.target
 Type=oneshot
 ExecStart=/usr/lib/cloudless/cloudless-updater apply
 TimeoutStartSec=30min
+NoNewPrivileges=true
+PrivateTmp=true
+UMask=0077

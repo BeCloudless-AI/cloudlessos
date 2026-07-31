@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+# Read-only CloudlessOS installer preflight. It runs from the live ISO before
+# Subiquity partitions a target disk.
+set -euo pipefail
+
+REPORT="${CLOUDLESS_PREFLIGHT_REPORT:-/run/cloudless-preinstall-report.txt}"
+MIN_DISK_BYTES=$((32 * 1024 * 1024 * 1024))
+RECOMMENDED_DISK_BYTES=$((128 * 1024 * 1024 * 1024))
+errors=0
+warnings=0
+
+install -d -m 0755 "$(dirname "$REPORT")"
+: > "$REPORT"
+exec > >(tee -a "$REPORT") 2>&1
+
+pass() { printf 'PASS  %s\n' "$*"; }
+warn() { warnings=$((warnings + 1)); printf 'WARN  %s\n' "$*"; }
+fail() { errors=$((errors + 1)); printf 'FAIL  %s\n' "$*"; }
+
+echo "CloudlessOS installer preflight"
+echo "Generated: $(date -u +%FT%TZ)"
+
+arch="${CLOUDLESS_PREFLIGHT_ARCH:-$(dpkg --print-architecture 2>/dev/null || uname -m)}"
+case "$arch" in
+    amd64|x86_64) pass "Architecture: AMD64" ;;
+    *) fail "Architecture $arch is unsupported by this ISO; DGX Spark uses the ARM64 package-layer installer." ;;
+esac
+
+if [ -n "${CLOUDLESS_PREFLIGHT_DISK_BYTES:-}" ]; then
+    largest_disk="$CLOUDLESS_PREFLIGHT_DISK_BYTES"
+else
+    largest_disk="$(lsblk -bdn -o TYPE,SIZE,RO 2>/dev/null |
+        awk '$1 == "disk" && $3 == 0 && $2 > max {max=$2} END {print max+0}')"
+fi
+if [ "${largest_disk:-0}" -lt "$MIN_DISK_BYTES" ]; then
+    fail "No writable disk of at least 32 GiB was detected. Largest candidate: $((largest_disk / 1024 / 1024 / 1024)) GiB."
+elif [ "$largest_disk" -lt "$RECOMMENDED_DISK_BYTES" ]; then
+    warn "Disk capacity is $((largest_disk / 1024 / 1024 / 1024)) GiB. Installation can continue, but 128 GiB or more is recommended for models."
+else
+    pass "Writable disk capacity: $((largest_disk / 1024 / 1024 / 1024)) GiB"
+fi
+
+firmware="${CLOUDLESS_PREFLIGHT_FIRMWARE:-}"
+if [ -z "$firmware" ]; then
+    if [ -d /sys/firmware/efi ]; then firmware=uefi; else firmware=bios; fi
+fi
+case "$firmware" in
+    uefi|UEFI) pass "Firmware path: UEFI" ;;
+    bios|BIOS) pass "Firmware path: legacy BIOS" ;;
+    *) warn "Firmware mode could not be identified; both UEFI and BIOS are supported." ;;
+esac
+
+network="${CLOUDLESS_PREFLIGHT_NETWORK:-auto}"
+if [ "$network" = auto ]; then
+    if ip route show default 2>/dev/null | grep -q . &&
+       getent ahosts updates.becloudless.ai >/dev/null 2>&1; then
+        network=ready
+    else
+        network=offline
+    fi
+fi
+if [ "$network" = ready ]; then
+    pass "Network and update-service DNS are ready"
+else
+    warn "Network is not ready. The base system can install from the USB, but updates, apps and models require connectivity."
+fi
+
+gpu="${CLOUDLESS_PREFLIGHT_GPU:-auto}"
+if [ "$gpu" = auto ]; then
+    if command -v lspci >/dev/null 2>&1 && lspci -nn 2>/dev/null | grep -Eqi 'NVIDIA|3D controller.*10de|VGA.*10de'; then
+        gpu=nvidia
+    elif command -v systemd-detect-virt >/dev/null 2>&1 && [ "$(systemd-detect-virt 2>/dev/null || true)" != none ]; then
+        gpu=virtual
+    else
+        gpu=none
+    fi
+fi
+case "$gpu" in
+    nvidia) pass "NVIDIA accelerator path detected; the installed system will select a signed compatible driver." ;;
+    virtual) warn "Virtual-machine graphics detected. CloudlessOS will install for UI/update testing without GPU inference." ;;
+    *) warn "No supported NVIDIA accelerator was detected. CloudlessOS can install, but local GPU inference will remain unavailable." ;;
+esac
+
+printf 'SUMMARY errors=%d warnings=%d report=%s\n' "$errors" "$warnings" "$REPORT"
+if [ "$errors" -ne 0 ]; then
+    echo "Preflight failed. No disk changes were made."
+    exit 1
+fi
+touch /run/cloudless-preinstall-ok 2>/dev/null || true
+echo "Preflight passed. Review warnings above before continuing."

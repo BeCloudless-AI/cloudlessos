@@ -63,7 +63,10 @@ mode `0600`. The release command loads only the five supported settings from tha
 file without evaluating it as shell code. Set `CLOUDLESS_RELEASE_ENV` to use a
 different private path. Never put this file in the repository.
 
-The command refuses dirty or unpushed tracked source. It runs the Go, browser
+The command refuses dirty or unpushed source, including untracked files. Before starting a builder,
+production preflight also requires the committed archive fingerprint, Cloudless update signing
+identity, account-scoped Cloudflare endpoint, non-placeholder credential shapes and the exact
+AMD64/ARM64/DGX validation contract. It runs the Go, browser
 JavaScript, AMD64, ARM64, package-content, signed-repository, and atomic
 publication tests; asks for explicit confirmation; imports the signing key only
 inside the disposable release container; signs the complete generation;
@@ -113,6 +116,17 @@ published with `no-store`, while packages and hash-addressed indexes are immutab
 command succeeds only after downloading the public repository, validating its archive
 signature, and checking every published index and package against the signed hashes.
 
+The changelog is also fetched through a signed SHA-256 `by-hash` path. The updater verifies
+`InRelease`, extracts the manifest hash and size, and then fetches that immutable object. A release
+test fails every R2 upload in turn and proves that the public commit always describes either the
+complete previous generation or the complete new one.
+
+`cloudless-release.json` uses the `cloudless.release.v2` schema. It inventories the complete six
+package by two architecture generation with version, repository filename, SHA-256 and byte size,
+plus retained per-package rollback objects. The embedded compatibility contract repeats the exact
+validated generic AMD64, generic ARM64 and DGX Spark ARM64 targets and binds them to the release
+matrix hash. Devices reject manifests for another channel, platform or architecture.
+
 Each release also contains immutable, versioned copies of
 `install-dgx-spark.sh` and `cloudless-apps-manifest.json`. Their SHA-256 hashes
 and detached-signature hashes are inside `cloudless-release.json`, which is
@@ -125,6 +139,20 @@ The DGX installation guide verifies the installer signature before execution.
 `sign-release-interactive.sh` and `publish-apt-r2.sh` remain available for
 diagnostics, but production releases should use `release.sh` so neither half of
 the pipeline can be accidentally skipped.
+
+`publish-signed-release.sh` is a recovery-only resume path. It now runs the same production
+preflight as `release.sh` and refuses to publish unless the signed manifest describes the exact
+current clean commit, production signing identity, channel, version and destination.
+
+Before installing packages, the device snapshots the currently ready inference engine and every
+non-terminal durable recipe operation. After restarting `cloudlessd`, it requires the same engine
+to remain ready and each operation to remain recoverable. A lost workload triggers package
+rollback, followed by the same continuity verification against the restored generation.
+
+Production release attestation includes a secret-hygiene gate. It inspects every tracked and
+non-ignored source file for recognizable private token and key material without printing a matched
+value. See [Secure release credentials](../docs/SECURE_RELEASE_CREDENTIALS.md) for rotation and
+least-privilege requirements.
 
 ## Existing installations
 

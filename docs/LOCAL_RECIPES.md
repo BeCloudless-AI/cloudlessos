@@ -1,12 +1,15 @@
 # Local inference recipes
 
+> Recipe execution is currently experimental. The ordered hardening work and release gates are
+> tracked in the [recipe reliability roadmap](./RECIPE_RELIABILITY_ROADMAP.md).
+
 Cloudless recipes are machine-owned, editable launch profiles for specialized inference setups.
 They use the native `cloudless.recipe/v1` format and run through Cloudless itself; SparkRun or
 another third-party recipe runtime is not installed or required.
 
-Recipes are available from **Model Manager -> Recipes**. A user can create one locally or import
-a reviewed manifest, check it without changing the active model, and then launch it through the
-same Cloudless model lifecycle used by the desktop.
+Recipes are available from **Model Manager -> Recipes**. A user can create and inspect one locally
+or import an authenticated Cloudless profile. Only the authenticated profile can currently cross
+into Check and Run; both operations use the same Cloudless model lifecycle as the desktop.
 
 ## What a recipe controls
 
@@ -20,8 +23,15 @@ A recipe can declare:
 - health checks and the private OpenAI-compatible API path;
 - whether runtime preparation and model download happen once on the coordinator.
 
-Recipe commands are powerful local code. Review their source, revision, image and commands before
-running them. Saving a recipe does not make it Cloudless-verified or add it to signed updates.
+Recipe commands are powerful local code. Cloudless displays their source, revision, image,
+commands and requested permissions, but it does not execute editable or unreviewed host-command
+recipes. The current `source-scripts-v1` adapter is executable only when the complete profile
+exactly matches one authenticated inside the signed CloudlessOS package. Any edit removes that
+status and blocks both Check and Run before a process, image build or Docker operation begins.
+
+A constrained declarative runner is planned for user-authored recipes. Until it ships, saving and
+inspecting a custom recipe is supported, while executing it requires turning it into a reviewed
+Cloudless profile. A passing compatibility Check never promotes local code into a reviewed profile.
 
 ## Launch lifecycle
 
@@ -101,23 +111,23 @@ an existing LAN API integration.
 ## Cache and multi-Spark transfer behavior
 
 With `downloadOnce` or `buildOnce`, the coordinator prepares an artifact once and copies it to the
-other Spark systems over the configured private SSH link. The transfer is a tar stream over SSH;
-the high-speed cable provides the network path, but end-to-end speed also depends on source reads,
-tar processing, SSH encryption and destination writes.
+other selected Spark systems over the configured private SSH link. Cloudless inventories each file
+by path, type, size and SHA-256, keeps verified peer files, and retransmits only missing or invalid
+content. Interrupted transfers resume from durable staging and are promoted only after the complete
+snapshot matches the coordinator's cryptographic manifest.
 
-The current model-cache check requires both:
+Model downloads also use a stable model-and-revision staging volume. Hugging Face partial chunks
+survive navigation, abort and daemon restart. A completed download is copied into a promotion tree,
+verified again, and atomically exchanged with the active cache; the last complete cache is retained
+until promotion succeeds.
 
-- the exact requested Hugging Face snapshot directory on the peer; and
-- the same total byte size for the repository cache directory on coordinator and peer.
-
-If a prior transfer was interrupted, a snapshot is incomplete, or unrelated cache metadata makes
-the directory sizes differ, Cloudless currently removes that peer repository directory and copies
-the complete repository again. The peer transfer is not yet file-level incremental or resumable.
-This is why a model may be copied again even though part of it already exists on the second Spark.
-The progress display should identify the peer and transferred bytes while this is happening.
-
-Do not manually modify a peer's cache during an active launch. Resumable, content-addressed peer
-distribution is tracked as hardening work in [ROADMAP.md](./ROADMAP.md).
+Cloudless periodically garbage-collects old recipe-owned artifacts. Saved recipes, active or
+recovering operations, unresolved cleanup obligations, Hugging Face refs, live containers and
+`.incomplete` chunks are protected. Eligible old checkouts, staging trees/volumes, unreferenced model
+revisions and orphaned custom images are removed oldest-first. Under storage pressure the retention
+window becomes shorter, but the ownership protections remain unchanged. Read-only status and a
+manual cleanup pass are available through `GET /api/recipes/cache` and
+`POST /api/recipes/cache/cleanup`.
 
 ## Check a recipe first
 

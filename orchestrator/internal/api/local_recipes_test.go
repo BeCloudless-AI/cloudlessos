@@ -1,11 +1,13 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -15,14 +17,132 @@ import (
 
 	"github.com/cloudless/orchestrator/internal/jobs"
 	"github.com/cloudless/orchestrator/internal/localrecipes"
+	"github.com/cloudless/orchestrator/internal/recipeops"
 	"github.com/cloudless/orchestrator/internal/sparkcluster"
 )
+
+func runTestGit(t *testing.T, directory string, args ...string) string {
+	t.Helper()
+	command := exec.Command("git", args...)
+	command.Dir = directory
+	output, err := command.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, output)
+	}
+	return strings.TrimSpace(string(output))
+}
+
+func allowUnreviewedRecipeCommandsForTest(t *testing.T) {
+	t.Helper()
+	previous := recipeExecutionPolicyEvaluator
+	recipeExecutionPolicyEvaluator = func(localrecipes.Recipe) recipeExecutionDecision {
+		return recipeExecutionDecision{Allowed: true, Mode: "test-only"}
+	}
+	t.Cleanup(func() { recipeExecutionPolicyEvaluator = previous })
+}
+
+func TestRecipeCheckCheckoutIsOperationScoped(t *testing.T) {
+	stateDir := t.TempDir()
+	operation := recipeops.Operation{
+		ID:             "rop-0123456789abcdef0123456789abcdef",
+		RecipeID:       "local-0123456789abcdef",
+		RecipeRevision: "sha256:" + strings.Repeat("a", 64),
+	}
+	checkout, err := recipeCheckCheckout(stateDir, operation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(stateDir, "recipe-checks", operation.ID)
+	if checkout != want {
+		t.Fatalf("check checkout = %q, want %q", checkout, want)
+	}
+	if checkout == recipeCheckout(localrecipes.Recipe{ID: operation.RecipeID}) {
+		t.Fatal("check checkout aliases the active runtime checkout")
+	}
+	operation.ID = "../escape"
+	if _, err := recipeCheckCheckout(stateDir, operation); err == nil {
+		t.Fatal("unsafe operation ID was accepted")
+	}
+}
+
+func TestPrepareRecipeSourceAtRejectsChangedReviewedFile(t *testing.T) {
+	root := t.TempDir()
+	repository := filepath.Join(root, "source.git")
+	if err := os.MkdirAll(repository, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	runTestGit(t, repository, "init", "--quiet")
+	runTestGit(t, repository, "config", "user.email", "test@cloudless.invalid")
+	runTestGit(t, repository, "config", "user.name", "Cloudless Test")
+	if err := os.WriteFile(filepath.Join(repository, "launch.sh"), []byte("#!/bin/sh\necho reviewed\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	runTestGit(t, repository, "add", "launch.sh")
+	runTestGit(t, repository, "commit", "--quiet", "-m", "reviewed source")
+	revision := runTestGit(t, repository, "rev-parse", "HEAD")
+
+	recipe := localrecipes.Recipe{
+		Source: localrecipes.Source{
+			URL:      "file://" + strings.TrimSuffix(repository, ".git"),
+			Revision: revision,
+			Files:    map[string]string{"launch.sh": strings.Repeat("0", 64)},
+		},
+	}
+	checkout := filepath.Join(root, "check")
+	if err := os.MkdirAll(checkout, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	job := jobs.NewManager().Create("recipe-check:test")
+	_, err := prepareRecipeSourceAt(context.Background(), job, recipe, checkout)
+	if err == nil || !strings.Contains(err.Error(), "reviewed file changed") {
+		t.Fatalf("prepare error = %v, want reviewed checksum rejection", err)
+	}
+}
+
+func TestValidateRecipeLifecycleCommandsChecksRenderedScripts(t *testing.T) {
+	workdir := t.TempDir()
+	script := filepath.Join(workdir, "start.sh")
+	if err := os.WriteFile(script, []byte("#!/bin/sh\nexit 0\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	recipe := localrecipes.Recipe{Runtime: localrecipes.Runtime{Lifecycle: localrecipes.Lifecycle{
+		Start: localrecipes.Command{Program: "bash", Args: []string{"./start.sh"}},
+		Stop:  localrecipes.Command{Program: "/bin/true"},
+	}}}
+	if err := validateRecipeLifecycleCommands(recipe, workdir); err != nil {
+		t.Fatalf("valid rendered lifecycle rejected: %v", err)
+	}
+	if err := os.Remove(script); err != nil {
+		t.Fatal(err)
+	}
+	if err := validateRecipeLifecycleCommands(recipe, workdir); err == nil || !strings.Contains(err.Error(), "unavailable") {
+		t.Fatalf("missing rendered script error = %v", err)
+	}
+}
+
+func TestValidateRecipeLifecycleCommandsRejectsEscapingScript(t *testing.T) {
+	root := t.TempDir()
+	workdir := filepath.Join(root, "runtime")
+	if err := os.MkdirAll(workdir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "outside.sh"), []byte("exit 0\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	recipe := localrecipes.Recipe{Runtime: localrecipes.Runtime{Lifecycle: localrecipes.Lifecycle{
+		Start: localrecipes.Command{Program: "bash", Args: []string{"../outside.sh"}},
+	}}}
+	err := validateRecipeLifecycleCommands(recipe, workdir)
+	if err == nil || !strings.Contains(err.Error(), "escapes") {
+		t.Fatalf("escaping script error = %v", err)
+	}
+}
 
 func TestLocalRecipeAbortCancelsRegisteredLaunch(t *testing.T) {
 	server := &Server{}
 	ctx, cancel := context.WithCancel(context.Background())
 	job := jobs.NewManager().Create("recipe:local-0123456789abcdef")
-	server.registerRecipeJob("local-0123456789abcdef", cancel, job)
+	server.registerRecipeJob("local-0123456789abcdef", "rop-test", cancel, job)
 	request := httptest.NewRequest(http.MethodPost, "/api/recipes/local-0123456789abcdef/abort", nil)
 	request.SetPathValue("id", "local-0123456789abcdef")
 	recorder := httptest.NewRecorder()
@@ -37,6 +157,25 @@ func TestLocalRecipeAbortCancelsRegisteredLaunch(t *testing.T) {
 	}
 	if state := job.Snapshot(); state.Phase != "stopping" {
 		t.Fatalf("job phase = %q, want stopping", state.Phase)
+	}
+}
+
+func TestUnregisterRecipeJobDoesNotDeleteNewerOperation(t *testing.T) {
+	server := &Server{}
+	first := jobs.NewManager().Create("recipe:first")
+	second := jobs.NewManager().Create("recipe:second")
+	_, cancelFirst := context.WithCancel(context.Background())
+	_, cancelSecond := context.WithCancel(context.Background())
+	defer cancelFirst()
+	defer cancelSecond()
+	server.registerRecipeJob("local-0123456789abcdef", "rop-first", cancelFirst, first)
+	server.registerRecipeJob("local-0123456789abcdef", "rop-second", cancelSecond, second)
+	server.unregisterRecipeJob("local-0123456789abcdef", "rop-first")
+	server.recipeJobsMu.Lock()
+	control, ok := server.recipeJobs["local-0123456789abcdef"]
+	server.recipeJobsMu.Unlock()
+	if !ok || control.operationID != "rop-second" || control.job != second {
+		t.Fatalf("newer operation control was removed: %#v", control)
 	}
 }
 
@@ -93,6 +232,21 @@ func TestRunRecipeCommandFailureIncludesLastOutputLine(t *testing.T) {
 	}
 }
 
+func TestConsumeRecipeCommandOutputDrainsOversizedLines(t *testing.T) {
+	payload := append(bytes.Repeat([]byte("x"), 2*1024*1024), '\n')
+	payload = append(payload, []byte("finished\n")...)
+	lines := make([]string, 0, 2)
+	if err := consumeRecipeCommandOutput(bytes.NewReader(payload), func(line string) { lines = append(lines, line) }); err != nil {
+		t.Fatal(err)
+	}
+	if len(lines) != 2 {
+		t.Fatalf("bounded lines = %q", lines)
+	}
+	if len(lines[0]) > 4100 || !strings.HasSuffix(lines[0], "...") || lines[1] != "finished" {
+		t.Fatalf("bounded lines = lengths/content %d, %q", len(lines[0]), lines)
+	}
+}
+
 func TestGitHubRecipePreviewDoesNotPersist(t *testing.T) {
 	store := localrecipes.New(t.TempDir())
 	server := &Server{recipes: store}
@@ -105,6 +259,45 @@ func TestGitHubRecipePreviewDoesNotPersist(t *testing.T) {
 	recipes, err := store.List()
 	if err != nil || len(recipes) != 0 {
 		t.Fatalf("preview persisted recipes: %#v, %v", recipes, err)
+	}
+}
+
+func TestUnreviewedRecipeCannotReachCheckOrRunExecution(t *testing.T) {
+	store := localrecipes.New(t.TempDir())
+	recipe, err := store.Create(localrecipes.NewDraft())
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := &Server{recipes: store}
+	for _, endpoint := range []struct {
+		name    string
+		handler func(http.ResponseWriter, *http.Request)
+	}{
+		{"check", server.localRecipeCheck},
+		{"run", server.localRecipeRun},
+	} {
+		t.Run(endpoint.name, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodPost, "/api/recipes/"+recipe.ID+"/"+endpoint.name, nil)
+			request.SetPathValue("id", recipe.ID)
+			recorder := httptest.NewRecorder()
+			endpoint.handler(recorder, request)
+			if recorder.Code != http.StatusForbidden ||
+				!strings.Contains(recorder.Body.String(), `"action":"review-permissions"`) {
+				t.Fatalf("%s response = %d: %s", endpoint.name, recorder.Code, recorder.Body.String())
+			}
+		})
+	}
+}
+
+func TestConfiguredRecipeCommandBlocksInternalUnreviewedReplay(t *testing.T) {
+	recipe := localrecipes.Recipe{ID: "local-0123456789abcdef", Origin: "local", Trust: "local-custom"}
+	command := localrecipes.Command{Program: "/bin/true"}
+	err := runConfiguredRecipeCommand(
+		context.Background(), jobs.NewManager().Create("recipe:test"), "recovering", "Replay",
+		t.TempDir(), nil, recipe, command,
+	)
+	if err == nil || !strings.Contains(err.Error(), "not Cloudless-signed") {
+		t.Fatalf("internal unreviewed command error = %v", err)
 	}
 }
 
@@ -126,9 +319,9 @@ func TestPrepareRecipeComposeAddsRestartPolicy(t *testing.T) {
 	if !strings.Contains(string(data), "restart: on-failure:5") {
 		t.Fatal("managed restart policy was not added")
 	}
-	if !strings.Contains(string(data), "cloudless-hf-cache:/cache/huggingface") ||
-		!strings.Contains(string(data), "name: ${HF_CACHE:-cloudless-hf}") {
-		t.Fatal("managed external model-cache volume was not added")
+	if !strings.Contains(string(data), "${HF_CACHE:-/var/lib/cloudless/models-cache}:/cache/huggingface") ||
+		strings.Contains(string(data), "external: true") {
+		t.Fatal("managed host model-cache mount was not added")
 	}
 	if !strings.Contains(string(data), "--port ${ENGINE_PORT:-8890}") {
 		t.Fatal("managed recipe engine port was not added")
@@ -238,7 +431,7 @@ func TestRecipeRuntimeUsesEditableEngineModelClusterAndEnvironment(t *testing.T)
 		t.Fatal(err)
 	}
 	checkout := t.TempDir()
-	env, workdir, err := writeRecipeRuntime(recipe, checkout, sparkcluster.State{}, true)
+	env, workdir, err := writeRecipeRuntime(recipe, checkout, sparkcluster.State{}, true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -265,6 +458,100 @@ func TestRecipeRuntimeUsesEditableEngineModelClusterAndEnvironment(t *testing.T)
 	}
 }
 
+func TestRecipeRuntimePersistsOperationOwnership(t *testing.T) {
+	draft := localrecipes.NewDraft()
+	draft.Source = localrecipes.Source{}
+	draft.Distributed.Nodes = 1
+	store := localrecipes.New(t.TempDir())
+	recipe, err := store.Create(draft)
+	if err != nil {
+		t.Fatal(err)
+	}
+	revision, err := recipeops.RecipeRevision(recipe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	operation := recipeops.Operation{
+		ID: "rop-0123456789abcdef0123456789abcdef", Kind: recipeops.KindRun,
+		RecipeID: recipe.ID, RecipeRevision: revision, Phase: recipeops.PhasePreparing,
+	}
+	checkout := t.TempDir()
+	env, _, err := writeRecipeRuntime(recipe, checkout, sparkcluster.State{}, true, &operation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for key, want := range map[string]string{
+		"CLOUDLESS_RECIPE_OPERATION_ID": operation.ID,
+		"CLOUDLESS_RECIPE_REVISION":     revision,
+		"COMPOSE_PROJECT_NAME":          "cloudless-recipe-0123456789abcdef",
+	} {
+		if env[key] != want {
+			t.Fatalf("%s = %q, want %q", key, env[key], want)
+		}
+	}
+	data, err := os.ReadFile(filepath.Join(checkout, ".env.dspark"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for key, want := range map[string]string{
+		"CLOUDLESS_RECIPE_OPERATION_ID": operation.ID,
+		"CLOUDLESS_RECIPE_REVISION":     revision,
+		"COMPOSE_PROJECT_NAME":          "cloudless-recipe-0123456789abcdef",
+	} {
+		if !strings.Contains(string(data), key+"="+want+"\n") {
+			t.Fatalf("runtime environment is missing %s:\n%s", key, data)
+		}
+	}
+	wrapper, err := os.ReadFile(filepath.Join(env["HOME"], "bin", "docker"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(wrapper), `--label "cloudless.recipe.operation=${CLOUDLESS_RECIPE_OPERATION_ID}"`) ||
+		!strings.Contains(string(wrapper), `--label "cloudless.recipe.revision=${CLOUDLESS_RECIPE_REVISION:-unknown}"`) {
+		t.Fatalf("Docker wrapper does not label direct helper containers:\n%s", wrapper)
+	}
+}
+
+func TestCloseActiveRecipeOperationPreservesRunIdentity(t *testing.T) {
+	dir := t.TempDir()
+	store := localrecipes.New(dir)
+	draft := localrecipes.NewDraft()
+	draft.Source = localrecipes.Source{}
+	draft.Distributed.Nodes = 1
+	recipe, err := store.Create(draft)
+	if err != nil {
+		t.Fatal(err)
+	}
+	operations, err := recipeops.Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run, err := operations.Begin(recipeops.KindRun, recipe, recipeops.PhasePreparing)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, phase := range []recipeops.Phase{
+		recipeops.PhasePrepared, recipeops.PhaseSwitching, recipeops.PhaseStarting,
+		recipeops.PhaseVerifying, recipeops.PhaseActive,
+	} {
+		run, err = operations.Transition(run.ID, phase, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	server := &Server{recipeOps: operations}
+	if err := server.closeActiveRecipeOperation(recipe.ID, nil); err != nil {
+		t.Fatal(err)
+	}
+	closed, ok := operations.Get(run.ID)
+	if !ok || closed.Phase != recipeops.PhaseStopped {
+		t.Fatalf("closed run operation = %#v, %v", closed, ok)
+	}
+	if _, ok := operations.ActiveForRecipe(recipe.ID); ok {
+		t.Fatal("stopped run remains active")
+	}
+}
+
 func TestRecipeRuntimeUsesFabricSSHAndDisablesDuplicatePeerWork(t *testing.T) {
 	draft := localrecipes.NewDraft()
 	draft.Runtime.BuildOnce = true
@@ -279,7 +566,7 @@ func TestRecipeRuntimeUsesFabricSSHAndDisablesDuplicatePeerWork(t *testing.T) {
 		NodeCount: 2, LocalIPs: []string{"10.100.0.1"}, LocalLinks: []string{"enp1s0f0np0"},
 		Nodes: []sparkcluster.Node{{Name: "peer", Host: "192.168.50.94", Username: "ledomaine", IPs: []string{"10.100.0.2"}}},
 	}
-	env, _, err := writeRecipeRuntime(recipe, checkout, cluster, false)
+	env, _, err := writeRecipeRuntime(recipe, checkout, cluster, false, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -305,6 +592,31 @@ func TestRecipeSSHCommandPreservesRemoteArguments(t *testing.T) {
 	want := `'docker' 'run' '-c' 'test -d "$1"' 'argument with spaces' 'it'"'"'s-literal'`
 	if got := cmd.Args[len(cmd.Args)-1]; got != want {
 		t.Fatalf("remote command = %q, want %q", got, want)
+	}
+}
+
+func TestRecipeCommandsPropagateOwnershipToLocalAndPeerHelpers(t *testing.T) {
+	env := map[string]string{
+		"HOME": "/tmp/cloudless-home", "PATH": "/usr/bin",
+		"CLOUDLESS_RECIPE_OPERATION_ID": "rop-owned", "CLOUDLESS_RECIPE_REVISION": "sha256:revision",
+	}
+	local := recipeLocalCommand(context.Background(), t.TempDir(), env, "docker", "run", "--rm", "runtime")
+	localArgs := strings.Join(local.Args, " ")
+	for _, want := range []string{"--label cloudless.recipe.operation=rop-owned", "--label cloudless.recipe.revision=sha256:revision"} {
+		if !strings.Contains(localArgs, want) {
+			t.Fatalf("local helper is missing %q: %s", want, localArgs)
+		}
+	}
+	peer := recipeSSHCommand(context.Background(), t.TempDir(), env, recipePeer{Alias: "worker"}, "docker", "run", "--rm", "runtime")
+	remote := peer.Args[len(peer.Args)-1]
+	for _, want := range []string{"'/usr/bin/env' 'CLOUDLESS_RECIPE_OPERATION_ID=rop-owned'", "'--label' 'cloudless.recipe.operation=rop-owned'"} {
+		if !strings.Contains(remote, want) {
+			t.Fatalf("peer helper is missing %q: %s", want, remote)
+		}
+	}
+	rsync := strings.Join(recipeRsyncOwnershipArgs(env), " ")
+	if !strings.Contains(rsync, "CLOUDLESS_RECIPE_OPERATION_ID='rop-owned'") || !strings.Contains(rsync, "CLOUDLESS_RECIPE_REVISION='sha256:revision'") {
+		t.Fatalf("rsync peer process has no ownership identity: %s", rsync)
 	}
 }
 
@@ -369,7 +681,8 @@ func TestRecipeUIUsesRecipesIconAndCloudlessSourceViewer(t *testing.T) {
 		`${uiIcon('recipes')}<span>Recipes</span>`,
 		`<h3>Recipe Library</h3>`,
 		`.recipe-actions .btn`,
-		`.recipe-actions { display: grid; grid-template-columns: repeat(3,minmax(0,1fr));`,
+		`.recipe-actions { display: grid; grid-template-columns: repeat(2,minmax(0,1fr));`,
+		`.recipe-actions .recipe-remove { grid-column: 2; }`,
 		`function recipeGitHubURL(value)`,
 		`function recipeImportRequest(sourceValue)`,
 		`function openRecipeImport()`,
@@ -393,6 +706,8 @@ func TestRecipeUIUsesRecipesIconAndCloudlessSourceViewer(t *testing.T) {
 		`/api/recipes/import/preview`,
 		`<span>Import recipe</span>`,
 		`<span>Check</span>`,
+		`trust.executionAllowed === true`,
+		`Execution blocked`,
 		`'/api/recipes/' + encodeURIComponent(id) + '/check'`,
 		"`https://github.com/${path}`",
 		`source.onkeydown = event => { if (event.key === 'Enter')`,
@@ -468,11 +783,16 @@ func TestRecipeCheckUsesStableProgressOverlay(t *testing.T) {
 	for _, want := range []string{
 		`function openRecipeCheckOverlay(recipe, trigger)`,
 		`function updateRecipeCheckOverlay(update)`,
-		`function finishRecipeCheckOverlay(ok, message)`,
+		`function finishRecipeCheckOverlay(ok, message, outcome = '')`,
 		`class="recipe-check-overlay"`,
 		`aria-label="Recipe check progress"`,
-		`Cloudless is validating this recipe without launching or downloading the model.`,
-		`This is a read-only check. The active model and running services are not changed.`,
+		`Cloudless is collecting launch evidence without loading the model or downloading its weights.`,
+		`A small bounded fabric transfer is used for multi-Spark recipes.`,
+		`'checking-image':2`,
+		`'checking-capacity':4`,
+		`'checking-accelerators':5`,
+		`'checking-fabric':7`,
+		`outcome === 'validated-with-warnings'`,
 		`trackLocalRecipeJob(result.jobId, 'check');`,
 		`if(checking)updateRecipeCheckOverlay(update);else if(recipeId)updateRecipeRunCard(recipeId,jobId,update)`,
 		`html.motion-disabled .recipe-check-spinner::before`,
@@ -484,6 +804,29 @@ func TestRecipeCheckUsesStableProgressOverlay(t *testing.T) {
 	}
 	if strings.Contains(page, `trackLocalRecipeJob(result.jobId, 'check');mmRecipes=null;renderLocalRecipes(c)`) {
 		t.Fatal("recipe check still repaints the entire manager after starting")
+	}
+}
+
+func TestRecipeCardsExposeDurablePreflightEvidence(t *testing.T) {
+	content, err := webFS.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(content)
+	for _, want := range []string{
+		`function recipeCurrentPreflight(recipe, data)`,
+		`operation.phase==='prepared'`,
+		`operation.recipeRevision===revision`,
+		`function recipePreflightHTML(recipe, data)`,
+		`Not checked for this recipe revision`,
+		`Launch evidence verified`,
+		`Requirements checked with warnings`,
+		`recipePreflightHTML(recipe,data)`,
+		`.recipe-preflight-item.warning i`,
+	} {
+		if !strings.Contains(page, want) {
+			t.Fatalf("recipe preflight UI is missing %q", want)
+		}
 	}
 }
 
@@ -516,6 +859,25 @@ func TestRecipeRunProgressUpdatesWithoutRepaintingManager(t *testing.T) {
 	}
 	if strings.Contains(page, `refreshTimer = window.setTimeout`) {
 		t.Fatal("recipe runs still poll by repainting the whole manager")
+	}
+}
+
+func TestRecipeProgressFallsBackToDurableOperationJournal(t *testing.T) {
+	content, err := webFS.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(content)
+	for _, want := range []string{
+		`function recipeOperationWorking(operation)`,
+		`function recipeOperationAsJob(operation)`,
+		`function recipeLiveJobs(data)`,
+		`overallPercent:Number.isFinite(overall)?overall:0`,
+		`Cloudless is reconciling this operation after a service restart.`,
+	} {
+		if !strings.Contains(page, want) {
+			t.Fatalf("durable recipe progress UI is missing %q", want)
+		}
 	}
 }
 

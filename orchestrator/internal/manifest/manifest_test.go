@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"strings"
 	"testing"
 )
 
@@ -119,5 +121,125 @@ func TestInvalidManifestSignatureFailsClosed(t *testing.T) {
 	store := New(server.URL + "/manifest.json")
 	if _, err := store.Get(context.Background()); err == nil {
 		t.Fatal("manifest with an invalid signature was accepted")
+	}
+}
+
+func TestSignedManifestSurvivesRestartFromVerifiedOfflineCache(t *testing.T) {
+	t.Setenv("CLOUDLESS_MANIFEST_REQUIRE_SIGNATURE", "1")
+	t.Setenv("CLOUDLESS_MANIFEST_CACHE_DIR", t.TempDir())
+	original := verifyManifestSignature
+	t.Cleanup(func() { verifyManifestSignature = original })
+	verifyManifestSignature = func(document, signature []byte, keyring string) error {
+		if len(document) == 0 || len(signature) == 0 {
+			return errors.New("missing signed cache material")
+		}
+		return nil
+	}
+	server := manifestServer(t, "nousresearch/hermes-agent")
+	url := server.URL + "/manifest.json"
+	if _, err := New(url).Get(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	server.Close()
+	doc, err := New(url).Get(context.Background())
+	if err != nil || doc == nil || doc.Apps["hermes"].Digest != "sha256:abc" {
+		t.Fatalf("verified offline cache was not used: doc=%#v err=%v", doc, err)
+	}
+}
+
+func TestTamperedSignedOfflineCacheIsRejected(t *testing.T) {
+	t.Setenv("CLOUDLESS_MANIFEST_REQUIRE_SIGNATURE", "1")
+	t.Setenv("CLOUDLESS_MANIFEST_CACHE_DIR", t.TempDir())
+	original := verifyManifestSignature
+	t.Cleanup(func() { verifyManifestSignature = original })
+	verifyManifestSignature = func(document, signature []byte, keyring string) error {
+		if strings.Contains(string(document), "tampered") {
+			return errors.New("bad signature")
+		}
+		return nil
+	}
+	server := manifestServer(t, "nousresearch/hermes-agent")
+	url := server.URL + "/manifest.json"
+	if _, err := New(url).Get(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	documentPath, _ := manifestCachePaths(url)
+	if err := os.WriteFile(documentPath, []byte(`{"manifestVersion":1,"channel":"tampered"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	server.Close()
+	if _, err := New(url).Get(context.Background()); err == nil {
+		t.Fatal("tampered signed cache was accepted")
+	}
+}
+
+func TestUnsupportedManifestVersionIsRejected(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"manifestVersion":99,"apps":{}}`))
+	}))
+	defer server.Close()
+	if _, err := New(server.URL + "/manifest.json").Get(context.Background()); err == nil {
+		t.Fatal("unknown manifest schema was accepted")
+	}
+}
+
+func modelManifestServer(t *testing.T, version int) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, ".asc") {
+			_, _ = w.Write([]byte("signature"))
+			return
+		}
+		fmt.Fprintf(w, `{"manifestVersion":%d,"highlights":[{"id":"example/model","name":"Example","fitProfiles":[{"id":"profile","evidence":"measured","source":"lab","engine":"vllm","architectures":["amd64"],"memoryTypes":["dedicated"],"minNodes":1,"maxNodes":1,"contextK":32,"requiredPerNodeGB":12}]}]}`, version)
+	}))
+}
+
+func TestUnsignedModelManifestCannotSupplyFitProfiles(t *testing.T) {
+	server := modelManifestServer(t, 2)
+	defer server.Close()
+	highlights := NewModels(server.URL + "/cloudless-models.json").Highlights(context.Background())
+	if len(highlights) != 1 || len(highlights[0].FitProfiles) != 0 {
+		t.Fatalf("unsigned model manifest supplied launch evidence: %#v", highlights)
+	}
+}
+
+func TestSignedV2ModelManifestCanSupplyFitProfiles(t *testing.T) {
+	server := modelManifestServer(t, 2)
+	defer server.Close()
+	t.Setenv("CLOUDLESS_MANIFEST_REQUIRE_SIGNATURE", "1")
+	original := verifyManifestSignature
+	t.Cleanup(func() { verifyManifestSignature = original })
+	verifyManifestSignature = func(document, signature []byte, keyring string) error { return nil }
+	highlights := NewModels(server.URL + "/cloudless-models.json").Highlights(context.Background())
+	if len(highlights) != 1 || len(highlights[0].FitProfiles) != 1 ||
+		highlights[0].FitProfiles[0].Evidence != "measured" {
+		t.Fatalf("verified model fit profile was not preserved: %#v", highlights)
+	}
+}
+
+func TestSignedLegacyModelManifestCannotSupplyFitProfiles(t *testing.T) {
+	server := modelManifestServer(t, 1)
+	defer server.Close()
+	t.Setenv("CLOUDLESS_MANIFEST_REQUIRE_SIGNATURE", "1")
+	original := verifyManifestSignature
+	t.Cleanup(func() { verifyManifestSignature = original })
+	verifyManifestSignature = func(document, signature []byte, keyring string) error { return nil }
+	highlights := NewModels(server.URL + "/cloudless-models.json").Highlights(context.Background())
+	if len(highlights) != 1 || len(highlights[0].FitProfiles) != 0 {
+		t.Fatalf("legacy schema supplied launch evidence: %#v", highlights)
+	}
+}
+
+func TestInvalidSignedModelManifestFailsClosed(t *testing.T) {
+	server := modelManifestServer(t, 2)
+	defer server.Close()
+	t.Setenv("CLOUDLESS_MANIFEST_REQUIRE_SIGNATURE", "1")
+	original := verifyManifestSignature
+	t.Cleanup(func() { verifyManifestSignature = original })
+	verifyManifestSignature = func(document, signature []byte, keyring string) error {
+		return errors.New("bad signature")
+	}
+	if highlights := NewModels(server.URL + "/cloudless-models.json").Highlights(context.Background()); highlights != nil {
+		t.Fatalf("invalid signed model manifest was accepted: %#v", highlights)
 	}
 }

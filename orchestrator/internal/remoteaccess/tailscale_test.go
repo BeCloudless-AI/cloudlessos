@@ -3,8 +3,12 @@ package remoteaccess
 import (
 	"context"
 	"errors"
+	"net"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/cloudless/orchestrator/internal/privileged"
 )
 
 type fakeCommands struct {
@@ -69,5 +73,29 @@ func TestManagedActionsUseConstrainedCommands(t *testing.T) {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("missing %q in %s", want, joined)
 		}
+	}
+}
+
+func TestInstallUsesPrivilegedBroker(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "broker.sock")
+	listener, err := net.Listen("unix", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	called := make(chan privileged.Action, 1)
+	go func() {
+		_ = privileged.Serve(ctx, listener, func(net.Conn) error { return nil }, func(_ context.Context, action privileged.Action, _ string) error {
+			called <- action
+			return nil
+		})
+	}()
+	client := &Client{broker: privileged.Client{SocketPath: path}}
+	if err := client.Install(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if action := <-called; action != privileged.ActionTailscaleInstaller {
+		t.Fatalf("action = %q", action)
 	}
 }

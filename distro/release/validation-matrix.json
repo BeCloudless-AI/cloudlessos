@@ -10,10 +10,20 @@
     "go-vet",
     "web-javascript",
     "app-manifest-v2",
+    "backup-recovery",
+    "installer-preflight",
     "platform-matrix",
     "package-architecture",
     "package-contents",
+    "package-lifecycle",
     "release-isolation",
+    "release-preflight",
+    "secret-hygiene",
+    "service-hardening",
+    "sbom",
+    "trust-inventory",
+    "vulnerability-scan",
+    "updater-workload-continuity",
     "atomic-repository"
   ]
 }

@@ -7,8 +7,14 @@ if [ "$(id -u)" -ne 0 ]; then
     exit 1
 fi
 
-export DEBIAN_FRONTEND=noninteractive
-apt-get update -qq
-apt-get install -y -qq curl imagemagick librsvg2-bin xorriso >/dev/null
+missing=false
+for command in curl convert rsvg-convert xorriso; do
+    command -v "$command" >/dev/null 2>&1 || missing=true
+done
+if $missing; then
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -qq
+    apt-get install -y -qq curl imagemagick librsvg2-bin xorriso >/dev/null
+fi
 bash distro/scripts/build-iso.sh
 bash distro/scripts/test-iso.sh

@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"os"
-	"os/exec"
 	"strings"
 	"time"
+
+	"github.com/cloudless/orchestrator/internal/desktop"
 )
 
 const virtualKeyboardAction = "virtual-keyboard"
@@ -67,28 +67,5 @@ func validateVirtualKey(action, value string) error {
 }
 
 func emitSystemVirtualKey(ctx context.Context, action, value string) error {
-	args := []string{"key", "--clearmodifiers"}
-	if action == "text" {
-		args = []string{"type", "--clearmodifiers", "--delay", "0", value}
-	} else {
-		key := map[string]string{
-			"backspace":   "BackSpace",
-			"left":        "Left",
-			"right":       "Right",
-			"enter":       "Return",
-			"shift-enter": "shift+Return",
-		}[action]
-		args = append(args, key)
-	}
-	cmd := exec.CommandContext(ctx, "xdotool", args...)
-	display := strings.TrimSpace(os.Getenv("CLOUDLESS_DISPLAY"))
-	if display == "" {
-		display = ":0"
-	}
-	xauthority := strings.TrimSpace(os.Getenv("CLOUDLESS_XAUTHORITY"))
-	if xauthority == "" {
-		xauthority = "/home/cloudless/.Xauthority"
-	}
-	cmd.Env = append(os.Environ(), "DISPLAY="+display, "XAUTHORITY="+xauthority)
-	return cmd.Run()
+	return desktop.NewClient().EmitKey(ctx, action, value)
 }

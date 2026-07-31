@@ -64,6 +64,16 @@
                  inset 0 1px 0 rgba(255, 255, 255, 0.5);
     --ok: #1fb877; --warn: #c98a00; --err: #e5484d;
     --radius: 20px;
+    /* Shared interaction and window geometry. Component-specific CSS may
+       specialize these, but controls must retain a stable icon/text contract. */
+    --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px;
+    --space-5: 20px; --space-6: 24px; --space-8: 32px;
+    --radius-control: 10px; --radius-panel: 16px; --radius-window: 20px;
+    --control-height: 36px; --control-gap: 8px;
+    --focus-ring: 0 0 0 3px color-mix(in srgb, var(--blue) 22%, transparent);
+    --window-settings-width: 1180px; --window-settings-height: 760px;
+    --window-primary-width: 1280px; --window-primary-height: 1040px;
+    --motion-fast: 150ms; --motion-normal: 240ms;
     --sky: 47, 107, 255; --sky-alpha: 0;    /* legacy (three.js field disabled) */
     /* iridescent wallpaper mesh stops */
     --w-base: #f6efe6;
@@ -110,6 +120,11 @@
   }
   ::selection { background: var(--blue-soft); }
   button { font: inherit; cursor: pointer; }
+  :where(button, a, input, select, textarea):focus-visible {
+    outline: 2px solid color-mix(in srgb, var(--blue) 78%, #fff);
+    outline-offset: 2px;
+    box-shadow: var(--focus-ring);
+  }
   /* numbers stay tabular so live metrics don't jitter */
   #clock, #big-clock, .us-val, .im-val, .key-meta, .im-ringval, .inf-hero-val { font-variant-numeric: tabular-nums; }
 
@@ -273,8 +288,8 @@
   @media (max-width: 560px) { .dock-item { width: 44px; height: 44px; font-size: 20px; } }
 
   /* settings sheet */
-  .set { width: min(1180px, calc(var(--ui-vw, 100vw) - 118px)); height: min(760px, calc(var(--ui-vh, 100vh) - 100px)); display: flex;
-    background: var(--card-strong); border: 1px solid var(--card-edge); border-radius: 26px;
+  .set { width: min(var(--window-settings-width), calc(var(--ui-vw, 100vw) - 118px)); height: min(var(--window-settings-height), calc(var(--ui-vh, 100vh) - 100px)); display: flex;
+    background: var(--card-strong); border: 1px solid var(--card-edge); border-radius: var(--radius-window);
     box-shadow: var(--shadow); animation: rise 0.3s ease; overflow: hidden; }
   .set-sidebar { width: 200px; flex: none; background: var(--panel-2); border-right: 1px solid var(--line); padding: 14px 12px; overflow-x: hidden; overflow-y: auto; }
   .set-sidebar, .set-content { scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
@@ -282,7 +297,7 @@
   .set-sidebar::-webkit-scrollbar-thumb, .set-content::-webkit-scrollbar-thumb { border-radius: 999px; background: var(--line-2); }
   .set-sidebar::-webkit-scrollbar-track, .set-content::-webkit-scrollbar-track { background: transparent; }
   html[data-ui-magnified="1"] .overlay { padding: 24px; }
-  html[data-ui-magnified="1"] .set { width: min(1180px, calc(var(--ui-vw, 100vw) - 48px)); height: min(760px, calc(var(--ui-vh, 100vh) - 48px)); }
+  html[data-ui-magnified="1"] .set { width: min(var(--window-settings-width), calc(var(--ui-vw, 100vw) - 48px)); height: min(var(--window-settings-height), calc(var(--ui-vh, 100vh) - 48px)); }
   html[data-ui-magnified="1"] .set-sidebar { width: 150px; }
   html[data-ui-magnified="1"] .lp, html[data-ui-magnified="1"] .mm { max-width: calc(var(--ui-vw, 100vw) - 48px); }
   html[data-ui-magnified="1"] .dock { transform: scale(var(--ui-inverse, .5)); transform-origin: top left; }
@@ -464,7 +479,7 @@
 
   /* ---------- model manager ---------- */
   #models { background: rgba(20, 16, 36, 0.30); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
-  .mm { position: relative; width: min(1280px, var(--ui-vw-96, 96vw)); height: min(var(--ui-vh-92, 92vh), 1040px); display: flex; flex-direction: column;
+  .mm { position: relative; width: min(var(--window-primary-width), var(--ui-vw-96, 96vw)); height: min(var(--ui-vh-92, 92vh), var(--window-primary-height)); display: flex; flex-direction: column;
     background: var(--card-strong); border: 1px solid var(--card-edge); border-radius: 26px; overflow: hidden;
     box-shadow: var(--shadow); animation: rise 0.32s ease; }
   .mm-body { flex: 1; overflow-y: auto; padding: 20px 32px 34px; }
@@ -800,6 +815,13 @@
   .eb-track { grid-column: 2 / -1; height: 6px; overflow: hidden; border-radius: 999px; background: var(--progress-rail); }
   .eb-track i { display: block; width: var(--engine-progress, 6%); height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--progress-start), var(--progress-end)); box-shadow: 0 1px 5px -1px var(--progress-glow); transition: width .4s ease; }
   .eb-track.indeterminate i { width: 32%; animation: engine-indeterminate 1.25s ease-in-out infinite; }
+  .eb-nodes { grid-column: 2 / -1; display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px; }
+  .eb-nodes.hidden { display: none; }
+  .eb-node { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 3px 10px; padding: 9px 10px; border-radius: 10px; background: color-mix(in srgb, var(--panel) 72%, transparent); border: 1px solid var(--line); }
+  .eb-node b, .eb-node em { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .eb-node b { color: var(--ink); font: 600 11px var(--mono); }
+  .eb-node em { grid-column: 1; color: var(--muted); font: 500 10px var(--mono); font-style: normal; }
+  .eb-node span { grid-column: 2; grid-row: 1 / 3; align-self: center; color: var(--progress-end); font: 700 11px var(--mono); }
   @keyframes engine-indeterminate { from { transform: translateX(-110%); } to { transform: translateX(330%); } }
   .eb-action { grid-column: 4; grid-row: 1; }
   .model-load-action {
@@ -822,6 +844,7 @@
     .eb-percent { grid-column: 3; grid-row: 2; }
     .eb-track { grid-column: 1 / 3; grid-row: 2; }
     .eb-action { grid-column: 1 / -1; grid-row: 3; width: 100%; }
+    .eb-nodes { grid-column: 1 / -1; }
     .eng-banner.unloaded .eb-txt { grid-column: 1 / -1; }
     .eng-banner.unloaded .eb-action { grid-row: 2; }
   }
@@ -1117,6 +1140,16 @@
   .cluster-peer-copy b, .cluster-peer-copy span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .cluster-peer-copy b { font-size: 11.5px; }
   .cluster-peer-copy span { margin-top: 2px; color: var(--muted); font: 9.5px 'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .cluster-node-card { cursor: default; }
+  .cluster-node-card.standby { opacity: .68; }
+  .cluster-node-select { width: 17px; height: 17px; flex: none; accent-color: var(--blue); cursor: pointer; }
+  .cluster-node-telemetry { margin-top: 6px !important; display: flex !important; flex-wrap: wrap; gap: 5px 10px; white-space: normal !important; }
+  .cluster-node-telemetry i { color: var(--ink-2); font-style: normal; }
+  .cluster-selection-panel { padding: 13px; display: flex; align-items: center; gap: 12px; border: 1px solid var(--hair); border-radius: 12px; background: var(--panel-2); }
+  .cluster-selection-panel > span { min-width: 0; flex: 1; }
+  .cluster-selection-panel b, .cluster-selection-panel small { display: block; }
+  .cluster-selection-panel b { color: var(--ink); font-size: 11px; }
+  .cluster-selection-panel small { margin-top: 3px; color: var(--muted); font-size: 9.5px; line-height: 1.4; }
   .cluster-discovery { display: grid; grid-template-columns: minmax(220px, .82fr) minmax(260px, 1.18fr); gap: 16px; }
   .cluster-discovery-stage { position: relative; min-height: 224px; padding: 16px; display: grid; place-items: center; border: 1px solid color-mix(in srgb, var(--blue) 19%, var(--hair)); border-radius: 16px; background: radial-gradient(circle at 50% 45%, color-mix(in srgb, var(--blue) 8%, transparent), transparent 58%), var(--panel-2); overflow: hidden; isolation: isolate; }
   .cluster-discovery-stage::after { content: ''; position: absolute; inset: auto 18px 14px; height: 1px; background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--blue) 24%, var(--hair)), transparent); }
@@ -1768,7 +1801,16 @@
   @media (prefers-reduced-motion: reduce) {
     .tour-card, .tour-spot, .tour-guard, .tour-corner { animation: none; transition: none; }
   }
-  .btn { padding: 9px 18px; border-radius: 12px; border: 1px solid var(--card-edge); background: var(--control); color: var(--ink); font-weight: 500; transition: filter 0.15s, background 0.15s, box-shadow .15s; }
+  .btn {
+    min-height: var(--control-height); padding: 0 16px;
+    display: inline-flex; align-items: center; justify-content: center; gap: var(--control-gap);
+    border-radius: var(--radius-control); border: 1px solid var(--card-edge);
+    background: var(--control); color: var(--ink); font-weight: 500;
+    line-height: 1; white-space: nowrap; vertical-align: middle;
+    transition: filter var(--motion-fast), background var(--motion-fast), border-color var(--motion-fast), box-shadow var(--motion-fast), transform var(--motion-fast);
+  }
+  .btn > .ui-icon { width: 15px; height: 15px; flex: 0 0 15px; margin: 0; }
+  .btn > span { min-width: 0; line-height: 1.1; }
   .btn.control-action {
     min-height: 38px; padding: 9px 14px; display: inline-flex; align-items: center; justify-content: center;
     gap: 8px; line-height: 1; white-space: nowrap;
@@ -1892,6 +1934,9 @@
     border: 1px solid var(--line-2); color: var(--muted); }
   .ac-badge.run { color: #fff; background: var(--accent); border-color: var(--accent); }
   .ac-badge.soon { color: var(--faint); }
+  .ac-badge.support-supported { color: #35c66f; border-color: color-mix(in srgb,#35c66f 42%,var(--hair)); background: color-mix(in srgb,#35c66f 10%,var(--panel-2)); }
+  .ac-badge.support-preview { color: #7d9cff; border-color: color-mix(in srgb,#7d9cff 42%,var(--hair)); background: color-mix(in srgb,#7d9cff 10%,var(--panel-2)); }
+  .ac-badge.support-experimental { color: #e7a948; border-color: color-mix(in srgb,#e7a948 42%,var(--hair)); background: color-mix(in srgb,#e7a948 10%,var(--panel-2)); }
   .ac-btn { font: inherit; font-size: 12.5px; padding: 9px 16px; border-radius: 9px; border: 1px solid var(--line-2);
     background: var(--control); color: var(--ink); cursor: pointer; transition: all .15s; }
   .ac-btn:hover:not([disabled]) { border-color: var(--blue); color: var(--blue); }
@@ -2882,6 +2927,64 @@
   }
   .recipe-card.insufficient-cluster .recipe-actions [data-recipe-edit],
   .recipe-card.insufficient-cluster .recipe-actions [data-recipe-delete] { opacity: 1; filter: none; }
+  .recipe-preflight { margin-top: 12px; overflow: hidden; border: 1px solid var(--hair); border-radius: 11px; background: color-mix(in srgb,var(--panel-2) 74%,transparent); }
+  .recipe-preflight > summary { min-height: 38px; padding: 9px 11px; display: flex; align-items: center; gap: 9px; list-style: none; cursor: pointer; color: var(--ink-2); font-size: 9.5px; }
+  .recipe-preflight > summary::-webkit-details-marker { display: none; }
+  .recipe-preflight > summary .ui-icon { width: 15px; height: 15px; flex: none; }
+  .recipe-preflight > summary b { font-weight: 720; }
+  .recipe-preflight > summary small { margin-left: auto; color: var(--faint); font: 8px/1.2 'Roboto Mono',ui-monospace,monospace; }
+  .recipe-preflight.pass > summary .ui-icon { color: #2faa5b; }
+  .recipe-preflight.warning > summary .ui-icon { color: #d99116; }
+  .recipe-preflight.empty > summary .ui-icon { color: var(--faint); }
+  .recipe-preflight-list { padding: 4px 10px 10px; display: grid; gap: 6px; border-top: 1px solid var(--hair); }
+  .recipe-preflight-item { min-width: 0; padding: 7px 8px; display: grid; grid-template-columns: 8px minmax(0,1fr); column-gap: 8px; border-radius: 8px; background: var(--control); }
+  .recipe-preflight-item i { width: 7px; height: 7px; margin-top: 4px; border-radius: 50%; background: var(--faint); }
+  .recipe-preflight-item.pass i { background: #2faa5b; }
+  .recipe-preflight-item.warning i { background: #d99116; }
+  .recipe-preflight-item.fail i, .recipe-preflight-item.unknown i { background: var(--err); }
+  .recipe-preflight-item b { overflow-wrap: anywhere; color: var(--ink-2); font-size: 9px; line-height: 1.35; }
+  .recipe-preflight-item span { grid-column: 2; overflow-wrap: anywhere; color: var(--faint); font-size: 8px; line-height: 1.4; }
+  .recipe-cleanup-warning { margin-top: 12px; padding: 11px 12px; display: grid; grid-template-columns: auto minmax(0,1fr); gap: 8px 10px; border: 1px solid color-mix(in srgb,#f0a733 38%,var(--hair)); border-radius: 11px; background: color-mix(in srgb,#f0a733 9%,var(--panel-2)); }
+  .recipe-cleanup-warning > .ui-icon { width: 15px; height: 15px; color: #d99116; }
+  .recipe-cleanup-copy { min-width: 0; display: grid; gap: 4px; }
+  .recipe-cleanup-copy b { color: var(--ink-2); font-size: 10px; }
+  .recipe-cleanup-copy > span { color: var(--muted); font-size: 9px; line-height: 1.45; }
+  .recipe-cleanup-nodes { display: flex; flex-wrap: wrap; gap: 5px; }
+  .recipe-cleanup-node { padding: 4px 6px; border-radius: 7px; color: var(--ink-2); background: var(--control); font: 7.5px/1.25 'Roboto Mono',ui-monospace,monospace; }
+  .recipe-failure { margin-top: 12px; overflow: hidden; border: 1px solid color-mix(in srgb,var(--err) 34%,var(--hair)); border-radius: 11px; background: color-mix(in srgb,var(--err) 6%,var(--panel-2)); }
+  .recipe-failure-head { padding: 11px 12px; display: grid; grid-template-columns: auto minmax(0,1fr) auto; gap: 9px 10px; align-items: start; }
+  .recipe-failure-head > .ui-icon { width: 15px; height: 15px; color: var(--err); }
+  .recipe-failure-copy { min-width: 0; display: grid; gap: 4px; }
+  .recipe-failure-copy b { color: var(--ink-2); font-size: 10px; }
+  .recipe-failure-copy span { color: var(--muted); font-size: 9px; line-height: 1.45; }
+  .recipe-failure-category { padding: 4px 6px; border-radius: 7px; color: color-mix(in srgb,var(--err) 84%,var(--ink)); background: color-mix(in srgb,var(--err) 10%,transparent); font: 7.5px/1.2 'Roboto Mono',ui-monospace,monospace; letter-spacing: .25px; text-transform: uppercase; }
+  .recipe-failure-details { border-top: 1px solid color-mix(in srgb,var(--err) 18%,var(--hair)); }
+  .recipe-failure-details > summary { min-height: 36px; padding: 8px 12px; display: flex; align-items: center; gap: 8px; list-style: none; cursor: pointer; color: var(--ink-2); font-size: 9px; }
+  .recipe-failure-details > summary::-webkit-details-marker { display: none; }
+  .recipe-failure-details > summary .ui-icon { width: 13px; height: 13px; color: var(--faint); }
+  .recipe-failure-details > summary span { margin-left: auto; color: var(--faint); font: 7.5px/1.2 'Roboto Mono',ui-monospace,monospace; }
+  .recipe-failure-body { padding: 11px 12px 12px; display: grid; gap: 9px; border-top: 1px solid var(--hair); }
+  .recipe-failure-fact { display: grid; gap: 3px; }
+  .recipe-failure-fact span { color: var(--faint); font: 7.5px/1.2 'Roboto Mono',ui-monospace,monospace; letter-spacing: .3px; text-transform: uppercase; }
+  .recipe-failure-fact p { margin: 0; overflow-wrap: anywhere; color: var(--muted); font-size: 8.5px; line-height: 1.5; }
+  .recipe-failure-tags { display: flex; flex-wrap: wrap; gap: 5px; }
+  .recipe-failure-actions { display: flex; justify-content: flex-end; }
+  .recipe-failure-actions .btn { min-height: 34px; padding: 0 11px; display: inline-flex; align-items: center; gap: 7px; }
+  .recipe-failure-actions .ui-icon { width: 13px; height: 13px; }
+  .recipe-trust-panel { margin-top: 10px; overflow: hidden; border: 1px solid var(--hair); border-radius: 11px; background: color-mix(in srgb,var(--panel-2) 74%,transparent); }
+  .recipe-trust-panel > summary { min-height: 38px; padding: 9px 11px; display: flex; align-items: center; gap: 9px; list-style: none; cursor: pointer; color: var(--ink-2); font-size: 9px; }
+  .recipe-trust-panel > summary::-webkit-details-marker { display: none; }
+  .recipe-trust-panel > summary .ui-icon { width: 14px; height: 14px; color: #d99116; }
+  .recipe-trust-panel.cloudless-reviewed > summary .ui-icon { color: #2faa5b; }
+  .recipe-trust-panel > summary span { margin-left: auto; color: var(--faint); font: 7.5px/1.2 'Roboto Mono',ui-monospace,monospace; text-transform: uppercase; }
+  .recipe-trust-body { padding: 11px; display: grid; gap: 9px; border-top: 1px solid var(--hair); }
+  .recipe-trust-summary { margin: 0; color: var(--muted); font-size: 8.5px; line-height: 1.5; }
+  .recipe-trust-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 7px; }
+  .recipe-trust-fact { min-width: 0; padding: 8px; display: grid; gap: 4px; border-radius: 8px; background: var(--control); }
+  .recipe-trust-fact span { color: var(--faint); font: 7px/1.2 'Roboto Mono',ui-monospace,monospace; letter-spacing: .3px; text-transform: uppercase; }
+  .recipe-trust-fact b { overflow-wrap: anywhere; color: var(--ink-2); font: 8px/1.4 'Roboto Mono',ui-monospace,monospace; font-weight: 600; }
+  .recipe-trust-list { display: grid; gap: 5px; }
+  .recipe-trust-list > span { padding: 6px 8px; overflow-wrap: anywhere; border-radius: 7px; color: var(--muted); background: var(--control); font: 7.5px/1.45 'Roboto Mono',ui-monospace,monospace; }
   .recipe-main { display: grid; grid-template-columns: auto minmax(0, 1fr) 292px; gap: 14px; align-items: start; padding: 17px; }
   .recipe-icon { width: 42px; height: 42px; display: grid; place-items: center; border: 1px solid color-mix(in srgb,var(--blue) 17%,var(--hair)); border-radius: 12px; color: var(--blue); background: var(--blue-soft); }
   .recipe-icon .ui-icon { width: 19px; height: 19px; }
@@ -2902,9 +3005,10 @@
   .recipe-specs b { margin-top: 4px; color: var(--ink-2); font-size: 9.5px; font-weight: 700; }
   .recipe-source { max-width: 100%; margin-top: 9px; color: var(--faint); font: 8.5px/1.4 'Roboto Mono',ui-monospace,SFMono-Regular,Menlo,monospace; overflow-wrap: anywhere; text-align: left; }
   .recipe-side { min-width: 0; align-self: center; }
-  .recipe-actions { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 7px; }
+  .recipe-actions { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 7px; }
   .recipe-actions .btn { width: 100%; min-width: 0; min-height: 38px; padding: 0 10px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; white-space: nowrap; line-height: 1; }
   .recipe-actions .recipe-primary-action { grid-column: 1 / -1; min-height: 42px; }
+  .recipe-actions .recipe-remove { grid-column: 2; }
   .recipe-actions .btn .ui-icon { width: 14px; height: 14px; flex: none; }
   .recipe-actions .btn span { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .recipe-actions .recipe-remove:not(:disabled):hover { color: var(--err); border-color: color-mix(in srgb,var(--err) 32%,var(--line)); background: color-mix(in srgb,var(--err) 7%,transparent); }
@@ -3066,6 +3170,21 @@
   .recipe-builder-field textarea.tall { min-height: 145px; }
   .recipe-builder-check { min-height: 42px; padding: 10px 12px; display: flex; align-items: center; gap: 9px; border: 1px solid var(--hair); border-radius: 10px; background: var(--control); color: var(--ink-2); font-size: 10.5px; }
   .recipe-builder-check input { width: 16px; height: 16px; accent-color: var(--blue); }
+  .recipe-worker-picker { grid-column: 1 / -1; display: grid; gap: 8px; }
+  .recipe-worker-picker-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+  .recipe-worker-picker-head b { color: var(--ink-2); font-size: 10.5px; }
+  .recipe-worker-picker-head span { color: var(--faint); font: 8.5px/1.4 'Roboto Mono',ui-monospace,monospace; }
+  .recipe-worker-options { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
+  .recipe-worker-option { min-width: 0; min-height: 54px; padding: 10px 11px; display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 9px; border: 1px solid var(--hair); border-radius: 11px; background: var(--control); cursor: pointer; }
+  .recipe-worker-option:hover { border-color: color-mix(in srgb,var(--blue) 38%,var(--line)); }
+  .recipe-worker-option input { width: 16px; height: 16px; accent-color: var(--blue); }
+  .recipe-worker-option-copy { min-width: 0; display: grid; gap: 3px; }
+  .recipe-worker-option-copy b { overflow: hidden; color: var(--ink-2); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+  .recipe-worker-option-copy small { overflow: hidden; color: var(--faint); font: 8px/1.3 'Roboto Mono',ui-monospace,monospace; text-overflow: ellipsis; white-space: nowrap; }
+  .recipe-worker-status { padding: 4px 6px; border-radius: 999px; color: #24985a; background: color-mix(in srgb,#2faa5b 12%,transparent); font: 7.5px/1.2 'Roboto Mono',ui-monospace,monospace; text-transform: uppercase; }
+  .recipe-worker-option.offline { opacity: .58; }
+  .recipe-worker-option.offline .recipe-worker-status { color: #a56b08; background: color-mix(in srgb,#f7b731 14%,transparent); }
+  .recipe-worker-empty { padding: 12px; border: 1px dashed var(--line); border-radius: 11px; color: var(--muted); font-size: 9.5px; line-height: 1.45; }
   .recipe-builder-note { margin-top: 12px; padding: 11px 12px; display: flex; align-items: flex-start; gap: 8px; border: 1px solid color-mix(in srgb, var(--blue) 22%, var(--hair)); border-radius: 11px; color: var(--muted); background: var(--blue-soft); font-size: 10px; line-height: 1.5; }
   .recipe-builder-note.warn { border-color: color-mix(in srgb, #f0a733 35%, var(--hair)); background: color-mix(in srgb, #f0a733 10%, var(--panel-2)); color: var(--ink-2); }
   .recipe-builder-note .ui-icon { width: 14px; height: 14px; flex: none; color: var(--blue); }
@@ -3380,7 +3499,7 @@
     .recipe-builder-steps { padding: 8px 10px; flex-direction: row; border-right: 0; border-bottom: 1px solid var(--hair); overflow-x: auto; }
     .recipe-builder-step { width: auto; flex: none; padding: 7px 9px; } .recipe-builder-step i { width: 20px; height: 20px; }
     .recipe-builder-page { padding: 16px 14px 22px; }
-    .recipe-builder-fields, .recipe-builder-fields.cols-3, .recipe-review { grid-template-columns: 1fr; } .recipe-builder-field.full, .recipe-review-card.wide { grid-column: auto; }
+    .recipe-builder-fields, .recipe-builder-fields.cols-3, .recipe-review, .recipe-worker-options { grid-template-columns: 1fr; } .recipe-builder-field.full, .recipe-review-card.wide { grid-column: auto; }
     .hf-results { grid-template-columns: 1fr; }
     .mm-filter-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px; }
     .mm-filter-label { display: none; }
@@ -3606,6 +3725,7 @@
     <span class="eb-spin"></span>
     <strong class="eb-percent" id="eb-percent">0%</strong>
     <span class="eb-track" role="progressbar" aria-label="Cloudless AI startup" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i></i></span>
+    <div class="eb-nodes hidden" id="eb-nodes" aria-live="polite"></div>
     <div class="eb-txt"><b id="eb-title">Cloudless AI is starting up…</b><span id="eb-sub">Your model is loading — chat and AI apps will be ready in a moment.</span></div>
     <button class="btn primary eb-action model-load-action hidden" id="eb-load" type="button"><svg class="ui-icon" aria-hidden="true"><use href="#ui-rocket"/></svg><span>Load model</span></button>
   </div>
@@ -3853,7 +3973,7 @@ const appOperations = new Map(), appOperationSeen = new Set(), appOperationNotif
 let appOperationSignature = '';
 let lastRunning = {}, engineReady = false, engineUnloaded = false, engineActive = '', engineExecutionMode = 'local', engineOperation = 'idle', engineSwitching = false, engineAborting = false, engineLoadJobId = '', activeEngineName = 'the engine';
 let pinnedIds = [], lpQuery = '', lpView = '';
-let clusterWizard = { step: 1, peers: [], host: '', username: '', password: '', cable: false, preflight: null, busy: false, error: '', adding: false, existingNodes: 0 };
+let clusterWizard = { step: 1, peers: [], host: '', username: '', password: '', cable: false, preflight: null, busy: false, error: '', adding: false, existingNodes: 0, operation: null };
 let asstMsgs = [], asstBusy = false, asstController = null, asstStreamQueued = false, asstStreamIndex = -1;
 let capabilityCache = { facts: {}, features: {} };
 function applyCapabilitySnapshot(snapshot) {
@@ -4898,6 +5018,10 @@ function statusBadge(a) {
   return lastRunning[a.id] === 'running' ? '<span class="ac-badge run">running</span>'
     : (a.image ? '' : '<span class="ac-badge soon">soon</span>');
 }
+function supportBadge(level) {
+  const value = ['experimental','preview','supported'].includes(level) ? level : 'experimental';
+  return `<span class="ac-badge support-${value}">${value}</span>`;
+}
 function appActions(a) {
   const isRun = lastRunning[a.id] === 'running';
   const operation = activeOperationForApp(a.id);
@@ -4944,7 +5068,7 @@ function renderAppDetail(el, a) {
       <div class="ad-head">
         <div class="ad-ic">${glyph(a.id)}</div>
         <div class="ad-id">
-          <div class="ad-nm">${escapeHtml(a.name)} ${statusBadge(a)}</div>
+          <div class="ad-nm">${escapeHtml(a.name)} ${supportBadge(a.supportLevel)} ${statusBadge(a)}</div>
           <div class="ad-cat">${escapeHtml(a.category || '')}</div>
         </div>
       </div>
@@ -4997,7 +5121,7 @@ function syncEngineState(d) {
   engineStartup = d.startup || null;
   enginePromotion = d.promotion || null;
   engineExecutionMode = d.executionMode === 'cluster' ? 'cluster' : 'local';
-  let operation = ['loading', 'unloading', 'aborting'].includes(d.operation) ? d.operation : 'idle';
+  let operation = ['loading', 'unloading', 'aborting', 'error'].includes(d.operation) ? d.operation : 'idle';
   // Readiness is authoritative even if a launch job has not yet emitted its
   // final SSE update. A ready model must always expose Unload, never Abort.
   if (engineReady && operation === 'loading') operation = 'idle';
@@ -5015,7 +5139,7 @@ async function renderEngine() {
   syncEngineState(d);
   // When readiness flips (model finished loading / engine went down), re-gate the
   // launch surfaces and update the banner.
-  const startupKey = `${engineStartup ? `${engineStartup.phase || ''}:${engineStartup.message || ''}:${engineStartup.layersDone || 0}:${engineStartup.layersTotal || 0}:${engineStartup.bytesDone || 0}:${engineStartup.bytesTotal || 0}` : ''}|${enginePromotion ? `${enginePromotion.phase || ''}:${enginePromotion.message || ''}:${enginePromotion.bytesDone || 0}:${enginePromotion.bytesTotal || 0}:${enginePromotion.error || ''}` : ''}`;
+  const startupKey = `${engineStartup ? `${engineStartup.phase || ''}:${engineStartup.message || ''}:${engineStartup.layersDone || 0}:${engineStartup.layersTotal || 0}:${engineStartup.bytesDone || 0}:${engineStartup.bytesTotal || 0}:${JSON.stringify(engineStartup.nodes || [])}` : ''}|${enginePromotion ? `${enginePromotion.phase || ''}:${enginePromotion.message || ''}:${enginePromotion.bytesDone || 0}:${enginePromotion.bytesTotal || 0}:${enginePromotion.error || ''}` : ''}`;
   const structuralChange = engineReady !== lastEngineReady || engineExecutionMode !== lastEngineMode || engineUnloaded !== lastEngineUnloaded || engineOperation !== lastEngineOperation;
   if (structuralChange || startupKey !== lastEngineStartup) {
     lastEngineReady = engineReady; lastEngineMode = engineExecutionMode; lastEngineUnloaded = engineUnloaded; lastEngineOperation = engineOperation; lastEngineStartup = startupKey;
@@ -5035,6 +5159,7 @@ function applyEngineUI() {
     banner.classList.toggle('unloaded', engineUnloaded);
     const title = document.getElementById('eb-title');
     const sub = document.getElementById('eb-sub');
+    const nodesHost = document.getElementById('eb-nodes');
     const load = document.getElementById('eb-load');
     const abortable = starting && engineLoadIsAbortable();
     banner.classList.toggle('abortable', abortable);
@@ -5047,6 +5172,10 @@ function applyEngineUI() {
       ? 'Stopping model loading…'
       : engineOperation === 'unloading'
       ? 'Unloading Cloudless AI…'
+      : engineOperation === 'error'
+      ? 'Cloudless AI needs attention'
+      : startupPhase === 'error'
+      ? 'Cloudless AI needs attention'
       : startupPhase === 'peer-downloading'
       ? 'Worker Sparks are downloading the model…'
       : startupPhase === 'peer-loading'
@@ -5055,7 +5184,7 @@ function applyEngineUI() {
       ? 'Optimizing distributed inference…'
       : 'Cloudless AI is starting up…';
     if (load) {
-      load.classList.toggle('hidden', !(engineUnloaded || abortable || engineAborting));
+      load.classList.toggle('hidden', !(engineUnloaded || abortable || engineAborting || engineOperation === 'error'));
       load.classList.toggle('abort', abortable || engineAborting);
       load.classList.toggle('primary', engineUnloaded && !engineAborting);
       load.disabled = engineAborting;
@@ -5063,11 +5192,23 @@ function applyEngineUI() {
         ? `<span class="key-dialog-spinner" aria-hidden="true"></span><span>Aborting…</span>`
         : abortable
         ? `${uiIcon('stop')}<span>Abort</span>`
+        : engineOperation === 'error'
+        ? `${uiIcon('models')}<span>Open Model Manager</span>`
         : `${uiIcon('rocket')}<span>Load model</span>`;
     }
     if (sub && engineUnloaded) sub.textContent = 'Accelerator memory has been released. Your selected model remains downloaded and ready to load again.';
     if (sub && starting) sub.textContent = engineStartup?.message || ((activeEngineName !== 'the engine' ? activeEngineName + ' is loading your model' : 'Your model is loading') + ' — chat and AI apps will be ready in a moment.');
     if (sub && promotionActive) sub.textContent = enginePromotion.message || 'The lightweight model remains usable while Cloudless prepares the full model.';
+    const nodeStages = starting && Array.isArray(engineStartup?.nodes) ? engineStartup.nodes : [];
+    if (nodesHost) {
+      nodesHost.classList.toggle('hidden', !nodeStages.length);
+      nodesHost.innerHTML = nodeStages.map(node => {
+        const pct = Number(node.percent || 0);
+        const amount = node.bytesTotal ? `${modelDownloadSize(node.bytesDone)} / ${modelDownloadSize(node.bytesTotal)}` : '';
+        const remaining = node.etaSeconds > 0 ? ` · ${operationDuration(node.etaSeconds)} left` : '';
+        return `<div class="eb-node"><b>${escapeHtml(node.node || 'Spark')}</b><em>${escapeHtml(node.message || node.phase || 'Preparing')}</em><span>${pct ? `${pct}%` : escapeHtml(node.phase || 'Active')}${amount ? `<br>${escapeHtml(amount)}` : ''}${remaining ? `<br>${escapeHtml(remaining)}` : ''}</span></div>`;
+      }).join('');
+    }
     if (starting || promotionActive) {
       const phase = engineStartup?.phase || 'loading';
       const msg = (engineStartup?.message || '').toLowerCase();
@@ -5089,6 +5230,7 @@ function applyEngineUI() {
       } else if (phase === 'peer-downloading') progressLabel = 'Downloading';
       else if (phase === 'peer-loading' || phase === 'loading') progressLabel = 'Loading';
       else if (phase === 'optimizing') progressLabel = 'Finalizing';
+      else if (phase === 'error') progressLabel = 'Failed';
       else if (phase === 'cluster') progressLabel = msg.includes('joined') ? 'Connected' : 'Preparing';
       if (progress != null) progress = Math.max(0, Math.min(100, progress));
       const percent = document.getElementById('eb-percent');
@@ -5513,10 +5655,10 @@ async function renderRemoteAccessPage(c) {
   }
   const connected = !!status.connected, ip = (status.ips || []).find(value => /^100\./.test(value)) || (status.ips || [])[0] || 'Not assigned';
   c.innerHTML = `<div class="machine-page"><div class="inf-page-hero"><span class="inf-page-icon">${uiIcon('network')}</span><div class="inf-page-copy"><div class="inf-page-eyebrow">Private networking</div><div class="inf-page-title">Tailscale</div><div class="inf-page-desc">${connected ? 'This CloudlessOS machine is reachable through your encrypted tailnet.' : 'Connect this machine to your tailnet to use CloudlessOS remotely.'}</div></div><span class="inf-state-pill ${connected?'ready':''}">${connected?'CONNECTED':'NOT CONNECTED'}</span></div><section class="machine-card"><div class="machine-card-head"><div><div class="machine-card-title">${connected ? escapeHtml(status.deviceName || 'CloudlessOS') : 'Connect your account'}</div><div class="machine-card-desc">${connected ? escapeHtml(status.dnsName || status.tailnet || 'Secure tailnet connection') : 'Authentication opens in Cloudless Browser and your password never passes through CloudlessOS.'}</div></div></div><div class="machine-facts"><div class="machine-fact"><div class="machine-fact-label">Tailscale IP</div><div class="machine-fact-value">${escapeHtml(ip)}</div></div><div class="machine-fact"><div class="machine-fact-label">Client version</div><div class="machine-fact-value">${escapeHtml(status.version || 'Installed')}</div></div>${connected?`<div class="machine-fact"><div class="machine-fact-label">Tailnet</div><div class="machine-fact-value">${escapeHtml(status.tailnet || 'Connected')}</div></div>`:''}</div><div class="machine-driver-actions">${connected?`<button class="btn control-action" id="tailscale-dashboard">${uiIcon('browser')}<span>Open Tailscale</span></button><button class="btn cluster-danger control-action" id="tailscale-logout">${uiIcon('unlink')}<span>Disconnect account</span></button>`:`<button class="btn primary control-action" id="tailscale-connect">${uiIcon('network')}<span>Connect Tailscale</span></button>`}</div></section>${connected?`<section class="machine-card"><div class="machine-card-head"><div><div class="machine-card-title">CloudlessOS over your tailnet</div><div class="machine-card-desc">These controls remain private to authenticated devices allowed by your Tailscale access policy.</div></div></div><div class="set-row"><span><b>Serve CloudlessOS</b><span class="fld-help">Give this dashboard a private HTTPS address inside your tailnet.</span></span><label class="switch"><input type="checkbox" id="tailscale-serve" ${status.serveEnabled?'checked':''}><span class="track2"></span></label></div><div class="set-row"><span><b>Tailscale SSH</b><span class="fld-help">Allow terminal access according to your tailnet SSH policy.</span></span><label class="switch"><input type="checkbox" id="tailscale-ssh" ${status.sshEnabled?'checked':''}><span class="track2"></span></label></div></section>`:''}</div>`;
-  const connect=document.getElementById('tailscale-connect'); if(connect)connect.onclick=async()=>{connect.disabled=true;connect.innerHTML='<i class="key-dialog-spinner"></i><span>Preparing sign-in…</span>';const result=await api('/api/system/tailscale/connect',{method:'POST'}).catch(error=>({error:error.message}));if(result.authURL){await openSystemBrowser(result.authURL);toast('Finish connecting in Browser');}else if(result.error)toast(result.error,true);else toast('Tailscale connected');setTimeout(()=>renderRemoteAccessPage(c),1500);};
+  const connect=document.getElementById('tailscale-connect'); if(connect)connect.onclick=async()=>{connect.disabled=true;connect.innerHTML='<i class="key-dialog-spinner"></i><span>Preparing sign-in…</span>';const result=await api('/api/system/tailscale/connect',{method:'POST',headers:{'X-Cloudless-Action':'tailscale-connect'}}).catch(error=>({error:error.message}));if(result.authURL){await openSystemBrowser(result.authURL);toast('Finish connecting in Browser');}else if(result.error)toast(result.error,true);else toast('Tailscale connected');setTimeout(()=>renderRemoteAccessPage(c),1500);};
   const dashboard=document.getElementById('tailscale-dashboard'); if(dashboard)dashboard.onclick=()=>openSystemBrowser(status.webURL||'http://100.100.100.100');
   const logout=document.getElementById('tailscale-logout'); if(logout)logout.onclick=async()=>{const approved=await openCloudlessDecision({title:'Disconnect Tailscale?',message:'This machine will stop being reachable through your tailnet.',detail:'CloudlessOS data and local networking are not changed.',confirmLabel:'Disconnect',icon:'unlink',returnFocus:logout});if(!approved)return;await api('/api/system/tailscale/logout',{method:'POST',headers:{'X-Cloudless-Action':'tailscale-logout'}});renderRemoteAccessPage(c);};
-  for(const [id,path] of [['tailscale-serve','serve'],['tailscale-ssh','ssh']]){const toggle=document.getElementById(id);if(toggle)toggle.onchange=async()=>{toggle.disabled=true;const result=await api('/api/system/tailscale/'+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({enabled:toggle.checked})}).catch(error=>({error:error.message}));if(result.error){toast(result.error,true);toggle.checked=!toggle.checked;}else toast(`${path==='serve'?'Private Cloudless access':'Tailscale SSH'} ${toggle.checked?'enabled':'disabled'}`);toggle.disabled=false;};}
+  for(const [id,path] of [['tailscale-serve','serve'],['tailscale-ssh','ssh']]){const toggle=document.getElementById(id);if(toggle)toggle.onchange=async()=>{toggle.disabled=true;const result=await api('/api/system/tailscale/'+path,{method:'POST',headers:{'Content-Type':'application/json','X-Cloudless-Action':'tailscale-'+path},body:JSON.stringify({enabled:toggle.checked})}).catch(error=>({error:error.message}));if(result.error){toast(result.error,true);toggle.checked=!toggle.checked;}else toast(`${path==='serve'?'Private Cloudless access':'Tailscale SSH'} ${toggle.checked?'enabled':'disabled'}`);toggle.disabled=false;};}
 }
 
 function renderDGXDashboardPage(c) {
@@ -5612,10 +5754,35 @@ function clusterChecks(checks = []) {
 function clusterHero(stateText = 'Not configured', ready = false) {
   return `<div class="inf-page-hero cluster-hero"><span class="inf-page-icon">${uiIcon('network')}</span><div class="inf-page-copy"><div class="inf-page-eyebrow">NVIDIA DGX Spark</div><div class="inf-page-title">Spark cluster</div><div class="inf-page-desc">Connect two to eight Sparks for distributed AI. Management Wi-Fi or Ethernet remains unchanged.</div></div><span class="inf-state-pill ${ready ? 'ready' : ''}">${escapeHtml(stateText)}</span></div>`;
 }
+function clusterHealthLayers(health = {}) {
+  const layers = [
+    ['physicalLink', 'Cable & ports'],
+    ['managementIp', 'Normal network'],
+    ['ssh', 'Secure login'],
+    ['fabric', 'Private fabric'],
+    ['workerRuntime', 'AI workers']
+  ];
+  return `<div class="cluster-status-grid">${layers.map(([key, fallback]) => {
+    const layer = health[key] || {status:'unknown',label:fallback,details:'Waiting for a health check.'};
+    const status = layer.status || 'unknown';
+    const stateLabel = status === 'healthy' ? 'READY' : status === 'idle' ? 'IDLE' : status === 'attention' ? 'ATTENTION' : 'UNKNOWN';
+    return `<div class="machine-fact"><div class="machine-card-head"><div class="machine-fact-label">${escapeHtml(layer.label || fallback)}</div><span class="inf-state-pill ${status === 'healthy' || status === 'idle' ? 'ready' : ''}">${stateLabel}</span></div><div class="machine-card-desc">${escapeHtml(layer.details || '')}</div></div>`;
+  }).join('')}</div>`;
+}
 async function renderSparkClusterPage(c) {
   c.innerHTML = `<div class="cluster-page">${clusterHero('Checking')}<section class="machine-card" aria-busy="true"><div class="cluster-busy-panel" role="status"><i>${uiIcon('reload')}</i><span><b>Checking your Spark</b><span>Reading the high-speed connection and current cluster setup…</span></span></div></section></div>`;
   let status; try { status = await api('/api/system/spark-cluster'); } catch { status = { error: 'CloudlessOS could not inspect Spark clustering.' }; }
   if (status.error) { c.innerHTML = `<div class="cluster-page">${clusterHero('Unavailable')}<section class="machine-card"><div class="cluster-readiness-summary attention"><span class="cluster-readiness-symbol">${uiIcon('alert')}</span><span class="cluster-readiness-copy"><b>Cluster information is unavailable</b><span>${escapeHtml(status.error)}</span></span></div><div class="cluster-actions"><button class="btn primary" id="cluster-status-retry">${uiIcon('reload')}Try again</button></div></section></div>`; c.querySelector('#cluster-status-retry').onclick = () => renderSparkClusterPage(c); return; }
+  const operation = status.operation || {};
+  if (operation.id && operation.phase !== 'completed' && operation.phase !== 'error') {
+    clusterWizard = {...clusterWizard, step:3, busy:true, error:'', operation, preflight:{ready:true,peerName:operation.peerName || operation.peerHost, nodeIndex:(status.nodeCount || 1) + 1, checks:[]}};
+    renderSparkClusterWizard(c); setTimeout(() => { if (c.isConnected) renderSparkClusterPage(c); }, 1200); return;
+  }
+  if (!status.configured && operation.phase === 'error') {
+    c.innerHTML = `<div class="cluster-page">${clusterHero('Needs attention')}<section class="machine-card"><div class="cluster-readiness-summary attention"><span class="cluster-readiness-symbol">${uiIcon('alert')}</span><span class="cluster-readiness-copy"><b>Cluster setup was interrupted</b><span>${escapeHtml(operation.message || operation.error || 'Run setup again to verify or clean up the peer safely.')}</span></span></div><div class="machine-driver-note">${uiIcon('alert')}<span>${operation.rollbackRequired ? 'CloudlessOS could not prove that every partial network change was removed. Re-enter the peer credentials so cleanup can be completed safely.' : 'No private network changes were left active.'}</span></div><div class="cluster-actions"><button class="btn primary" id="cluster-operation-recover">${uiIcon('reload')}Restart guided setup</button></div></section></div>`;
+    c.querySelector('#cluster-operation-recover').onclick = () => { clusterWizard = {step:1,peers:[],host:operation.peerHost || '',username:'',password:'',cable:false,preflight:null,busy:false,error:'',adding:false,existingNodes:0,operation:null}; renderSparkClusterWizard(c); };
+    return;
+  }
   if (status.configured) { renderSparkClusterStatus(c, status); return; }
   renderSparkClusterWizard(c);
 }
@@ -5645,7 +5812,8 @@ function renderSparkClusterWizard(c) {
     const summaryTitle = createFailed ? 'The Spark was not added' : (p.ready ? `Spark ${p.nodeIndex || ''} is ready` : `${failed || 'A few'} ${failed === 1 ? 'item needs' : 'items need'} attention`);
     const summaryDetail = createFailed ? w.error : (p.ready ? `The new Spark can reach the private fabric and will make this a ${p.nodeCount || 2}-node cluster.` : 'Nothing has been changed yet. Follow the highlighted guidance, then check again.');
     if (w.busy && p.ready) {
-      body = `<section class="machine-card" aria-busy="true"><div class="cluster-connect-progress" role="status" aria-live="polite"><div class="cluster-connect-visual" aria-hidden="true"><span class="cluster-connect-device">${uiIcon('machine')}</span><i class="cluster-connect-line"></i><span class="cluster-connect-device">${uiIcon('machine')}</span></div><h3>Adding ${escapeHtml(p.peerName || 'the Spark')}…</h3><p>CloudlessOS is applying its private address, installing the restricted cluster identity, and verifying both high-speed paths.</p><div class="cluster-connect-stages"><span class="cluster-connect-stage"><i></i>Protect existing cluster</span><span class="cluster-connect-stage"><i></i>Configure ${escapeHtml(p.peerName || 'new Spark')}</span><span class="cluster-connect-stage"><i></i>Verify node ${p.nodeIndex || ''}</span></div></div></section>`;
+      const operation = w.operation || {percent:4,message:'Preparing the durable cluster operation.'};
+      body = `<section class="machine-card" aria-busy="true"><div class="cluster-connect-progress" role="status" aria-live="polite"><div class="cluster-connect-visual" aria-hidden="true"><span class="cluster-connect-device">${uiIcon('machine')}</span><i class="cluster-connect-line"></i><span class="cluster-connect-device">${uiIcon('machine')}</span></div><h3>Adding ${escapeHtml(p.peerName || 'the Spark')}… ${Math.max(1, Number(operation.percent) || 1)}%</h3><p>${escapeHtml(operation.message || 'CloudlessOS is applying the private network and restricted identity.')}</p><div class="cluster-connect-stages"><span class="cluster-connect-stage ${Number(operation.percent) >= 20 ? 'done' : 'active'}"><i></i>Protect existing cluster</span><span class="cluster-connect-stage ${Number(operation.percent) >= 76 ? 'done' : Number(operation.percent) >= 20 ? 'active' : ''}"><i></i>Configure ${escapeHtml(p.peerName || 'new Spark')}</span><span class="cluster-connect-stage ${Number(operation.percent) >= 76 ? 'active' : ''}"><i></i>Verify node ${p.nodeIndex || ''}</span></div></div></section>`;
     } else {
     body = `<section class="machine-card" aria-busy="${w.busy}"><div class="cluster-readiness-summary ${summaryReady ? '' : 'attention'}"><span class="cluster-readiness-symbol">${uiIcon(summaryReady ? 'check' : 'alert')}</span><span class="cluster-readiness-copy"><b>${escapeHtml(summaryTitle)}</b><span>${escapeHtml(summaryDetail)}</span></span></div>${clusterChecks(p.checks)}${w.busy ? `<div class="cluster-busy-panel" role="status"><i>${uiIcon('reload')}</i><span><b>${p.ready ? 'Adding Spark to cluster' : 'Checking again'}</b><span>${p.ready ? 'Applying the private network and verifying the new node…' : 'Repeating the fabric and readiness checks…'}</span></span></div>` : ''}${!p.ready ? `<div class="cluster-actions"><button class="btn" id="cluster-back" ${w.busy ? 'disabled' : ''}>${uiIcon('arrow-left')}Check cable and login</button><button class="btn primary ${w.busy ? 'cluster-busy' : ''}" id="cluster-recheck" ${w.busy ? 'disabled' : ''}>${uiIcon('reload')}Check again</button></div>` : `<div class="cluster-next"><div class="cluster-next-title">What CloudlessOS will do</div><ol class="cluster-next-list"><li>Assign this Spark a unique private cluster address.</li><li>Add a restricted Spark-to-Spark login key.</li><li>Verify the fabric without changing normal Internet access.</li></ol></div><div class="cluster-fingerprint">Security code for <b>${escapeHtml(p.peerName || w.host)}</b><code>${escapeHtml(p.fingerprint || 'Unavailable')}</code></div><label class="cluster-cable"><input type="checkbox" id="cluster-fingerprint-confirm"><span><b>Yes, this is the Spark I want to connect</b><span>The security code prevents CloudlessOS from connecting to a different computer by mistake.</span></span></label><div class="cluster-actions"><button class="btn" id="cluster-back" ${w.busy ? 'disabled' : ''}>${uiIcon('arrow-left')}Back</button><button class="btn primary ${w.busy ? 'cluster-busy' : ''}" id="cluster-create" ${w.busy ? 'disabled' : ''}>${uiIcon(w.busy ? 'reload' : 'network')}<span>${w.busy ? 'Adding Spark…' : (createFailed ? 'Try adding again' : 'Add Spark to cluster')}</span></button></div>`}</section>`;
     }
@@ -5666,19 +5834,96 @@ function bindSparkClusterWizard(c) {
   const preflight = c.querySelector('#cluster-preflight'); if (preflight) preflight.onclick = () => runPreflight(true);
   [c.querySelector('#cluster-user'), c.querySelector('#cluster-password')].filter(Boolean).forEach(input => input.onkeydown = e => { if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); preflight?.click(); } });
   const recheck = c.querySelector('#cluster-recheck'); if (recheck) recheck.onclick = () => runPreflight(false);
-  const create = c.querySelector('#cluster-create'); if (create) create.onclick = async () => { if (!c.querySelector('#cluster-fingerprint-confirm').checked) { w.error = 'Confirm the peer identity before continuing.'; renderSparkClusterWizard(c); return; } w.busy = true; w.error = ''; renderSparkClusterWizard(c); let result; try { result = await api('/api/system/spark-cluster/create', {method:'POST', headers:{'Content-Type':'application/json','X-Cloudless-Action':'spark-cluster-create'}, body:JSON.stringify({host:w.host,username:w.username,password:w.password,fingerprint:w.preflight.fingerprint})}); } catch { result = {error:'The Spark could not be added.'}; } w.busy = false; if (result.error) { w.error = result.error; renderSparkClusterWizard(c); return; } clusterWizard = {step:1,peers:[],host:'',username:'',password:'',cable:false,preflight:null,busy:false,error:'',adding:false,existingNodes:0}; renderSparkClusterStatus(c, result); toast(`${result.nodeCount || 2}-Spark cluster is ready`); };
+  const create = c.querySelector('#cluster-create'); if (create) create.onclick = async () => {
+    if (!c.querySelector('#cluster-fingerprint-confirm').checked) { w.error = 'Confirm the peer identity before continuing.'; renderSparkClusterWizard(c); return; }
+    w.busy = true; w.error = ''; w.operation = {percent:1,message:'Starting the durable cluster operation.'}; renderSparkClusterWizard(c);
+    let result; try { result = await api('/api/system/spark-cluster/create', {method:'POST', headers:{'Content-Type':'application/json','X-Cloudless-Action':'spark-cluster-create'}, body:JSON.stringify({host:w.host,username:w.username,password:w.password,fingerprint:w.preflight.fingerprint})}); } catch { result = {error:'The Spark could not be added.'}; }
+    if (result.error || !result.jobId) { w.busy = false; w.error = result.error || 'CloudlessOS did not start the cluster operation.'; renderSparkClusterWizard(c); return; }
+    const events = new EventSource(`/api/jobs/${result.jobId}/events`); let ended = false;
+    const finish = async error => {
+      if (ended) return; ended = true; events.close(); w.busy = false;
+      if (error) { w.error = error; w.operation = null; renderSparkClusterWizard(c); return; }
+      let status; try { status = await api('/api/system/spark-cluster'); } catch { status = {error:'The Spark was added, but its status could not be refreshed.'}; }
+      if (status.error) { w.error = status.error; renderSparkClusterWizard(c); return; }
+      clusterWizard = {step:1,peers:[],host:'',username:'',password:'',cable:false,preflight:null,busy:false,error:'',adding:false,existingNodes:0,operation:null};
+      renderSparkClusterStatus(c, status); toast(`${status.nodeCount || 2}-Spark cluster is ready`);
+    };
+    events.onmessage = event => { const update = JSON.parse(event.data); w.operation = update; renderSparkClusterWizard(c); if (update.phase === 'error') finish(update.error || update.message); else if (update.done) finish(''); };
+    events.onerror = () => finish('The progress connection closed. Reopen Spark Cluster to see the durable operation state.');
+  };
 }
 function renderSparkClusterStatus(c, status) {
   const healthy = Boolean(status.healthy);
+  const operation = status.operation || {};
+  const operationActive = operation.id && operation.phase !== 'completed' && operation.phase !== 'error';
+  const operationBanner = operationActive
+    ? `<div class="cluster-busy-panel" role="status"><i>${uiIcon('reload')}</i><span><b>${operation.action === 'disconnect' ? 'Disconnecting cluster' : 'Updating cluster'} · ${Math.max(1, Number(operation.percent) || 1)}%</b><span>${escapeHtml(operation.message || 'The durable cluster operation is still running.')}</span></span></div>`
+    : operation.phase === 'error'
+    ? `<div class="machine-driver-note" role="alert">${uiIcon('alert')}<span><b>Cluster operation needs attention.</b> ${escapeHtml(operation.message || operation.error || '')}${operation.rollbackRequired ? ' Cleanup could not be fully proven; re-enter peer credentials before continuing.' : ''}</span></div>`
+    : '';
   const localIps = (status.localIps || []).join(' · ') || 'Private addresses unavailable';
   const workers = Array.isArray(status.nodes) ? status.nodes : [{name:status.peerName,host:status.peerHost,ips:status.peerIps,healthy}];
   const nodeCount = status.nodeCount || (workers.length + 1);
-  const nodeCards = `<div class="cluster-peer-list spaced"><div class="cluster-peer cluster-node-card">${uiIcon('machine')}<span class="cluster-peer-copy"><b>${escapeHtml(status.localName || 'This Spark')}</b><span>Coordinator · ${escapeHtml(localIps)}</span></span><span class="inf-state-pill ready">HEAD</span></div>${workers.map((node, index) => `<div class="cluster-peer cluster-node-card">${uiIcon('machine')}<span class="cluster-peer-copy"><b>${escapeHtml(node.name || node.host || `Spark ${index + 2}`)}</b><span>Worker ${index + 1} · ${escapeHtml((node.ips || []).join(' · ') || node.host || 'Private address unavailable')}</span></span><span class="inf-state-pill ${node.healthy ? 'ready' : ''}">${node.healthy ? 'READY' : 'CHECK'}</span></div>`).join('')}</div>`;
+  const selectedCount = status.computeNodeCount || (workers.filter(node => node.selected !== false).length + 1);
+  const formatGB = bytes => bytes > 0 ? `${(Number(bytes) / 1073741824).toFixed(0)} GB` : 'Unknown';
+  const localTelemetry = status.localTelemetry || {}, localGPU = Array.isArray(localTelemetry.gpus) ? localTelemetry.gpus[0] : null;
+  const localStats = localGPU ? `<span class="cluster-node-telemetry"><i>${Number(localGPU.utilPct || 0)}% load</i><i>${Math.round(Number(localGPU.memHeadroomMB || 0) / 1024)} GB memory free</i><i>${Number(localGPU.tempC || 0)}°C</i><i>${Number(localGPU.powerW || 0).toFixed(0)} W</i><i>${formatGB(localTelemetry.storageAvailableBytes)} storage free</i><i>${escapeHtml(status.health?.physicalLink?.status || 'unknown')} link</i></span>` : '';
+  const nodeCards = `<div class="cluster-peer-list spaced"><div class="cluster-peer cluster-node-card">${uiIcon('machine')}<span class="cluster-peer-copy"><b>${escapeHtml(status.localName || 'This Spark')}</b><span>Coordinator · ${escapeHtml(localIps)}</span>${localStats}</span><span class="inf-state-pill ready">HEAD</span></div>${workers.map((node, index) => {
+    const telemetry = node.telemetry || {}, gpu = Array.isArray(telemetry.gpus) ? telemetry.gpus[0] : null;
+    const stats = gpu ? `<span class="cluster-node-telemetry"><i>${Number(gpu.utilPct || 0)}% load</i><i>${Math.round(Number(gpu.memHeadroomMB || 0) / 1024)} GB memory free</i><i>${Number(gpu.tempC || 0)}°C</i><i>${Number(gpu.powerW || 0).toFixed(0)} W</i><i>${formatGB(telemetry.storageAvailableBytes)} storage free</i><i>${escapeHtml(node.health?.physicalLink?.status || 'unknown')} link</i></span>` : `<span class="cluster-node-telemetry"><i>Live telemetry unavailable</i><i>${escapeHtml(node.health?.physicalLink?.status || 'unknown')} link</i></span>`;
+    const identity = node.fingerprint || node.host || node.name;
+    const addressFailed = node.health?.managementIp?.status === 'attention' || node.health?.ssh?.status === 'attention';
+    return `<div class="cluster-peer cluster-node-card ${node.selected === false ? 'standby' : ''}"><input class="cluster-node-select" data-cluster-node="${escapeAttr(identity)}" type="checkbox" aria-label="Use ${escapeAttr(node.name || node.host || `Spark ${index + 2}`)} for distributed compute" ${node.selected === false ? '' : 'checked'} ${node.healthy && node.workerReady ? '' : 'disabled'}>${uiIcon('machine')}<span class="cluster-peer-copy"><b>${escapeHtml(node.name || node.host || `Spark ${index + 2}`)}</b><span>Worker ${index + 1} · ${escapeHtml((node.ips || []).join(' · ') || node.host || 'Private address unavailable')}</span>${stats}</span>${addressFailed ? `<button class="btn" data-cluster-rebind="${escapeAttr(identity)}">Update address</button>` : ''}<span class="inf-state-pill ${node.healthy ? 'ready' : ''}">${node.selected === false ? 'STANDBY' : (node.healthy ? 'SELECTED' : 'CHECK')}</span></div>`;
+  }).join('')}</div>`;
+  const selectionPanel = workers.length > 1 ? `<div class="cluster-selection-panel"><span><b>Compute subset: ${selectedCount} of ${nodeCount} Sparks</b><small>Choose exactly which healthy workers managed models use. Unselected Sparks remain connected as standby nodes.</small></span><button class="btn primary" id="cluster-save-selection">Save selection</button></div>` : '';
   const canAdd = nodeCount < 8;
-  c.innerHTML = `<div class="cluster-page">${clusterHero(healthy ? `${nodeCount} nodes ready` : 'Needs attention', healthy)}<section class="machine-card"><div class="cluster-connected-hero ${healthy ? '' : 'attention'}"><span class="cluster-connected-copy"><b>${healthy ? `Your ${nodeCount}-Spark cluster is connected` : 'The private fabric needs attention'}</b><span>${healthy ? 'Every enrolled Spark is reachable and ready for distributed workloads.' : 'Your management network is unaffected. Run a health check to identify the node or path that needs attention.'}</span></span><span class="cluster-health-orb">${uiIcon(healthy ? 'check' : 'alert')}</span></div>${nodeCards}${!healthy ? clusterChecks(status.checks) : ''}<div class="cluster-status-grid"><div class="machine-fact"><div class="machine-fact-label">Topology</div><div class="machine-fact-value">${status.topology === 'direct' ? 'Direct cable' : 'Managed RoCE switch'}</div></div><div class="machine-fact"><div class="machine-fact-label">Cluster size</div><div class="machine-fact-value">${nodeCount} of 8 Sparks</div></div><div class="machine-fact"><div class="machine-fact-label">Set up</div><div class="machine-fact-value">${escapeHtml(status.createdAt ? new Date(status.createdAt).toLocaleDateString() : 'Configured')}</div></div></div><div class="machine-driver-note">${uiIcon('alert')}<span>Cluster memory is aggregate, not one shared-memory computer. Distributed models are partitioned across all required nodes.</span></div>${healthy ? `<details class="cluster-advanced"><summary>Technical details and connection checks</summary><div class="cluster-advanced-body">${clusterChecks(status.checks)}</div></details>` : ''}<div class="cluster-actions">${canAdd ? `<button class="btn primary" id="cluster-add">${uiIcon('plus')}Add another Spark</button>` : ''}<button class="btn" id="cluster-refresh">${uiIcon('reload')}<span>${healthy ? 'Check all nodes' : 'Run health check'}</span></button><button class="btn cluster-danger" id="cluster-disconnect">${uiIcon('trash')}Disconnect cluster</button></div></section></div>`;
+  c.innerHTML = `<div class="cluster-page">${clusterHero(healthy ? `${nodeCount} nodes ready` : 'Needs attention', healthy)}<section class="machine-card"><div class="cluster-connected-hero ${healthy ? '' : 'attention'}"><span class="cluster-connected-copy"><b>${healthy ? `Your ${nodeCount}-Spark cluster is connected` : 'One cluster layer needs attention'}</b><span>${healthy ? 'Every enrolled Spark is reachable and ready for distributed workloads.' : 'Cable, normal network, secure login, private fabric, and AI worker health are checked separately below.'}</span></span><span class="cluster-health-orb">${uiIcon(healthy ? 'check' : 'alert')}</span></div>${clusterHealthLayers(status.health)}${nodeCards}${selectionPanel}${!healthy ? clusterChecks(status.checks) : ''}<div class="cluster-status-grid"><div class="machine-fact"><div class="machine-fact-label">Topology</div><div class="machine-fact-value">${status.topology === 'direct' ? 'Direct cable' : 'Managed RoCE switch'}</div></div><div class="machine-fact"><div class="machine-fact-label">Cluster size</div><div class="machine-fact-value">${nodeCount} of 8 Sparks</div></div><div class="machine-fact"><div class="machine-fact-label">Active compute</div><div class="machine-fact-value">${selectedCount} Sparks selected</div></div></div><div class="machine-driver-note">${uiIcon('alert')}<span>Cluster memory is aggregate, not one shared-memory computer. Distributed models are partitioned across the selected nodes.</span></div>${healthy ? `<details class="cluster-advanced"><summary>Technical details and connection checks</summary><div class="cluster-advanced-body">${clusterChecks(status.checks)}</div></details>` : ''}<div class="cluster-actions">${canAdd ? `<button class="btn primary" id="cluster-add">${uiIcon('plus')}Add another Spark</button>` : ''}<button class="btn" id="cluster-refresh">${uiIcon('reload')}<span>${healthy ? 'Check all nodes' : 'Run health check'}</span></button><button class="btn cluster-danger" id="cluster-disconnect">${uiIcon('trash')}Disconnect cluster</button></div></section></div>`;
+  if (operationBanner) c.querySelector('.machine-card')?.insertAdjacentHTML('afterbegin', operationBanner);
   document.getElementById('cluster-refresh').onclick = () => renderSparkClusterPage(c);
   document.getElementById('cluster-disconnect').onclick = () => openSparkClusterDisconnect(c, status);
+  const saveSelection = document.getElementById('cluster-save-selection');
+  if (saveSelection) saveSelection.onclick = async () => {
+    const all = [...c.querySelectorAll('[data-cluster-node]')], selected = all.filter(input => input.checked).map(input => input.dataset.clusterNode);
+    if (!selected.length) { toast('Select at least one worker Spark'); return; }
+    saveSelection.disabled = true;
+    try {
+      const nodes = selected.length === all.length ? [] : selected;
+      await api('/api/system/spark-cluster/selection', {method:'POST',headers:{'Content-Type':'application/json','X-Cloudless-Action':'spark-cluster-selection'},body:JSON.stringify({nodes})});
+      toast(`Compute subset saved · ${selected.length + 1} Sparks`);
+      renderSparkClusterPage(c);
+    } catch (error) {
+      saveSelection.disabled = false;
+      toast(error.message || 'Could not save the compute subset');
+    }
+  };
+  c.querySelectorAll('[data-cluster-rebind]').forEach(button => {
+    button.onclick = () => {
+      const node = workers.find(item => (item.fingerprint || item.host || item.name) === button.dataset.clusterRebind);
+      if (node) openSparkAddressUpdate(c, status, node);
+    };
+  });
   const add = document.getElementById('cluster-add'); if (add) add.onclick = () => { clusterWizard = {step:1,peers:[],host:'',username:'',password:'',cable:false,preflight:null,busy:false,error:'',adding:true,existingNodes:nodeCount}; renderSparkClusterWizard(c); };
+}
+function openSparkAddressUpdate(c, status, node) {
+  const layer = document.getElementById('key-dialog-layer'), content = document.getElementById('key-dialog-content');
+  const identity = node.fingerprint || node.host || node.name;
+  content.innerHTML = `<div class="key-dialog-head"><div class="key-dialog-heading"><div class="key-dialog-title" id="key-dialog-title">Update Spark address</div><div class="key-dialog-sub">Use this after DHCP changes the normal Wi-Fi or Ethernet address. The private high-speed fabric is not changed.</div></div><button class="key-dialog-close" id="cluster-rebind-close">${uiIcon('close')}</button></div><div class="key-dialog-body"><div class="machine-driver-note">${uiIcon('alert')}<span>CloudlessOS will accept the new address only if its SSH fingerprint matches <b>${escapeHtml(node.name || 'the enrolled Spark')}</b>.</span></div><label class="cluster-field"><span class="fld-label">New hostname or IPv4 address</span><input class="fld-input" id="cluster-rebind-host" value="${escapeAttr(node.host || '')}" autocomplete="off"></label><label class="cluster-field"><span class="fld-label">Linux username</span><input class="fld-input" id="cluster-rebind-user" value="${escapeAttr(node.username || '')}" autocomplete="username"></label><label class="cluster-field"><span class="fld-label">Administrator password</span><input class="fld-input" id="cluster-rebind-password" type="password" autocomplete="current-password"></label><div class="key-dialog-help" id="cluster-rebind-error">The password is used once and is never saved.</div><div class="key-dialog-actions"><button class="btn" id="cluster-rebind-cancel">Cancel</button><button class="btn primary" id="cluster-rebind-confirm">${uiIcon('check')}<span>Verify and update</span></button></div></div>`;
+  layer.classList.remove('hidden');
+  document.getElementById('cluster-rebind-close').onclick = closeKeyDialog;
+  document.getElementById('cluster-rebind-cancel').onclick = closeKeyDialog;
+  document.getElementById('cluster-rebind-confirm').onclick = async event => {
+    const button = event.currentTarget, error = document.getElementById('cluster-rebind-error');
+    const request = {node:identity,host:document.getElementById('cluster-rebind-host').value.trim(),username:document.getElementById('cluster-rebind-user').value.trim(),password:document.getElementById('cluster-rebind-password').value};
+    if (!request.host || !request.username || !request.password) { error.textContent = 'Enter the new address, username, and administrator password.'; return; }
+    button.disabled = true; error.textContent = 'Checking hardware, login, and the saved SSH fingerprint…';
+    try {
+      await api('/api/system/spark-cluster/rebind', {method:'POST',headers:{'Content-Type':'application/json','X-Cloudless-Action':'spark-cluster-rebind'},body:JSON.stringify(request)});
+      closeKeyDialog(); toast('Spark management address updated'); renderSparkClusterPage(c);
+    } catch (failure) {
+      button.disabled = false; error.textContent = failure.message || 'The new address could not be verified.';
+    }
+  };
+  setTimeout(() => document.getElementById('cluster-rebind-host')?.focus(), 0);
 }
 function openSparkClusterDisconnect(c, status) {
   const layer = document.getElementById('key-dialog-layer'), content = document.getElementById('key-dialog-content');
@@ -5689,7 +5934,7 @@ function openSparkClusterDisconnect(c, status) {
   document.getElementById('cluster-disconnect-confirm').onclick = async e => {
     const passwords = {}; document.querySelectorAll('[data-cluster-disconnect-password]').forEach(input => { passwords[input.dataset.clusterDisconnectPassword] = input.value; });
     if (Object.values(passwords).some(value => !value)) { document.getElementById('cluster-disconnect-error').textContent = 'Enter the administrator password for every worker Spark.'; return; }
-    const button = e.currentTarget, body = content.querySelector('.key-dialog-body'), started = Date.now();
+    const button = e.currentTarget, body = content.querySelector('.key-dialog-body');
     button.disabled = true;
     document.getElementById('cluster-disconnect-cancel').disabled = true;
     document.getElementById('cluster-disconnect-close').disabled = true;
@@ -5704,20 +5949,9 @@ function openSparkClusterDisconnect(c, status) {
       track.style.setProperty('--disconnect-progress', `${percent}%`); track.setAttribute('aria-valuenow', String(percent));
       body.querySelectorAll('[data-disconnect-stage]').forEach((item, index) => { item.classList.toggle('done', index < stage); item.classList.toggle('active', index === stage); });
     };
-    let networkDone = false, localStarted = 0, lastUpdate = null;
+    let lastUpdate = null;
     const formatRemaining = seconds => { seconds = Math.max(1, Math.round(seconds)); return seconds < 60 ? `About ${seconds} seconds remaining` : `About ${Math.ceil(seconds / 60)} minutes remaining`; };
-    const timer = setInterval(() => {
-      if (!networkDone) {
-        const elapsed = (Date.now() - started) / 1000;
-        setProgress(Math.min(39, 8 + elapsed * .55), `Safely disconnecting ${status.nodeCount || 2} Sparks…`, elapsed < 12 ? 'Stopping all worker ranks and releasing the distributed session.' : 'Removing the private high-speed configuration from every Spark.', formatRemaining(Math.max(8, 45 - elapsed)), elapsed < 12 ? 0 : 1);
-      } else if (lastUpdate && !lastUpdate.done) {
-        const elapsed = (Date.now() - localStarted) / 1000, done = +(lastUpdate.layersDone || 0), total = +(lastUpdate.layersTotal || 0);
-        const shardRatio = total > 0 ? Math.min(1, done / total) : 0;
-        const percent = total > 0 ? 58 + shardRatio * 34 : Math.min(68, 48 + elapsed / 18);
-        const seconds = done > 0 && total > done ? (elapsed / done) * (total - done) + 75 : Math.max(60, 360 - elapsed);
-        setProgress(percent, 'Starting local AI on this Spark…', lastUpdate.message || 'Preparing the local inference engine.', formatRemaining(seconds), 2);
-      }
-    }, 1000);
+    const timer = 0;
     let result;
     try { result = await api('/api/system/spark-cluster/disconnect', {method:'POST',headers:{'Content-Type':'application/json','X-Cloudless-Action':'spark-cluster-disconnect'},body:JSON.stringify({passwords})}); }
     catch { result = {error:'The cluster could not be disconnected.'}; }
@@ -5725,9 +5959,7 @@ function openSparkClusterDisconnect(c, status) {
       clearInterval(timer); body.innerHTML = `<div class="machine-driver-note" role="alert">${uiIcon('alert')}<span>${escapeHtml(result.error)}</span></div><div class="key-dialog-actions"><button class="btn primary" id="cluster-disconnect-done">Close</button></div>`;
       document.getElementById('cluster-disconnect-done').onclick = closeKeyDialog; return;
     }
-    networkDone = true; localStarted = Date.now();
-    engineExecutionMode = 'local'; engineReady = false; engineStartup = {phase:'switching', message:'Preparing local inference on this Spark…'}; applyEngineUI();
-    setProgress(46, 'Private link removed', 'Distributed mode is off. CloudlessOS is now releasing its memory and starting a compatible model locally.', 'About 6 minutes remaining', 2);
+    setProgress(8, 'Disconnect operation started', 'CloudlessOS is reporting each durable cleanup stage as it completes.', 'Time remaining is being measured', 0);
     if (!result.jobId) { clearInterval(timer); closeKeyDialog(); clusterWizard.step=1; renderSparkClusterPage(c); toast('Spark cluster disconnected'); return; }
     const es = new EventSource(`/api/jobs/${result.jobId}/events`); let ended = false;
     const finish = (ok, message = '') => {
@@ -5735,7 +5967,15 @@ function openSparkClusterDisconnect(c, status) {
       if (ok) { setProgress(100, 'Local AI is ready', 'This Spark is now operating independently.', 'Complete', 3); setTimeout(() => { closeKeyDialog(); clusterWizard.step=1; renderSparkClusterPage(c); renderEngine(); toast(result.modelChanged ? 'Cluster disconnected · compatible local model selected' : 'Cluster disconnected · local AI ready'); }, 650); }
       else { body.querySelector('#cluster-disconnect-progress-title').textContent = 'Cluster disconnected'; body.querySelector('#cluster-disconnect-progress-detail').textContent = message || 'The private connection was removed, but the local model could not start. Open Model Manager to choose another model.'; body.querySelector('#cluster-disconnect-eta').textContent = 'Local AI needs attention'; body.insertAdjacentHTML('beforeend', `<div class="key-dialog-actions"><button class="btn primary" id="cluster-disconnect-done">Close</button></div>`); document.getElementById('cluster-disconnect-done').onclick = () => { closeKeyDialog(); clusterWizard.step=1; renderSparkClusterPage(c); }; }
     };
-    es.onmessage = event => { const update = JSON.parse(event.data); lastUpdate = update; if (update.phase === 'error') finish(false, update.error); else if (update.done) finish(true); };
+    es.onmessage = event => {
+      const update = JSON.parse(event.data); lastUpdate = update;
+      const localPhase = ['local-fallback','switching','loading','running'].includes(update.phase);
+      if (localPhase) { engineExecutionMode = 'local'; engineReady = false; engineStartup = update; applyEngineUI(); }
+      const stage = localPhase ? 2 : String(update.phase || '').includes('network') ? 1 : 0;
+      const eta = Number(update.etaSeconds) > 0 ? formatRemaining(update.etaSeconds) : 'Time remaining is being measured';
+      setProgress(update.percent || 1, localPhase ? 'Starting local AI on this Spark…' : `Safely disconnecting ${status.nodeCount || 2} Sparks…`, update.message || 'CloudlessOS is completing the durable disconnect operation.', eta, stage);
+      if (update.phase === 'error') finish(false, update.error); else if (update.done) finish(true);
+    };
     es.onerror = () => finish(false, 'CloudlessOS lost the progress connection. The cluster is disconnected; check Model Manager to confirm the local model.');
   };
   setTimeout(() => document.querySelector('[data-cluster-disconnect-password]')?.focus(), 0);
@@ -5792,6 +6032,16 @@ function apiKeyRow(k) {
       <button class="btn danger" data-revoke="${escapeAttr(k.id)}">Revoke</button>
     </div>`;
 }
+function apiAuditRow(event) {
+  const when = event.time ? new Date(event.time).toLocaleString() : '';
+  const label = event.event === 'gateway-request' ? `${event.scope || 'API'} request`
+    : event.event === 'gateway-rate-limit' ? 'Rate limit'
+    : event.event === 'gateway-exposure' ? `${event.scope || 'Network'} access`
+    : event.event === 'gateway-key' ? 'API key'
+    : 'Authentication';
+  const detail = [event.keyId ? `key ${event.keyId}` : '', event.source || '', event.status ? `HTTP ${event.status}` : '', event.detail || ''].filter(Boolean).join(' · ');
+  return `<div class="key-row"><div class="key-main"><span class="key-name">${escapeHtml(label)}</span><span class="key-scope">${escapeHtml(event.outcome || '')}</span></div><div class="key-meta">${escapeHtml(detail || 'Local policy change')} · ${escapeHtml(when)}</div></div>`;
+}
 function apiWireRevokes(container) {
   container.querySelectorAll('[data-revoke]').forEach(b => b.onclick = async () => {
     const approved = await openCloudlessDecision({
@@ -5804,7 +6054,7 @@ function apiWireRevokes(container) {
       returnFocus: b,
     });
     if (!approved) return;
-    try { await api('/api/keys/' + b.dataset.revoke, { method: 'DELETE' }); toast('Key revoked'); apiRefreshKeys(); }
+    try { await api('/api/keys/' + b.dataset.revoke, { method: 'DELETE', headers: { 'X-Cloudless-Action': 'gateway-key-revoke' } }); toast('Key revoked'); apiRefreshKeys(); }
     catch { toast('Failed', true); }
   });
 }
@@ -5960,18 +6210,13 @@ function openDisplayResolutionDialog(output, width, height) {
     close.disabled = true; cancel.disabled = true; confirmButton.disabled = true;
     confirmButton.innerHTML = '<span class="key-dialog-spinner" aria-hidden="true"></span><span>Applying…</span>';
     try {
-      await api('/api/system/display', {
+      const result = await api('/api/system/display', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Cloudless-Action': 'display' },
         body: JSON.stringify({ output, width, height }),
       });
       keyDialogBusy = false;
-      closeKeyDialog();
-      toast(`Resolution changed to ${width} × ${height}`);
-      setTimeout(() => {
-        applyUIZoom();
-        if (settingsOpen() && setPage === 'display') renderDisplayPage(document.getElementById('set-content'));
-      }, 500);
+      showDisplayKeepDialog(result, output, width, height);
     } catch (err) {
       keyDialogBusy = false;
       close.disabled = false; cancel.disabled = false; confirmButton.disabled = false;
@@ -5980,6 +6225,77 @@ function openDisplayResolutionDialog(output, width, height) {
     }
   };
   confirmButton.focus();
+}
+function showDisplayKeepDialog(result, output, width, height) {
+  const content = document.getElementById('key-dialog-content');
+  let remaining = Math.max(1, Number(result.confirmSeconds) || 20);
+  let settled = false;
+  content.innerHTML = `<div class="key-dialog-head">
+      <span class="key-dialog-icon">${uiIcon('display')}</span>
+      <div class="key-dialog-heading"><div class="key-dialog-title" id="key-dialog-title">Keep this resolution?</div><div class="key-dialog-sub">Confirm that ${width} × ${height} is readable on ${escapeHtml(output)}.</div></div>
+      <button class="key-dialog-close" id="display-keep-close" type="button" aria-label="Restore previous resolution">${uiIcon('close')}</button>
+    </div>
+    <div class="key-dialog-body">
+      <div class="uninstall-summary"><b>The previous resolution returns automatically.</b><br><span id="display-keep-countdown">Reverting in ${remaining} seconds.</span></div>
+      <div class="key-dialog-error" id="display-keep-error" role="alert"></div>
+      <div class="key-dialog-actions">
+        <button class="btn" id="display-keep-revert" type="button">Restore previous</button>
+        <button class="btn primary" id="display-keep-confirm" type="button">${uiIcon('check')}<span>Keep changes</span></button>
+      </div>
+    </div>`;
+  const countdown = document.getElementById('display-keep-countdown');
+  const error = document.getElementById('display-keep-error');
+  const keep = document.getElementById('display-keep-confirm');
+  const revert = document.getElementById('display-keep-revert');
+  const close = document.getElementById('display-keep-close');
+  const timer = setInterval(() => {
+    remaining -= 1;
+    if (countdown) countdown.textContent = remaining > 0 ? `Reverting in ${remaining} seconds.` : 'Restoring the previous resolution…';
+    if (remaining <= 0) restore(false);
+  }, 1000);
+  const finish = message => {
+    clearInterval(timer);
+    keyDialogOnClose = null;
+    keyDialogBusy = false;
+    closeKeyDialog();
+    toast(message);
+    setTimeout(() => {
+      applyUIZoom();
+      if (settingsOpen() && setPage === 'display') renderDisplayPage(document.getElementById('set-content'));
+    }, 350);
+  };
+  const request = (path, action) => api(path, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Cloudless-Action': action },
+    body: JSON.stringify({ token: result.token }),
+  });
+  async function restore(showError = true) {
+    if (settled) return;
+    settled = true; keyDialogBusy = true; keep.disabled = true; revert.disabled = true; close.disabled = true;
+    try { await request('/api/system/display/revert', 'display-revert'); }
+    catch (err) { if (showError && error) error.textContent = err.message || 'The automatic rollback is still completing.'; }
+    finish('Previous resolution restored');
+  }
+  keep.onclick = async () => {
+    if (settled) return;
+    settled = true; keyDialogBusy = true; keep.disabled = true; revert.disabled = true; close.disabled = true;
+    keep.innerHTML = '<span class="key-dialog-spinner" aria-hidden="true"></span><span>Saving…</span>';
+    try {
+      await request('/api/system/display/confirm', 'display-confirm');
+      finish(`Resolution kept at ${width} × ${height}`);
+    } catch (err) {
+      settled = false; keyDialogBusy = false; keep.disabled = false; revert.disabled = false; close.disabled = false;
+      error.textContent = err.message || 'CloudlessOS could not confirm the resolution. It will be restored automatically.';
+      keep.innerHTML = `${uiIcon('check')}<span>Keep changes</span>`;
+    }
+  };
+  revert.onclick = () => restore();
+  close.onclick = () => restore();
+  keyDialogOnClose = () => {
+    if (settled) return;
+    settled = true; clearInterval(timer);
+    request('/api/system/display/revert', 'display-revert').catch(() => {});
+  };
+  keep.focus();
 }
 function showCreatedAPIKey(result) {
   keyDialogBusy = false;
@@ -6062,7 +6378,7 @@ function openKeyDialog() {
     input.disabled = true; submit.disabled = true;
     submit.innerHTML = '<span class="key-dialog-spinner" aria-hidden="true"></span><span>Generating…</span>';
     try {
-      const result = await api('/api/keys', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, scope: scope.value }) });
+      const result = await api('/api/keys', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Cloudless-Action': 'gateway-key-create' }, body: JSON.stringify({ name, scope: scope.value }) });
       if (!result || result.error || !result.key) throw new Error(result && result.error ? result.error : 'Key generation failed');
       apiRefreshKeys();
       showCreatedAPIKey(result);
@@ -6128,6 +6444,7 @@ function openUninstallDialog(id, app) {
 async function renderApiPage(c) {
   c.innerHTML = '<div class="set-hint">Loading…</div>';
   let g; try { g = await api('/api/gateway'); } catch { c.innerHTML = '<div class="set-hint">Could not load API access.</div>'; return; }
+  let auditEvents = []; try { auditEvents = (await api('/api/gateway/audit')).events || []; } catch {}
   let engine = {}; try { engine = await api('/api/engine'); setActiveEngine(engine); } catch {}
   const distributed = engine.executionMode === 'cluster';
   const keys = g.keys || [];
@@ -6179,6 +6496,11 @@ async function renderApiPage(c) {
       </div>
       <div class="sec-warn api-warning">${uiIcon('alert')}<span>Anyone with a valid key can use your model and GPU while an access route is enabled. Share keys carefully and revoke unused ones.</span></div>
     </section>
+    <section class="api-section">
+      <div class="api-section-head"><div><div class="api-section-title">Security activity</div><div class="api-section-desc">Authentication failures, rate limits, API requests and network exposure changes are recorded locally. Prompts, responses and key secrets are never logged.</div></div></div>
+      <div class="machine-driver-note">${uiIcon('shield')}<span>Per-key limit: ${g.policy?.requestsPerMinute || 60} requests per minute, with a short burst of ${g.policy?.burst || 15}. Hermes administration and its dashboard are never exposed through this gateway.</span></div>
+      <div id="gateway-audit">${auditEvents.length ? auditEvents.slice(0, 20).map(apiAuditRow).join('') : '<div class="api-keys-empty">No gateway activity recorded yet.</div>'}</div>
+    </section>
   </div>`;
   c.querySelectorAll('[data-copy], [data-copy-target]').forEach(b => b.onclick = () => {
     const value = b.dataset.copyTarget ? (document.getElementById(b.dataset.copyTarget)?.textContent || '') : b.dataset.copy;
@@ -6195,7 +6517,7 @@ async function renderApiPage(c) {
     const modelAlias = document.getElementById('api-contract-alias').value.trim();
     button.disabled = true; button.innerHTML = `<span class="key-dialog-spinner" aria-hidden="true"></span><span>Applying…</span>`;
     try {
-      await api('/api/settings/inference-contract', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ port, modelAlias }) });
+      await api('/api/settings/inference-contract', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Cloudless-Action': 'gateway-contract' }, body: JSON.stringify({ port, modelAlias }) });
       toast('API identity saved');
       await renderApiPage(c);
     } catch (error) {
@@ -6206,7 +6528,16 @@ async function renderApiPage(c) {
   const lan = document.getElementById('gw-lan');
   lan.onchange = async () => {
     const enable = lan.checked; lan.disabled = true;
-    try { const r = await api('/api/gateway/lan', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enable }) });
+    if (enable) {
+      const approved = await openCloudlessDecision({
+        title: 'Allow local-network API access?',
+        message: 'Devices on this network will be able to reach the Cloudless model and Hermes Agent gateway.',
+        detail: 'A scoped Cloudless API key is always required. Requests are rate-limited and recorded in the local security activity log.',
+        confirmLabel: 'Allow local access', icon: 'network', returnFocus: lan
+      });
+      if (!approved) { lan.checked = false; lan.disabled = false; return; }
+    }
+    try { const r = await api('/api/gateway/lan', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Cloudless-Action': 'gateway-lan' }, body: JSON.stringify({ enable }) });
       toast(enable ? (r.url ? 'API on your network: ' + r.url : 'Enabled') : 'Local network access off'); renderApiPage(c);
     } catch { toast('Failed (is the daemon reachable?)', true); lan.checked = !enable; }
     lan.disabled = false;
@@ -6214,10 +6545,19 @@ async function renderApiPage(c) {
   const tun = document.getElementById('gw-tun');
   tun.onchange = async () => {
     const enable = tun.checked; tun.disabled = true;
+    if (enable) {
+      const approved = await openCloudlessDecision({
+        title: 'Create a public AI gateway?',
+        message: 'This makes the model and Hermes Agent chat API reachable from the internet.',
+        detail: 'Only allow-listed inference routes are exposed. A scoped key is mandatory and requests are rate-limited and audited, but anyone holding that key can consume this machine’s compute.',
+        confirmLabel: 'Create public link', icon: 'expand', tone: 'danger', returnFocus: tun
+      });
+      if (!approved) { tun.checked = false; tun.disabled = false; tout.classList.add('hidden'); return; }
+    }
     tout.classList.remove('hidden');
     tout.innerHTML = `<div class="tun-status">${enable ? 'Creating public link… (a few seconds)' : 'Removing link…'}</div>`;
     try {
-      const r = await api('/api/gateway/tunnel', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enable }) });
+      const r = await api('/api/gateway/tunnel', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Cloudless-Action': 'gateway-public' }, body: JSON.stringify({ enable }) });
       if (!enable) { tout.classList.add('hidden'); tout.innerHTML = ''; toast('Public link removed'); }
       else if (r.url) { apiTunRender(tout, { url: r.url, modelURL: r.url + '/v1', agentURL: r.url + '/agent/v1' }); toast('Public API link ready'); }
       else { tout.innerHTML = `<div class="tun-status">Link is starting — reopen this page in a moment to get the URL.</div>`; }
@@ -6344,9 +6684,9 @@ async function renderEnginePage(c) {
       ? `<button class="btn" data-eng="${e.id}" ${engineOperation !== 'idle' ? 'disabled' : ''}>Use this engine</button><button class="btn danger" data-remove-custom="${e.id}" ${engineOperation !== 'idle' ? 'disabled' : ''}>Remove</button>`
       : `<button class="btn" data-eng="${e.id}" ${engineOperation !== 'idle' ? 'disabled' : ''}>Use this engine</button>`;
     return `<div class="ec ${e.active || selectedUnloaded ? 'on' : ''}">
-        <div class="ec-head"><span class="ec-ic">${uiIcon(info.icon)}</span><span class="ec-title"><span class="ec-name">${escapeHtml(e.name.replace(' Engine', ''))}</span>${info.runs ? `<span class="ec-runs">${escapeHtml(info.runs)}</span>` : ''}${e.custom ? '<span class="ec-custom">Local build</span>' : ''}</span></div>
+        <div class="ec-head"><span class="ec-ic">${uiIcon(info.icon)}</span><span class="ec-title"><span class="ec-name">${escapeHtml(e.name.replace(' Engine', ''))}</span>${supportBadge(e.supportLevel)}${info.runs ? `<span class="ec-runs">${escapeHtml(info.runs)}</span>` : ''}${e.custom ? '<span class="ec-custom">Local build</span>' : ''}</span></div>
         <div class="ec-best">${escapeHtml(info.best)}</div>
-        ${e.custom ? `<div class="ec-image">${escapeHtml(e.image || '')}</div>` : ''}
+        ${e.custom ? `<div class="ec-image">${escapeHtml(e.image || '')} · ${escapeHtml(e.architecture || 'unknown architecture')} · ${escapeHtml(e.contractVersion || 'legacy profile')}</div><div class="ec-best">${e.validationStatus === 'compatible' ? 'Contract verified on this host' : e.validationStatus === 'failed' ? `Contract check failed${e.lastError ? `: ${escapeHtml(e.lastError)}` : ''}` : e.validationStatus === 'validating' ? 'Checking the Cloudless API contract…' : 'Registered · contract will be verified on first activation'}</div>` : ''}
         <ul class="ec-traits">${traits}</ul>
         <div class="ec-foot ${e.active || selectedUnloaded ? 'has-actions' : ''} ${e.custom && !e.active && !selectedUnloaded ? 'custom-actions' : ''}">${foot}</div>
       </div>`;
@@ -6478,16 +6818,43 @@ async function refreshModelDownloads() {
   } catch {}
 }
 
-const FIT_LABEL = { fits: 'Comfortable', tight: 'Close fit', over: 'Too large', unknown: 'Unknown fit' };
+const FIT_LABEL = { fits: 'Comfortable', tight: 'Close fit', over: 'Too large', unknown: 'Not reviewed' };
 function memoryLabel(type) { return type === 'unified' ? 'unified memory' : 'VRAM'; }
-function fitExplain(fit, type) {
+function memoryGB(value) {
+  const n = Number(value || 0);
+  return n ? `${n.toFixed(n >= 100 ? 0 : 1).replace(/\.0$/, '')} GB` : 'unknown';
+}
+function memoryAccountingSummary(cluster, distributed) {
+  const capacity = distributed ? cluster.combinedCapacityGB : cluster.localCapacityGB;
+  const available = distributed ? cluster.combinedAvailableGB : cluster.localAvailableGB;
+  const reserved = distributed ? cluster.combinedReservedGB : cluster.localReservedGB;
+  const cache = distributed ? cluster.combinedCacheGB : 0;
+  if (!capacity) return 'Memory accounting is unavailable';
+  return `${memoryGB(capacity)} AI capacity · ${memoryGB(available)} available now · ${memoryGB(reserved)} protected for CloudlessOS${cache ? ` · ${memoryGB(cache)} reclaimable cache` : ''}`;
+}
+function fitExplain(fit, type, estimate = {}) {
   const memory = memoryLabel(type);
   return ({
     fits: `Plenty of ${memory} headroom for normal use.`,
     tight: 'Should run, but long contexts and concurrent requests may be limited.',
     over: `Needs more ${memory} than this machine currently reports.`,
-    unknown: 'CloudlessOS cannot estimate compatibility for this model yet.'
-  })[fit] || 'CloudlessOS cannot estimate compatibility for this model yet.';
+    unknown: estimate.reason || 'No reviewed runtime profile matches this exact model, engine, architecture, and topology.'
+  })[fit] || 'No reviewed runtime profile matches this exact model, engine, architecture, and topology.';
+}
+function fitEvidence(estimate = {}) {
+  if (estimate.evidence === 'measured') return 'Measured profile';
+  if (estimate.evidence === 'reviewed-estimate') return 'Reviewed requirement';
+  return 'No matching profile';
+}
+function fitAmount(m, estimate = {}) {
+  if (estimate.requiredPerNodeGB) {
+    const prefix = estimate.evidence === 'measured' ? '' : '~';
+    return `${prefix}${estimate.requiredPerNodeGB} GB${estimate.usablePerNodeGB ? ` of ${estimate.usablePerNodeGB} GB usable` : ''}`;
+  }
+  // Image checkpoints still use their explicit catalog requirement. Language
+  // models with a fitEstimate never fall back to a parameter-derived guess.
+  if (!m.fitEstimate && m.minVramGB) return `~${m.minVramGB} GB`;
+  return 'No reviewed profile';
 }
 function modelMeter(m, gpu) {
   const required = ((m.fitEstimate || {}).requiredPerNodeGB) || m.minVramGB || 0;
@@ -6498,10 +6865,11 @@ function modelMeter(m, gpu) {
 function modelCompatibility(m, gpu) {
   const label = FIT_LABEL[m.fit] || FIT_LABEL.unknown;
   const estimate = m.fitEstimate || {};
-  const amount = estimate.requiredPerNodeGB ? `~${estimate.requiredPerNodeGB} GB${estimate.usablePerNodeGB ? ` of ${estimate.usablePerNodeGB} GB usable` : ''}` : (m.minVramGB ? `~${m.minVramGB} GB` : 'No estimate');
+  const amount = fitAmount(m, estimate);
+  const metered = estimate.requiredPerNodeGB || (!m.fitEstimate && m.minVramGB);
   return `<div class="mdl-compat">
-    <div class="mdl-compat-row"><span class="mdl-fit fit-${m.fit || 'unknown'}">${label}</span><span class="mdl-vram">${amount}</span></div>
-    ${gpu && m.minVramGB ? `<span class="mdl-meter" aria-hidden="true"><i style="--meter:${modelMeter(m, gpu)}%"></i></span>` : ''}
+    <div class="mdl-compat-row"><span class="mdl-fit fit-${m.fit || 'unknown'}" title="${escapeAttr(fitEvidence(estimate))}">${label}</span><span class="mdl-vram">${amount}</span></div>
+    ${gpu && metered ? `<span class="mdl-meter" aria-hidden="true"><i style="--meter:${modelMeter(m, gpu)}%"></i></span>` : ''}
   </div>`;
 }
 function modelSort(list) {
@@ -6570,7 +6938,8 @@ function modelSection(title, list, cardFn) {
 function activeModelCard(m, gpu, memoryType) {
   if (!m) return '';
   const estimate = m.fitEstimate || {};
-  const meta = [m.params, m.quant, m.contextK ? `${m.contextK}K context` : '', estimate.requiredPerNodeGB ? `~${estimate.requiredPerNodeGB} GB at ${estimate.contextK || 32}K` : (m.minVramGB ? `~${m.minVramGB} GB ${memoryLabel(memoryType)}` : '')].filter(Boolean).join(' · ');
+  const requirement = estimate.requiredPerNodeGB ? `${estimate.evidence === 'measured' ? '' : '~'}${estimate.requiredPerNodeGB} GB at ${estimate.contextK || 32}K · ${fitEvidence(estimate)}` : '';
+  const meta = [m.params, m.quant, m.contextK ? `${m.contextK}K context` : '', requirement].filter(Boolean).join(' · ');
   return `<button class="mm-active-card" data-active-model="${escapeAttr(m.id)}">
     <span class="mm-active-icon">${uiIcon('models')}</span>
     <span class="mm-active-copy"><span class="mm-active-kicker">${engineExecutionMode === 'cluster' ? `Loaded across ${sparkCount((mmLM || {}).cluster)} Sparks` : 'Loaded now'}</span><span class="mm-active-name">${escapeHtml(m.name)}</span><span class="mm-active-meta">${escapeHtml(meta || m.id)}</span></span>
@@ -6741,13 +7110,14 @@ function launchModel(m) {
     <div class="key-dialog-body">
       <div class="model-confirm-facts">
         <div class="model-confirm-fact"><small>Loaded now</small><b>${escapeHtml(curName)}</b></div>
-        <div class="model-confirm-fact"><small>Compatibility</small><b>${escapeHtml(FIT_LABEL[m.fit] || FIT_LABEL.unknown)}${(m.fitEstimate || {}).requiredPerNodeGB ? ` · ~${m.fitEstimate.requiredPerNodeGB} GB at ${m.fitEstimate.contextK || 32}K` : (m.minVramGB ? ` · ~${m.minVramGB} GB` : '')}</b></div>
+        <div class="model-confirm-fact"><small>Compatibility</small><b>${escapeHtml(FIT_LABEL[m.fit] || FIT_LABEL.unknown)}${(m.fitEstimate || {}).requiredPerNodeGB ? ` · ${(m.fitEstimate || {}).evidence === 'measured' ? '' : '~'}${m.fitEstimate.requiredPerNodeGB} GB at ${m.fitEstimate.contextK || 32}K` : ' · no matching runtime profile'}</b></div>
       </div>
       <div class="model-run-modes" role="radiogroup" aria-label="Where to run this model">
         <button class="model-run-mode" type="button" data-model-mode="local" role="radio"><span class="model-run-mode-icon">${uiIcon('machine')}</span><span class="model-run-mode-copy"><b>Run on this Spark</b><small>${gpu} GB ${memoryLabel(memoryType)} · fastest startup for models that fit locally</small></span><i class="model-run-mode-check"></i></button>
         ${clusterEligible ? `<button class="model-run-mode cluster" type="button" data-model-mode="cluster" role="radio"><span class="model-run-mode-icon">${uiIcon('network')}</span><span class="model-run-mode-copy"><b>Use all ${clusterNodes} Sparks</b><small>~${cluster.combinedMemoryGB} GB aggregate · Cloudless configures distributed inference automatically. First launch may take longer while workers download the model.</small></span><i class="model-run-mode-check"></i></button>` : ''}
       </div>
-      ${m.fit === 'over' && !clusterEligible ? `<div class="model-confirm-warning">This model is estimated to need about ${((m.fitEstimate || {}).requiredPerNodeGB) || m.minVramGB} GB at ${((m.fitEstimate || {}).contextK) || 32}K context. CloudlessOS reserves part of the machine's memory for the OS and services, so launching may fail.</div>` : ''}
+      ${m.fit === 'over' && !clusterEligible ? `<div class="model-confirm-warning">The matching runtime profile requires ${((m.fitEstimate || {}).evidence === 'measured' ? '' : 'about ')}${(m.fitEstimate || {}).requiredPerNodeGB} GB per node at ${((m.fitEstimate || {}).contextK) || 32}K context. CloudlessOS reserves part of the machine's memory for the OS and services, so launching may fail.</div>` : ''}
+      ${m.fit === 'unknown' && !clusterEligible ? `<div class="model-confirm-warning">CloudlessOS has no reviewed profile for this exact model, engine, architecture, and topology. Downloading is safe, but launch compatibility will only be known after the engine validates it.</div>` : ''}
       <div class="key-dialog-actions">
         <button class="btn" id="model-launch-cancel" type="button">Cancel</button>
         <button class="btn primary" id="model-launch-confirm" type="button">${uiIcon('rocket')}<span>Launch model</span></button>
@@ -6939,7 +7309,25 @@ async function renderLocalRecipes(c) {
   if (mmTab === 'recipes' && !mmDetail && document.body.contains(c)) paintLocalRecipes(c, mmRecipes);
 }
 function recipeJob(data, id) {
-  return (data.jobs || []).find(job => !job.done && (job.appId === `recipe:${id}` || job.appId === `recipe:${id}:check` || job.appId === `recipe:${id}:stop`));
+  const live=(data.jobs || []).find(job => !job.done && (job.appId === `recipe:${id}` || job.appId === `recipe:${id}:check` || job.appId === `recipe:${id}:stop` || job.appId === `recipe:${id}:recovery` || job.appId === `recipe:${id}:cleanup`));
+  if(live)return live;
+  const operation=(data.operations||[]).filter(item=>item.recipeId===id&&recipeOperationWorking(item)).sort((a,b)=>Date.parse(b.updatedAt||0)-Date.parse(a.updatedAt||0))[0];
+  return operation?recipeOperationAsJob(operation):null;
+}
+function recipeOperationWorking(operation){
+  if(!operation)return false;
+  if(operation.kind==='check'&&operation.phase==='prepared')return false;
+  return !['active','stopped','failed','aborted'].includes(operation.phase);
+}
+function recipeOperationAsJob(operation){
+  const progress=operation.progress||{},overall=Number(progress.overallPercent);
+  return {id:'operation:'+operation.id,operationId:operation.id,appId:`recipe:${operation.recipeId}:recovery`,phase:progress.stage||operation.phase||'recovering',message:progress.message||'Recovering an interrupted recipe operation…',percent:Number.isFinite(overall)?overall:0,overallPercent:Number.isFinite(overall)?overall:0,layersDone:Number(progress.completed)||0,layersTotal:Number(progress.total)||0,bytesDone:Number(progress.bytesDone)||0,bytesTotal:Number(progress.bytesTotal)||0,elapsedSeconds:Number(progress.elapsedSeconds)||0,etaSeconds:Number(progress.etaSeconds)||0,durable:true,done:false};
+}
+function recipeLiveJobs(data){
+  const live=(data&&data.jobs||[]).filter(job=>!job.done&&recipeRunID(job));
+  const represented=new Set(live.map(recipeRunID));
+  (data&&data.operations||[]).filter(recipeOperationWorking).forEach(operation=>{if(!represented.has(operation.recipeId)){live.push(recipeOperationAsJob(operation));represented.add(operation.recipeId);}});
+  return live;
 }
 const RECIPE_RUN_STAGES = [
   ['source','Recipe'], ['building','Runtime'], ['syncing-image','Runtime to peers'], ['downloading','Internet download'],
@@ -6954,6 +7342,8 @@ function recipeRunPhaseLabel(phase) {
   return ({pending:'Preparing recipe',source:'Verifying recipe',building:'Preparing custom runtime','syncing-source':'Copying recipe setup','syncing-image':'Direct-link runtime transfer',downloading:'Internet download to the primary Spark','syncing-model':'Direct-link model transfer',stopping:'Switching inference engines',starting:'Starting inference',health:'Checking engine readiness',connecting:'Connecting Cloudless',ready:'Recipe ready',running:'Recipe ready',canceled:'Launch canceled',error:'Launch failed'})[phase] || 'Preparing recipe';
 }
 function recipeProgressParts(job) {
+  const overall=Number(job&&job.overallPercent);
+  if(Number.isFinite(overall))return {byteTotal:Number(job&&job.bytesTotal)||0,total:100,done:Math.max(0,Math.min(100,overall)),pct:Math.max(0,Math.min(100,Math.round(overall)))};
   const byteTotal = Number(job && job.bytesTotal) || 0;
   const total = byteTotal || Number(job && job.layersTotal) || 0;
   const done = byteTotal ? Number(job && job.bytesDone) || 0 : Number(job && job.layersDone) || 0;
@@ -6988,24 +7378,24 @@ function recipeProgressHTML(job) {
   return `<div class="recipe-progress" aria-live="polite"><div class="recipe-progress-head"><div class="recipe-progress-copy"><div class="recipe-progress-kicker">${escapeHtml(recipeRunPhaseLabel(job.phase))}</div><div class="recipe-progress-row">${escapeHtml(recipeProgressMessage(job))}</div></div><b class="recipe-progress-percent">${parts.total ? parts.pct + '%' : 'Active'}</b></div><div class="track" role="progressbar" aria-label="Overall recipe launch progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${parts.pct}"><i style="width:${parts.pct}%"></i></div><div class="recipe-progress-meta">${recipeProgressMeta(job,parts)}</div>${recipeProgressRouteHTML(job.phase)}<div class="recipe-progress-stages">${recipeProgressStages(job.phase)}</div></div>`;
 }
 let recipeHomeSignature='';
-function recipeRunID(job){const match=/^recipe:([^:]+)$/.exec(String(job&&job.appId||''));return match?match[1]:'';}
+function recipeRunID(job){const match=/^recipe:([^:]+)(?::(?:check|stop|recovery|cleanup))?$/.exec(String(job&&job.appId||''));return match?match[1]:'';}
 function openRecipeLibrary(){mmTab='recipes';mmDetail=null;mmHF=false;document.getElementById('models').classList.remove('hidden');renderModelManager();}
 function renderHomeRecipeJobs(data){
   const host=document.getElementById('recipe-jobs-home');if(!host)return;
-  const jobs=(data&&data.jobs||[]).filter(job=>!job.done&&recipeRunID(job));
+  const jobs=recipeLiveJobs(data);
   const signature=JSON.stringify(jobs);if(signature===recipeHomeSignature)return;recipeHomeSignature=signature;
   host.classList.toggle('hidden',jobs.length===0);
-  host.innerHTML=jobs.map(job=>{const id=recipeRunID(job),recipe=(data.recipes||[]).find(item=>item.id===id)||{},parts=recipeProgressParts(job),route=recipeProgressRoute(job.phase);return `<article class="model-download-home recipe-job-home" data-home-recipe="${escapeAttr(id)}"><span class="model-download-icon">${uiIcon(job.phase==='downloading'?'download':'recipes')}</span><div class="model-download-copy"><span class="model-download-title">${escapeHtml(recipe.name||'Preparing inference recipe')}</span><span class="model-download-meta">${escapeHtml(recipeProgressMessage(job))}</span><span class="model-download-track ${parts.total?'':'indeterminate'}" style="--progress:${parts.pct}%"><i></i></span><span class="recipe-home-context">${escapeHtml(route||'This operation runs in the background. You can keep using CloudlessOS.')}</span></div><span class="recipe-home-actions"><span class="model-download-percent">${parts.total?parts.pct+'%':'Active'}</span><button class="btn" type="button" data-view-recipe>View details</button><button class="model-download-cancel" type="button" data-abort-home-recipe="${escapeAttr(id)}" title="Abort recipe launch" aria-label="Abort recipe launch">${uiIcon('stop')}</button></span></article>`}).join('');
+  host.innerHTML=jobs.map(job=>{const id=recipeRunID(job),recipe=(data.recipes||[]).find(item=>item.id===id)||{},parts=recipeProgressParts(job),route=recipeProgressRoute(job.phase);return `<article class="model-download-home recipe-job-home" data-home-recipe="${escapeAttr(id)}"><span class="model-download-icon">${uiIcon(job.phase==='downloading'?'download':'recipes')}</span><div class="model-download-copy"><span class="model-download-title">${escapeHtml(recipe.name||'Preparing inference recipe')}</span><span class="model-download-meta">${escapeHtml(recipeProgressMessage(job))}</span><span class="model-download-track ${parts.total?'':'indeterminate'}" style="--progress:${parts.pct}%"><i></i></span><span class="recipe-home-context">${escapeHtml(route||(job.durable?'Cloudless is reconciling this operation after a service restart.':'This operation runs in the background. You can keep using CloudlessOS.'))}</span></div><span class="recipe-home-actions"><span class="model-download-percent">${parts.total?parts.pct+'%':'Active'}</span><button class="btn" type="button" data-view-recipe>View details</button>${job.durable?'':`<button class="model-download-cancel" type="button" data-abort-home-recipe="${escapeAttr(id)}" title="Abort recipe launch" aria-label="Abort recipe launch">${uiIcon('stop')}</button>`}</span></article>`}).join('');
   host.querySelectorAll('[data-view-recipe]').forEach(button=>button.onclick=openRecipeLibrary);
   host.querySelectorAll('[data-abort-home-recipe]').forEach(button=>button.onclick=async()=>{button.disabled=true;button.innerHTML='<span class="key-dialog-spinner" aria-hidden="true"></span>';const result=await api('/api/recipes/'+encodeURIComponent(button.dataset.abortHomeRecipe)+'/abort',{method:'POST'}).catch(()=>({error:'Could not abort this recipe.'}));if(result.error){toast(result.error,true);button.disabled=false;button.innerHTML=uiIcon('stop');}else toast('Stopping recipe launch');});
 }
 async function refreshRecipeJobs(){
   const data=await api('/api/recipes').catch(()=>null);if(!data)return;
-  const previous=mmRecipes,previousActive=JSON.stringify((previous&&previous.jobs||[]).filter(job=>!job.done&&recipeRunID(job)).map(job=>job.id));
+  const previous=mmRecipes,previousActive=JSON.stringify(recipeLiveJobs(previous||{}).map(job=>job.id));
   mmRecipes=data;renderHomeRecipeJobs(data);
   if(modelsOpen()&&mmTab==='recipes'&&!mmDetail){
-    const currentActive=JSON.stringify((data.jobs||[]).filter(job=>!job.done&&recipeRunID(job)).map(job=>job.id));
-    if(previousActive!==currentActive)paintLocalRecipes(document.getElementById('mm-tab-body'),data);else(data.jobs||[]).filter(job=>!job.done).forEach(job=>{const id=recipeRunID(job);if(id)updateRecipeRunCard(id,job.id,job);});
+    const currentJobs=recipeLiveJobs(data),currentActive=JSON.stringify(currentJobs.map(job=>job.id));
+    if(previousActive!==currentActive)paintLocalRecipes(document.getElementById('mm-tab-body'),data);else currentJobs.forEach(job=>{const id=recipeRunID(job);if(id)updateRecipeRunCard(id,job.id,job);});
   }
 }
 function markRecipeAbortPending(button) {
@@ -7026,7 +7416,10 @@ function updateRecipeRunCard(recipeId, jobId, update = {}) {
   const state = card.querySelector('.recipe-state');
   if (state) { state.className = 'recipe-state active'; state.textContent = update.phase === 'stopping' ? 'Stopping' : 'Working'; }
   let action = card.querySelector('.recipe-primary-action');
-  if (action && !action.dataset.liveRecipeAbort) {
+  if (action && action.dataset.cleanupOperation) {
+    action.disabled = true;
+    action.innerHTML = '<span class="key-dialog-spinner" aria-hidden="true"></span><span>Cleaning up</span>';
+  } else if (action && !action.dataset.liveRecipeAbort) {
     action.className = 'btn danger recipe-primary-action';
     action.removeAttribute('data-recipe-run');
     action.dataset.liveRecipeAbort = recipeId;
@@ -7055,7 +7448,14 @@ function updateRecipeRunCard(recipeId, jobId, update = {}) {
 }
 function recipeReady(recipe, data) {
   const nodes = Number(recipe.distributed && recipe.distributed.nodes || 1), cluster = data.cluster || {};
-  return nodes === 1 || (!!cluster.distributedReady && Number(cluster.nodes) === nodes);
+  if (nodes === 1) return true;
+  if (!cluster.configured || Number(cluster.nodes) < nodes) return false;
+  const workers = Array.isArray(cluster.workers) ? cluster.workers : [];
+  if (!workers.length) return !!cluster.distributedReady;
+  const healthy = worker => !!worker.healthy && !!worker.workerReady;
+  const selected = recipe.distributed && Array.isArray(recipe.distributed.selectedNodes) ? recipe.distributed.selectedNodes : [];
+  if (!selected.length) return workers.filter(healthy).length >= nodes - 1;
+  return selected.length === nodes - 1 && selected.every(selector => workers.some(worker => healthy(worker) && recipeWorkerMatches(worker, selector)));
 }
 function recipeConnectedSparks(data) {
   return Math.max(1, Number(data.cluster && data.cluster.nodes || 0));
@@ -7114,12 +7514,13 @@ function recipePageButtons(current, total) {
   }).join('');
 }
 function recipeCheckStepIndex(phase) {
-  return ({pending:0,'checking-cluster':0,'checking-topology':1,'checking-tools':2,'checking-source':3,validated:4,running:4})[phase] ?? 0;
+  return ({pending:0,'checking-cluster':0,'checking-topology':0,'checking-source':1,'checking-image':2,'checking-runtime':3,'checking-capacity':4,'checking-accelerators':5,'checking-ports':6,'checking-fabric':7,'checking-tools':8,'checking-contract':9,validated:10,'validated-with-warnings':10,running:10})[phase] ?? 0;
 }
 function openRecipeCheckOverlay(recipe, trigger) {
   closeRecipeCheckOverlay();
   const manager = document.querySelector('#models .mm'); if (!manager) return;
-  manager.insertAdjacentHTML('beforeend','<div class="recipe-check-overlay" role="dialog" aria-modal="true" aria-labelledby="recipe-check-title"><section class="recipe-check-card"><div class="recipe-check-head"><span class="recipe-check-spinner"><span class="recipe-check-success">' + uiIcon('check') + '</span><span class="recipe-check-failure">' + uiIcon('warning') + '</span></span><div class="recipe-check-copy"><div class="recipe-check-kicker">Recipe verification</div><div class="recipe-check-title" id="recipe-check-title">Checking ' + escapeHtml(recipe.name || 'recipe') + '</div><div class="recipe-check-sub">Cloudless is validating this recipe without launching or downloading the model.</div></div></div><div class="recipe-check-progress" aria-live="polite"><div class="recipe-check-progress-row"><span class="recipe-check-message">Starting the recipe check…</span><span class="recipe-check-percent">0%</span></div><div class="recipe-check-track" role="progressbar" aria-label="Recipe check progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i></i></div></div><div class="recipe-check-steps"><div class="recipe-check-step on"><i>1</i><span>Cluster</span></div><div class="recipe-check-step"><i>2</i><span>Topology</span></div><div class="recipe-check-step"><i>3</i><span>Tools</span></div><div class="recipe-check-step"><i>4</i><span>Source</span></div></div><div class="recipe-check-error hidden"></div><p class="recipe-check-note">This is a read-only check. The active model and running services are not changed.</p><button class="btn recipe-check-dismiss" type="button">Return to recipes</button></section></div>');
+  const steps=['Cluster','Source','Image','Runtime','Storage','GPU','Ports','Fabric','Tools','Contract'].map((label,index)=>'<div class="recipe-check-step'+(index===0?' on':'')+'"><i>'+(index+1)+'</i><span>'+label+'</span></div>').join('');
+  manager.insertAdjacentHTML('beforeend','<div class="recipe-check-overlay" role="dialog" aria-modal="true" aria-labelledby="recipe-check-title"><section class="recipe-check-card"><div class="recipe-check-head"><span class="recipe-check-spinner"><span class="recipe-check-success">' + uiIcon('check') + '</span><span class="recipe-check-failure">' + uiIcon('warning') + '</span></span><div class="recipe-check-copy"><div class="recipe-check-kicker">Recipe verification</div><div class="recipe-check-title" id="recipe-check-title">Checking ' + escapeHtml(recipe.name || 'recipe') + '</div><div class="recipe-check-sub">Cloudless is collecting launch evidence without loading the model or downloading its weights.</div></div></div><div class="recipe-check-progress" aria-live="polite"><div class="recipe-check-progress-row"><span class="recipe-check-message">Starting the recipe check…</span><span class="recipe-check-percent">0%</span></div><div class="recipe-check-track" role="progressbar" aria-label="Recipe check progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i></i></div></div><div class="recipe-check-steps">'+steps+'</div><div class="recipe-check-error hidden"></div><p class="recipe-check-note">The active model and running services are not changed. A small bounded fabric transfer is used for multi-Spark recipes.</p><button class="btn recipe-check-dismiss" type="button">Return to recipes</button></section></div>');
   const root = manager.querySelector('.recipe-check-overlay');
   activeRecipeCheck = {id:recipe.id, name:recipe.name || 'Recipe', root, trigger, terminal:false};
   root.querySelector('.recipe-check-dismiss').onclick = closeRecipeCheckOverlay;
@@ -7132,7 +7533,7 @@ function updateRecipeCheckOverlay(update) {
   root.querySelector('.recipe-check-message').textContent = update.message || 'Checking recipe…';
   root.querySelector('.recipe-check-percent').textContent = total ? pct + '%' : 'Working';
   const track = root.querySelector('.recipe-check-track'); track.setAttribute('aria-valuenow', String(pct)); track.querySelector('i').style.width = Math.max(2,pct) + '%';
-  root.querySelectorAll('.recipe-check-step').forEach((item,index) => { item.classList.toggle('done', step >= 4 || index < step); item.classList.toggle('on', step < 4 && index === step); });
+  root.querySelectorAll('.recipe-check-step').forEach((item,index) => { item.classList.toggle('done', step >= 10 || index < step); item.classList.toggle('on', step < 10 && index === step); });
 }
 function closeRecipeCheckOverlay() {
   if (!activeRecipeCheck) return;
@@ -7140,17 +7541,18 @@ function closeRecipeCheckOverlay() {
   if (activeRecipeCheck.trigger && document.body.contains(activeRecipeCheck.trigger)) activeRecipeCheck.trigger.disabled = false;
   activeRecipeCheck = null;
 }
-function finishRecipeCheckOverlay(ok, message) {
+function finishRecipeCheckOverlay(ok, message, outcome = '') {
   if (!activeRecipeCheck || !activeRecipeCheck.root) return;
   const check = activeRecipeCheck, card = check.root.querySelector('.recipe-check-card'); check.terminal = true;
+  const warning = ok && outcome === 'validated-with-warnings';
   card.classList.add(ok ? 'success' : 'error');
-  check.root.querySelector('.recipe-check-title').textContent = ok ? 'Recipe check passed' : 'Recipe check failed';
-  check.root.querySelector('.recipe-check-message').textContent = ok ? 'The recipe is compatible with the selected hardware and cluster.' : 'Cloudless could not validate this recipe.';
+  check.root.querySelector('.recipe-check-title').textContent = warning ? 'Requirements checked with a warning' : ok ? 'Recipe check passed' : 'Recipe check failed';
+  check.root.querySelector('.recipe-check-message').textContent = warning ? 'Source and machine requirements passed. The custom runtime image can only be proven after its reviewed build.' : ok ? 'The evidence is bound to this recipe revision, machine, and cluster.' : 'Cloudless could not validate this recipe.';
   if (ok) {
     check.root.querySelector('.recipe-check-percent').textContent = '100%';
     const track=check.root.querySelector('.recipe-check-track');track.setAttribute('aria-valuenow','100');track.querySelector('i').style.width='100%';
     check.root.querySelectorAll('.recipe-check-step').forEach(item=>{item.classList.add('done');item.classList.remove('on');});
-    window.setTimeout(()=>{if(activeRecipeCheck===check){closeRecipeCheckOverlay();toast('Recipe check passed');}},850);
+    window.setTimeout(()=>{if(activeRecipeCheck===check){closeRecipeCheckOverlay();toast(warning?'Requirements checked with a warning':'Recipe check passed');mmRecipes=null;renderModelManager();}},1100);
   } else {
     const error=check.root.querySelector('.recipe-check-error');error.textContent=message||'The recipe check failed.';error.classList.remove('hidden');
   }
@@ -7205,6 +7607,22 @@ function recipeParseMap(value, label) {
   }
   return result;
 }
+function recipeWorkerIdentity(worker) { return String(worker && (worker.fingerprint || worker.name || worker.host) || '').trim(); }
+function recipeWorkerMatches(worker, selector) {
+  const wanted = String(selector || '').trim().toLowerCase();
+  return [worker && worker.fingerprint, worker && worker.name, worker && worker.host].some(value => String(value || '').trim().toLowerCase() === wanted);
+}
+function recipeWorkerPicker(distributed) {
+  const workers = mmRecipes && mmRecipes.cluster && Array.isArray(mmRecipes.cluster.workers) ? mmRecipes.cluster.workers : [];
+  const selected = Array.isArray(distributed.selectedNodes) ? distributed.selectedNodes : [];
+  const required = Math.max(0, Number(distributed.nodes || 1) - 1);
+  const options = workers.map(worker => {
+    const identity = recipeWorkerIdentity(worker), checked = selected.some(value => recipeWorkerMatches(worker, value));
+    const ready = !!worker.healthy && !!worker.workerReady;
+    return '<label class="recipe-worker-option' + (ready ? '' : ' offline') + '"><input type="checkbox" data-recipe-worker value="' + escapeAttr(identity) + '"' + (checked ? ' checked' : '') + '><span class="recipe-worker-option-copy"><b>' + escapeHtml(worker.name || worker.host || 'DGX Spark') + '</b><small>' + escapeHtml(worker.host || identity) + '</small></span><span class="recipe-worker-status">' + (ready ? 'Ready' : 'Attention') + '</span></label>';
+  }).join('');
+  return '<div class="recipe-worker-picker"><div class="recipe-worker-picker-head"><b>Worker Sparks</b><span>Select exactly ' + required + ', or none for automatic placement</span></div><div class="recipe-worker-options">' + (options || '<div class="recipe-worker-empty">No worker Sparks are enrolled yet. You can save the recipe with automatic placement and connect the cluster before running Check.</div>') + '</div><div class="key-dialog-help">Explicit selection is saved by the Spark fingerprint. Unselected Sparks are not prepared, started, stopped, or charged with model storage for this recipe.</div></div>';
+}
 function recipeField(id, label, value, options) {
   const opts = options || {}, full = opts.full ? ' full' : '', hint = opts.hint ? '<small>' + escapeHtml(opts.hint) + '</small>' : '', locked = opts.readonly ? ' readonly' : (opts.disabled ? ' disabled' : '');
   let control;
@@ -7240,16 +7658,17 @@ function recipePage(title, subtitle, body) {
   return '<div class="recipe-builder-page"><div class="recipe-builder-page-head"><h3>' + escapeHtml(title) + '</h3><p>' + escapeHtml(subtitle) + '</p></div>' + body + '<div class="key-dialog-error" id="recipe-builder-error" role="alert"></div></div>';
 }
 function recipeBuilderContent() {
-  const d = recipeBuilder.draft, step = recipeBuilder.step;
+  const d = recipeBuilder.draft, step = recipeBuilder.step, managed = d.runtime.adapter === 'managed-container-v1';
   if (step === 1) return recipePage('Recipe basics', 'Give this configuration a clear identity. A repository is optional.',
     recipeSection('Identity', 'These details appear in your local recipe library.', '<div class="recipe-builder-fields">' +
       recipeField('rb-name','Recipe name',d.name,{full:true,placeholder:'My long-context research setup'}) +
       recipeField('rb-description','Description',d.description,{type:'textarea',full:true,placeholder:'Explain what this setup is designed to do.'}) +
-      recipeField('rb-platform','Target platform',d.platform,{placeholder:'dgx-spark, generic-nvidia, or your own label'}) + '</div>') +
+      recipeField('rb-platform','Target platform',d.platform,{placeholder:'dgx-spark or generic'}) + '</div>') +
+    (managed ? '<div class="recipe-builder-note">' + uiIcon('shield') + '<span>Managed recipes do not clone or execute source repositories.</span></div>' :
     recipeSection('Optional source repository', 'Leave this empty for recipes that launch an installed command or container directly.', '<div class="recipe-builder-fields">' +
       recipeField('rb-source-url','Repository URL',d.source.url,{placeholder:'https://github.com/owner/repository'}) +
       recipeField('rb-source-revision','Branch, tag or commit',d.source.revision,{placeholder:'main or an exact commit'}) +
-      recipeField('rb-source-files','Verified file checksums',recipeMapLines(d.source.files),{type:'textarea',full:true,tall:true,placeholder:'relative/file.sh=SHA256',help:'Optional. One relative-path=SHA256 entry per line.'}) + '</div>'));
+      recipeField('rb-source-files','Verified file checksums',recipeMapLines(d.source.files),{type:'textarea',full:true,tall:true,placeholder:'relative/file.sh=SHA256',help:'Optional. One relative-path=SHA256 entry per line.'}) + '</div>')));
   if (step === 2) return recipePage('Inference engine', 'Choose the server Cloudless will expose through its normal API gateway.',
     recipeSection('Engine', 'Built-in choices provide clear metadata; Custom accepts any engine launched by your runtime commands.', '<div class="recipe-builder-fields cols-3">' +
       recipeField('rb-engine-type','Inference engine',d.engine.type,{placeholder:'vllm, sglang, llama.cpp, tgi…'}) +
@@ -7257,13 +7676,13 @@ function recipeBuilderContent() {
       recipeField('rb-engine-api','API base path',d.engine.apiPath,{placeholder:'/v1'}) +
       recipeField('rb-engine-proxy','API proxy target',d.engine.proxyHost,{placeholder:'host.docker.internal',help:'Host the Cloudless API gateway connects to.'}) +
       recipeField('rb-engine-restart','Restart policy',d.engine.restartPolicy,{placeholder:'unless-stopped',help:'For example: no, always, unless-stopped, or on-failure:5.'}) +
-      recipeField('rb-engine-image','Container image',d.engine.image,{full:true,placeholder:'repository/image:tag'}) +
+      recipeField('rb-engine-image','Container image',d.engine.image,{full:true,placeholder:managed?'repository/image@sha256:64-character-digest':'repository/image:tag'}) +
       recipeField('rb-engine-served','Private runtime alias','cloudless',{full:true,readonly:true,help:'Reserved for internal compatibility. Clients use the editable model name configured in Settings → API access.'}) +
       recipeField('rb-engine-args','Additional engine arguments',recipeLines(d.engine.arguments),{type:'textarea',full:true,tall:true,placeholder:'--enable-prefix-caching\n--disable-log-requests',help:'One argument per line. They are also available as ENGINE_ARGS.'}) + '</div>'));
   if (step === 3) return recipePage('Model and memory', 'Every model-loading and parallelism control is editable.',
     recipeSection('Model identity', 'Use a Hugging Face ID, local path, or any identifier understood by the selected engine.', '<div class="recipe-builder-fields">' +
       recipeField('rb-model-id','Model ID or path',d.model.id,{full:true,placeholder:'organization/model'}) +
-      recipeField('rb-model-revision','Model revision',d.model.revision,{placeholder:'main or exact commit'}) +
+      recipeField('rb-model-revision','Model revision',d.model.revision,{placeholder:managed?'Exact 40- or 64-character commit':'main or exact commit'}) +
       recipeField('rb-model-quant','Quantization',d.model.quantization,{placeholder:'none, awq, gptq, fp8, gguf…'}) +
       recipeField('rb-model-dtype','Compute dtype',d.model.dtype,{placeholder:'auto, float16, bfloat16…'}) +
       recipeField('rb-model-kv','KV-cache dtype',d.model.kvCacheDtype,{placeholder:'auto, fp8, fp8_e4m3…'}) + '</div>') +
@@ -7274,6 +7693,11 @@ function recipeBuilderContent() {
       recipeField('rb-model-tp','Tensor parallel size',d.model.tensorParallel,{type:'number',min:1,max:1024}) +
       recipeField('rb-model-pp','Pipeline parallel size',d.model.pipelineParallel,{type:'number',min:1,max:1024}) +
       '<label class="recipe-builder-check"><input id="rb-model-trust" type="checkbox"' + (d.model.trustRemoteCode ? ' checked' : '') + '><span>Allow model remote code</span></label></div>'));
+  if (step === 4 && managed) return recipePage('Placement and networking', 'Constrained recipes currently run on one local machine.',
+    recipeSection('Local placement', 'Multi-node execution remains reserved for exact Cloudless-signed profiles until remote execution has the same brokered boundary.', '<div class="recipe-builder-fields">' +
+      recipeField('rb-dist-nodes','Total nodes',1,{type:'number',readonly:true}) +
+      recipeField('rb-dist-port','Reserved master port',d.distributed.masterPort,{type:'number',readonly:true}) + '</div>') +
+    '<div class="recipe-builder-note">' + uiIcon('shield') + '<span>The container receives outbound networking for model downloads, but no host network namespace or Docker socket.</span></div>');
   if (step === 4) return recipePage('Cluster and networking', 'Configure one machine or a distributed inference topology.',
     recipeSection('Topology', 'Cloudless checks the requested node count before launching.', '<div class="recipe-builder-fields cols-3">' +
       recipeField('rb-dist-nodes','Total nodes',d.distributed.nodes,{type:'number',min:1,max:64}) +
@@ -7282,8 +7706,15 @@ function recipeBuilderContent() {
       recipeField('rb-dist-worker','Worker alias',d.distributed.workerAlias,{placeholder:'cloudless-recipe-worker'}) +
       recipeField('rb-dist-interface','Network interface',d.distributed.interface,{placeholder:'auto or enp1s0f0np0'}) +
       recipeField('rb-dist-hca','RDMA / HCA device',d.distributed.hca,{placeholder:'auto or mlx5_0'}) +
-      recipeField('rb-dist-gid','InfiniBand GID index',d.distributed.ibGidIndex,{type:'number',min:0,max:255}) + '</div>') +
+      recipeField('rb-dist-gid','InfiniBand GID index',d.distributed.ibGidIndex,{type:'number',min:0,max:255}) +
+      recipeWorkerPicker(d.distributed) + '</div>') +
     '<div class="recipe-builder-note">' + uiIcon('info') + '<span>Use auto for the interface and HCA when Cloudless should select the connected cluster fabric. Exact values are useful for advanced multi-network systems.</span></div>');
+  if (step === 5 && managed) return recipePage('Managed runtime', 'Cloudless generates and owns every executable part of this recipe.',
+    recipeSection('Constrained container', 'The recipe cannot execute host commands, use SSH, mount host paths, access the Docker socket, or change the Cloudless API contract.', '<div class="recipe-builder-fields">' +
+      recipeField('rb-runtime-adapter','Runtime adapter',d.runtime.adapter,{readonly:true,full:true}) +
+      recipeField('rb-runtime-timeout','Overall timeout (minutes)',d.runtime.timeoutMinutes,{type:'number',min:1,max:10080}) +
+      recipeField('rb-runtime-env','Container environment',recipeMapLines(d.runtime.environment),{type:'textarea',full:true,tall:true,placeholder:'HF_HUB_DISABLE_XET=1',help:'One KEY=value entry per line. Cloudless ignores protected cache and account-token keys.'}) + '</div>') +
+    '<div class="recipe-builder-note">' + uiIcon('shield') + '<span>Cloudless pins the image and model, synthesizes the vLLM command, drops all Linux capabilities, enables a read-only root filesystem, and mounts only the shared model cache.</span></div>');
   if (step === 5) return recipePage('Runtime and lifecycle', 'Define exactly how Cloudless prepares, starts and stops this recipe.',
     recipeSection('Runtime behavior', 'The source-scripts adapter runs each program directly without adding shell interpretation.', '<div class="recipe-builder-fields cols-3">' +
       recipeField('rb-runtime-adapter','Runtime adapter',d.runtime.adapter,{placeholder:'source-scripts-v1 or your adapter label'}) +
@@ -7304,25 +7735,25 @@ function recipeBuilderContent() {
       recipeField('rb-health-path','Health path',d.health.path,{placeholder:'/health'}) +
       recipeField('rb-health-timeout','Startup timeout (seconds)',d.health.timeoutSeconds,{type:'number',min:1,max:86400}) +
       recipeField('rb-health-interval','Check interval (seconds)',d.health.intervalSeconds,{type:'number',min:1,max:3600}) + '</div>'));
-  const sourceLabel = d.source.url ? d.source.url + ' @ ' + d.source.revision : 'No repository; local commands only';
+  const sourceLabel = d.source.url ? d.source.url + ' @ ' + d.source.revision : (managed ? 'No source code Â· Cloudless-managed container' : 'No repository; local commands only');
   return recipePage('Review complete recipe', 'Nothing is hidden or locked. Go back to any section to change it.',
     '<div class="recipe-review">' +
       '<div class="recipe-review-card wide"><span>Recipe</span><b>' + escapeHtml(d.name) + '</b></div>' +
       '<div class="recipe-review-card"><span>Platform</span><b>' + escapeHtml(d.platform) + '</b></div>' +
       '<div class="recipe-review-card"><span>Engine</span><b>' + escapeHtml(d.engine.type + ' · ' + d.engine.image) + '</b></div>' +
       '<div class="recipe-review-card wide"><span>Model</span><b>' + escapeHtml(d.model.id + ' @ ' + d.model.revision) + '</b></div>' +
-      '<div class="recipe-review-card"><span>Topology</span><b>' + d.distributed.nodes + ' node(s) · TP ' + d.model.tensorParallel + ' · PP ' + d.model.pipelineParallel + '</b></div>' +
+      '<div class="recipe-review-card"><span>Topology</span><b>' + d.distributed.nodes + ' node(s) · TP ' + d.model.tensorParallel + ' · PP ' + d.model.pipelineParallel + (d.distributed.selectedNodes && d.distributed.selectedNodes.length ? ' · ' + d.distributed.selectedNodes.length + ' fixed worker(s)' : ' · automatic placement') + '</b></div>' +
       '<div class="recipe-review-card"><span>Context</span><b>' + Number(d.model.maxContext).toLocaleString() + ' tokens</b></div>' +
       '<div class="recipe-review-card"><span>Memory target</span><b>' + Math.round(Number(d.model.gpuMemoryUtilization) * 100) + '%</b></div>' +
       '<div class="recipe-review-card wide"><span>Source</span><b>' + escapeHtml(sourceLabel) + '</b></div>' +
-      '<div class="recipe-review-card"><span>Start command</span><b>' + escapeHtml(d.runtime.lifecycle.start.program + ' ' + (d.runtime.lifecycle.start.args || []).join(' ')) + '</b></div>' +
+      '<div class="recipe-review-card"><span>Runtime</span><b>' + (managed ? 'Constrained container Â· no recipe commands' : escapeHtml(d.runtime.lifecycle.start.program + ' ' + (d.runtime.lifecycle.start.args || []).join(' '))) + '</b></div>' +
       '<div class="recipe-review-card"><span>Health check</span><b>' + escapeHtml(d.health.scheme + '://' + d.health.host + ':' + d.health.port + d.health.path) + '</b></div>' +
-    '</div><div class="recipe-builder-note warn">' + uiIcon('warning') + '<span>This is a user-authored execution recipe. Cloudless validates its structure, but you are choosing the commands, source and runtime permissions.</span></div>');
+    '</div><div class="recipe-builder-note ' + (managed ? '' : 'warn') + '">' + uiIcon(managed ? 'shield' : 'warning') + '<span>' + (managed ? 'This recipe is executable because Cloudless owns its complete container command and restricted permission set.' : 'This recipe contains host commands. Only an exact Cloudless-signed profile can execute them.') + '</span></div>');
 }
 function recipeRead(id) { const element = document.getElementById(id); return element ? element.value.trim() : ''; }
 function recipeNumber(id) { return Number(recipeRead(id)); }
 function recipePersistPage() {
-  const d = recipeBuilder.draft, step = recipeBuilder.step, error = document.getElementById('recipe-builder-error');
+  const d = recipeBuilder.draft, step = recipeBuilder.step, managed = d.runtime.adapter === 'managed-container-v1', error = document.getElementById('recipe-builder-error');
   try {
     if (step === 1) {
       d.name = recipeRead('rb-name'); d.description = recipeRead('rb-description'); d.platform = recipeRead('rb-platform');
@@ -7341,13 +7772,27 @@ function recipePersistPage() {
       d.model.tensorParallel = recipeNumber('rb-model-tp'); d.model.pipelineParallel = recipeNumber('rb-model-pp'); d.model.trustRemoteCode = !!document.getElementById('rb-model-trust').checked;
       if (!d.model.id || !d.model.revision) throw new Error('Enter both a model ID and revision.');
     } else if (step === 4) {
-      d.distributed.nodes = recipeNumber('rb-dist-nodes'); d.distributed.backend = recipeRead('rb-dist-backend'); d.distributed.masterPort = recipeNumber('rb-dist-port');
-      d.distributed.workerAlias = recipeRead('rb-dist-worker'); d.distributed.interface = recipeRead('rb-dist-interface'); d.distributed.hca = recipeRead('rb-dist-hca'); d.distributed.ibGidIndex = recipeNumber('rb-dist-gid');
+      if (managed) {
+        d.distributed.nodes = 1; d.distributed.selectedNodes = []; d.distributed.backend = 'nccl';
+        d.distributed.workerAlias = 'cloudless-recipe-worker'; d.distributed.interface = 'auto'; d.distributed.hca = 'auto';
+      } else {
+        d.distributed.nodes = recipeNumber('rb-dist-nodes'); d.distributed.backend = recipeRead('rb-dist-backend'); d.distributed.masterPort = recipeNumber('rb-dist-port');
+        d.distributed.workerAlias = recipeRead('rb-dist-worker'); d.distributed.interface = recipeRead('rb-dist-interface'); d.distributed.hca = recipeRead('rb-dist-hca'); d.distributed.ibGidIndex = recipeNumber('rb-dist-gid');
+        d.distributed.selectedNodes = [...document.querySelectorAll('[data-recipe-worker]:checked')].map(input => input.value);
+        if (d.distributed.selectedNodes.length && d.distributed.selectedNodes.length !== Math.max(0,d.distributed.nodes - 1)) throw new Error('Select exactly ' + Math.max(0,d.distributed.nodes - 1) + ' worker Spark(s), or clear every selection to let Cloudless place them automatically.');
+      }
     } else if (step === 5) {
-      d.runtime.adapter = recipeRead('rb-runtime-adapter'); d.runtime.workingDir = recipeRead('rb-runtime-dir'); d.runtime.timeoutMinutes = recipeNumber('rb-runtime-timeout');
-      d.runtime.prerequisites = recipeParseLines(recipeRead('rb-runtime-prereq')); d.runtime.environment = recipeParseMap(recipeRead('rb-runtime-env'),'Environment variables');
-      ['build','download','start','stop'].forEach(name => { d.runtime.lifecycle[name] = {program:recipeRead('rb-' + name + '-program'),args:recipeParseLines(recipeRead('rb-' + name + '-args'))}; });
-      if (!d.runtime.lifecycle.start.program) throw new Error('A start command is required.');
+      if (d.runtime.adapter === 'managed-container-v1') {
+        d.runtime.workingDir = '.'; d.runtime.timeoutMinutes = recipeNumber('rb-runtime-timeout');
+        d.runtime.prerequisites = []; d.runtime.environment = recipeParseMap(recipeRead('rb-runtime-env'),'Environment variables');
+        d.runtime.buildOnce = false; d.runtime.downloadOnce = false;
+        ['build','download','start','stop'].forEach(name => { d.runtime.lifecycle[name] = {program:'',args:[]}; });
+      } else {
+        d.runtime.adapter = recipeRead('rb-runtime-adapter'); d.runtime.workingDir = recipeRead('rb-runtime-dir'); d.runtime.timeoutMinutes = recipeNumber('rb-runtime-timeout');
+        d.runtime.prerequisites = recipeParseLines(recipeRead('rb-runtime-prereq')); d.runtime.environment = recipeParseMap(recipeRead('rb-runtime-env'),'Environment variables');
+        ['build','download','start','stop'].forEach(name => { d.runtime.lifecycle[name] = {program:recipeRead('rb-' + name + '-program'),args:recipeParseLines(recipeRead('rb-' + name + '-args'))}; });
+        if (!d.runtime.lifecycle.start.program) throw new Error('A start command is required.');
+      }
     } else if (step === 6) {
       d.health.scheme = recipeRead('rb-health-scheme'); d.health.host = recipeRead('rb-health-host'); d.health.port = recipeNumber('rb-health-port');
       d.health.path = recipeRead('rb-health-path'); d.health.timeoutSeconds = recipeNumber('rb-health-timeout'); d.health.intervalSeconds = recipeNumber('rb-health-interval');
@@ -7378,25 +7823,93 @@ function renderRecipeBuilderDialog() {
     keyDialogBusy = false; closeKeyDialog(); toast(recipeBuilder.editingId ? 'Recipe updated' : 'Recipe created'); mmRecipes = null; renderModelManager();
   });
 }
+function recipeCurrentPreflight(recipe, data) {
+  const revision=data.revisions&&data.revisions[recipe.id];
+  return (data.operations||[]).filter(operation=>operation.kind==='check'&&operation.phase==='prepared'&&operation.recipeId===recipe.id&&operation.preflight&&operation.recipeRevision===revision).sort((a,b)=>Date.parse(b.preflight.createdAt||b.updatedAt||0)-Date.parse(a.preflight.createdAt||a.updatedAt||0))[0]?.preflight||null;
+}
+function recipeCleanupResources(operation) {
+  const kinds = new Set(['container','container-set','compose-project','private-port','stable-port','rendezvous-port','process-set','staging-checkout']);
+  return (operation && operation.resources || []).filter(resource => kinds.has(resource.kind));
+}
+function recipeCleanupIssue(recipe, data) {
+  return (data.operations || []).filter(operation => operation.recipeId === recipe.id && ['failed','aborted','stopped','recovering'].includes(operation.phase) && recipeCleanupResources(operation).length)
+    .sort((a,b) => Date.parse(b.updatedAt || 0) - Date.parse(a.updatedAt || 0))[0] || null;
+}
+function recipeCleanupHTML(operation) {
+  if (!operation) return '';
+  const counts = new Map();
+  recipeCleanupResources(operation).forEach(resource => { const node = resource.node || 'This Spark'; counts.set(node,(counts.get(node)||0)+1); });
+  const nodes = [...counts].map(([node,count]) => '<span class="recipe-cleanup-node">' + escapeHtml(node) + ' · ' + count + ' resource' + (count === 1 ? '' : 's') + '</span>').join('');
+  const running = operation.phase === 'recovering';
+  return '<div class="recipe-cleanup-warning">' + uiIcon(running ? 'reload' : 'warning') + '<div class="recipe-cleanup-copy"><b>' + (running ? 'Cleanup is being retried' : 'Runtime cleanup needs attention') + '</b><span>' + (running ? 'Cloudless is contacting every last-known Spark and verifying that processes, containers, and ports are gone.' : 'A previous operation could not prove that all runtime resources stopped. New launches stay blocked until this is resolved.') + '</span><div class="recipe-cleanup-nodes">' + nodes + '</div></div></div>';
+}
+function recipeFailureHTML(recipe, data) {
+  const failure = data.failures && data.failures[recipe.id];
+  if (!failure) return '';
+  const nodes = (failure.affectedNodes || []).map(node => '<span class="recipe-cleanup-node">' + escapeHtml(node) + '</span>').join('');
+  const artifacts = (failure.retainedArtifacts || []).map(artifact => '<span class="recipe-cleanup-node">' + escapeHtml(artifact) + '</span>').join('');
+  const date = new Date(failure.updatedAt || ''), when = Number.isNaN(date.getTime()) ? '' : new Intl.DateTimeFormat(undefined,{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}).format(date);
+  return '<section class="recipe-failure" aria-label="Last recipe failure"><div class="recipe-failure-head">' + uiIcon('warning') + '<div class="recipe-failure-copy"><b>' + escapeHtml(failure.summary || 'Recipe operation failed') + '</b><span>' + escapeHtml(failure.remedy || 'Review the diagnostic details before retrying.') + '</span></div><span class="recipe-failure-category">' + escapeHtml(failure.category || 'runtime') + '</span></div>' +
+    '<details class="recipe-failure-details"><summary>' + uiIcon('terminal') + '<b>Failure details</b><span>' + escapeHtml((failure.phase || 'unknown') + (when ? ' · ' + when : '')) + '</span></summary><div class="recipe-failure-body">' +
+    (failure.detail ? '<div class="recipe-failure-fact"><span>Reported error</span><p>' + escapeHtml(failure.detail) + '</p></div>' : '') +
+    (nodes ? '<div class="recipe-failure-fact"><span>Affected nodes</span><div class="recipe-failure-tags">' + nodes + '</div></div>' : '') +
+    (artifacts ? '<div class="recipe-failure-fact"><span>Safe retained artifacts</span><div class="recipe-failure-tags">' + artifacts + '</div></div>' : '') +
+    '<div class="recipe-failure-fact"><span>Cleanup</span><p>' + (failure.cleanupPending ? 'Runtime resources still require verified cleanup. Use Retry cleanup before another launch.' : 'Cloudless has no unresolved runtime cleanup claim for this operation.') + '</p></div>' +
+    '<div class="recipe-failure-actions"><button class="btn" type="button" data-recipe-diagnostics="' + escapeAttr(recipe.id) + '" data-diagnostic-operation="' + escapeAttr(failure.operationId) + '">' + uiIcon('download') + '<span>Download diagnostics</span></button></div></div></details></section>';
+}
+function recipeTrustHTML(recipe, data) {
+  const trust = data.trust && data.trust[recipe.id];
+  if (!trust) return '';
+  const short = value => value ? (value.length > 24 ? value.slice(0,12) + '…' + value.slice(-8) : value) : 'Not available';
+  const commands = (trust.commands || []).map(command => '<span>' + escapeHtml(command) + '</span>').join('');
+  const permissions = (trust.hostPermissions || []).map(permission => '<span>' + escapeHtml(permission) + '</span>').join('');
+  return '<details class="recipe-trust-panel ' + escapeAttr(trust.level || '') + '"><summary>' + uiIcon(trust.reviewed ? 'check' : 'alert') + '<b>' + escapeHtml(trust.label || 'Unreviewed recipe') + '</b><span>' + (!trust.executionAllowed ? 'Execution blocked' : trust.imagePinned ? 'Runtime pinned' : 'Run Check to pin runtime') + '</span></summary><div class="recipe-trust-body"><p class="recipe-trust-summary">' + escapeHtml(trust.summary || '') + '</p>' + (trust.blockedReason ? '<div class="recipe-warning">' + escapeHtml(trust.blockedReason) + '</div>' : '') + '<div class="recipe-trust-grid">' +
+    '<div class="recipe-trust-fact"><span>Source revision</span><b>' + escapeHtml(trust.sourcePinned ? short(trust.sourceRevision) : 'Mutable or local') + '</b></div>' +
+    '<div class="recipe-trust-fact"><span>Runtime image</span><b>' + escapeHtml(trust.imagePinned ? short(trust.imageDigest) : trust.imageReference || 'Not pinned') + '</b></div>' +
+    '<div class="recipe-trust-fact"><span>Compatibility metadata</span><b>' + escapeHtml(trust.signedMetadata ? short(trust.metadataDigest) : 'Not Cloudless-signed') + '</b></div>' +
+    '<div class="recipe-trust-fact"><span>Check evidence</span><b>' + escapeHtml(trust.evidenceHash ? short(trust.evidenceHash) : 'Not checked') + '</b></div></div>' +
+    (trust.signedMetadata ? '<div class="recipe-trust-fact"><span>Authenticated by</span><b>' + escapeHtml(trust.signer + ' · ' + short(trust.signingKeyFingerprint)) + '</b></div>' : '') +
+    '<div class="recipe-failure-fact"><span>Commands Cloudless will run</span><div class="recipe-trust-list">' + (commands || '<span>No lifecycle command is configured.</span>') + '</div></div>' +
+    '<div class="recipe-failure-fact"><span>Host access requested</span><div class="recipe-trust-list">' + permissions + '</div></div></div></details>';
+}
+function recipePreflightHTML(recipe, data) {
+  const artifact=recipeCurrentPreflight(recipe,data);
+  if(!artifact)return '<details class="recipe-preflight empty"><summary>'+uiIcon('search')+'<b>Not checked for this recipe revision</b><small>RUN CHECK</small></summary></details>';
+  const checks=(artifact.checks||[]).map(check=>'<div class="recipe-preflight-item '+escapeAttr(check.status||'unknown')+'"><i></i><b>'+escapeHtml(check.summary||check.id||'Preflight check')+'</b>'+(check.detail?'<span>'+escapeHtml(check.detail)+'</span>':'')+'</div>').join('');
+  const status=artifact.launchable?'pass':'warning',label=artifact.launchable?'Launch evidence verified':'Requirements checked with warnings';
+  const date=new Date(artifact.createdAt||'');const when=Number.isNaN(date.getTime())?'SAVED':new Intl.DateTimeFormat(undefined,{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}).format(date);
+  return '<details class="recipe-preflight '+status+'"><summary>'+uiIcon(artifact.launchable?'check':'warning')+'<b>'+label+'</b><small>'+escapeHtml(when)+'</small></summary><div class="recipe-preflight-list">'+checks+'</div></details>';
+}
 function recipeCard(recipe, data) {
   const active = data.active === recipe.id, job = recipeJob(data, recipe.id), nodes = Number(recipe.distributed && recipe.distributed.nodes || 1);
+  const tombstoned = !!recipe.tombstonedAt;
   const plan = data.plans && data.plans[recipe.id] || {};
-  const ready = recipeReady(recipe, data), connected = recipeConnectedSparks(data), needsMoreSparks = recipeNeedsMoreSparks(recipe, data);
-  const action = active
+  const cleanup = recipeCleanupIssue(recipe,data), cleaning = cleanup && cleanup.phase === 'recovering', failure = data.failures && data.failures[recipe.id];
+  const trust = data.trust && data.trust[recipe.id] || {}, executionAllowed = trust.executionAllowed === true;
+  const ready = !tombstoned && executionAllowed && recipeReady(recipe, data) && !cleanup, connected = recipeConnectedSparks(data), needsMoreSparks = recipeNeedsMoreSparks(recipe, data);
+  const action = cleanup
+    ? '<button class="btn ' + (cleaning ? '' : 'primary') + ' recipe-primary-action" type="button" data-cleanup-operation="' + escapeAttr(cleanup.id) + '"' + (cleaning ? ' disabled' : ' data-recipe-cleanup="' + escapeAttr(recipe.id) + '"') + '>' + (cleaning ? '<span class="key-dialog-spinner" aria-hidden="true"></span><span>Cleaning up</span>' : uiIcon('reload') + '<span>Retry cleanup</span>') + '</button>'
+    : tombstoned
+    ? '<button class="btn recipe-primary-action" type="button" disabled><span class="key-dialog-spinner" aria-hidden="true"></span><span>Removal pending</span></button>'
+    : active
     ? '<button class="btn danger recipe-primary-action" type="button" data-recipe-stop="' + escapeAttr(recipe.id) + '"' + (job ? ' disabled' : '') + '>' + uiIcon('stop') + '<span>Stop recipe</span></button>'
     : job ? '<button class="btn danger recipe-primary-action" type="button" data-recipe-abort="' + escapeAttr(recipe.id) + '">' + uiIcon('stop') + '<span>Abort</span></button>'
     : '<button class="btn primary recipe-primary-action" type="button" data-recipe-run="' + escapeAttr(recipe.id) + '"' + (!ready ? ' disabled' : '') + '>' + uiIcon('rocket') + '<span>Run recipe</span></button>';
   const engine = recipe.engine || {}, model = recipe.model || {}, source = recipe.source || {};
-  const state = active ? 'Running' : job ? 'Working' : ready ? 'Ready' : needsMoreSparks ? 'Needs ' + nodes + ' Sparks' : 'Needs attention';
+  const state = cleaning ? 'Cleaning' : cleanup ? 'Cleanup required' : tombstoned ? 'Removal pending' : active ? 'Running' : job ? 'Working' : !executionAllowed ? 'Review required' : failure ? 'Last run failed' : ready ? 'Ready' : needsMoreSparks ? 'Needs ' + nodes + ' Sparks' : 'Needs attention';
   const sourceLabel = recipe.origin === 'catalog' ? 'Imported recipe' : recipe.origin === 'github' ? 'GitHub import' : 'Local recipe';
   return '<article class="recipe-card' + (active || job ? ' is-active' : !ready ? ' needs-attention' : '') + (needsMoreSparks ? ' insufficient-cluster' : '') + '" data-recipe-id="' + escapeAttr(recipe.id) + '"><div class="recipe-main"><span class="recipe-icon">' + uiIcon('recipes') + '</span><div class="recipe-copy">' +
-    '<div class="recipe-eyebrow"><span>' + sourceLabel + '</span><span>' + escapeHtml(recipeUpdatedLabel(recipe)) + '</span></div>' +
+    '<div class="recipe-eyebrow"><span>' + sourceLabel + ' · ' + escapeHtml(trust.supportLevel || 'experimental') + '</span><span>' + escapeHtml(recipeUpdatedLabel(recipe)) + '</span></div>' +
     '<div class="recipe-title-row"><span class="recipe-title">' + escapeHtml(recipe.name) + '</span><span class="recipe-state ' + (active || job ? 'active' : ready ? 'ready' : 'attention') + '">' + state + '</span></div>' +
     '<div class="recipe-desc">' + escapeHtml(recipe.description || 'No description has been added yet.') + '</div><div class="recipe-specs"><div><span>Model</span><b>' + escapeHtml(model.id || 'Not specified') + '</b></div><div><span>Runtime</span><b>' + escapeHtml(engine.type || 'Custom') + '</b></div><div><span>Topology</span><b>' + nodes + ' node' + (nodes === 1 ? '' : 's') + ' · TP ' + Number(model.tensorParallel || 1) + '</b></div><div><span>Context</span><b>' + Number(model.maxContext || 0).toLocaleString() + ' tokens</b></div></div>' +
     (source.url ? '<button class="lnk recipe-source" type="button" data-recipe-source="' + escapeAttr(source.url) + '">' + escapeHtml(source.url + ' @ ' + source.revision) + '</button>' : '<div class="recipe-source">Cloudless-native commands · no repository</div>') +
+    recipeTrustHTML(recipe,data) +
     (plan.requiresCustomRuntime && !plan.runtimeReady ? '<div class="recipe-runtime-notice">' + uiIcon('warning') + '<span>One-time specialized runtime preparation required' + (plan.runtimeEstimateBytes ? ' · up to about ' + modelDownloadSize(plan.runtimeEstimateBytes) : '') + '</span></div>' : '') +
-    (ready ? '' : '<div class="recipe-warning">' + (needsMoreSparks ? 'Requires ' + nodes + ' DGX Sparks. ' + connected + (connected === 1 ? ' is' : ' are') + ' connected.' : 'This recipe needs exactly ' + nodes + ' healthy DGX Spark' + (nodes === 1 ? '' : 's') + ' before it can run.') + '</div>') +
-    '</div><div class="recipe-side"><div class="recipe-actions">' + action + '<button class="btn" type="button" data-recipe-check="' + escapeAttr(recipe.id) + '"' + (active || job || !ready ? ' disabled' : '') + '>' + uiIcon('search') + '<span>Check</span></button><button class="btn" type="button" data-recipe-edit="' + escapeAttr(recipe.id) + '"' + (active || job ? ' disabled' : '') + '>' + uiIcon('settings') + '<span>Edit</span></button><button class="btn recipe-remove" type="button" data-recipe-delete="' + escapeAttr(recipe.id) + '"' + (active || job ? ' disabled' : '') + '>' + uiIcon('trash') + '<span>Remove</span></button></div></div></div>' + recipeProgressHTML(job) + '</article>';
+    recipeFailureHTML(recipe,data) +
+    recipeCleanupHTML(cleanup) +
+    recipePreflightHTML(recipe,data) +
+    (ready || cleanup || !executionAllowed ? '' : '<div class="recipe-warning">' + (tombstoned ? 'This recipe cannot start new work. Cloudless will remove its saved definition after all owned resources are verified absent.' : needsMoreSparks ? 'Requires ' + nodes + ' DGX Sparks. ' + connected + (connected === 1 ? ' is' : ' are') + ' connected.' : 'This recipe needs ' + nodes + ' healthy DGX Spark' + (nodes === 1 ? '' : 's') + ' before it can run.') + '</div>') +
+    '</div><div class="recipe-side"><div class="recipe-actions">' + action + '<button class="btn" type="button" data-recipe-check="' + escapeAttr(recipe.id) + '"' + (tombstoned || active || job || cleanup || !ready ? ' disabled' : '') + '>' + uiIcon('search') + '<span>Check</span></button><button class="btn" type="button" data-recipe-edit="' + escapeAttr(recipe.id) + '"' + (tombstoned || active || job || cleanup ? ' disabled' : '') + '>' + uiIcon('settings') + '<span>Edit</span></button><button class="btn recipe-remove" type="button" data-recipe-delete="' + escapeAttr(recipe.id) + '"' + (tombstoned || active || job || cleanup ? ' disabled' : '') + '>' + uiIcon('trash') + '<span>Remove</span></button></div></div></div>' + recipeProgressHTML(job) + '</article>';
 }
 function recipeGitHubURL(value) {
   let path = String(value || '').trim().replace(/^(?:https?:\/\/)?(?:www\.)?github\.com\//i, '');
@@ -7492,6 +8005,25 @@ function paintLocalRecipes(c, data) {
     const result=await api('/api/recipes/' + encodeURIComponent(id) + '/check',{method:'POST'}).catch(()=>({error:'Could not check this recipe.'}));
     if(result.error){if(activeRecipeCheck)finishRecipeCheckOverlay(false,result.error);else{toast(result.error,true);button.disabled=false;}return;} trackLocalRecipeJob(result.jobId, 'check');
   });
+  c.querySelectorAll('[data-recipe-cleanup]').forEach(button => button.onclick = async () => {
+    button.disabled = true; button.innerHTML = '<span class="key-dialog-spinner" aria-hidden="true"></span><span>Starting cleanup</span>';
+    const id = button.dataset.recipeCleanup, operation = button.dataset.cleanupOperation;
+    const result = await api('/api/recipes/' + encodeURIComponent(id) + '/cleanup/' + encodeURIComponent(operation),{method:'POST'}).catch(()=>({error:'Could not retry recipe cleanup.'}));
+    if(result.error){toast(result.error,true);button.disabled=false;button.innerHTML=uiIcon('reload')+'<span>Retry cleanup</span>';return;}
+    toast('Retrying cleanup on every last-known Spark'); mmRecipes=null; trackLocalRecipeJob(result.jobId,'cleanup',id); renderLocalRecipes(c);
+  });
+  c.querySelectorAll('[data-recipe-diagnostics]').forEach(button => button.onclick = async () => {
+    button.disabled = true; const original = button.innerHTML; button.innerHTML = '<span class="key-dialog-spinner" aria-hidden="true"></span><span>Building bundle</span>';
+    const endpoint = '/api/recipes/' + encodeURIComponent(button.dataset.recipeDiagnostics) + '/diagnostics/' + encodeURIComponent(button.dataset.diagnosticOperation);
+    try {
+      const response = await fetch(endpoint,{headers:{'Accept':'application/zip'}});
+      if(!response.ok){const body=await response.json().catch(()=>({}));throw new Error(body.error||'Could not build recipe diagnostics.');}
+      const blob = await response.blob(), disposition = response.headers.get('Content-Disposition') || '', match = disposition.match(/filename="?([^";]+)"?/i);
+      const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = match ? match[1] : 'cloudless-recipe-diagnostics.zip'; document.body.appendChild(link); link.click(); link.remove(); setTimeout(()=>URL.revokeObjectURL(link.href),1000);
+      toast('Recipe diagnostics downloaded');
+    } catch(error) { toast(error.message || 'Could not build recipe diagnostics.',true); }
+    finally { button.disabled = false; button.innerHTML = original; }
+  });
   c.querySelectorAll('[data-recipe-abort]').forEach(button => button.onclick = async () => {
     markRecipeAbortPending(button); const id=button.dataset.recipeAbort; const result=await api('/api/recipes/' + encodeURIComponent(id) + '/abort',{method:'POST'}).catch(()=>({error:'Could not abort this recipe.'}));
     if(result.error){toast(result.error,true);button.disabled=false;button.innerHTML=uiIcon('stop')+'<span>Abort</span>';return;} toast('Stopping recipe launch');
@@ -7502,14 +8034,14 @@ function paintLocalRecipes(c, data) {
   });
   c.querySelectorAll('[data-recipe-delete]').forEach(button => button.onclick = async () => {
     button.disabled=true;const result=await fetch('/api/recipes/' + encodeURIComponent(button.dataset.recipeDelete),{method:'DELETE'});
-    if(!result.ok){const body=await result.json().catch(()=>({}));toast(body.error||'Could not remove recipe',true);button.disabled=false;return;}toast('Local recipe removed');mmRecipes=null;renderLocalRecipes(c);
+    if(!result.ok){const body=await result.json().catch(()=>({}));toast(body.error||'Could not remove recipe',true);button.disabled=false;return;}toast(result.status===202?'Recipe hidden; Cloudless will finish removal after cleanup.':'Local recipe removed');mmRecipes=null;renderLocalRecipes(c);
   });
 }
 function trackLocalRecipeJob(jobId, operation = 'run', recipeId = '') {
   const checking = operation === 'check', stream = new EventSource(`/api/jobs/${jobId}/events`); let ended = false;
-  const finish = (ok, message, canceled = false) => { if (ended) return; ended = true; stream.close(); if(checking){finishRecipeCheckOverlay(ok,message);return;} toast(canceled ? 'Recipe launch stopped' : ok ? (operation === 'stop' ? 'Recipe stopped' : 'Recipe ready') : (message || 'Recipe failed'), !ok && !canceled); mmRecipes = null; if (modelsOpen() && mmTab === 'recipes') renderModelManager(); refreshActiveModel(); };
-  stream.onmessage = event => { const update = JSON.parse(event.data); if(checking)updateRecipeCheckOverlay(update);else if(recipeId)updateRecipeRunCard(recipeId,jobId,update); if (update.phase === 'error') finish(false, update.error); else if (update.phase === 'canceled') finish(true, '', true); else if (update.done) finish(true); };
-  stream.onerror = async () => { const update = await api(`/api/jobs/${jobId}`).catch(() => null); if (update && update.done) finish(update.phase !== 'error', update.error); };
+  const finish = (ok, message, canceled = false, outcome = '') => { if (ended) return; ended = true; stream.close(); if(checking){finishRecipeCheckOverlay(ok,message,outcome);return;} const success=operation==='cleanup'?'Recipe cleanup verified':operation==='stop'?'Recipe stopped':'Recipe ready', failure=operation==='cleanup'?'Cleanup still needs attention — open the recipe for node details.':'Recipe failed — open Failure details for the affected phase, cleanup status, and next action.'; toast(canceled ? 'Recipe launch stopped' : ok ? success : failure, !ok && !canceled); mmRecipes = null; if (modelsOpen() && mmTab === 'recipes') renderModelManager(); refreshActiveModel(); };
+  stream.onmessage = event => { const update = JSON.parse(event.data); if(checking)updateRecipeCheckOverlay(update);else if(recipeId)updateRecipeRunCard(recipeId,jobId,update); if (update.phase === 'error') finish(false, update.error); else if (update.phase === 'canceled') finish(true, '', true); else if (update.done) finish(true,'',false,update.containerId||''); };
+  stream.onerror = async () => { const update = await api(`/api/jobs/${jobId}`).catch(() => null); if (update && update.done) finish(update.phase !== 'error', update.error, false, update.containerId||''); };
 }
 // Shared list renderer for both tabs: summary + search + filter chips + filtered sections.
 function paintModelList(c, data, kind) {
@@ -7518,9 +8050,9 @@ function paintModelList(c, data, kind) {
   const cluster = data.cluster || {};
   const clusterNodes = sparkCount(cluster);
   const summary = cluster.distributedReady
-    ? `${uiIcon('network')}<span class="mm-machine-copy"><span class="mm-machine-label">${clusterNodes}-Spark compute ready</span><span class="mm-machine-value">~${cluster.combinedMemoryGB} GB aggregate ${memory}</span><span class="mm-machine-note">${gpu} GB per Spark · distributed compatibility shown separately</span></span>`
+    ? `${uiIcon('network')}<span class="mm-machine-copy"><span class="mm-machine-label">${clusterNodes}-Spark compute ready</span><span class="mm-machine-value">${cluster.combinedMemoryGB ? `${cluster.combinedMemoryGB} GB physical ${memory}` : 'Memory telemetry updating'}</span><span class="mm-machine-note">${memoryAccountingSummary(cluster, true)}</span></span>`
     : gpu > 0
-    ? `${uiIcon('machine')}<span class="mm-machine-copy"><span class="mm-machine-label">Available accelerator memory</span><span class="mm-machine-value">${gpu} GB ${memory}</span><span class="mm-machine-note">Compatibility is estimated with runtime headroom</span></span>`
+    ? `${uiIcon('machine')}<span class="mm-machine-copy"><span class="mm-machine-label">Accelerator memory</span><span class="mm-machine-value">${gpu} GB physical ${memory}</span><span class="mm-machine-note">${memoryType === 'unified' ? memoryAccountingSummary(cluster, false) : 'Compatibility requires a matching reviewed runtime profile'}</span></span>`
     : `${uiIcon('machine')}<span class="mm-machine-copy"><span class="mm-machine-label">Hardware</span><span class="mm-machine-value">No GPU detected</span><span class="mm-machine-note">Compatibility estimates are unavailable</span></span>`;
   const chip = (key, label) => `<button class="mm-chip ${mmFilter[key] ? 'on' : ''}" data-f="${key}" aria-pressed="${mmFilter[key]}">${label}</button>`;
   const chips = chip('fits', 'Runs on this GPU') + (lm && cluster.distributedReady ? chip('cluster', `Runs across ${clusterNodes} Sparks`) : '') + chip('downloaded', 'Downloaded') + (lm ? chip('vision', 'Vision') + chip('tools', 'Tool calling') : '');
@@ -7680,7 +8212,7 @@ async function disconnectHFAccount() {
 function renderHuggingFace(c) {
   c.innerHTML = `<div class="hf-page">
     <button class="lp-back" id="hf-back">${uiIcon('arrow-right', 'ui-icon')}<span>Model Manager</span></button>
-    <div class="hf-hero"><span class="hf-hero-mark">HF</span><div><h2>Discover models on Hugging Face</h2><p>Search the public Hub or paste a repository URL. CloudlessOS inspects the model metadata, estimates accelerator-memory requirements, and adds it to the normal download and launch workflow.</p></div></div>
+    <div class="hf-hero"><span class="hf-hero-mark">HF</span><div><h2>Discover models on Hugging Face</h2><p>Search the public Hub or paste a repository URL. CloudlessOS inspects repository metadata and adds it to the normal download workflow, but does not claim memory compatibility until an exact runtime profile has been reviewed.</p></div></div>
     <div id="hf-account-host">${hfAccountHTML(mmHFAccount)}</div>
     <form class="hf-form" id="hf-form"><label class="mm-search">${uiIcon('search')}<input id="hf-query" aria-label="Search Hugging Face" placeholder="Search models or paste huggingface.co/organization/model" value="${escapeAttr(mmHFQuery)}" spellcheck="false" autocomplete="off"></label><button class="btn primary" id="hf-search" type="submit">${uiIcon('search')}<span>Search</span></button></form>
     <div class="hf-guidance">Public text-generation models are supported. A connected account also unlocks gated models you have accepted and private repositories you can access.</div>
@@ -7768,18 +8300,24 @@ function renderModelDetail(c) {
     else { state = '<span class="md-state-line remote"><i></i>Available to download</span>'; actions = `<button class="btn primary" data-dl>${uiIcon('download')}<span>Download model</span></button>`; }
   }
   const fitClass = m.fit || 'unknown';
+  const fitEstimate = m.fitEstimate || {};
   const fit = `<div class="md-compat-panel fit-${fitClass}">
-      <div><div class="md-compat-title">${escapeHtml(FIT_LABEL[fitClass] || FIT_LABEL.unknown)} on this machine</div><div class="md-compat-copy">${escapeHtml(fitExplain(fitClass, memoryType))}${(m.fitEstimate || {}).recommendedContextK && m.contextK > m.fitEstimate.recommendedContextK ? ` Recommended context: ${m.fitEstimate.recommendedContextK}K.` : ''}</div></div>
-      <div class="md-compat-numbers">${(m.fitEstimate || {}).requiredPerNodeGB ? `~${m.fitEstimate.requiredPerNodeGB} GB needed at ${m.fitEstimate.contextK || 32}K` : (m.minVramGB ? `~${m.minVramGB} GB needed` : 'No estimate')}${(m.fitEstimate || {}).usablePerNodeGB ? ` · ${m.fitEstimate.usablePerNodeGB} GB usable` : (gpu ? ` · ${gpu} GB available` : '')}</div>
-      ${gpu && m.minVramGB ? `<span class="mdl-meter" aria-hidden="true"><i style="--meter:${modelMeter(m, gpu)}%"></i></span>` : ''}
+      <div><div class="md-compat-title">${escapeHtml(FIT_LABEL[fitClass] || FIT_LABEL.unknown)} on this machine</div><div class="md-compat-copy">${escapeHtml(fitExplain(fitClass, memoryType, fitEstimate))}</div></div>
+      <div class="md-compat-numbers">${escapeHtml(fitAmount(m, fitEstimate))}${fitEstimate.contextK ? ` at ${fitEstimate.contextK}K context` : ''} · ${escapeHtml(fitEvidence(fitEstimate))}</div>
+      ${fitEstimate.availablePerNodeGB ? `<div class="md-compat-copy">${memoryGB(fitEstimate.totalPerNodeGB)} physical · ${memoryGB(fitEstimate.usablePerNodeGB)} AI capacity · ${memoryGB(Math.max(0, fitEstimate.availablePerNodeGB - fitEstimate.reservedPerNodeGB))} available now · ${memoryGB(fitEstimate.reservedPerNodeGB)} protected for CloudlessOS</div>` : ''}
+      ${gpu && fitEstimate.requiredPerNodeGB ? `<span class="mdl-meter" aria-hidden="true"><i style="--meter:${modelMeter(m, gpu)}%"></i></span>` : ''}
+      ${fitEstimate.evidenceSource ? `<div class="md-compat-copy">Evidence: ${escapeHtml(fitEstimate.evidenceSource)}</div>` : ''}
     </div>`;
   const clusterInfo = modelData.cluster || {};
   const clusterNodes = sparkCount(clusterInfo);
   const clusterFitClass = m.clusterFit || '';
+  const clusterEstimate = m.clusterEstimate || {};
   const clusterFit = lm && clusterInfo.distributedReady && clusterFitClass ? `<div class="md-compat-panel fit-${clusterFitClass}">
-      <div><div class="md-compat-title">${escapeHtml(FIT_LABEL[clusterFitClass] || FIT_LABEL.unknown)} across ${clusterNodes} Sparks</div><div class="md-compat-copy">CloudlessOS can partition this model across the connected GB10 GPUs and keep the normal API endpoint unchanged.</div></div>
-      <div class="md-compat-numbers">${(m.clusterEstimate || {}).requiredPerNodeGB ? `~${m.clusterEstimate.requiredPerNodeGB} GB per Spark` : (m.minVramGB ? `~${m.minVramGB} GB total` : 'No estimate')} · ${clusterNodes} tensor shards</div>
-      ${(m.clusterEstimate || {}).usablePerNodeGB ? `<span class="mdl-meter" aria-hidden="true"><i style="--meter:${Math.max(4, Math.min(100, Math.round((m.clusterEstimate.requiredPerNodeGB / m.clusterEstimate.usablePerNodeGB) * 100)))}%"></i></span>` : ''}
+      <div><div class="md-compat-title">${escapeHtml(FIT_LABEL[clusterFitClass] || FIT_LABEL.unknown)} across ${clusterNodes} Sparks</div><div class="md-compat-copy">${escapeHtml(clusterFitClass === 'unknown' ? fitExplain('unknown', memoryType, clusterEstimate) : 'This exact topology has a reviewed Cloudless runtime profile and keeps the normal API endpoint unchanged.')}</div></div>
+      <div class="md-compat-numbers">${clusterEstimate.requiredPerNodeGB ? `${clusterEstimate.evidence === 'measured' ? '' : '~'}${clusterEstimate.requiredPerNodeGB} GB per Spark · ${clusterNodes} tensor shards` : 'No reviewed distributed requirement'} · ${escapeHtml(fitEvidence(clusterEstimate))}</div>
+      ${clusterEstimate.availablePerNodeGB ? `<div class="md-compat-copy">Per Spark: ${memoryGB(clusterEstimate.totalPerNodeGB)} physical · ${memoryGB(clusterEstimate.usablePerNodeGB)} AI capacity · ${memoryGB(Math.max(0, clusterEstimate.availablePerNodeGB - clusterEstimate.reservedPerNodeGB))} available now</div>` : ''}
+      ${clusterEstimate.usablePerNodeGB ? `<span class="mdl-meter" aria-hidden="true"><i style="--meter:${Math.max(4, Math.min(100, Math.round((clusterEstimate.requiredPerNodeGB / clusterEstimate.usablePerNodeGB) * 100)))}%"></i></span>` : ''}
+      ${clusterEstimate.evidenceSource ? `<div class="md-compat-copy">Evidence: ${escapeHtml(clusterEstimate.evidenceSource)}</div>` : ''}
     </div>` : '';
   const recNote = m.recommended ? `<div class="md-banner rec">${escapeHtml(m.recommendBy || 'Recommended for your region')}.</div>` : '';
   const gatedNote = (lm && m.gated && !m.downloaded) ? `<div class="md-banner note">This Hugging Face repository is gated. Accept its terms and provide your Hugging Face token before downloading.</div>` : '';
@@ -8196,9 +8734,11 @@ async function renderDoctorPage(c) {
 
 async function renderGeneralPage(c) {
   c.innerHTML = '<div class="set-hint">Loading…</div>';
-  let update;
+  let update, bootHealth;
   try { update = await api('/api/system/update'); }
   catch { update = { state: 'failed', configured: false, message: 'Could not reach the system update service.' }; }
+  try { bootHealth = await api('/api/system/boot-health'); }
+  catch { bootHealth = { available: false }; }
   const state = update.state || 'idle';
   const busy = state === 'checking' || state === 'installing';
   const current = update.currentVersion || 'development';
@@ -8218,6 +8758,12 @@ async function renderGeneralPage(c) {
   if (update.configured && state === 'available') updateActions = '<button class="btn" id="sys-update-check">Check again</button><button class="btn primary" id="sys-update-apply">Install update</button>';
   else if (state === 'reboot_required') updateActions = '<button class="btn primary" id="sys-update-reboot">Restart now</button>';
   else if (!busy && update.configured) updateActions = '<button class="btn" id="sys-update-check">Check for updates</button>';
+  const bootCount = Number(bootHealth.consecutiveHealthyBoots) || 0;
+  const bootStatus = !bootHealth.available
+    ? 'Not recorded yet'
+    : bootHealth.healthy
+      ? `Healthy · ${bootCount} consecutive verified boot${bootCount === 1 ? '' : 's'}`
+      : `Attention · ${String(bootHealth.reason || 'boot audit failed').replaceAll('-', ' ')}`;
   c.innerHTML = `
     <div class="set-block"><h3>system update</h3>
       <div class="sys-update">
@@ -8237,6 +8783,7 @@ async function renderGeneralPage(c) {
     </div>
     <div class="set-block"><h3>about</h3>
       <div class="set-row"><span class="srow-label">system</span><span>CloudlessOS</span></div>
+      <div class="set-row"><span class="srow-label">boot health</span><span>${escapeHtml(bootStatus)}</span></div>
       <div class="set-row"><span class="srow-label">engine</span><span id="gen-engine">—</span></div>
     </div>`;
   const check = document.getElementById('sys-update-check'); if (check) check.onclick = () => startSystemUpdate('check');
@@ -8326,7 +8873,7 @@ async function renderAppPage(c, id) {
   const admin = st.admin ? `<div class="set-block"><h3>administration</h3>
       <div class="fld-help" style="margin:0 0 ${(st.admin.user || st.admin.pass) ? '12' : '0'}px">${escapeHtml(st.admin.note || '')}</div>
       ${(st.admin.user || st.admin.pass) ? `<div class="adm-creds">
-        ${st.admin.user ? `<div class="adm-row"><span class="adm-k">Default admin</span><code class="adm-v">${escapeHtml(st.admin.user)}</code></div>` : ''}
+        ${st.admin.user ? `<div class="adm-row"><span class="adm-k">Administrator</span><code class="adm-v">${escapeHtml(st.admin.user)}</code></div>` : ''}
         ${st.admin.pass ? `<div class="adm-row"><span class="adm-k">Password</span><code class="adm-v">${escapeHtml(st.admin.pass)}</code></div>` : ''}
         <div class="fld-help" style="margin:8px 0 0">⚠ Change these in the app's Admin Panel after your first sign-in.</div>
       </div>` : ''}</div>` : '';
@@ -8415,7 +8962,7 @@ async function renderAppPage(c, id) {
       out.classList.remove('hidden');
       out.innerHTML = `<div class="tun-status">${enable ? 'Opening on your network…' : 'Turning off…'}</div>`;
       try {
-        const r = await api(`/api/apps/${id}/lan`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enable }) });
+        const r = await api(`/api/apps/${id}/lan`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Cloudless-Action': 'app-lan-exposure' }, body: JSON.stringify({ enable }) });
         if (!enable) { out.classList.add('hidden'); out.innerHTML = ''; toast('Local network access off'); }
         else if (r.url) { lanRender(out, r, app); toast('Now reachable on your network'); }
         else { out.innerHTML = `<div class="tun-status err">Couldn't detect this machine's network address.</div>`; lanToggle.checked = false; }
@@ -8446,7 +8993,7 @@ async function renderAppPage(c, id) {
       out.classList.remove('hidden');
       out.innerHTML = `<div class="tun-status">${enable ? 'Creating public link… (a few seconds)' : 'Removing link…'}</div>`;
       try {
-        const r = await api(`/api/apps/${id}/tunnel`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enable }) });
+        const r = await api(`/api/apps/${id}/tunnel`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Cloudless-Action': 'app-public-exposure' }, body: JSON.stringify({ enable }) });
         if (!enable) { out.classList.add('hidden'); out.innerHTML = ''; toast('Public link removed'); }
         else if (r.url) { tunRender(out, r.url, app); toast('Public link ready'); }
         else { out.innerHTML = `<div class="tun-status">Link is starting — reopen this page in a moment to get the URL.</div>`; }

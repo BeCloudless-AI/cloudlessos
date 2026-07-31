@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -29,7 +30,7 @@ import (
 func main() {
 	addr := envOr("CLOUDLESS_ADDR", "127.0.0.1:8765")
 
-	eng := engine.NewDocker()
+	eng := configuredEngine()
 
 	st, err := state.Open(state.DefaultDir())
 	if err != nil {
@@ -186,4 +187,19 @@ func envOr(key, def string) string {
 		return v
 	}
 	return def
+}
+
+func configuredEngine() engine.Engine {
+	socketPath := envOr("CLOUDLESS_ENGINE_SOCKET", engine.DefaultBrokerSocket)
+	if _, err := os.Stat(socketPath); err == nil {
+		log.Printf("container engine: authenticated broker at %s", socketPath)
+		return engine.NewBrokerClient(socketPath)
+	}
+	executable, _ := os.Executable()
+	if strings.HasPrefix(filepath.Clean(executable), "/usr/lib/cloudless/") {
+		log.Printf("container engine: packaged broker at %s (waiting for socket)", socketPath)
+		return engine.NewBrokerClient(socketPath)
+	}
+	log.Printf("container engine: direct Docker development mode")
+	return engine.NewDocker()
 }

@@ -1,13 +1,19 @@
 [Unit]
-Description=Validate the first CloudlessOS boot
-After=cloudlessd.service graphical.target
-Wants=cloudlessd.service
+Description=Audit the CloudlessOS graphical boot ownership chain
+After=cloudlessd.service lightdm.service graphical.target
+Wants=cloudlessd.service graphical.target
+OnFailure=cloudless-graphical-recovery.service
 
 [Service]
 Type=oneshot
-ExecStartPre=/bin/sleep 5
-ExecStart=/usr/lib/cloudless/cloudless-validate
+ExecStart=/usr/lib/cloudless/cloudless-boot-audit
 RemainAfterExit=yes
+TimeoutStartSec=110
+NoNewPrivileges=true
+ProtectHome=read-only
+ProtectSystem=strict
+ReadWritePaths=/var/lib/cloudless
+UMask=0077
 
 [Install]
 WantedBy=multi-user.target

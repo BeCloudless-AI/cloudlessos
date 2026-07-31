@@ -138,7 +138,7 @@ func TestHuggingFaceSearchUsesConnectedAccountForPrivateModels(t *testing.T) {
 	}
 }
 
-func TestHuggingFaceMetadataBuildsCompatibilityEstimate(t *testing.T) {
+func TestHuggingFaceMetadataDoesNotInventCompatibilityEstimate(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !strings.HasSuffix(r.URL.Path, "/resolve/main/config.json") {
 			t.Fatalf("unexpected metadata request: %s", r.URL.Path)
@@ -153,8 +153,11 @@ func TestHuggingFaceMetadataBuildsCompatibilityEstimate(t *testing.T) {
 	info := hfAPIModel{ID: "Qwen/Test-7B-AWQ", PipelineTag: "text-generation", LibraryName: "transformers", Tags: []string{"chat", "awq", "license:apache-2.0"}}
 	info.Safetensors.Total = 7_000_000_000
 	model := hfModelFromInfo(context.Background(), info.ID, info)
-	if model.Source != "huggingface" || model.Quant != "AWQ" || model.ContextK != 33 || model.MinVRAMGB < 5 || model.MinVRAMGB > 8 {
+	if model.Source != "huggingface" || model.Quant != "AWQ" || model.ContextK != 33 || model.MinVRAMGB != 0 {
 		t.Fatalf("imported model metadata = %#v", model)
+	}
+	if !strings.Contains(model.RuntimeNote, "will not claim a memory fit") {
+		t.Fatalf("imported model does not explain missing fit evidence: %#v", model)
 	}
 }
 

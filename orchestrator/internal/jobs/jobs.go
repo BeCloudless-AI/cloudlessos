@@ -12,23 +12,34 @@ import (
 
 // Update is a snapshot of a job's progress.
 type Update struct {
-	Phase       string `json:"phase"` // pending | pulling | starting | running | error
-	Message     string `json:"message"`
-	LayersDone  int    `json:"layersDone"`
-	LayersTotal int    `json:"layersTotal"`
-	BytesDone   int64  `json:"bytesDone,omitempty"`
-	BytesTotal  int64  `json:"bytesTotal,omitempty"`
-	ContainerID string `json:"containerId,omitempty"`
-	Error       string `json:"error,omitempty"`
-	Done        bool   `json:"done"`
-	Percent     int    `json:"percent"`
-	ItemsDone   int    `json:"itemsDone,omitempty"`
-	ItemsTotal  int    `json:"itemsTotal,omitempty"`
-	CurrentItem string `json:"currentItem,omitempty"`
-	StartedAt   string `json:"startedAt,omitempty"`
-	UpdatedAt   string `json:"updatedAt,omitempty"`
-	ElapsedSecs int64  `json:"elapsedSeconds,omitempty"`
-	ETASecs     int64  `json:"etaSeconds,omitempty"`
+	Phase       string         `json:"phase"` // pending | pulling | starting | running | error
+	Message     string         `json:"message"`
+	LayersDone  int            `json:"layersDone"`
+	LayersTotal int            `json:"layersTotal"`
+	BytesDone   int64          `json:"bytesDone,omitempty"`
+	BytesTotal  int64          `json:"bytesTotal,omitempty"`
+	ContainerID string         `json:"containerId,omitempty"`
+	Error       string         `json:"error,omitempty"`
+	Done        bool           `json:"done"`
+	Percent     int            `json:"percent"`
+	ItemsDone   int            `json:"itemsDone,omitempty"`
+	ItemsTotal  int            `json:"itemsTotal,omitempty"`
+	CurrentItem string         `json:"currentItem,omitempty"`
+	StartedAt   string         `json:"startedAt,omitempty"`
+	UpdatedAt   string         `json:"updatedAt,omitempty"`
+	ElapsedSecs int64          `json:"elapsedSeconds,omitempty"`
+	ETASecs     int64          `json:"etaSeconds,omitempty"`
+	Nodes       []NodeProgress `json:"nodes,omitempty"`
+}
+
+type NodeProgress struct {
+	Node       string `json:"node"`
+	Phase      string `json:"phase"`
+	Message    string `json:"message,omitempty"`
+	BytesDone  int64  `json:"bytesDone,omitempty"`
+	BytesTotal int64  `json:"bytesTotal,omitempty"`
+	Percent    int    `json:"percent,omitempty"`
+	ETASecs    int64  `json:"etaSeconds,omitempty"`
 }
 
 // Snapshot identifies a job together with its latest progress update.
@@ -42,23 +53,26 @@ type Snapshot struct {
 type Job struct {
 	ID    string
 	AppID string
+	seq   int
 
-	mu    sync.Mutex
-	state Update
-	subs  map[chan Update]struct{}
-	start time.Time
+	mu       sync.Mutex
+	state    Update
+	subs     map[chan Update]struct{}
+	start    time.Time
+	observer func(Update)
 }
 
 // Manager owns all jobs.
 type Manager struct {
-	mu   sync.Mutex
-	seq  int
-	jobs map[string]*Job
+	mu          sync.Mutex
+	seq         int
+	jobs        map[string]*Job
+	maxTerminal int
 }
 
 // NewManager returns an empty job manager.
 func NewManager() *Manager {
-	return &Manager{jobs: make(map[string]*Job)}
+	return &Manager{jobs: make(map[string]*Job), maxTerminal: 200}
 }
 
 // Create registers a new pending job for an app.
@@ -87,6 +101,7 @@ func (m *Manager) createLocked(appID string) *Job {
 	j := &Job{
 		ID:    fmt.Sprintf("job-%d", m.seq),
 		AppID: appID,
+		seq:   m.seq,
 		subs:  make(map[chan Update]struct{}),
 		start: now,
 		state: Update{Phase: "pending", Message: "Queued", StartedAt: now.UTC().Format(time.RFC3339), UpdatedAt: now.UTC().Format(time.RFC3339)},
@@ -107,6 +122,7 @@ func (m *Manager) Get(id string) (*Job, bool) {
 func (m *Manager) List(prefix string) []Snapshot {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	m.pruneTerminalLocked()
 	out := make([]Snapshot, 0, len(m.jobs))
 	for _, j := range m.jobs {
 		if prefix != "" && !strings.HasPrefix(j.AppID, prefix) {
@@ -114,8 +130,30 @@ func (m *Manager) List(prefix string) []Snapshot {
 		}
 		out = append(out, Snapshot{ID: j.ID, AppID: j.AppID, Update: j.Snapshot()})
 	}
-	sort.Slice(out, func(i, k int) bool { return out[i].ID < out[k].ID })
+	sort.Slice(out, func(i, k int) bool {
+		return m.jobs[out[i].ID].seq < m.jobs[out[k].ID].seq
+	})
 	return out
+}
+
+func (m *Manager) pruneTerminalLocked() {
+	limit := m.maxTerminal
+	if limit <= 0 {
+		limit = 200
+	}
+	terminal := make([]*Job, 0)
+	for _, job := range m.jobs {
+		if job.Snapshot().Done {
+			terminal = append(terminal, job)
+		}
+	}
+	if len(terminal) <= limit {
+		return
+	}
+	sort.Slice(terminal, func(i, j int) bool { return terminal[i].seq > terminal[j].seq })
+	for _, job := range terminal[limit:] {
+		delete(m.jobs, job.ID)
+	}
 }
 
 // Snapshot returns the current state.
@@ -148,7 +186,6 @@ func (j *Job) Unsubscribe(ch chan Update) {
 // apply mutates the state and broadcasts it to subscribers (non-blocking).
 func (j *Job) apply(fn func(*Update)) {
 	j.mu.Lock()
-	defer j.mu.Unlock()
 	fn(&j.state)
 	now := time.Now()
 	j.state.UpdatedAt = now.UTC().Format(time.RFC3339)
@@ -159,10 +196,29 @@ func (j *Job) apply(fn func(*Update)) {
 		default: // slow subscriber: drop intermediate update, it'll get the next one
 		}
 	}
+	observer := j.observer
+	j.mu.Unlock()
+	if observer != nil {
+		observer(update)
+	}
+}
+
+// Observe installs a non-blocking-caller progress sink. The sink runs after
+// the Job lock is released, so a durable journal can persist the update without
+// deadlocking Snapshot or another progress call.
+func (j *Job) Observe(observer func(Update)) {
+	j.mu.Lock()
+	j.observer = observer
+	update := j.snapshotLocked(time.Now())
+	j.mu.Unlock()
+	if observer != nil {
+		observer(update)
+	}
 }
 
 func (j *Job) snapshotLocked(now time.Time) Update {
 	u := j.state
+	u.Nodes = append([]NodeProgress(nil), j.state.Nodes...)
 	if !j.start.IsZero() {
 		u.ElapsedSecs = int64(now.Sub(j.start).Seconds())
 	}
@@ -174,12 +230,28 @@ func (j *Job) snapshotLocked(now time.Time) Update {
 	return u
 }
 
+// ProgressNodes reports exact per-node preparation state for distributed
+// operations while retaining aggregate byte progress for the main progress bar.
+func (j *Job) ProgressNodes(phase, message string, nodes []NodeProgress, done, total int64) {
+	j.apply(func(u *Update) {
+		u.Phase = phase
+		u.Message = message
+		u.Nodes = append([]NodeProgress(nil), nodes...)
+		u.BytesDone = done
+		u.BytesTotal = total
+		if total > 0 {
+			u.Percent = clampPercent(int(done * 100 / total))
+		}
+	})
+}
+
 // Progress reports pull/start progress. Pass done/total < 0 to leave them unchanged.
 func (j *Job) Progress(phase, msg string, done, total int) {
 	j.apply(func(u *Update) {
 		if u.Phase != phase {
 			u.BytesDone = 0
 			u.BytesTotal = 0
+			u.Nodes = nil
 		}
 		u.Phase = phase
 		u.Message = msg
@@ -202,6 +274,7 @@ func (j *Job) ProgressOperation(phase, msg, currentItem string, percent, done, t
 		if u.Phase != phase {
 			u.BytesDone = 0
 			u.BytesTotal = 0
+			u.Nodes = nil
 		}
 		u.Phase = phase
 		u.Message = msg
@@ -226,6 +299,9 @@ func (j *Job) ProgressDetail(phase, msg string, done, total int) {
 // ProgressBytes reports byte-level progress for downloads.
 func (j *Job) ProgressBytes(phase, msg string, done, total int64) {
 	j.apply(func(u *Update) {
+		if u.Phase != phase {
+			u.Nodes = nil
+		}
 		u.Phase = phase
 		u.Message = msg
 		u.BytesDone = done

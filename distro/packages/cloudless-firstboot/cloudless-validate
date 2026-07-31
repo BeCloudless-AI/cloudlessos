@@ -19,6 +19,16 @@ if [ -r /etc/dgx-release ]; then
 else
     echo "platform: generic"
 fi
+printf 'default-target: '; systemctl get-default 2>/dev/null || echo unknown
+if [ -r /etc/dgx-release ] && [ ! -e /etc/cloudless/dgx-appliance ]; then
+    echo "display-mode: dgx-side-by-side"
+else
+    printf 'lightdm: '; if systemctl is-active --quiet lightdm; then echo ready; else echo unavailable; fi
+    printf 'x-display: '; if [ -S /tmp/.X11-unix/X0 ]; then echo ready; else echo unavailable; fi
+    printf 'kiosk-browser: '
+    if ps -u cloudless -o comm= 2>/dev/null | grep -Eq 'chromium|chrome|firefox'; then echo ready; else echo unavailable; fi
+fi
+printf 'browser-profile-owner: '; stat -c '%U:%G' /home/cloudless/.config 2>/dev/null || echo unavailable
 printf 'docker: '; if docker info >/dev/null 2>&1; then echo ready; else echo unavailable; fi
 printf 'nvidia: '; if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi >/dev/null 2>&1; then echo ready; else echo unavailable; fi
 printf 'orchestrator: '; if curl --silent --fail --max-time 5 http://127.0.0.1:8765/api/health >/dev/null; then echo ready; else echo unavailable; fi

@@ -10,8 +10,18 @@ exec >>"$LOG" 2>&1
 
 echo "$(date -Is) Cloudless kiosk starting"
 
-while ! curl --silent --fail --max-time 2 http://127.0.0.1:8765/api/health >/dev/null; do sleep 1; done
-echo "$(date -Is) Cloudless API is ready"
+START_URL=http://127.0.0.1:8765
+attempt=0
+while ! curl --silent --fail --max-time 2 http://127.0.0.1:8765/api/health >/dev/null; do
+    attempt=$((attempt + 1))
+    if [ "$attempt" -ge 25 ]; then
+        START_URL=file:///usr/share/cloudless/recovery.html
+        echo "$(date -Is) Cloudless API is still unavailable; opening the recovery screen"
+        break
+    fi
+    sleep 1
+done
+[ "$START_URL" != http://127.0.0.1:8765 ] || echo "$(date -Is) Cloudless API is ready"
 
 # Restore the last display mode selected in CloudlessOS Settings. The API only
 # persists modes reported by xrandr for a connected output, and this final
@@ -54,7 +64,7 @@ while :; do
     echo "$(date -Is) launching $BROWSER"
     case "$(basename "$BROWSER")" in
         firefox)
-            "$BROWSER" --class CloudlessKiosk --kiosk http://127.0.0.1:8765
+            "$BROWSER" --class CloudlessKiosk --kiosk "$START_URL"
             ;;
         *)
             # Strictly confined Chromium snaps cannot write arbitrary hidden
@@ -66,7 +76,7 @@ while :; do
                 *) PROFILE_DIR="$XDG_CONFIG_HOME/cloudless-browser" ;;
             esac
             mkdir -p "$PROFILE_DIR"
-            "$BROWSER" --class=CloudlessKiosk --kiosk --app=http://127.0.0.1:8765 \
+            "$BROWSER" --class=CloudlessKiosk --kiosk --app="$START_URL" \
                 --user-data-dir="$PROFILE_DIR" --no-first-run \
                 --disable-session-crashed-bubble --disable-infobars --disable-pinch \
                 --overscroll-history-navigation=0

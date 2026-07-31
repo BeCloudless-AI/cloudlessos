@@ -14,18 +14,18 @@ import (
 // System is a best-effort snapshot of the host machine (Linux). Fields that can't
 // be read are left zero/empty rather than failing — the UI degrades gracefully.
 type System struct {
-	Hostname   string `json:"hostname"`
-	OS         string `json:"os"`         // distro pretty name, e.g. "Ubuntu 24.04.1 LTS"
-	Kernel     string `json:"kernel"`     // e.g. "6.6.87.2-microsoft-standard-WSL2"
-	Arch       string `json:"arch"`       // GOARCH, e.g. "amd64"
-	CPU        string `json:"cpu"`        // model name, e.g. "AMD Ryzen 9 7950X"
-	Cores      int    `json:"cores"`      // logical CPUs
-	MemTotalMB int    `json:"memTotalMB"` // total RAM
-	UptimeSec  int64  `json:"uptimeSec"`  // host uptime
-	Platform   string `json:"platform"`   // generic | dgx-spark
-	Product    string `json:"product,omitempty"`
-	DGXVersion string `json:"dgxVersion,omitempty"`
-	UnifiedGPU bool   `json:"unifiedGpuMemory"`
+	Hostname              string `json:"hostname"`
+	OS                    string `json:"os"`         // distro pretty name, e.g. "Ubuntu 24.04.1 LTS"
+	Kernel                string `json:"kernel"`     // e.g. "6.6.87.2-microsoft-standard-WSL2"
+	Arch                  string `json:"arch"`       // GOARCH, e.g. "amd64"
+	CPU                   string `json:"cpu"`        // model name, e.g. "AMD Ryzen 9 7950X"
+	Cores                 int    `json:"cores"`      // logical CPUs
+	MemTotalMB            int    `json:"memTotalMB"` // total RAM
+	UptimeSec             int64  `json:"uptimeSec"`  // host uptime
+	Platform              string `json:"platform"`   // generic | dgx-spark
+	Product               string `json:"product,omitempty"`
+	DGXVersion            string `json:"dgxVersion,omitempty"`
+	UnifiedGPU            bool   `json:"unifiedGpuMemory"`
 	StorageTotalBytes     uint64 `json:"storageTotalBytes"`
 	StorageAvailableBytes uint64 `json:"storageAvailableBytes"`
 }
@@ -129,10 +129,45 @@ func memTotalMB() int {
 	return total
 }
 
+// NewMemoryBudget applies the explicit Cloudless unified-memory policy. Linux
+// MemAvailable is the authoritative "could be allocated now" value and already
+// accounts for reclaimable cache. The reserve protects the desktop, Docker and
+// system services: 8% of physical memory, with a 12 GiB floor on Spark-sized
+// systems and never more than half of very small systems.
+func NewMemoryBudget(totalMB, availableMB, reclaimableMB int) MemoryBudget {
+	if totalMB <= 0 {
+		return MemoryBudget{}
+	}
+	availableMB = max(0, min(availableMB, totalMB))
+	reclaimableMB = max(0, min(reclaimableMB, totalMB))
+	reservedMB := max(12*1024, totalMB*8/100)
+	reservedMB = min(reservedMB, totalMB/2)
+	systemUsedMB := max(0, totalMB-availableMB)
+	return MemoryBudget{
+		TotalMB: totalMB, AvailableMB: availableMB, ReclaimableMB: reclaimableMB,
+		SystemUsedMB: systemUsedMB, ReservedMB: reservedMB,
+		WorkloadCapacityMB: max(0, totalMB-reservedMB),
+		WorkloadHeadroomMB: max(0, availableMB-reservedMB),
+	}
+}
+
+// HostMemoryBudget reads the live Linux accounting used by DGX Spark unified
+// memory. Cached + SReclaimable is exposed for explanation only; it is not
+// added to MemAvailable.
+func HostMemoryBudget() MemoryBudget {
+	total, available, cached, reclaimable := memInfoDetailsMB()
+	return NewMemoryBudget(total, available, cached+reclaimable)
+}
+
 func memInfoMB() (total, available int) {
+	total, available, _, _ = memInfoDetailsMB()
+	return total, available
+}
+
+func memInfoDetailsMB() (total, available, cached, reclaimable int) {
 	f, err := os.Open("/proc/meminfo")
 	if err != nil {
-		return 0, 0
+		return 0, 0, 0, 0
 	}
 	defer f.Close()
 	sc := bufio.NewScanner(f)
@@ -144,6 +179,8 @@ func memInfoMB() (total, available int) {
 		}{
 			{"MemTotal:", &total},
 			{"MemAvailable:", &available},
+			{"Cached:", &cached},
+			{"SReclaimable:", &reclaimable},
 		} {
 			if v, ok := strings.CutPrefix(line, field.prefix); ok {
 				parts := strings.Fields(v)
@@ -155,7 +192,7 @@ func memInfoMB() (total, available int) {
 			}
 		}
 	}
-	return total, available
+	return total, available, cached, reclaimable
 }
 
 func uptimeSec() int64 {

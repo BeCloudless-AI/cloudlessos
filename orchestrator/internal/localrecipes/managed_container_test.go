@@ -1,0 +1,68 @@
+package localrecipes
+
+import (
+	"strings"
+	"testing"
+)
+
+const testManagedImage = "registry.example/cloudless/vllm@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+
+func managedContainerTestDraft() Draft {
+	d := NewDraft()
+	d.Source = Source{}
+	d.Engine.Image = testManagedImage
+	d.Engine.ServedModelName = CloudlessModelAlias
+	d.Engine.ProxyHost = "host.docker.internal"
+	d.Engine.Arguments = []string{"--enable-prefix-caching"}
+	d.Model.Revision = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	d.Model.TensorParallel = 1
+	d.Distributed.Nodes = 1
+	d.Distributed.SelectedNodes = nil
+	d.Runtime = Runtime{
+		Adapter:        ManagedContainerAdapter,
+		WorkingDir:     ".",
+		TimeoutMinutes: 120,
+		Environment:    map[string]string{"HF_HUB_DISABLE_XET": "1"},
+	}
+	d.Health = Health{
+		Scheme: "http", Host: "127.0.0.1", Port: d.Engine.ContainerPort,
+		Path: "/health", TimeoutSeconds: 180, IntervalSeconds: 3,
+	}
+	return d
+}
+
+func TestManagedContainerDraftIsAcceptedWithoutLifecycleCommands(t *testing.T) {
+	validated, err := validateDraft(managedContainerTestDraft())
+	if err != nil {
+		t.Fatalf("validate managed container draft: %v", err)
+	}
+	if validated.Runtime.Lifecycle.Start.Program != "" {
+		t.Fatal("managed runtime unexpectedly gained a host command")
+	}
+}
+
+func TestManagedContainerDraftRejectsMutableOrExecutableInputs(t *testing.T) {
+	tests := []struct {
+		name string
+		edit func(*Draft)
+		want string
+	}{
+		{"mutable image", func(d *Draft) { d.Engine.Image = "vllm/vllm-openai:latest" }, "pinned"},
+		{"mutable model", func(d *Draft) { d.Model.Revision = "main" }, "immutable"},
+		{"source", func(d *Draft) { d.Source.URL, d.Source.Revision = "https://github.com/x/y", strings.Repeat("c", 40) }, "source repositories"},
+		{"command", func(d *Draft) { d.Runtime.Lifecycle.Start = Command{Program: "bash", Args: []string{"run.sh"}} }, "start command"},
+		{"host prerequisite", func(d *Draft) { d.Runtime.Prerequisites = []string{"ssh"} }, "host prerequisites"},
+		{"multiple nodes", func(d *Draft) { d.Distributed.Nodes = 2 }, "one local node"},
+		{"contract override", func(d *Draft) { d.Engine.Arguments = []string{"--port"} }, "not available"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			draft := managedContainerTestDraft()
+			tc.edit(&draft)
+			_, err := validateDraft(draft)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("error = %v, want substring %q", err, tc.want)
+			}
+		})
+	}
+}

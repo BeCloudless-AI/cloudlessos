@@ -15,6 +15,7 @@ import (
 	"github.com/cloudless/orchestrator/internal/jobs"
 	"github.com/cloudless/orchestrator/internal/nvidiaupdate"
 	"github.com/cloudless/orchestrator/internal/osupdate"
+	"github.com/cloudless/orchestrator/internal/privileged"
 )
 
 // shortDigest trims "sha256:" and shortens for display.
@@ -70,6 +71,35 @@ type updateCenterStatus struct {
 	UpdateCount int                  `json:"updateCount"`
 }
 
+type managedEngineTarget struct {
+	Image    string
+	Digest   string
+	Source   string
+	Channel  string
+	Verified bool
+	Notes    string
+}
+
+func (s *Server) managedEngineTarget(ctx context.Context, app catalog.App) (managedEngineTarget, error) {
+	if s.manifest != nil {
+		if pin, ok := s.manifest.PinFor(ctx, app.ID, app.Image); ok {
+			return managedEngineTarget{
+				Image: pin.Ref(), Digest: pin.CurrentDigest(),
+				Source: "cloudless", Channel: s.manifest.Channel(ctx),
+				Verified: pin.Verified, Notes: pin.Notes,
+			}, nil
+		}
+	}
+	remote, err := s.eng.RemoteDigest(ctx, app.Image)
+	if err != nil || remote == "" {
+		return managedEngineTarget{}, fmt.Errorf("could not reach the engine image registry")
+	}
+	return managedEngineTarget{
+		Image: imageRepository(app.Image) + "@" + remote, Digest: remote,
+		Source: "upstream",
+	}, nil
+}
+
 func imageRepository(ref string) string {
 	ref = strings.TrimSpace(ref)
 	if at := strings.Index(ref, "@"); at >= 0 {
@@ -90,17 +120,16 @@ func sameImageRepository(left, right string) bool {
 // an inactive prefetched engine is still installed even though its old tag is no
 // longer present in the new catalog entry.
 func (s *Server) repositoryDigest(ctx context.Context, image string) string {
-	raw, err := s.eng.Output(ctx, "image", "ls", "--digests", "--format", "{{.Repository}}|{{.Tag}}|{{.Digest}}")
+	images, err := s.eng.ListImageDigests(ctx)
 	if err != nil {
 		return ""
 	}
 	repository := imageRepository(image)
-	for _, line := range strings.Split(raw, "\n") {
-		parts := strings.Split(strings.TrimSpace(line), "|")
-		if len(parts) != 3 || parts[0] != repository || parts[2] == "" || parts[2] == "<none>" {
+	for _, candidate := range images {
+		if candidate.Repository != repository || candidate.Digest == "" || candidate.Digest == "<none>" {
 			continue
 		}
-		return parts[2]
+		return candidate.Digest
 	}
 	return ""
 }
@@ -127,37 +156,38 @@ func (s *Server) managedEngineUpdate(ctx context.Context, app catalog.App, selec
 	}
 	result.Installed = true
 
-	desired := ""
-	desiredRef := ""
-	if s.manifest != nil {
-		if pin, ok := s.manifest.PinFor(ctx, app.ID, app.Image); ok {
-			desired = pin.CurrentDigest()
-			desiredRef = pin.Ref()
-			result.Source, result.Channel = "cloudless", s.manifest.Channel(ctx)
-			result.Verified, result.Notes = pin.Verified, pin.Notes
-		}
+	target, err := s.managedEngineTarget(ctx, app)
+	if err != nil {
+		result.CheckError = "Could not reach the engine image registry."
+		return result
 	}
-	if desired == "" {
-		remote, err := s.eng.RemoteDigest(ctx, app.Image)
-		result.Source = "upstream"
-		if err != nil || remote == "" {
-			result.CheckError = "Could not reach the engine image registry."
-			return result
-		}
-		desired = remote
-	}
+	result.Source, result.Channel = target.Source, target.Channel
+	result.Verified, result.Notes = target.Verified, target.Notes
 	// Digest-pinned pulls intentionally do not retag the catalog reference. For
 	// an inactive or model-specific runtime, the presence of the exact reviewed
 	// reference means the base engine update is already installed. An active
 	// base runtime still compares its container digest so it remains actionable
 	// until the safe restart has actually cut over.
-	if desiredRef != "" && !result.RestartOnUpdate {
-		if reviewed, _ := s.eng.ImageDigest(ctx, desiredRef); reviewed != "" {
+	if target.Image != app.Image && !result.RestartOnUpdate {
+		if reviewed, _ := s.eng.ImageDigest(ctx, target.Image); reviewed == target.Digest {
 			installed = reviewed
 		}
 	}
+	if s.state != nil {
+		if recorded, ok := s.state.ManagedEngineArtifact(app.ID); ok &&
+			recorded.Image == target.Image && recorded.DownloadedDigest == target.Digest {
+			if present, _ := s.eng.ImageDigest(ctx, target.Image); present == target.Digest && !result.RestartOnUpdate {
+				installed = present
+			}
+			if result.RestartOnUpdate && recorded.ActiveDigest == target.Digest {
+				if current, _ := s.eng.ContainerImageDigest(ctx, app.ContainerName()); current == target.Digest {
+					installed = current
+				}
+			}
+		}
+	}
 	result.Current = shortDigest(installed)
-	result.HasUpdate, result.Latest = installed != desired, shortDigest(desired)
+	result.HasUpdate, result.Latest = installed != target.Digest, shortDigest(target.Digest)
 	return result
 }
 
@@ -330,14 +360,14 @@ func (s *Server) updateCenterGet(w http.ResponseWriter, r *http.Request) {
 // updateCenterCheck starts the privileged system/driver checkers. Application
 // and managed-engine registry checks are performed by the following
 // GET /api/updates request.
-func (s *Server) updateCenterCheck(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) updateCenterCheck(w http.ResponseWriter, r *http.Request) {
 	failures := []string{}
-	if err := startUpdateUnit("cloudless-update-check.service"); err != nil {
+	if err := s.runPrivileged(r.Context(), privileged.ActionSystemUpdateCheck); err != nil {
 		failures = append(failures, err.Error())
 	}
 	snapshot := capabilities.Current()
 	if feature, ok := snapshot.Features[capabilities.GenericDriverUpdates]; ok && feature.Available {
-		if err := startUpdateUnit("cloudless-nvidia-check.service"); err != nil {
+		if err := s.runPrivileged(r.Context(), privileged.ActionNVIDIAUpdateCheck); err != nil {
 			failures = append(failures, err.Error())
 		}
 	}
@@ -418,6 +448,7 @@ func (s *Server) createAppUpdate(app catalog.App) (*jobs.Job, bool) {
 	identity := "app:" + app.ID + ":update"
 	job, created := s.jobs.CreateUnique(identity, "app:"+app.ID+":")
 	if created {
+		s.auditJob(job, "update", "application", app.ID)
 		go s.runInstall(job, app)
 	}
 	return job, created
@@ -448,6 +479,13 @@ func (s *Server) updateCenterEngineApply(w http.ResponseWriter, r *http.Request)
 		writeJSON(w, http.StatusConflict, map[string]string{"error": app.Name + " is already current"})
 		return
 	}
+	targetCtx, targetCancel := context.WithTimeout(r.Context(), 20*time.Second)
+	target, targetErr := s.managedEngineTarget(targetCtx, app)
+	targetCancel()
+	if targetErr != nil || target.Digest == "" {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "the reviewed engine target could not be resolved"})
+		return
+	}
 	identity := "engine-update:" + app.ID
 	job, created := s.jobs.CreateUnique(identity, "engine-update:")
 	if !created {
@@ -458,7 +496,8 @@ func (s *Server) updateCenterEngineApply(w http.ResponseWriter, r *http.Request)
 		writeJSON(w, http.StatusAccepted, map[string]string{"jobId": job.ID, "engine": app.ID})
 		return
 	}
-	go s.runManagedEngineUpdate(job, app)
+	s.auditJob(job, "update", "engine", app.ID)
+	go s.runManagedEngineUpdate(job, app, target)
 	writeJSON(w, http.StatusAccepted, map[string]string{"jobId": job.ID, "engine": app.ID})
 }
 
@@ -515,13 +554,28 @@ func (s *Server) pullManagedEngine(ctx context.Context, job *jobs.Job, app catal
 	})
 }
 
-func (s *Server) runManagedEngineUpdate(job *jobs.Job, app catalog.App) {
+func (s *Server) runManagedEngineUpdate(job *jobs.Job, app catalog.App, target managedEngineTarget) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Hour)
 	defer cancel()
-	image := s.imageFor(ctx, app)
-	if err := s.pullManagedEngine(ctx, job, app, image); err != nil {
+	if err := s.pullManagedEngine(ctx, job, app, target.Image); err != nil {
 		job.Fail(fmt.Errorf("download %s update: %w", app.Name, err))
 		return
+	}
+	downloaded, _ := s.eng.ImageDigest(ctx, target.Image)
+	if downloaded != target.Digest {
+		job.Fail(fmt.Errorf("download %s update: pulled digest %s does not match target %s", app.Name, shortDigest(downloaded), shortDigest(target.Digest)))
+		return
+	}
+	if s.state != nil {
+		previous, _ := s.state.ManagedEngineArtifact(app.ID)
+		previous.EngineID, previous.Image = app.ID, target.Image
+		previous.DownloadedDigest = target.Digest
+		previous.Source, previous.Channel = target.Source, target.Channel
+		previous.Verified = target.Verified
+		if err := s.state.SetManagedEngineArtifact(previous); err != nil {
+			job.Fail(fmt.Errorf("record %s downloaded runtime: %w", app.Name, err))
+			return
+		}
 	}
 
 	container, _ := s.eng.Find(ctx, app.ContainerName())
@@ -533,7 +587,7 @@ func (s *Server) runManagedEngineUpdate(job *jobs.Job, app catalog.App) {
 		return
 	}
 
-	latest, _ := s.eng.ImageDigest(ctx, image)
+	latest := target.Digest
 	current, _ := s.eng.ContainerImageDigest(ctx, app.ContainerName())
 	if latest != "" && current == latest {
 		job.Succeed("")
@@ -542,5 +596,18 @@ func (s *Server) runManagedEngineUpdate(job *jobs.Job, app catalog.App) {
 	job.ProgressOperation("restarting", "Restarting the active "+app.Name+" with the updated runtime", app.Name, 82, 0, 1)
 	// applyEngine preserves the selected model, execution mode and stable API
 	// identity. On a Spark cluster it also pulls the same image on every worker.
-	s.applyEngine(job, app)
+	s.applyEngineVerified(job, app, target.Image, func(verifyCtx context.Context) error {
+		active, _ := s.eng.ContainerImageDigest(verifyCtx, app.ContainerName())
+		if active != target.Digest {
+			return fmt.Errorf("%s restarted but active digest %s does not match target %s", app.Name, shortDigest(active), shortDigest(target.Digest))
+		}
+		if s.state != nil {
+			artifact, _ := s.state.ManagedEngineArtifact(app.ID)
+			artifact.ActiveDigest = active
+			if err := s.state.SetManagedEngineArtifact(artifact); err != nil {
+				return fmt.Errorf("record active %s runtime: %w", app.Name, err)
+			}
+		}
+		return nil
+	})
 }

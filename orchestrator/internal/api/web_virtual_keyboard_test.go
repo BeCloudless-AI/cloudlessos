@@ -41,3 +41,31 @@ func TestEmbeddedWebIncludesConditionalVirtualKeyboard(t *testing.T) {
 		}
 	}
 }
+
+func TestVirtualKeyboardUsesCloudlessInputForEmbeddedSurfaces(t *testing.T) {
+	content, err := webFS.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(content)
+	for _, want := range []string{
+		`target === document.getElementById('app-surface-frame') && appSurfaceOpen()`,
+		`target.classList.contains('terminal-frame') && terminalWindowOpen()`,
+		`void emitEmbeddedVirtualKey('text', virtualKeyboardCharacter(key))`,
+		`void emitEmbeddedVirtualKey(virtualKeyboardShift ? 'shift-enter' : 'enter')`,
+		`'/api/system/input/key'`,
+		`showVirtualKeyboard(embeddedFrame)`,
+	} {
+		if !strings.Contains(page, want) {
+			t.Fatalf("Cloudless embedded-input contract is missing %q", want)
+		}
+	}
+	for _, forbidden := range []string{
+		`matchbox-keyboard`,
+		`florence`,
+	} {
+		if strings.Contains(strings.ToLower(page), forbidden) {
+			t.Fatalf("frontend must not substitute an external keyboard: found %q", forbidden)
+		}
+	}
+}

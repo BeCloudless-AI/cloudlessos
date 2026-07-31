@@ -13,7 +13,9 @@ function Shot($name, $body, $w, $ht) {
   $tmp = "$env:TEMP\dh-$name.html"
   [System.IO.File]::WriteAllText($tmp, $page, (New-Object System.Text.UTF8Encoding($false)))
   $out = "$env:TEMP\dh-$name.png"
-  & $edge --headless=new --disable-gpu --hide-scrollbars --force-device-scale-factor=1 --window-size=$w,$ht --screenshot="$out" ("file:///" + ($tmp -replace '\\','/')) 2>$null | Out-Null
+  $edgeProfileBase = if ($env:CLOUDLESS_VISUAL_EDGE_PROFILE) { $env:CLOUDLESS_VISUAL_EDGE_PROFILE } else { Join-Path $env:TEMP "cloudless-visual-edge-$PID" }
+  $edgeProfile = "$edgeProfileBase-$([guid]::NewGuid().ToString('N'))"
+  & $edge --headless=new --disable-gpu --hide-scrollbars --no-first-run "--user-data-dir=$edgeProfile" --force-device-scale-factor=1 --window-size=$w,$ht --screenshot="$out" ("file:///" + ($tmp -replace '\\','/')) 2>$null | Out-Null
   if (Test-Path $out) { "OK  $out" } else { "NO SHOT $name" }
 }
 
@@ -31,7 +33,9 @@ function ShotFirstLaunchState($name, $w, $ht, $state) {
   $tmp = "$env:TEMP\dh-$name.html"
   [System.IO.File]::WriteAllText($tmp, $page, (New-Object System.Text.UTF8Encoding($false)))
   $out = "$env:TEMP\dh-$name.png"
-  & $edge --headless=new --disable-gpu --hide-scrollbars --force-device-scale-factor=1 --window-size=$w,$ht --screenshot="$out" ("file:///" + ($tmp -replace '\\','/')) 2>$null | Out-Null
+  $edgeProfileBase = if ($env:CLOUDLESS_VISUAL_EDGE_PROFILE) { $env:CLOUDLESS_VISUAL_EDGE_PROFILE } else { Join-Path $env:TEMP "cloudless-visual-edge-$PID" }
+  $edgeProfile = "$edgeProfileBase-$([guid]::NewGuid().ToString('N'))"
+  & $edge --headless=new --disable-gpu --hide-scrollbars --no-first-run "--user-data-dir=$edgeProfile" --force-device-scale-factor=1 --window-size=$w,$ht --screenshot="$out" ("file:///" + ($tmp -replace '\\','/')) 2>$null | Out-Null
   if (Test-Path $out) { "OK  $out" } else { "NO SHOT $name" }
 }
 

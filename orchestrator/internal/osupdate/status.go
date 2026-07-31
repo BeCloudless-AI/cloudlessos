@@ -27,22 +27,24 @@ type Package struct {
 }
 
 type Status struct {
-	State            string    `json:"state"`
-	Channel          string    `json:"channel"`
-	Configured       bool      `json:"configured"`
-	CurrentVersion   string    `json:"currentVersion,omitempty"`
-	AvailableVersion string    `json:"availableVersion,omitempty"`
-	ReleaseTitle     string    `json:"releaseTitle,omitempty"`
-	ReleaseSummary   string    `json:"releaseSummary,omitempty"`
-	Changelog        []string  `json:"changelog,omitempty"`
-	Message          string    `json:"message,omitempty"`
-	Progress         int       `json:"progress"`
-	Error            string    `json:"error,omitempty"`
-	CheckedAt        string    `json:"checkedAt,omitempty"`
-	UpdatedAt        string    `json:"updatedAt,omitempty"`
-	RebootRequired   bool      `json:"rebootRequired"`
-	RebootBootID     string    `json:"rebootBootId,omitempty"`
-	Packages         []Package `json:"packages,omitempty"`
+	State                 string    `json:"state"`
+	Channel               string    `json:"channel"`
+	Configured            bool      `json:"configured"`
+	CurrentVersion        string    `json:"currentVersion,omitempty"`
+	CurrentSourceCommit   string    `json:"currentSourceCommit,omitempty"`
+	AvailableVersion      string    `json:"availableVersion,omitempty"`
+	AvailableSourceCommit string    `json:"availableSourceCommit,omitempty"`
+	ReleaseTitle          string    `json:"releaseTitle,omitempty"`
+	ReleaseSummary        string    `json:"releaseSummary,omitempty"`
+	Changelog             []string  `json:"changelog,omitempty"`
+	Message               string    `json:"message,omitempty"`
+	Progress              int       `json:"progress"`
+	Error                 string    `json:"error,omitempty"`
+	CheckedAt             string    `json:"checkedAt,omitempty"`
+	UpdatedAt             string    `json:"updatedAt,omitempty"`
+	RebootRequired        bool      `json:"rebootRequired"`
+	RebootBootID          string    `json:"rebootBootId,omitempty"`
+	Packages              []Package `json:"packages,omitempty"`
 }
 
 func StatusPath() string {

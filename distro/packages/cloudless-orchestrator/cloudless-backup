@@ -1,0 +1,336 @@
+#!/usr/bin/env bash
+set -euo pipefail
+umask 077
+
+readonly SCHEMA="cloudless-control-plane-backup-v1"
+readonly SYSTEM_PATHS=(
+  "var/lib/cloudless"
+  "etc/cloudless"
+  "var/lib/cloudless-updater/current"
+)
+CLEAN_WORKSPACE=""
+CLEAN_PASSFILE=""
+CLEAN_PASS_GENERATED=0
+CLEAN_OUTPUT=""
+CLOUDLESS_BACKUP_RESTART=0
+RESTORE_ACTIVE=0
+RESTORE_ROLLBACK=""
+RESTORE_TARGET_ROOT=""
+
+cleanup() {
+  if [[ "$RESTORE_ACTIVE" -eq 1 ]]; then
+    local path destination saved failed
+    for path in "${SYSTEM_PATHS[@]}"; do
+      destination="$RESTORE_TARGET_ROOT/$path"
+      saved="$RESTORE_ROLLBACK/$path"
+      if [[ -e "$destination" ]]; then
+        failed="$RESTORE_ROLLBACK/failed/$path"
+        mkdir -p "$(dirname "$failed")"
+        mv "$destination" "$failed" || true
+      fi
+      if [[ -e "$saved" ]]; then
+        mkdir -p "$(dirname "$destination")"
+        mv "$saved" "$destination" || true
+      fi
+    done
+    echo "Restore failed; the previous state was put back. Failed candidate files are in $RESTORE_ROLLBACK/failed." >&2
+  fi
+  restart_control_plane
+  [[ -z "$CLEAN_WORKSPACE" ]] || rm -rf "$CLEAN_WORKSPACE"
+  [[ "$CLEAN_PASS_GENERATED" -eq 0 || -z "$CLEAN_PASSFILE" ]] || rm -f "$CLEAN_PASSFILE"
+  [[ -z "$CLEAN_OUTPUT" ]] || rm -f "$CLEAN_OUTPUT"
+}
+trap cleanup EXIT
+
+usage() {
+  cat <<'EOF'
+Usage:
+  cloudless-backup create DESTINATION.cloudless-backup
+  cloudless-backup verify BACKUP.cloudless-backup
+  cloudless-backup restore BACKUP.cloudless-backup [--yes]
+
+Backups are encrypted with AES-256. Set CLOUDLESS_BACKUP_PASSPHRASE_FILE to a
+mode-0600 passphrase file for unattended operation; otherwise a passphrase is
+requested without echo. Restore keeps the replaced files below
+/var/backups/cloudless and never restores model weights or Docker layers.
+EOF
+}
+
+die() { echo "ERROR: $*" >&2; exit 1; }
+rooted() {
+  local path="/${1#/}"
+  if [[ -n "${CLOUDLESS_BACKUP_ROOT:-}" ]]; then
+    printf '%s%s' "${CLOUDLESS_BACKUP_ROOT%/}" "$path"
+  else
+    printf '%s' "$path"
+  fi
+}
+require_root() {
+  if [[ -n "${CLOUDLESS_BACKUP_ROOT:-}" ]]; then
+    [[ "$CLOUDLESS_BACKUP_ROOT" == /* && "$CLOUDLESS_BACKUP_ROOT" != "/" ]] ||
+      die "CLOUDLESS_BACKUP_ROOT must be an absolute non-root test path"
+  fi
+  [[ -n "${CLOUDLESS_BACKUP_ROOT:-}" || "$(id -u)" -eq 0 ]] ||
+    die "run this command with sudo"
+}
+require_commands() {
+  local command
+  for command in gpg tar sha256sum python3 stat mktemp flock; do
+    command -v "$command" >/dev/null || die "missing required command: $command"
+  done
+}
+acquire_mutation_guard() {
+  local lock_dir service
+  lock_dir="$(rooted /run/lock)"
+  mkdir -p "$lock_dir"
+  exec 9>"$lock_dir/cloudless-backup.lock"
+  flock -n 9 || die "another Cloudless backup or restore is already running"
+  [[ -z "${CLOUDLESS_BACKUP_ROOT:-}" && -x /usr/bin/systemctl ]] || return 0
+  for service in cloudless-update-apply.service cloudless-nvidia-apply.service; do
+    if systemctl is-active --quiet "$service"; then
+      die "cannot back up or restore while $service is active"
+    fi
+  done
+}
+current_architecture() {
+  if [[ -n "${CLOUDLESS_BACKUP_ROOT:-}" && -n "${CLOUDLESS_BACKUP_TEST_ARCH:-}" ]]; then
+    printf '%s\n' "$CLOUDLESS_BACKUP_TEST_ARCH"
+    return
+  fi
+  dpkg --print-architecture 2>/dev/null || uname -m
+}
+normalized_architecture() {
+  case "${1,,}" in
+    amd64|x86_64) printf 'amd64\n' ;;
+    arm64|aarch64) printf 'arm64\n' ;;
+    *) printf '%s\n' "${1,,}" ;;
+  esac
+}
+validate_restore_architecture() {
+  local properties="$1" backup_arch current_arch
+  backup_arch="$(sed -n 's/^architecture=//p' "$properties" | head -n 1)"
+  current_arch="$(current_architecture)"
+  [[ -n "$backup_arch" ]] || die "backup architecture metadata is missing"
+  [[ "$(normalized_architecture "$backup_arch")" == "$(normalized_architecture "$current_arch")" ]] ||
+    die "backup architecture $backup_arch does not match this machine ($current_arch)"
+}
+passphrase_file() {
+  local supplied="${CLOUDLESS_BACKUP_PASSPHRASE_FILE:-}"
+  if [[ -n "$supplied" ]]; then
+    [[ -f "$supplied" && -s "$supplied" ]] || die "backup passphrase file is missing or empty"
+    local mode
+    mode="$(stat -c '%a' "$supplied")"
+    (( (8#$mode & 077) == 0 )) || die "backup passphrase file must not be group/world accessible"
+    printf '%s' "$supplied"
+    return
+  fi
+  [[ -t 0 ]] || die "set CLOUDLESS_BACKUP_PASSPHRASE_FILE for non-interactive use"
+  local first second generated
+  generated="$(mktemp)"
+  chmod 0600 "$generated"
+  read -r -s -p "Backup passphrase: " first
+  echo
+  [[ -n "$first" ]] || { rm -f "$generated"; die "passphrase cannot be empty"; }
+  if [[ "${1:-}" == "create" ]]; then
+    read -r -s -p "Confirm passphrase: " second
+    echo
+    [[ "$first" == "$second" ]] || { rm -f "$generated"; die "passphrases do not match"; }
+  fi
+  printf '%s' "$first" > "$generated"
+  unset first second
+  printf '%s' "$generated"
+}
+stop_control_plane() {
+  [[ -z "${CLOUDLESS_BACKUP_ROOT:-}" && -x /usr/bin/systemctl ]] || return 0
+  if systemctl is-active --quiet cloudlessd.service; then
+    CLOUDLESS_BACKUP_RESTART=1
+    systemctl stop cloudlessd.service
+  fi
+}
+restart_control_plane() {
+  [[ "${CLOUDLESS_BACKUP_RESTART:-0}" == "1" ]] || return 0
+  systemctl start cloudlessd.service || true
+  CLOUDLESS_BACKUP_RESTART=0
+}
+decrypt_outer() {
+  local source="$1" destination="$2" passfile="$3"
+  gpg --batch --quiet --pinentry-mode loopback --passphrase-file "$passfile" \
+    --decrypt --output "$destination" "$source" ||
+    die "backup decryption failed (wrong passphrase or damaged file)"
+}
+validate_envelope() {
+  python3 - "$1" <<'PY' || die "backup envelope is malformed"
+import sys, tarfile
+with tarfile.open(sys.argv[1], "r:gz") as archive:
+    members = archive.getmembers()
+names = [member.name for member in members]
+if sorted(names) != ["SHA256SUMS", "payload.tar.gz"] or len(set(names)) != len(names):
+    raise SystemExit("unexpected or duplicate envelope member")
+if not all(member.isfile() for member in members):
+    raise SystemExit("envelope members must be regular files")
+PY
+}
+validate_payload() {
+  python3 - "$1" <<'PY' || die "backup payload contains an unsafe member"
+import pathlib, sys, tarfile
+allowed = (
+    "metadata",
+    "var/lib/cloudless",
+    "etc/cloudless",
+    "var/lib/cloudless-updater/current",
+)
+with tarfile.open(sys.argv[1], "r:gz") as archive:
+    members = archive.getmembers()
+seen = set()
+for member in members:
+    name = member.name.rstrip("/")
+    path = pathlib.PurePosixPath(name)
+    if not name or path.is_absolute() or ".." in path.parts or name in seen:
+        raise SystemExit("absolute, traversal or duplicate member")
+    seen.add(name)
+    if not any(name == root or name.startswith(root + "/") for root in allowed):
+        raise SystemExit("member outside allow-list")
+    if not (member.isfile() or member.isdir()):
+        raise SystemExit("links, devices and special members are forbidden")
+PY
+}
+unpack_verified() {
+  local source="$1" workspace="$2" passfile="$3"
+  decrypt_outer "$source" "$workspace/envelope.tar.gz" "$passfile"
+  validate_envelope "$workspace/envelope.tar.gz"
+  tar -xzf "$workspace/envelope.tar.gz" -C "$workspace" payload.tar.gz SHA256SUMS
+  (cd "$workspace" && sha256sum -c SHA256SUMS >/dev/null) ||
+    die "backup integrity verification failed"
+  validate_payload "$workspace/payload.tar.gz"
+}
+create_backup() {
+  require_root
+  acquire_mutation_guard
+  local destination="$1"
+  [[ "$destination" != */ ]] || die "destination must be a file"
+  destination="$(readlink -m "$destination")"
+  [[ ! -e "$destination" ]] || die "destination already exists: $destination"
+  mkdir -p "$(dirname "$destination")"
+  local workspace passfile generated_pass=0 source_root destination_dir temporary
+  workspace="$(mktemp -d)"
+  passfile="$(passphrase_file create)"
+  [[ "$passfile" == "${CLOUDLESS_BACKUP_PASSPHRASE_FILE:-}" ]] || generated_pass=1
+  CLEAN_WORKSPACE="$workspace"
+  CLEAN_PASSFILE="$passfile"
+  CLEAN_PASS_GENERATED="$generated_pass"
+  source_root="${CLOUDLESS_BACKUP_ROOT:-/}"
+  stop_control_plane
+
+  mkdir -p "$workspace/metadata"
+  {
+    echo "schema=$SCHEMA"
+    echo "created=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    echo "architecture=$(current_architecture)"
+    echo "hostname=$(hostname)"
+    echo "cloudless_version=$(dpkg-query -W -f='${Version}' cloudless-orchestrator 2>/dev/null || echo unknown)"
+  } > "$workspace/metadata/backup.properties"
+
+  local present=() path
+  for path in "${SYSTEM_PATHS[@]}"; do
+    [[ -e "$source_root/$path" ]] && present+=("$path")
+  done
+  ((${#present[@]} > 0)) || die "no Cloudless state was found"
+  tar --numeric-owner -czf "$workspace/payload.tar.gz" \
+    -C "$source_root" "${present[@]}" -C "$workspace" metadata
+  validate_payload "$workspace/payload.tar.gz"
+  (cd "$workspace" && sha256sum payload.tar.gz > SHA256SUMS)
+  destination_dir="$(dirname "$destination")"
+  temporary="$(mktemp "$destination_dir/.cloudless-backup.XXXXXX")"
+  CLEAN_OUTPUT="$temporary"
+  (cd "$workspace" && tar -czf - payload.tar.gz SHA256SUMS) |
+    gpg --batch --quiet --yes --symmetric --cipher-algo AES256 \
+      --pinentry-mode loopback --passphrase-file "$passfile" --output "$temporary"
+  chmod 0600 "$temporary"
+  mkdir -p "$workspace/post-encryption-verify"
+  unpack_verified "$temporary" "$workspace/post-encryption-verify" "$passfile"
+  tar -xOf "$workspace/post-encryption-verify/payload.tar.gz" metadata/backup.properties |
+    grep -qx "schema=$SCHEMA" || die "completed backup failed its schema self-check"
+  mv -T "$temporary" "$destination"
+  CLEAN_OUTPUT=""
+  restart_control_plane
+  echo "Encrypted CloudlessOS backup created: $destination"
+}
+verify_backup() {
+  local source="$1"
+  [[ -f "$source" ]] || die "backup not found: $source"
+  local workspace passfile generated_pass=0
+  workspace="$(mktemp -d)"
+  passfile="$(passphrase_file verify)"
+  [[ "$passfile" == "${CLOUDLESS_BACKUP_PASSPHRASE_FILE:-}" ]] || generated_pass=1
+  CLEAN_WORKSPACE="$workspace"
+  CLEAN_PASSFILE="$passfile"
+  CLEAN_PASS_GENERATED="$generated_pass"
+  unpack_verified "$source" "$workspace" "$passfile"
+  local properties="$workspace/properties"
+  tar -xOf "$workspace/payload.tar.gz" metadata/backup.properties > "$properties"
+  grep -qx "schema=$SCHEMA" "$properties" || die "unsupported backup schema"
+  echo "Backup is encrypted, intact and structurally safe."
+  sed -n '/^\(created\|architecture\|hostname\|cloudless_version\)=/p' "$properties"
+}
+restore_backup() {
+  require_root
+  acquire_mutation_guard
+  local source="$1" confirmed="${2:-}"
+  [[ -f "$source" ]] || die "backup not found: $source"
+  if [[ "$confirmed" != "--yes" ]]; then
+    [[ -t 0 ]] || die "restore requires --yes in non-interactive use"
+    read -r -p "Replace this machine's Cloudless control-plane state? Type RESTORE: " confirmed
+    [[ "$confirmed" == "RESTORE" ]] || die "restore cancelled"
+  fi
+  local workspace passfile generated_pass=0 target_root rollback stamp
+  workspace="$(mktemp -d)"
+  passfile="$(passphrase_file verify)"
+  [[ "$passfile" == "${CLOUDLESS_BACKUP_PASSPHRASE_FILE:-}" ]] || generated_pass=1
+  CLEAN_WORKSPACE="$workspace"
+  CLEAN_PASSFILE="$passfile"
+  CLEAN_PASS_GENERATED="$generated_pass"
+  target_root="${CLOUDLESS_BACKUP_ROOT:-/}"
+  stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+  mkdir -p "$(rooted /var/backups/cloudless)"
+  rollback="$(mktemp -d "$(rooted /var/backups/cloudless)/$stamp-XXXXXX")"
+  unpack_verified "$source" "$workspace" "$passfile"
+  mkdir -p "$workspace/restored"
+  tar -xzf "$workspace/payload.tar.gz" -C "$workspace/restored"
+  grep -qx "schema=$SCHEMA" "$workspace/restored/metadata/backup.properties" ||
+    die "unsupported backup schema"
+  validate_restore_architecture "$workspace/restored/metadata/backup.properties"
+
+  stop_control_plane
+  RESTORE_ACTIVE=1
+  RESTORE_ROLLBACK="$rollback"
+  RESTORE_TARGET_ROOT="$target_root"
+  local path destination saved
+  for path in "${SYSTEM_PATHS[@]}"; do
+    destination="$target_root/$path"
+    saved="$rollback/$path"
+    if [[ -e "$destination" ]]; then
+      mkdir -p "$(dirname "$saved")"
+      mv "$destination" "$saved"
+    fi
+    if [[ -e "$workspace/restored/$path" ]]; then
+      mkdir -p "$(dirname "$destination")"
+      cp -a "$workspace/restored/$path" "$destination"
+    fi
+  done
+  chown -R root:root "$(rooted /etc/cloudless)" "$(rooted /var/lib/cloudless-updater/current)" 2>/dev/null || true
+  chmod 0700 "$(rooted /var/lib/cloudless)" 2>/dev/null || true
+  RESTORE_ACTIVE=0
+  restart_control_plane
+  echo "CloudlessOS control-plane state restored."
+  echo "Previous state retained at: $rollback"
+  echo "Reboot before resuming inference or cluster administration."
+}
+
+require_commands
+[[ $# -ge 2 ]] || { usage; exit 2; }
+case "$1" in
+  create) create_backup "$2" ;;
+  verify) verify_backup "$2" ;;
+  restore) restore_backup "$2" "${3:-}" ;;
+  *) usage; exit 2 ;;
+esac

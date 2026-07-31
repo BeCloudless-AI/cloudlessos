@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"runtime"
 	"strings"
 	"time"
 
@@ -58,26 +59,37 @@ func (s *Server) customEngineCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := contextWithShortTimeout(r)
 	defer cancel()
-	inspection, err := s.eng.Output(ctx, "image", "inspect", body.Image, "--format", "{{.Id}} {{.Architecture}}")
-	if err != nil || strings.TrimSpace(inspection) == "" {
+	inspection, err := s.eng.InspectImage(ctx, body.Image)
+	if err != nil || !strings.HasPrefix(inspection.ID, "sha256:") {
 		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": "Docker cannot find that image locally. Build or tag it first, then try again."})
+		return
+	}
+	imageID, architecture := inspection.ID, inspection.Architecture
+	if architecture != runtime.GOARCH {
+		writeJSON(w, http.StatusUnprocessableEntity, map[string]string{"error": fmt.Sprintf("that image is built for %s, but this CloudlessOS host is %s", architecture, runtime.GOARCH)})
 		return
 	}
 	commandMode := ""
 	if body.Base == "vllm" {
-		if entrypoint, entryErr := s.eng.Output(ctx, "image", "inspect", body.Image, "--format", "{{json .Config.Entrypoint}}"); entryErr == nil {
-			lower := strings.ToLower(entrypoint)
-			if strings.Contains(lower, "vllm") && strings.Contains(lower, "serve") {
-				commandMode = "vllm-entrypoint"
-			}
+		lower := strings.ToLower(strings.Join(inspection.EntryPoint, " "))
+		if strings.Contains(lower, "vllm") && strings.Contains(lower, "serve") {
+			commandMode = "vllm-entrypoint"
 		}
 	}
-	def := state.CustomEngine{ID: customEngineID(body.Name), Name: body.Name, Image: body.Image, Base: body.Base, CommandMode: commandMode, Created: time.Now().UTC().Format(time.RFC3339)}
+	def := state.CustomEngine{
+		ID: customEngineID(body.Name), Name: body.Name, Image: body.Image,
+		ResolvedImage: imageID, ImageDigest: imageID, Architecture: architecture,
+		Base: body.Base, CommandMode: commandMode,
+		ProfileVersion: 1, ContractVersion: "cloudless-openai-v1",
+		ValidationStatus: "registered", Created: time.Now().UTC().Format(time.RFC3339),
+	}
 	if err := s.state.UpsertCustomEngine(def); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]any{"engine": def, "inspection": strings.TrimSpace(inspection)})
+	writeJSON(w, http.StatusCreated, map[string]any{
+		"engine": def, "inspection": strings.TrimSpace(inspection.ID + " " + inspection.Architecture),
+	})
 }
 
 func contextWithShortTimeout(r *http.Request) (context.Context, context.CancelFunc) {

@@ -17,18 +17,36 @@ import (
 
 // GPU is a single GPU's live stats.
 type GPU struct {
-	Index       int     `json:"index"`
-	Name        string  `json:"name"`
-	MemUsedMB   int     `json:"memUsedMB"`
-	MemTotalMB  int     `json:"memTotalMB"`
-	UtilPct     int     `json:"utilPct"`
-	TempC       int     `json:"tempC"`
-	PowerW      float64 `json:"powerW"`
-	PowerLimitW float64 `json:"powerLimitW"`
-	Driver      string  `json:"driver"`
-	MemoryType  string  `json:"memoryType"` // dedicated | unified
-	Node        string  `json:"node,omitempty"`
-	Remote      bool    `json:"remote,omitempty"`
+	Index            int     `json:"index"`
+	Name             string  `json:"name"`
+	MemUsedMB        int     `json:"memUsedMB"`
+	MemTotalMB       int     `json:"memTotalMB"`
+	MemAvailableMB   int     `json:"memAvailableMB,omitempty"`
+	MemReclaimableMB int     `json:"memReclaimableMB,omitempty"`
+	MemReservedMB    int     `json:"memReservedMB,omitempty"`
+	MemHeadroomMB    int     `json:"memHeadroomMB,omitempty"`
+	UtilPct          int     `json:"utilPct"`
+	TempC            int     `json:"tempC"`
+	PowerW           float64 `json:"powerW"`
+	PowerLimitW      float64 `json:"powerLimitW"`
+	Driver           string  `json:"driver"`
+	MemoryType       string  `json:"memoryType"` // dedicated | unified
+	Node             string  `json:"node,omitempty"`
+	Remote           bool    `json:"remote,omitempty"`
+}
+
+// MemoryBudget separates physical unified memory from the part Linux currently
+// considers available and the safety margin Cloudless keeps for the OS. Cache
+// is reported independently: MemAvailable already includes reclaimable cache,
+// so it must never be added to headroom a second time.
+type MemoryBudget struct {
+	TotalMB            int `json:"totalMB"`
+	AvailableMB        int `json:"availableMB"`
+	ReclaimableMB      int `json:"reclaimableMB"`
+	SystemUsedMB       int `json:"systemUsedMB"`
+	ReservedMB         int `json:"reservedMB"`
+	WorkloadCapacityMB int `json:"workloadCapacityMB"`
+	WorkloadHeadroomMB int `json:"workloadHeadroomMB"`
 }
 
 // gpuTTL is how long a nvidia-smi snapshot is reused. GPU stats are read-only
@@ -71,8 +89,7 @@ func queryGPUs(ctx context.Context) ([]GPU, error) {
 
 	gpus := ParseGPUsCSV(string(out))
 	if hostplatform.IsDGXSpark() {
-		total, available := memInfoMB()
-		ApplyUnifiedMemory(gpus, total, available)
+		ApplyUnifiedMemoryBudget(gpus, HostMemoryBudget())
 	}
 	return gpus, nil
 }
@@ -105,17 +122,40 @@ func ParseGPUsCSV(out string) []GPU {
 
 // ApplyUnifiedMemory maps host unified-memory capacity onto each GB10 GPU.
 func ApplyUnifiedMemory(gpus []GPU, totalMB, availableMB int) {
-	if totalMB <= 0 {
+	ApplyUnifiedMemoryBudget(gpus, NewMemoryBudget(totalMB, availableMB, 0))
+}
+
+// ApplyUnifiedMemoryBudget maps one host memory budget onto its GB10
+// accelerator. A Spark exposes one unified pool, so multiple nvidia-smi rows
+// must not be summed as if each row owned a separate copy.
+func ApplyUnifiedMemoryBudget(gpus []GPU, budget MemoryBudget) {
+	if budget.TotalMB <= 0 {
 		return
 	}
-	used := totalMB - availableMB
-	if used < 0 {
-		used = 0
-	}
 	for i := range gpus {
-		gpus[i].MemTotalMB = totalMB
-		gpus[i].MemUsedMB = used
+		gpus[i].MemTotalMB = budget.TotalMB
+		gpus[i].MemUsedMB = budget.SystemUsedMB
+		gpus[i].MemAvailableMB = budget.AvailableMB
+		gpus[i].MemReclaimableMB = budget.ReclaimableMB
+		gpus[i].MemReservedMB = budget.ReservedMB
+		gpus[i].MemHeadroomMB = budget.WorkloadHeadroomMB
 		gpus[i].MemoryType = "unified"
+	}
+}
+
+// AcceleratorMemoryBudget returns the local unified-memory budget. Dedicated
+// accelerators do not share Linux RAM, so their usable capacity continues to
+// come from nvidia-smi and this returns an empty budget.
+func AcceleratorMemoryBudget(ctx context.Context) MemoryBudget {
+	gpus, _ := GPUs(ctx)
+	if len(gpus) == 0 || gpus[0].MemoryType != "unified" {
+		return MemoryBudget{}
+	}
+	return MemoryBudget{
+		TotalMB: gpus[0].MemTotalMB, AvailableMB: gpus[0].MemAvailableMB,
+		ReclaimableMB: gpus[0].MemReclaimableMB, SystemUsedMB: gpus[0].MemUsedMB,
+		ReservedMB: gpus[0].MemReservedMB, WorkloadCapacityMB: gpus[0].MemTotalMB - gpus[0].MemReservedMB,
+		WorkloadHeadroomMB: gpus[0].MemHeadroomMB,
 	}
 }
 

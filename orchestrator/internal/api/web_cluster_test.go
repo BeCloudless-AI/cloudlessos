@@ -21,6 +21,11 @@ func TestEmbeddedWebIncludesSparkClusterWizard(t *testing.T) {
 			t.Fatalf("embedded cluster UI missing safe local fallback progress %q", want)
 		}
 	}
+	for _, want := range []string{"Compute subset:", "data-cluster-node", "Save selection", "function openSparkAddressUpdate", "Update Spark address", "X-Cloudless-Action':'spark-cluster-rebind'", "storage free", "physicalLink"} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("embedded cluster UI missing subset, telemetry, or address recovery %q", want)
+		}
+	}
 	for _, want := range []string{"clusterCheckFailureLabels", "The other Spark has a private network conflict", "will be reused"} {
 		if !strings.Contains(html, want) {
 			t.Fatalf("embedded cluster UI missing stale-address guidance %q", want)
@@ -31,7 +36,7 @@ func TestEmbeddedWebIncludesSparkClusterWizard(t *testing.T) {
 			t.Fatalf("embedded cluster UI missing connection failure state %q", want)
 		}
 	}
-	for _, want := range []string{"id=\"home-cluster\"", "function renderHomeCluster", "-Spark compute is ready", "computeReady ? 'Manage'", "host.querySelector('button').onclick = openSparkClusterSurface", "Runs across ${clusterNodes} Sparks", "Use all ${clusterNodes} Sparks", "mode: selectedMode", "distributed compatibility shown separately", "Powered by Hermes Agent", "Active across ${engineNodes} Sparks", "served by your Spark cluster", "Running across ${sparkCount(connectedSpark)} Sparks", "executionMode === 'cluster'"} {
+	for _, want := range []string{"id=\"home-cluster\"", "function renderHomeCluster", "-Spark compute is ready", "computeReady ? 'Manage'", "host.querySelector('button').onclick = openSparkClusterSurface", "Runs across ${clusterNodes} Sparks", "Use all ${clusterNodes} Sparks", "mode: selectedMode", "memoryAccountingSummary(cluster, true)", "Powered by Hermes Agent", "Active across ${engineNodes} Sparks", "served by your Spark cluster", "Running across ${sparkCount(connectedSpark)} Sparks", "executionMode === 'cluster'"} {
 		if !strings.Contains(html, want) {
 			t.Fatalf("embedded UI missing system-wide cluster experience %q", want)
 		}

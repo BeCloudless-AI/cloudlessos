@@ -9,10 +9,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math"
 	"net/http"
 	"regexp"
-	"strconv"
 	"strings"
 
 	"github.com/cloudless/orchestrator/internal/catalog"
@@ -45,13 +43,18 @@ type Context struct {
 // ModelOption is the authoritative subset of Model Manager data needed for
 // compatibility answers. It prevents the assistant from guessing model fit.
 type ModelOption struct {
-	ID         string
-	Name       string
-	Params     string
-	Quant      string
-	MinVRAMGB  int
-	Fit        string // fits | tight | over | unknown
-	ClusterFit string // distributed fit across a healthy Spark cluster
+	ID                       string
+	Name                     string
+	Params                   string
+	Quant                    string
+	Fit                      string // fits | tight | over | unknown
+	ClusterFit               string // distributed fit across a healthy Spark cluster
+	RequiredPerNodeGB        float64
+	ClusterRequiredPerNodeGB float64
+	Evidence                 string // measured | reviewed-estimate | missing
+	ClusterEvidence          string
+	FitReason                string
+	ClusterFitReason         string
 }
 
 // ModelAdvice is a deterministic compatibility answer plus the Model Manager
@@ -101,6 +104,9 @@ func SystemPrompt(c Context) string {
 	b.WriteString("Never create or invoke a Hermes skill, terminal command, shell script, package manager, Hugging Face CLI, or other workaround to manage a model. ")
 	b.WriteString("Never claim that an install, download, switch, or other OS action has started or completed merely because the user said yes. ")
 	b.WriteString("You may explain and offer a CloudlessOS action tag; the GUI performs the action only after the user clicks its button. ")
+	b.WriteString("If a tool is unavailable, denied, or fails, say so once and do not retry it in a loop or claim the task is progressing. ")
+	b.WriteString("If the user asks to stop or abort, stop proposing or attempting the action and direct them to the visible CloudlessOS Abort control when one exists. ")
+	b.WriteString("Never treat conversational consent as permission to execute an OS action; wait for the user to click the relevant CloudlessOS control. ")
 	b.WriteString("For CloudlessOS settings, apps, engines, and models, answer directly without using Hermes tools. If an exact model is not listed below, say it is not currently verified in Model Manager and do not invent a way to install it.\n\n")
 
 	eng := c.Engine
@@ -152,9 +158,13 @@ func SystemPrompt(c Context) string {
 		if m.Quant != "" {
 			quant = ", " + m.Quant
 		}
-		memory := "accelerator memory need unknown"
-		if m.MinVRAMGB > 0 {
-			memory = fmt.Sprintf("needs about %d GB %s", m.MinVRAMGB, memoryLabel(c))
+		memory := "no matching reviewed runtime profile"
+		if m.RequiredPerNodeGB > 0 {
+			prefix := "about "
+			if m.Evidence == "measured" {
+				prefix = ""
+			}
+			memory = fmt.Sprintf("profile requires %s%.1f GB %s per node", prefix, m.RequiredPerNodeGB, memoryLabel(c))
 		}
 		fit := m.Fit
 		if c.ClusterReady && m.ClusterFit != "" {
@@ -283,9 +293,16 @@ func modelGuidance(text string, c Context, forced bool) (ModelAdvice, bool) {
 		name := normalizeModelText(strings.ToLower(m.Name))
 		id := normalizeModelText(strings.ToLower(m.ID))
 		if (name != "" && strings.Contains(normalized, name)) || (id != "" && strings.Contains(normalized, id)) {
-			need := fmt.Sprintf("about %d GB of %s", m.MinVRAMGB, memoryLabel(c))
+			need := "an unknown amount of " + memoryLabel(c)
+			if m.RequiredPerNodeGB > 0 {
+				prefix := "about "
+				if m.Evidence == "measured" {
+					prefix = ""
+				}
+				need = fmt.Sprintf("%s%.1f GB of %s per node", prefix, m.RequiredPerNodeGB, memoryLabel(c))
+			}
 			if c.GPUVRAMGB <= 0 {
-				return ModelAdvice{Reply: fmt.Sprintf("%s is available in Model Manager and needs %s, but CloudlessOS currently reports %s. It cannot run this model with the local GPU engine as configured. You can review or download it now, then launch it after a supported GPU is available.", m.Name, need, c.GPU), ModelID: m.ID, Label: labelFor(m.Name)}, true
+				return ModelAdvice{Reply: fmt.Sprintf("%s is available in Model Manager, but CloudlessOS currently reports %s and cannot validate a local launch. You can review or download it now; Model Manager will only claim compatibility when both hardware and an exact runtime profile are available.", m.Name, c.GPU), ModelID: m.ID, Label: labelFor(m.Name)}, true
 			}
 			switch m.Fit {
 			case "fits":
@@ -297,38 +314,23 @@ func modelGuidance(text string, c Context, forced bool) (ModelAdvice, bool) {
 					nodes := max(2, c.ClusterNodes)
 					return ModelAdvice{Reply: fmt.Sprintf("%s is too large for one Spark, but your connected %d-Spark cluster can run it in distributed mode. It needs %s and Model Manager reports approximately %d GB aggregate unified memory. Open its card to prepare and launch it across the cluster.", m.Name, nodes, need, c.ClusterMemory), ModelID: m.ID, Label: labelFor(m.Name)}, true
 				}
-				return ModelAdvice{Reply: fmt.Sprintf("%s is listed, but Model Manager estimates it needs %s—more than this machine can comfortably provide. Its card can help you compare a smaller or quantized variant.", m.Name, need), ModelID: m.ID, Label: labelFor(m.Name)}, true
+				return ModelAdvice{Reply: fmt.Sprintf("%s is listed, but its matching runtime profile requires %s—more than this machine can comfortably provide. Its card can help you compare a smaller or quantized variant.", m.Name, need), ModelID: m.ID, Label: labelFor(m.Name)}, true
 			default:
-				return ModelAdvice{Reply: fmt.Sprintf("%s is available in Model Manager, but CloudlessOS cannot verify its GPU fit right now. Open its card to review it; model installation and switching should happen there.", m.Name), ModelID: m.ID, Label: labelFor(m.Name)}, true
+				reason := strings.TrimSpace(m.FitReason)
+				if reason == "" {
+					reason = "no reviewed profile matches this exact model, engine, architecture, and topology"
+				}
+				return ModelAdvice{Reply: fmt.Sprintf("%s is available in Model Manager, but CloudlessOS does not have a verified fit for this setup: %s. Parameter count and quantization names are not enough to predict loaded memory. Open its card to review it; model installation and switching should happen there.", m.Name, reason), ModelID: m.ID, Label: labelFor(m.Name)}, true
 			}
 		}
 	}
 
 	repo := strings.TrimRight(hfRepoRe.FindString(strings.TrimSpace(text)), ".,;:")
-	params, bits, estimate, estimated := estimateModelVRAM(lower)
 	modelName := "custom model"
 	if repo != "" {
 		modelName = repo
 	}
-	if estimated {
-		quant := fmt.Sprintf("%d-bit", bits)
-		if c.GPUVRAMGB <= 0 {
-			reply := fmt.Sprintf("Based on the name, I read this as roughly %.1fB parameters at %s, with a conservative requirement of about %d GB of %s including runtime overhead. CloudlessOS currently reports %s, so it cannot run this model with the local GPU engine as configured. This is an estimate—the exact architecture and context length can change it. You can still review the repository in Model Manager, but launching it requires a supported GPU with enough accelerator memory.", params, quant, estimate, memoryLabel(c), c.GPU)
-			return ModelAdvice{Reply: reply, ModelID: repo, Label: labelFor(modelName)}, true
-		}
-		fit := "should fit"
-		detail := "with useful headroom"
-		switch {
-		case float64(estimate) > float64(c.GPUVRAMGB)*1.05:
-			fit, detail = "is unlikely to fit fully in GPU memory", "so choose a smaller or more heavily quantized variant"
-		case float64(estimate) > float64(c.GPUVRAMGB)*0.85:
-			fit, detail = "would be a tight fit", "with little room left for KV cache or other GPU apps"
-		}
-		reply := fmt.Sprintf("Based on the name, I read this as roughly %.1fB parameters at %s. A conservative estimate is about %d GB of %s including runtime overhead, so it %s on %s, %s. This is an estimate—the exact architecture and context length can change it. Review the exact Hugging Face repository in Model Manager before downloading or launching.", params, quant, estimate, memoryLabel(c), fit, c.GPU, detail)
-		return ModelAdvice{Reply: reply, ModelID: repo, Label: labelFor(modelName)}, true
-	}
-
-	reply := fmt.Sprintf("I don’t have enough detail to judge that exact model yet. %s is the hardware available, but I need the exact Hugging Face repository or at least its parameter size and quantization—for example, 32B AWQ or 8B BF16. Model Manager remains the final check and handles the actual download or launch.", c.GPU)
+	reply := fmt.Sprintf("I can’t determine whether that exact model will run from its name, parameter count, quantization label, or repository size alone. %s is the hardware available, but loaded memory also depends on the exact artifact, inference engine, architecture, context, and topology. Open the repository in Model Manager; CloudlessOS will show “Not reviewed” until a matching runtime profile exists, and it handles the actual download or launch.", c.GPU)
 	return ModelAdvice{Reply: reply, ModelID: repo, Label: labelFor(modelName)}, true
 }
 
@@ -343,31 +345,6 @@ var (
 	hfRepoRe      = regexp.MustCompile(`(?i)\b[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*\b`)
 	modelParamsRe = regexp.MustCompile(`(?i)\b(\d+(?:\.\d+)?)\s*b\b`)
 )
-
-func estimateModelVRAM(text string) (params float64, bits, estimateGB int, ok bool) {
-	m := modelParamsRe.FindStringSubmatch(text)
-	if len(m) != 2 {
-		return 0, 0, 0, false
-	}
-	params, err := strconv.ParseFloat(m[1], 64)
-	if err != nil || params <= 0 {
-		return 0, 0, 0, false
-	}
-	bits = 16
-	switch {
-	case containsAny(text, "awq", "gptq", "4-bit", "4bit", "q4"):
-		bits = 4
-	case containsAny(text, "8-bit", "8bit", "q8", "int8", "fp8"):
-		bits = 8
-	case containsAny(text, "fp32", "32-bit", "32bit"):
-		bits = 32
-	}
-	weightsGB := params * float64(bits) / 8
-	// 10% covers common tensor/quantization metadata; 4 GB reserves a small
-	// but useful KV cache and runtime workspace. Model Manager is still final.
-	estimateGB = int(math.Ceil(weightsGB*1.10 + 4))
-	return params, bits, estimateGB, true
-}
 
 func containsAny(text string, parts ...string) bool {
 	for _, part := range parts {

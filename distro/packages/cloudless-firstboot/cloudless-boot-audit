@@ -1,0 +1,155 @@
+#!/bin/sh
+# Record whether the complete Cloudless graphical ownership chain became ready.
+# The probe is intentionally bounded: a failed boot must leave an exact reason
+# instead of a permanently black display and an indefinitely "activating" unit.
+set -u
+
+STATE_DIR="${CLOUDLESS_BOOT_AUDIT_STATE_DIR:-/var/lib/cloudless}"
+STATE_FILE="$STATE_DIR/boot-health.json"
+HISTORY_FILE="$STATE_DIR/boot-health-history.tsv"
+REPORT_FILE="$STATE_DIR/validation-report.txt"
+PROBE_DIR="${CLOUDLESS_BOOT_AUDIT_PROBE_DIR:-}"
+TIMEOUT="${CLOUDLESS_BOOT_AUDIT_TIMEOUT:-90}"
+INTERVAL="${CLOUDLESS_BOOT_AUDIT_INTERVAL:-2}"
+BOOT_ID="${CLOUDLESS_BOOT_ID:-$(cat /proc/sys/kernel/random/boot_id 2>/dev/null || echo unknown)}"
+
+case "$TIMEOUT:$INTERVAL" in
+    *[!0-9:]*|:*|*:) echo "Invalid boot-audit timeout or interval" >&2; exit 2 ;;
+esac
+[ "$INTERVAL" -gt 0 ] || { echo "Boot-audit interval must be positive" >&2; exit 2; }
+
+install -d -m 0750 "$STATE_DIR"
+
+is_dgx_spark() {
+    [ -r /etc/dgx-release ] ||
+        { [ -r /sys/devices/virtual/dmi/id/product_name ] &&
+          grep -Eqi 'DGX[[:space:]_-]*Spark|GB10' /sys/devices/virtual/dmi/id/product_name; }
+}
+
+if is_dgx_spark; then platform=dgx-spark; else platform=generic; fi
+if [ "$platform" = dgx-spark ] && [ ! -e /etc/cloudless/dgx-appliance ]; then
+    display_expected=false
+else
+    display_expected=true
+fi
+
+fixture_probe() {
+    name="$1"
+    [ -n "$PROBE_DIR" ] || return 2
+    [ -r "$PROBE_DIR/$name" ] || return 1
+    [ "$(tr -d '\r\n' < "$PROBE_DIR/$name")" = ready ]
+}
+
+probe() {
+    name="$1"
+    if [ -n "$PROBE_DIR" ]; then fixture_probe "$name"; return $?; fi
+    case "$name" in
+        default-target) [ "$(systemctl get-default 2>/dev/null)" = graphical.target ] ;;
+        lightdm) systemctl is-active --quiet lightdm.service ;;
+        x-display) [ -S /tmp/.X11-unix/X0 ] ;;
+        graphical-session) pgrep -u cloudless -f 'openbox|cloudless-kiosk|CloudlessKiosk' >/dev/null 2>&1 ;;
+        kiosk-browser) pgrep -u cloudless -f 'chromium|chrome|firefox' >/dev/null 2>&1 ;;
+        browser-profile) [ "$(stat -c '%U:%G' /home/cloudless/.config 2>/dev/null)" = cloudless:cloudless ] ;;
+        orchestrator) curl --silent --fail --max-time 3 http://127.0.0.1:8765/api/health >/dev/null ;;
+        *) return 1 ;;
+    esac
+}
+
+default_target=skipped lightdm=skipped x_display=skipped graphical_session=skipped
+kiosk_browser=skipped browser_profile=waiting orchestrator=waiting
+attempts=0
+started="$(date +%s)"
+
+while :; do
+    attempts=$((attempts + 1))
+    if [ "$display_expected" = true ]; then
+        if probe default-target; then default_target=ready; else default_target=waiting; fi
+        if probe lightdm; then lightdm=ready; else lightdm=waiting; fi
+        if probe x-display; then x_display=ready; else x_display=waiting; fi
+        if probe graphical-session; then graphical_session=ready; else graphical_session=waiting; fi
+        if probe kiosk-browser; then kiosk_browser=ready; else kiosk_browser=waiting; fi
+    fi
+    if probe browser-profile; then browser_profile=ready; else browser_profile=waiting; fi
+    if probe orchestrator; then orchestrator=ready; else orchestrator=waiting; fi
+
+    healthy=true
+    if [ "$display_expected" = true ]; then
+        for value in "$default_target" "$lightdm" "$x_display" "$graphical_session" "$kiosk_browser"; do
+            [ "$value" = ready ] || healthy=false
+        done
+    fi
+    [ "$browser_profile" = ready ] || healthy=false
+    [ "$orchestrator" = ready ] || healthy=false
+    [ "$healthy" = true ] && break
+    now="$(date +%s)"
+    [ $((now - started)) -ge "$TIMEOUT" ] && break
+    sleep "$INTERVAL"
+done
+
+reason=ready
+if [ "$healthy" != true ]; then
+    reason=unknown
+    if [ "$default_target" = waiting ]; then reason=default-target-not-graphical
+    elif [ "$lightdm" = waiting ]; then reason=lightdm-not-active
+    elif [ "$x_display" = waiting ]; then reason=x-display-missing
+    elif [ "$graphical_session" = waiting ]; then reason=cloudless-session-missing
+    elif [ "$kiosk_browser" = waiting ]; then reason=kiosk-browser-missing
+    elif [ "$browser_profile" = waiting ]; then reason=browser-profile-owner-invalid
+    elif [ "$orchestrator" = waiting ]; then reason=orchestrator-unhealthy
+    fi
+fi
+
+previous_count=0
+previous_boot=
+previous_healthy=false
+if [ -r "$STATE_FILE" ]; then
+    previous_count="$(sed -n 's/.*"consecutiveHealthyBoots":\([0-9][0-9]*\).*/\1/p' "$STATE_FILE" | head -n1)"
+    previous_boot="$(sed -n 's/.*"bootId":"\([^"]*\)".*/\1/p' "$STATE_FILE" | head -n1)"
+    grep -Fq '"healthy":true' "$STATE_FILE" && previous_healthy=true
+fi
+case "$previous_count" in ''|*[!0-9]*) previous_count=0 ;; esac
+if [ "$healthy" = true ]; then
+    if [ "$previous_boot" = "$BOOT_ID" ] && [ "$previous_healthy" = true ]; then consecutive="$previous_count"
+    else consecutive=$((previous_count + 1)); fi
+else
+    consecutive=0
+fi
+
+checked="$(date -u +%FT%TZ)"
+elapsed=$(( $(date +%s) - started ))
+tmp="$STATE_FILE.tmp.$$"
+cat > "$tmp" <<EOF
+{"schema":"cloudless.boot-health.v1","healthy":$healthy,"consecutiveHealthyBoots":$consecutive,"bootId":"$BOOT_ID","checkedAt":"$checked","elapsedSeconds":$elapsed,"attempts":$attempts,"platform":"$platform","displayExpected":$display_expected,"reason":"$reason","probes":{"defaultTarget":"$default_target","lightdm":"$lightdm","xDisplay":"$x_display","graphicalSession":"$graphical_session","kioskBrowser":"$kiosk_browser","browserProfile":"$browser_profile","orchestrator":"$orchestrator"}}
+EOF
+chmod 0640 "$tmp"
+mv -f "$tmp" "$STATE_FILE"
+
+printf '%s\t%s\t%s\t%s\t%s\n' "$checked" "$BOOT_ID" "$healthy" "$reason" "$elapsed" >> "$HISTORY_FILE"
+tail -n 20 "$HISTORY_FILE" > "$HISTORY_FILE.tmp.$$"
+mv -f "$HISTORY_FILE.tmp.$$" "$HISTORY_FILE"
+chmod 0640 "$HISTORY_FILE"
+
+cat > "$REPORT_FILE" <<EOF
+CloudlessOS boot audit: $checked
+healthy: $healthy
+consecutive-healthy-boots: $consecutive
+platform: $platform
+display-expected: $display_expected
+reason: $reason
+elapsed-seconds: $elapsed
+default-target: $default_target
+lightdm: $lightdm
+x-display: $x_display
+graphical-session: $graphical_session
+kiosk-browser: $kiosk_browser
+browser-profile: $browser_profile
+orchestrator: $orchestrator
+EOF
+chmod 0640 "$REPORT_FILE"
+
+if [ "$healthy" = true ]; then
+    echo "Cloudless graphical boot is healthy ($consecutive consecutive boot(s))."
+    exit 0
+fi
+echo "Cloudless graphical boot failed: $reason. Run cloudless-repair or cloudless-diagnostics." >&2
+exit 1

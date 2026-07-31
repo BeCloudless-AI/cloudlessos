@@ -78,3 +78,24 @@ func TestFailedContainerCannotBePinned(t *testing.T) {
 		t.Fatalf("pin failed ComfyUI returned %d: %s", response.Code, response.Body.String())
 	}
 }
+
+func TestPinsGetOmitsSavedShortcutAfterAppStops(t *testing.T) {
+	store, err := state.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetPins([]string{"n8n"}); err != nil {
+		t.Fatal(err)
+	}
+	server := &Server{state: store, eng: pinEngine{states: map[string]string{"cloudless-n8n": "exited"}}}
+	request := httptest.NewRequest(http.MethodGet, "/api/pins", nil)
+	response := httptest.NewRecorder()
+
+	server.pinsGet(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("get pins returned %d: %s", response.Code, response.Body.String())
+	}
+	if got := response.Body.String(); got != "{\"pinned\":[]}\n" {
+		t.Fatalf("stopped app leaked into visible pins: %s", got)
+	}
+}

@@ -15,7 +15,9 @@ import (
 	"time"
 
 	"github.com/cloudless/orchestrator/internal/catalog"
+	"github.com/cloudless/orchestrator/internal/modelfit"
 	"github.com/cloudless/orchestrator/internal/models"
+	"github.com/cloudless/orchestrator/internal/platform"
 )
 
 var huggingFaceBaseURL = "https://huggingface.co"
@@ -258,14 +260,7 @@ func hfModelFromInfo(ctx context.Context, repo string, info hfAPIModel, token ..
 		authToken = token[0]
 	}
 	params := hfParameterTotal(info)
-	quant, bits := hfQuant(repo, info.Tags)
-	minGB := 0
-	if params > 0 {
-		weightGB := float64(params) * float64(bits) / 8 / 1_000_000_000
-		minGB = int(math.Ceil(weightGB*1.15 + 2))
-	} else if info.UsedStorage > 0 {
-		minGB = int(math.Ceil(float64(info.UsedStorage)/1_000_000_000*1.15 + 2))
-	}
+	quant, _ := hfQuant(repo, info.Tags)
 	tags := usefulHFTags(info)
 	joined := strings.ToLower(repo + " " + strings.Join(info.Tags, " "))
 	use := "general"
@@ -288,12 +283,13 @@ func hfModelFromInfo(ctx context.Context, repo string, info hfAPIModel, token ..
 			}
 			return "Unknown"
 		}(),
-		Quant: quant, ContextK: hfContextK(ctx, repo, authToken), MinVRAMGB: minGB,
+		Quant: quant, ContextK: hfContextK(ctx, repo, authToken),
 		Use: use, Tags: tags, ToolCalling: strings.Contains(joined, "chat") || strings.Contains(joined, "instruct"),
 		Vision: use == "vision", License: hfLicense(info), Gated: hfGated(info.Gated),
 		Description: "Community model from " + strings.Split(repo, "/")[0] + " on Hugging Face. Repository metadata was checked before it was added to CloudlessOS.",
 		Source:      "huggingface", SourceURL: huggingFaceBaseURL + "/" + repo,
-		RuntimeStatus: runtimeStatus, RuntimeNote: runtimeNote,
+		RuntimeStatus: runtimeStatus,
+		RuntimeNote:   runtimeNote + " CloudlessOS will not claim a memory fit until a reviewed runtime profile matches this exact artifact.",
 	}
 }
 
@@ -370,13 +366,26 @@ func (s *Server) huggingFaceImport(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "could not save the imported model"})
 		return
 	}
-	gpuGB, _ := acceleratorMemory(r.Context())
+	gpuGB, memoryType, availableGB, reservedGB := acceleratorFitMemory(r.Context())
 	have := s.downloadedModels(r.Context())
-	current := s.state.Get().Model
+	currentState := s.state.Get()
+	current := currentState.Model
 	if current == "" {
 		current = catalog.DefaultModel()
 	}
-	writeJSON(w, http.StatusOK, modelView{Model: model, Fit: fitFor(model.MinVRAMGB, gpuGB), Active: repo == current, Downloaded: have[repo]})
+	engineID := currentState.Engine
+	if engineID == "" {
+		engineID = catalog.DefaultEngine()
+	}
+	estimate := modelfit.EstimateModel(model, modelfit.Envelope{
+		MemoryGB: float64(gpuGB), AvailableGB: availableGB, ReservedGB: reservedGB,
+		MemoryType: memoryType, Nodes: 1,
+		Engine: engineID, Architecture: platform.Architecture(), Platform: platform.Detect(),
+	})
+	writeJSON(w, http.StatusOK, modelView{
+		Model: model, Fit: estimate.Status, FitEstimate: estimate,
+		Active: repo == current, Downloaded: have[repo],
+	})
 }
 
 type hfAccountView struct {

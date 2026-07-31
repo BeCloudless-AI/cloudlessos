@@ -49,4 +49,36 @@ func TestMergeCannotEraseReviewedRuntimeContract(t *testing.T) {
 	if got[0].RuntimeImage != builtin.RuntimeImage || got[0].Revision != builtin.Revision || !got[0].SingleNodeOnly {
 		t.Fatalf("reviewed runtime contract was erased: %#v", got[0])
 	}
+	if len(got[0].FitProfiles) == 0 {
+		t.Fatalf("reviewed fit profiles were erased: %#v", got[0])
+	}
+}
+
+func TestEveryCuratedModelHasAnExplicitSingleNodeFitProfile(t *testing.T) {
+	for _, model := range All() {
+		if len(model.FitProfiles) == 0 {
+			t.Fatalf("%s has no runtime fit profile", model.ID)
+		}
+		profile := model.FitProfiles[0]
+		if profile.Engine == "" || len(profile.Architectures) == 0 || len(profile.MemoryTypes) == 0 ||
+			profile.MinNodes != 1 || profile.MaxNodes != 1 || profile.RequiredPerNodeGB <= 0 ||
+			profile.ContextK <= 0 || profile.Evidence == "" || profile.Source == "" {
+			t.Fatalf("%s has an incomplete single-node fit profile: %#v", model.ID, profile)
+		}
+	}
+}
+
+func TestSparkDefaultHasMeasuredDistributedProfile(t *testing.T) {
+	model, ok := Get("Qwen/Qwen3.6-35B-A3B")
+	if !ok {
+		t.Fatal("Spark default model is missing")
+	}
+	for _, profile := range model.FitProfiles {
+		if profile.Sharded && profile.Evidence == "measured" && profile.MinNodes == 2 &&
+			profile.MaxNodes == 2 && profile.RequiredPerNodeGB > 0 &&
+			model.Revision == "995ad96eacd98c81ed38be0c5b274b04031597b0" {
+			return
+		}
+	}
+	t.Fatalf("Spark default lacks its measured cluster profile: %#v", model.FitProfiles)
 }

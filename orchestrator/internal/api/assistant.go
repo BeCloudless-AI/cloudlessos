@@ -12,7 +12,9 @@ import (
 	"github.com/cloudless/orchestrator/internal/assistant"
 	"github.com/cloudless/orchestrator/internal/catalog"
 	"github.com/cloudless/orchestrator/internal/hardware"
+	"github.com/cloudless/orchestrator/internal/modelfit"
 	modelcatalog "github.com/cloudless/orchestrator/internal/models"
+	"github.com/cloudless/orchestrator/internal/platform"
 )
 
 // assistantChat streams a grounded reply from the built-in Cloudless Assistant.
@@ -153,8 +155,16 @@ func (s *Server) assistantContext(ctx context.Context) assistant.Context {
 	modelList := s.mfModels.Highlights(modelCtx)
 	cancel()
 	modelList = modelcatalog.Merge(modelList)
-	gpuGB, memoryType := acceleratorMemory(ctx)
+	gpuGB, memoryType, availableGB, reservedGB := acceleratorFitMemory(ctx)
 	cluster := clusterCompute(ctx, gpuGB)
+	fitEngine := st.Engine
+	if fitEngine == "" {
+		fitEngine = active
+	}
+	if fitEngine == "" {
+		fitEngine = catalog.DefaultEngine()
+	}
+	machinePlatform := platform.Detect()
 	modelOptions := make([]assistant.ModelOption, 0, len(modelList))
 	currentListed := false
 	for _, m := range modelList {
@@ -162,12 +172,34 @@ func (s *Server) assistantContext(ctx context.Context) assistant.Context {
 			currentListed = true
 		}
 		clusterFit := ""
+		var clusterEstimate modelfit.Estimate
 		if cluster.DistributedReady && !m.SingleNodeOnly {
-			clusterFit = fitFor(m.MinVRAMGB, cluster.CombinedMemoryGB)
+			clusterMemoryGB := float64(cluster.LocalMemoryGB)
+			clusterAvailableGB := availableGB
+			if cluster.PerNodeCapacityGB > 0 {
+				clusterMemoryGB = cluster.PerNodeCapacityGB + reservedGB
+				clusterAvailableGB = cluster.PerNodeAvailableGB + reservedGB
+			}
+			clusterEstimate = modelfit.EstimateModel(m, modelfit.Envelope{
+				MemoryGB: clusterMemoryGB, AvailableGB: clusterAvailableGB, ReservedGB: reservedGB,
+				MemoryType: memoryType,
+				Nodes:      cluster.Nodes, Sharded: true, Engine: fitEngine,
+				Architecture: platform.Architecture(), Platform: machinePlatform,
+			})
+			clusterFit = clusterEstimate.Status
 		}
+		localEstimate := modelfit.EstimateModel(m, modelfit.Envelope{
+			MemoryGB: float64(gpuGB), AvailableGB: availableGB, ReservedGB: reservedGB,
+			MemoryType: memoryType, Nodes: 1,
+			Engine: fitEngine, Architecture: platform.Architecture(), Platform: machinePlatform,
+		})
 		modelOptions = append(modelOptions, assistant.ModelOption{
 			ID: m.ID, Name: m.Name, Params: m.Params, Quant: m.Quant,
-			MinVRAMGB: m.MinVRAMGB, Fit: fitFor(m.MinVRAMGB, gpuGB), ClusterFit: clusterFit,
+			Fit: localEstimate.Status, ClusterFit: clusterFit,
+			RequiredPerNodeGB:        localEstimate.RequiredPerNodeGB,
+			ClusterRequiredPerNodeGB: clusterEstimate.RequiredPerNodeGB,
+			Evidence:                 localEstimate.Evidence, ClusterEvidence: clusterEstimate.Evidence,
+			FitReason: localEstimate.Reason, ClusterFitReason: clusterEstimate.Reason,
 		})
 	}
 	if !currentListed && model != "" {

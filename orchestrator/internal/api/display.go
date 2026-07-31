@@ -2,18 +2,21 @@ package api
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"os"
-	"os/exec"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/cloudless/orchestrator/internal/desktop"
 	"github.com/cloudless/orchestrator/internal/state"
 )
 
@@ -42,28 +45,24 @@ type displaySnapshot struct {
 	Error      string                  `json:"error,omitempty"`
 }
 
-var resolutionPattern = regexp.MustCompile(`^([0-9]+)x([0-9]+)$`)
-
-func displayEnvironment() []string {
-	display := os.Getenv("CLOUDLESS_DISPLAY")
-	if display == "" {
-		display = ":0"
-	}
-	home := os.Getenv("CLOUDLESS_DESKTOP_HOME")
-	if home == "" {
-		home = "/home/cloudless"
-	}
-	return append(os.Environ(), "DISPLAY="+display, "XAUTHORITY="+home+"/.Xauthority")
+type pendingDisplayChange struct {
+	Schema           string                  `json:"schema"`
+	Token            string                  `json:"token"`
+	Selected         state.DisplayPreference `json:"selected"`
+	Previous         state.DisplayPreference `json:"previous"`
+	ExpiresAt        time.Time               `json:"expiresAt"`
+	Timer            *time.Timer             `json:"-"`
+	RollbackAttempts int                     `json:"-"`
 }
 
+var resolutionPattern = regexp.MustCompile(`^([0-9]+)x([0-9]+)$`)
+
 func queryDisplays(ctx context.Context) (displaySnapshot, error) {
-	cmd := exec.CommandContext(ctx, "xrandr", "--query")
-	cmd.Env = displayEnvironment()
-	data, err := cmd.Output()
+	data, err := desktop.NewClient().QueryDisplay(ctx)
 	if err != nil {
 		return displaySnapshot{}, fmt.Errorf("display service unavailable: %w", err)
 	}
-	return parseXrandr(string(data))
+	return parseXrandr(data)
 }
 
 func parseXrandr(raw string) (displaySnapshot, error) {
@@ -145,18 +144,148 @@ func parseXrandr(raw string) (displaySnapshot, error) {
 }
 
 func applyDisplayMode(ctx context.Context, output string, width, height int) error {
-	cmd := exec.CommandContext(ctx, "xrandr", "--output", output, "--mode", fmt.Sprintf("%dx%d", width, height))
-	cmd.Env = displayEnvironment()
-	if data, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("could not change display mode: %s", strings.TrimSpace(string(data)))
+	if err := desktop.NewClient().ApplyDisplay(ctx, output, width, height); err != nil {
+		return fmt.Errorf("could not change display mode: %w", err)
 	}
+	return nil
+}
+
+func (s *Server) queryDisplay(ctx context.Context) (displaySnapshot, error) {
+	if s.displayQuery != nil {
+		return s.displayQuery(ctx)
+	}
+	return queryDisplays(ctx)
+}
+
+func (s *Server) applyDisplay(ctx context.Context, output string, width, height int) error {
+	if s.displayApply != nil {
+		return s.displayApply(ctx, output, width, height)
+	}
+	return applyDisplayMode(ctx, output, width, height)
+}
+
+func displayChangeToken() (string, error) {
+	raw := make([]byte, 16)
+	if _, err := rand.Read(raw); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(raw), nil
+}
+
+func (s *Server) pendingDisplayPath() string {
+	if s.state == nil {
+		return ""
+	}
+	return filepath.Join(s.state.Dir(), "display-change-pending.json")
+}
+
+func (s *Server) persistPendingDisplay(change *pendingDisplayChange) error {
+	path := s.pendingDisplayPath()
+	if path == "" {
+		return nil
+	}
+	data, err := json.Marshal(change)
+	if err != nil {
+		return err
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmp, 0o600); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return nil
+}
+
+func (s *Server) clearPendingDisplay() error {
+	path := s.pendingDisplayPath()
+	if path == "" {
+		return nil
+	}
+	err := os.Remove(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	return err
+}
+
+func (s *Server) recoverPendingDisplayChange() {
+	path := s.pendingDisplayPath()
+	if path == "" {
+		return
+	}
+	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return
+	}
+	if err != nil {
+		fmt.Printf("Cloudless could not read pending display recovery: %v\n", err)
+		return
+	}
+	var change pendingDisplayChange
+	if json.Unmarshal(data, &change) != nil || change.Schema != "cloudless.display-change.v1" ||
+		change.Token == "" || change.Previous.Output == "" || change.Previous.Width <= 0 || change.Previous.Height <= 0 {
+		fmt.Printf("Cloudless found an invalid pending display recovery record\n")
+		return
+	}
+	s.displayMu.Lock()
+	if s.displayChange != nil {
+		s.displayMu.Unlock()
+		return
+	}
+	s.displayChange = &change
+	delay := s.displayRecoveryDelay
+	if delay <= 0 {
+		delay = time.Second
+	}
+	change.Timer = time.AfterFunc(delay, func() {
+		if rollbackErr := s.rollbackDisplay(change.Token); rollbackErr != nil && rollbackErr.Error() != "display confirmation expired" {
+			fmt.Printf("Cloudless pending display recovery failed: %v\n", rollbackErr)
+		}
+	})
+	s.displayMu.Unlock()
+}
+
+func (s *Server) rollbackDisplay(token string) error {
+	s.displayMu.Lock()
+	defer s.displayMu.Unlock()
+	change := s.displayChange
+	if change == nil || change.Token != token {
+		return errors.New("display confirmation expired")
+	}
+	if change.Timer != nil {
+		change.Timer.Stop()
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := s.applyDisplay(ctx, change.Previous.Output, change.Previous.Width, change.Previous.Height); err != nil {
+		change.RollbackAttempts++
+		if change.RollbackAttempts < 30 {
+			change.Timer = time.AfterFunc(2*time.Second, func() {
+				if retryErr := s.rollbackDisplay(token); retryErr != nil && retryErr.Error() != "display confirmation expired" {
+					fmt.Printf("Cloudless display rollback retry failed: %v\n", retryErr)
+				}
+			})
+		}
+		return err
+	}
+	if err := s.clearPendingDisplay(); err != nil {
+		return fmt.Errorf("clear pending display recovery: %w", err)
+	}
+	s.displayChange = nil
 	return nil
 }
 
 func (s *Server) displayGet(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 4*time.Second)
 	defer cancel()
-	snapshot, err := queryDisplays(ctx)
+	snapshot, err := s.queryDisplay(ctx)
 	if s.state != nil {
 		snapshot.Configured = s.state.DisplayPreference()
 	}
@@ -178,16 +307,18 @@ func (s *Server) displaySet(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
-	snapshot, err := queryDisplays(ctx)
+	snapshot, err := s.queryDisplay(ctx)
 	if err != nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
 		return
 	}
 	valid := false
+	var previous state.DisplayPreference
 	for _, output := range snapshot.Outputs {
 		if output.Name != request.Output {
 			continue
 		}
+		previous = state.DisplayPreference{Output: output.Name, Width: output.Width, Height: output.Height}
 		for _, mode := range output.Modes {
 			if mode.Width == request.Width && mode.Height == request.Height {
 				valid = true
@@ -199,15 +330,112 @@ func (s *Server) displaySet(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "that resolution is not supported by the selected display"})
 		return
 	}
-	if err := applyDisplayMode(ctx, request.Output, request.Width, request.Height); err != nil {
+	if previous.Width <= 0 || previous.Height <= 0 {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "the current display mode cannot be restored safely"})
+		return
+	}
+	token, err := displayChangeToken()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "could not create display confirmation"})
+		return
+	}
+	delay := s.displayDelay
+	if delay <= 0 {
+		delay = 20 * time.Second
+	}
+	s.displayMu.Lock()
+	if s.displayChange != nil {
+		s.displayMu.Unlock()
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "confirm or revert the current display change first"})
+		return
+	}
+	change := &pendingDisplayChange{
+		Schema: "cloudless.display-change.v1", Token: token, Selected: request, Previous: previous,
+		ExpiresAt: time.Now().Add(delay).UTC(),
+	}
+	if err := s.persistPendingDisplay(change); err != nil {
+		s.displayMu.Unlock()
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "could not create a durable display rollback"})
+		return
+	}
+	if err := s.applyDisplay(ctx, request.Output, request.Width, request.Height); err != nil {
+		_ = s.clearPendingDisplay()
+		s.displayMu.Unlock()
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
+	s.displayChange = change
+	change.Timer = time.AfterFunc(delay, func() {
+		if err := s.rollbackDisplay(token); err != nil && err.Error() != "display confirmation expired" {
+			fmt.Printf("Cloudless display rollback failed: %v\n", err)
+		}
+	})
+	s.displayMu.Unlock()
+	writeJSON(w, http.StatusOK, map[string]any{
+		"applied": true, "confirmationRequired": true, "token": token,
+		"confirmSeconds": int(delay.Round(time.Second) / time.Second), "configured": request,
+	})
+}
+
+func (s *Server) displayConfirm(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("X-Cloudless-Action") != "display-confirm" {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "display confirmation header required"})
+		return
+	}
+	var request struct {
+		Token string `json:"token"`
+	}
+	if json.NewDecoder(r.Body).Decode(&request) != nil || request.Token == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid display confirmation"})
+		return
+	}
+	s.displayMu.Lock()
+	change := s.displayChange
+	if change == nil || change.Token != request.Token {
+		s.displayMu.Unlock()
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "display confirmation expired"})
+		return
+	}
 	if s.state != nil {
-		if err := s.state.SetDisplayPreference(request); err != nil {
-			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		if err := s.state.SetDisplayPreference(change.Selected); err != nil {
+			s.displayMu.Unlock()
+			_ = s.rollbackDisplay(request.Token)
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "could not save display preference; the previous mode was restored"})
 			return
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"applied": true, "configured": request})
+	if err := s.clearPendingDisplay(); err != nil {
+		if s.state != nil {
+			_ = s.state.SetDisplayPreference(change.Previous)
+		}
+		s.displayMu.Unlock()
+		_ = s.rollbackDisplay(request.Token)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "could not finish display confirmation; the previous mode was restored"})
+		return
+	}
+	if change.Timer != nil {
+		change.Timer.Stop()
+	}
+	s.displayChange = nil
+	s.displayMu.Unlock()
+	writeJSON(w, http.StatusOK, map[string]any{"confirmed": true, "configured": change.Selected})
+}
+
+func (s *Server) displayRevert(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("X-Cloudless-Action") != "display-revert" {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "display revert header required"})
+		return
+	}
+	var request struct {
+		Token string `json:"token"`
+	}
+	if json.NewDecoder(r.Body).Decode(&request) != nil || request.Token == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid display revert request"})
+		return
+	}
+	if err := s.rollbackDisplay(request.Token); err != nil {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"reverted": true})
 }

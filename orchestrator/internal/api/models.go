@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,19 +10,21 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/cloudless/orchestrator/internal/catalog"
+	"github.com/cloudless/orchestrator/internal/engine"
 	"github.com/cloudless/orchestrator/internal/hardware"
 	"github.com/cloudless/orchestrator/internal/jobs"
+	"github.com/cloudless/orchestrator/internal/modelcache"
 	"github.com/cloudless/orchestrator/internal/modelfit"
 	"github.com/cloudless/orchestrator/internal/models"
 	"github.com/cloudless/orchestrator/internal/places"
+	"github.com/cloudless/orchestrator/internal/platform"
+	"github.com/cloudless/orchestrator/internal/state"
 )
 
 // acceleratorMemory reports the capacity available to GPU workloads. On DGX
@@ -32,37 +35,33 @@ func acceleratorMemory(ctx context.Context) (int, string) {
 	return hardware.AcceleratorMemoryGB(c)
 }
 
+func acceleratorFitMemory(ctx context.Context) (totalGB int, memoryType string, availableGB, reservedGB float64) {
+	totalGB, memoryType = acceleratorMemory(ctx)
+	if memoryType != "unified" {
+		return totalGB, memoryType, float64(totalGB), 0
+	}
+	budget := hardware.AcceleratorMemoryBudget(ctx)
+	return totalGB, memoryType,
+		float64(budget.AvailableMB) / 1024,
+		float64(budget.ReservedMB) / 1024
+}
+
 // totalVRAMGB is retained internally while API clients migrate to memoryType.
 func totalVRAMGB(ctx context.Context) int {
 	total, _ := acceleratorMemory(ctx)
 	return total
 }
 
-// fitFor classifies a model's VRAM need against available GPU memory.
-func fitFor(minGB, gpuGB int) string {
-	if gpuGB <= 0 {
-		return "unknown"
-	}
-	switch {
-	case float64(minGB) <= float64(gpuGB)*0.85:
-		return "fits"
-	case float64(minGB) <= float64(gpuGB)*1.05:
-		return "tight"
-	default:
-		return "over"
-	}
-}
-
-// modelVolumePath resolves Docker's local Hugging Face cache mount. Installed
-// systems run cloudlessd as root, so reading it directly avoids launching a
-// throwaway container every time Model Manager opens.
+// modelVolumePath resolves Cloudless's host-owned Hugging Face cache. It no
+// longer exposes Docker's root-private volume mountpoint to the API daemon.
 func (s *Server) modelVolumePath(ctx context.Context) string {
-	out, err := s.eng.Output(ctx, "volume", "inspect", "cloudless-hf", "--format", "{{.Mountpoint}}")
-	if err != nil {
-		return ""
-	}
-	path := strings.TrimSpace(out)
+	_ = ctx
+	path := modelcache.Root()
 	if stat, err := os.Stat(filepath.Join(path, "hub")); err == nil && stat.IsDir() {
+		return path
+	}
+	// An empty, prepared cache is still valid and writable.
+	if stat, err := os.Stat(path); err == nil && stat.IsDir() {
 		return path
 	}
 	return ""
@@ -157,6 +156,10 @@ func exposeModelCache(cacheRoot string, have map[string]bool) error {
 			_ = os.RemoveAll(temp)
 			return err
 		}
+		if err := os.Chmod(filepath.Join(temp, ".cloudless-revision"), 0o644); err != nil {
+			_ = os.RemoveAll(temp)
+			return err
+		}
 		if info, err := os.Lstat(destination); err == nil {
 			if info.Mode()&os.ModeSymlink != 0 {
 				_ = os.Remove(destination)
@@ -186,7 +189,12 @@ func hardlinkTree(source, destination string) error {
 		}
 		target := filepath.Join(destination, relative)
 		if entry.IsDir() {
-			return os.MkdirAll(target, 0o755)
+			if err := os.MkdirAll(target, 0o755); err != nil {
+				return err
+			}
+			// cloudlessd runs with UMask=0077. The Models view is deliberately
+			// read-only to the desktop account, so make that visibility explicit.
+			return os.Chmod(target, 0o755)
 		}
 		resolved, err := filepath.EvalSymlinks(path)
 		if err != nil {
@@ -195,13 +203,7 @@ func hardlinkTree(source, destination string) error {
 		if err := os.Link(resolved, target); err == nil {
 			return nil
 		}
-		// ProtectSystem/ProtectHome place cloudlessd in a private mount
-		// namespace. Link through PID 1's namespace so the source cache and
-		// desktop Models folder share their real host mount.
-		if output, err := exec.Command("nsenter", "-t", "1", "-m", "--", "ln", "--", resolved, target).CombinedOutput(); err != nil {
-			return fmt.Errorf("hard-link %s: %w: %s", entry.Name(), err, strings.TrimSpace(string(output)))
-		}
-		return nil
+		return fmt.Errorf("hard-link %s into the Models view: model cache and desktop storage must share a filesystem", entry.Name())
 	})
 }
 
@@ -223,21 +225,7 @@ func (s *Server) downloadedModels(ctx context.Context) map[string]bool {
 	defer cancel()
 	root := s.modelVolumePath(c)
 	have := scanModelHub(root)
-	if root == "" {
-		out, err := s.eng.Output(c, "run", "--rm", "-v", "cloudless-hf:/c", "busybox",
-			"sh", "-c", `for f in /c/hub/models--*/refs/main; do [ -s "$f" ] && basename "$(dirname "$(dirname "$f")")"; done 2>/dev/null`)
-		if err == nil {
-			for _, line := range strings.Split(out, "\n") {
-				rest, ok := strings.CutPrefix(strings.TrimSpace(line), "models--")
-				if !ok {
-					continue
-				}
-				if org, name, found := strings.Cut(rest, "--"); found {
-					have[org+"/"+name] = true
-				}
-			}
-		}
-	} else {
+	if root != "" {
 		if err := exposeModelCache(root, have); err != nil {
 			log.Printf("models: expose cache in Models folder: %v", err)
 		}
@@ -296,6 +284,46 @@ func (s *Server) cancelModelJob(jobID string) bool {
 	return ok
 }
 
+func modelDownloadContainerName(repo string) string {
+	sum := sha256.Sum256([]byte(strings.TrimSpace(repo)))
+	return fmt.Sprintf("cloudless-model-download-%x", sum[:8])
+}
+
+func (s *Server) observeModelDownload(job *jobs.Job, repo string) {
+	job.Observe(func(update jobs.Update) {
+		if update.Done && update.Phase != "error" {
+			if err := s.state.RemoveModelDownload(repo); err != nil {
+				log.Printf("models: remove durable download %s: %v", repo, err)
+			}
+			return
+		}
+		download := state.ModelDownload{
+			ModelID: repo, Phase: update.Phase, Message: update.Message,
+			BytesDone: update.BytesDone, BytesTotal: update.BytesTotal,
+			Started: update.StartedAt, Updated: update.UpdatedAt, Error: update.Error,
+		}
+		if err := s.state.SetModelDownload(download); err != nil {
+			log.Printf("models: persist download %s: %v", repo, err)
+		}
+	})
+}
+
+// startModelDownloadRecovery resumes interrupted cache operations after a
+// cloudlessd restart. Hugging Face's incomplete blob chunks remain in the
+// shared volume; snapshot_download verifies and continues them.
+func (s *Server) startModelDownloadRecovery() {
+	for _, download := range s.state.ModelDownloads() {
+		if download.ModelID == "" || download.Phase == "error" || download.Phase == "canceled" {
+			continue
+		}
+		job := s.jobs.Create("model-dl:" + download.ModelID)
+		s.observeModelDownload(job, download.ModelID)
+		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Minute)
+		s.registerModelJob(job.ID, cancel)
+		go s.runModelDownload(ctx, cancel, job, download.ModelID, s.huggingFaceToken())
+	}
+}
+
 type modelDownloadView struct {
 	JobID      string `json:"jobId"`
 	ModelID    string `json:"modelId"`
@@ -303,6 +331,10 @@ type modelDownloadView struct {
 	Message    string `json:"message"`
 	BytesDone  int64  `json:"bytesDone"`
 	BytesTotal int64  `json:"bytesTotal"`
+	Percent    int    `json:"percent"`
+	ETASecs    int64  `json:"etaSeconds,omitempty"`
+	StartedAt  string `json:"startedAt,omitempty"`
+	UpdatedAt  string `json:"updatedAt,omitempty"`
 	Done       bool   `json:"done"`
 	Error      string `json:"error,omitempty"`
 }
@@ -317,6 +349,8 @@ func (s *Server) activeModelDownloads() []modelDownloadView {
 			JobID: snapshot.ID, ModelID: strings.TrimPrefix(snapshot.AppID, "model-dl:"),
 			Phase: snapshot.Phase, Message: snapshot.Message,
 			BytesDone: snapshot.BytesDone, BytesTotal: snapshot.BytesTotal,
+			Percent: snapshot.Percent, ETASecs: snapshot.ETASecs,
+			StartedAt: snapshot.StartedAt, UpdatedAt: snapshot.UpdatedAt,
 			Done: snapshot.Done, Error: snapshot.Error,
 		})
 	}
@@ -343,13 +377,19 @@ type modelView struct {
 // "Cloudless highlights" (from the hosted models manifest, else the built-in list).
 // Each carries a VRAM-fit verdict, active and downloaded flags.
 func (s *Server) modelsList(w http.ResponseWriter, r *http.Request) {
-	gpuGB, memoryType := acceleratorMemory(r.Context())
+	gpuGB, memoryType, availableGB, reservedGB := acceleratorFitMemory(r.Context())
 	cluster := clusterCompute(r.Context(), gpuGB)
-	engineUnloaded := s.state.Get().EngineUnloaded
-	current := s.state.Get().Model
+	currentState := s.state.Get()
+	engineUnloaded := currentState.EngineUnloaded
+	current := currentState.Model
 	if current == "" {
 		current = catalog.DefaultModel()
 	}
+	activeEngine := currentState.Engine
+	if activeEngine == "" {
+		activeEngine = catalog.DefaultEngine()
+	}
+	machinePlatform := platform.Detect()
 
 	// Region-awareness: a machine in France is recommended French-built (Mistral) models.
 	country, countryName, _, _ := s.effectiveCountry()
@@ -388,14 +428,24 @@ func (s *Server) modelsList(w http.ResponseWriter, r *http.Request) {
 
 	view := func(m models.Model) modelView {
 		estimate := modelfit.EstimateModel(m, modelfit.Envelope{
-			MemoryGB: float64(gpuGB), MemoryType: memoryType, Nodes: 1,
+			MemoryGB: float64(gpuGB), AvailableGB: availableGB, ReservedGB: reservedGB,
+			MemoryType: memoryType, Nodes: 1,
+			Engine: activeEngine, Architecture: platform.Architecture(), Platform: machinePlatform,
 		})
 		mv := modelView{Model: m, Fit: estimate.Status, FitEstimate: estimate,
 			Active: !engineUnloaded && m.ID == current, Downloaded: have[m.ID]}
 		if cluster.DistributedReady && !m.SingleNodeOnly {
+			clusterMemoryGB := float64(cluster.LocalMemoryGB)
+			clusterAvailableGB := availableGB
+			if cluster.PerNodeCapacityGB > 0 {
+				clusterMemoryGB = cluster.PerNodeCapacityGB + reservedGB
+				clusterAvailableGB = cluster.PerNodeAvailableGB + reservedGB
+			}
 			clusterEstimate := modelfit.EstimateModel(m, modelfit.Envelope{
-				MemoryGB: float64(cluster.LocalMemoryGB), MemoryType: memoryType,
-				Nodes: cluster.Nodes, Sharded: true,
+				MemoryGB: clusterMemoryGB, AvailableGB: clusterAvailableGB, ReservedGB: reservedGB,
+				MemoryType: memoryType,
+				Nodes:      cluster.Nodes, Sharded: true, Engine: activeEngine,
+				Architecture: platform.Architecture(), Platform: machinePlatform,
 			})
 			mv.ClusterFit = clusterEstimate.Status
 			mv.ClusterEstimate = &clusterEstimate
@@ -490,15 +540,15 @@ func (s *Server) modelDownload(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	hadCompleteCache := s.downloadedModels(r.Context())[body.ID]
 	token := strings.TrimSpace(body.Token)
 	if token == "" {
 		token = s.huggingFaceToken()
 	}
 	job := s.jobs.Create("model-dl:" + body.ID)
+	s.observeModelDownload(job, body.ID)
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Minute)
 	s.registerModelJob(job.ID, cancel)
-	go s.runModelDownload(ctx, cancel, job, body.ID, hadCompleteCache, token)
+	go s.runModelDownload(ctx, cancel, job, body.ID, token)
 	writeJSON(w, http.StatusAccepted, map[string]string{"jobId": job.ID})
 }
 
@@ -550,51 +600,17 @@ func (s *Server) removeModelCache(ctx context.Context, repo string) error {
 		return fmt.Errorf("invalid model id")
 	}
 	root := s.modelVolumePath(ctx)
-	if root != "" {
-		if err := os.RemoveAll(filepath.Join(root, "hub", cacheName)); err != nil {
-			root = ""
-		}
-	}
 	if root == "" {
-		if _, err := s.eng.Output(ctx, "run", "--rm", "-v", "cloudless-hf:/c", "busybox",
-			"sh", "-c", `rm -rf "/c/hub/$1"`, "cloudless-remove-model", cacheName); err != nil {
-			return err
-		}
+		return errors.New("Cloudless model cache is unavailable")
+	}
+	if err := os.RemoveAll(filepath.Join(root, "hub", cacheName)); err != nil {
+		return err
 	}
 	if err := s.removeExposedModel(repo); err != nil {
 		return err
 	}
 	s.invalidateDownloadedModels()
 	return nil
-}
-
-func (s *Server) cleanCanceledModelCache(ctx context.Context, repo string, hadCompleteCache bool) error {
-	if !hadCompleteCache {
-		return s.removeModelCache(ctx, repo)
-	}
-	cacheName, ok := modelCacheName(repo)
-	if !ok {
-		return fmt.Errorf("invalid model id")
-	}
-	root := s.modelVolumePath(ctx)
-	if root != "" {
-		var removeErr error
-		_ = filepath.WalkDir(filepath.Join(root, "hub", cacheName, "blobs"), func(path string, entry os.DirEntry, walkErr error) error {
-			if walkErr == nil && !entry.IsDir() && strings.HasSuffix(entry.Name(), ".incomplete") {
-				if err := os.Remove(path); err != nil && removeErr == nil {
-					removeErr = err
-				}
-			}
-			return nil
-		})
-		if removeErr == nil {
-			return nil
-		}
-	}
-	_, err := s.eng.Output(ctx, "run", "--rm", "-v", "cloudless-hf:/c", "busybox",
-		"sh", "-c", `find "/c/hub/$1/blobs" -type f -name '*.incomplete' -delete 2>/dev/null || true`,
-		"cloudless-clean-model", cacheName)
-	return err
 }
 
 func (s *Server) modelUninstall(w http.ResponseWriter, r *http.Request) {
@@ -643,38 +659,46 @@ func huggingFaceModelBytes(ctx context.Context, repo, token string) int64 {
 }
 
 func huggingFaceModelRevisionBytes(ctx context.Context, repo, revision, token string) int64 {
+	total, _ := huggingFaceModelRevisionSize(ctx, repo, revision, token)
+	return total
+}
+
+func huggingFaceModelRevisionSize(ctx context.Context, repo, revision, token string) (int64, error) {
 	endpoint := "https://huggingface.co/api/models/" + repo
 	if revision = strings.TrimSpace(revision); revision != "" {
 		endpoint += "/revision/" + url.PathEscape(revision)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint+"?blobs=true", nil)
 	if err != nil {
-		return 0
+		return 0, err
 	}
 	if token = strings.TrimSpace(token); token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return 0
+		return 0, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return 0
+		return 0, fmt.Errorf("Hugging Face model metadata returned HTTP %d", resp.StatusCode)
 	}
 	var info struct {
 		Siblings []struct {
 			Size int64 `json:"size"`
 		} `json:"siblings"`
 	}
-	if json.NewDecoder(resp.Body).Decode(&info) != nil {
-		return 0
+	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
+		return 0, err
 	}
 	var total int64
 	for _, file := range info.Siblings {
 		total += file.Size
 	}
-	return total
+	if total <= 0 {
+		return 0, errors.New("Hugging Face model metadata did not include file sizes")
+	}
+	return total, nil
 }
 
 func directoryBytes(path string) int64 {
@@ -691,23 +715,28 @@ func directoryBytes(path string) int64 {
 }
 
 func (s *Server) modelRepoBytes(ctx context.Context, repo, root string) int64 {
+	_ = ctx
 	cacheName := "models--" + strings.ReplaceAll(repo, "/", "--")
 	if root != "" {
 		return directoryBytes(filepath.Join(root, "hub", cacheName))
 	}
-	c, cancel := context.WithTimeout(ctx, 2*time.Second)
-	defer cancel()
-	out, err := s.eng.Output(c, "run", "--rm", "-v", "cloudless-hf:/c", "busybox",
-		"du", "-sb", filepath.Join("/c/hub", cacheName))
-	if err != nil {
-		return 0
+	return 0
+}
+
+func (s *Server) modelRepoIncomplete(ctx context.Context, repo, root string) int {
+	_ = ctx
+	cacheName := "models--" + strings.ReplaceAll(repo, "/", "--")
+	if root != "" {
+		count := 0
+		_ = filepath.WalkDir(filepath.Join(root, "hub", cacheName, "blobs"), func(_ string, entry os.DirEntry, err error) error {
+			if err == nil && !entry.IsDir() && strings.HasSuffix(entry.Name(), ".incomplete") {
+				count++
+			}
+			return nil
+		})
+		return count
 	}
-	fields := strings.Fields(out)
-	if len(fields) == 0 {
-		return 0
-	}
-	value, _ := strconv.ParseInt(fields[0], 10, 64)
-	return value
+	return 0
 }
 
 func formatDownloadProgress(done, total int64) string {
@@ -724,7 +753,7 @@ func formatDownloadProgress(done, total int64) string {
 
 // runModelDownload fetches a repo into the shared cache while polling its
 // on-disk byte count for real progress.
-func (s *Server) runModelDownload(ctx context.Context, cancel context.CancelFunc, job *jobs.Job, repo string, hadCompleteCache bool, token string) {
+func (s *Server) runModelDownload(ctx context.Context, cancel context.CancelFunc, job *jobs.Job, repo, token string) {
 	defer cancel()
 	defer s.unregisterModelJob(job.ID)
 	vllm, _ := catalog.Get("vllm")
@@ -742,28 +771,37 @@ func (s *Server) runModelDownload(ctx context.Context, cancel context.CancelFunc
 	root := s.modelVolumePath(ctx)
 	job.ProgressBytes("downloading", "Preparing "+repo+"…", s.modelRepoBytes(ctx, repo, root), total)
 	py := "import os; from huggingface_hub import snapshot_download; kw={}; revision=os.environ.get('CLOUDLESS_MODEL_REVISION',''); kw.update(revision=revision) if revision else None; snapshot_download(os.environ['CLOUDLESS_MODEL_ID'], **kw)"
-	containerName := "cloudless-model-download-" + job.ID
+	containerName := modelDownloadContainerName(repo)
+	// A daemon crash may leave the previous helper running. Stop that stable
+	// helper before resuming so two writers never mutate the same cache blobs.
+	cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 15*time.Second)
+	_ = s.eng.Remove(cleanupCtx, containerName)
+	cleanupCancel()
 	result := make(chan error, 1)
 	go func() {
-		args := []string{"run", "--rm", "--name", containerName, "--entrypoint", "python3",
-			"-e", "CLOUDLESS_MODEL_ID=" + repo}
+		env := map[string]string{"CLOUDLESS_MODEL_ID": repo}
 		if revision != "" {
-			args = append(args, "-e", "CLOUDLESS_MODEL_REVISION="+revision)
+			env["CLOUDLESS_MODEL_REVISION"] = revision
 		}
 		if token != "" {
-			args = append(args, "-e", "HF_TOKEN="+token)
+			env["HF_TOKEN"] = token
 		}
-		args = append(args, "-v", "cloudless-hf:/root/.cache/huggingface", img, "-c", py)
-		_, err := s.eng.Output(ctx, args...)
+		_, err := s.eng.RunTransient(ctx, engine.RunSpec{
+			Name:       containerName,
+			Image:      img,
+			Env:        env,
+			Volumes:    map[string]string{modelcache.Root(): "/root/.cache/huggingface"},
+			EntryPoint: "python3",
+			Args:       []string{"-c", py},
+		})
 		result <- err
 	}()
-	cleanupCanceled := func() {
+	stopCanceled := func() {
 		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cleanupCancel()
 		_ = s.eng.Remove(cleanupCtx, containerName)
-		if err := s.cleanCanceledModelCache(cleanupCtx, repo, hadCompleteCache); err != nil {
-			log.Printf("models: clean canceled download %s: %v", repo, err)
-		}
+		// Keep .incomplete Hugging Face blobs. A later Download resumes verified
+		// chunks instead of forcing the user to transfer the model again.
 		job.Cancel()
 	}
 	ticker := time.NewTicker(time.Second)
@@ -773,7 +811,7 @@ func (s *Server) runModelDownload(ctx context.Context, cancel context.CancelFunc
 		case err := <-result:
 			if err != nil {
 				if errors.Is(ctx.Err(), context.Canceled) {
-					cleanupCanceled()
+					stopCanceled()
 					return
 				}
 				job.Fail(err)
@@ -799,7 +837,7 @@ func (s *Server) runModelDownload(ctx context.Context, cancel context.CancelFunc
 			job.ProgressBytes("downloading", "Downloading "+repo+" · "+formatDownloadProgress(done, total), done, total)
 		case <-ctx.Done():
 			if errors.Is(ctx.Err(), context.Canceled) {
-				cleanupCanceled()
+				stopCanceled()
 				return
 			}
 			job.Fail(ctx.Err())

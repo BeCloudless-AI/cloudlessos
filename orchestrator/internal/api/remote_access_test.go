@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/cloudless/orchestrator/internal/remoteaccess"
+	"github.com/cloudless/orchestrator/internal/state"
 )
 
 type fakeRemoteAccess struct {
@@ -33,17 +34,29 @@ func (f *fakeRemoteAccess) Install(context.Context) error { f.installed = true; 
 
 func TestTailscaleRoutesKeepCredentialsOutsideCloudless(t *testing.T) {
 	fake := &fakeRemoteAccess{status: remoteaccess.Status{Installed: true}, authURL: "https://login.tailscale.com/a/example"}
-	s := &Server{remoteAccess: fake}
+	store, err := state.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{remoteAccess: fake, state: store}
 	routes := s.Routes()
 
 	request := httptest.NewRequest(http.MethodPost, "/api/system/tailscale/connect", nil)
 	response := httptest.NewRecorder()
+	routes.ServeHTTP(response, request)
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("connect without confirmation = %d %s", response.Code, response.Body.String())
+	}
+	request = httptest.NewRequest(http.MethodPost, "/api/system/tailscale/connect", nil)
+	request.Header.Set("X-Cloudless-Action", "tailscale-connect")
+	response = httptest.NewRecorder()
 	routes.ServeHTTP(response, request)
 	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), fake.authURL) {
 		t.Fatalf("connect response = %d %s", response.Code, response.Body.String())
 	}
 
 	request = httptest.NewRequest(http.MethodPost, "/api/system/tailscale/serve", strings.NewReader(`{"enabled":true}`))
+	request.Header.Set("X-Cloudless-Action", "tailscale-serve")
 	response = httptest.NewRecorder()
 	routes.ServeHTTP(response, request)
 	if response.Code != http.StatusOK || !fake.serve {
@@ -55,6 +68,17 @@ func TestTailscaleRoutesKeepCredentialsOutsideCloudless(t *testing.T) {
 	routes.ServeHTTP(response, request)
 	if response.Code != http.StatusForbidden || fake.loggedOut {
 		t.Fatal("logout accepted without confirmation header")
+	}
+
+	response = httptest.NewRecorder()
+	routes.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/security/audit", nil))
+	if response.Code != http.StatusOK ||
+		!strings.Contains(response.Body.String(), `"category":"remote-access"`) ||
+		!strings.Contains(response.Body.String(), `"event":"tailscale-connect"`) {
+		t.Fatalf("security audit response = %d %s", response.Code, response.Body.String())
+	}
+	if strings.Contains(response.Body.String(), fake.authURL) {
+		t.Fatalf("Tailscale authorization URL leaked into the audit: %s", response.Body.String())
 	}
 }
 
@@ -77,6 +101,13 @@ func TestBrowserRequestIsValidatedAndQueued(t *testing.T) {
 	payload, err := osReadFile(browserRequestDir + "/" + entries[0].Name())
 	if err != nil {
 		t.Fatal(err)
+	}
+	info, err := entries[0].Info()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o660 {
+		t.Fatalf("browser request mode = %o, want 660", info.Mode().Perm())
 	}
 	var queued map[string]string
 	if json.Unmarshal(payload, &queued) != nil || queued["url"] != "https://example.com/docs" {
@@ -102,7 +133,8 @@ func TestBrowserStatusAndRestoreRequest(t *testing.T) {
 	s := &Server{}
 	response := httptest.NewRecorder()
 	s.systemBrowserStatus(response, httptest.NewRequest(http.MethodGet, "/api/system/browser", nil))
-	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"running":true`) || !strings.Contains(response.Body.String(), `"minimized":true`) {
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), `"running":true`) || !strings.Contains(response.Body.String(), `"minimized":true`) ||
+		!strings.Contains(response.Body.String(), `"profilePersistence":"persistent"`) || !strings.Contains(response.Body.String(), `"downloadsPath":"/home/cloudless/Downloads"`) {
 		t.Fatalf("status response = %d %s", response.Code, response.Body.String())
 	}
 	if response.Header().Get("Cache-Control") != "no-store" {

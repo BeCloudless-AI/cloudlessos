@@ -23,6 +23,9 @@ func App(def state.CustomEngine) (catalog.App, bool) {
 	base.Name = def.Name
 	base.Description = "Locally built " + strings.TrimSuffix(def.Name, " Engine") + " runtime."
 	base.Image = def.Image
+	if def.ResolvedImage != "" {
+		base.Image = def.ResolvedImage
+	}
 	// The upstream vLLM Dockerfile has `vllm serve` as its entrypoint, while
 	// NVIDIA's Spark image expects those words in argv. Registration inspects the
 	// image so either source-build style receives the correct model arguments.
@@ -37,6 +40,7 @@ func App(def state.CustomEngine) (catalog.App, bool) {
 	base.Preinstall = false
 	base.Prefetch = false
 	base.Verified = false
+	base.SupportLevel = "experimental"
 	return base, true
 }
 

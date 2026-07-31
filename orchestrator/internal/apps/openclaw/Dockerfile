@@ -8,9 +8,6 @@ RUN npm install -g openclaw@latest
 RUN mkdir -p /root/.openclaw
 COPY openclaw.json /root/.openclaw/openclaw.json
 
-# Referenced as ${CUSTOM_API_KEY} in the config; vLLM ignores the value.
-ENV CUSTOM_API_KEY=cloudless
-
 EXPOSE 18789
 # Local single-user appliance, run with host networking: bind the gateway to
 # loopback (so it accepts --auth none — the 0.0.0.0 guard only blocks no-auth on

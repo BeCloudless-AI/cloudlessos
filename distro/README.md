@@ -46,7 +46,9 @@ run `bash distro/scripts/collect-dgx-spark-info.sh`. It creates a single inspect
 
 For an emulated firmware smoke test, install QEMU, OVMF, Socat, and ImageMagick and run
 `distro/scripts/test-boot.sh`. It captures BIOS and UEFI framebuffers under
-`distro/out/boot-tests/`.
+`distro/out/boot-tests/` and rejects blank/degenerate output. Cached container definitions for ISO
+authoring and firmware smoke tests live under `distro/docker/iso-builder/` and
+`distro/docker/boot-tester/`.
 
 The ISO and SHA-256 file are written to `distro/out/`. Set
 `CLOUDLESS_BASE_ISO=/path/to/ubuntu.iso` to use an existing Ubuntu Server image.
@@ -95,7 +97,13 @@ verified generation.
 
 ## Installation behavior
 
-The installer asks for networking, target Grstorage, and administrator identity. It has no
+Before the installer can partition a disk, a read-only Cloudless preflight reports architecture,
+largest writable disk, BIOS/UEFI mode, network/DNS state and the NVIDIA, virtual-machine or limited
+graphics path. An unsupported architecture or disk below 32 GiB stops before any disk changes;
+network and missing-GPU conditions remain visible warnings because the local package installation
+can still complete.
+
+The installer asks for networking, target storage, and administrator identity. It has no
 default password and does not silently wipe a disk. Cloudless packages are installed from
 the ISO after Ubuntu lays down the base system.
 
@@ -119,7 +127,21 @@ On the installed system:
 - The official Tailscale Linux client is installed by `cloudless-tailscale-install.service` after a
   normal boot. It is not connected, advertised, or publicly exposed until the user enables it in
   Settings → Remote access.
-- `cloudless-firstboot.service` writes `/var/lib/cloudless/validation-report.txt`.
+- `cloudless-firstboot.service` waits for the complete display/API ownership chain and atomically
+  writes `/var/lib/cloudless/boot-health.json`, a 20-boot history and the readable
+  `/var/lib/cloudless/validation-report.txt`. A failed boot records the exact missing stage.
+- A failed audit triggers one bounded `cloudless-repair` attempt per kernel boot. A runtime marker
+  prevents recovery loops; a second failure remains visible in systemd and the diagnostic bundle.
+
+If the control plane does not become healthy during graphical startup, the kiosk opens a local
+Cloudless recovery screen rather than remaining black. It retries automatically. From a console,
+SSH session or the terminal, inspect and repair the deterministic service/profile chain with:
+
+```bash
+cloudless-repair --check
+sudo cloudless-repair --repair
+cloudless-diagnostics
+```
 
 The first hardware setup requires internet access and may take several minutes. A driver
 installation may require an additional reboot before `nvidia-smi` becomes available.

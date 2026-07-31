@@ -31,9 +31,23 @@ fi
 
 rm -rf "$WORK/overlay" "$WORK/boot"
 mkdir -p "$WORK/overlay/cloudless/packages" "$WORK/boot/grub"
-cp "$DISTRO"/out/packages/*.deb "$WORK/overlay/cloudless/packages/"
+shopt -s nullglob
+amd64_packages=("$DISTRO"/out/packages/*_amd64.deb)
+[ "${#amd64_packages[@]}" -eq 6 ] || {
+    echo "Expected exactly six AMD64 Cloudless packages, found ${#amd64_packages[@]}." >&2
+    exit 1
+}
+for package in "${amd64_packages[@]}"; do
+    [ "$(dpkg-deb -f "$package" Architecture)" = amd64 ] || {
+        echo "Refusing non-AMD64 package in the generic installer: $package" >&2
+        exit 1
+    }
+    cp "$package" "$WORK/overlay/cloudless/packages/"
+done
+shopt -u nullglob
 cp "$DISTRO/iso/autoinstall.yaml" "$WORK/overlay/autoinstall.yaml"
 cp "$DISTRO/iso/theme.txt" "$WORK/overlay/cloudless/theme.txt"
+install -m 0755 "$DISTRO/iso/cloudless-preinstall" "$WORK/overlay/cloudless/preinstall"
 rsvg-convert -w 1920 -h 1080 "$DISTRO/iso/installer-background.svg" -o "$WORK/installer-background.png"
 rsvg-convert -w 700 "$DISTRO/assets/cloudless-logo.svg" -o "$WORK/installer-logo.png"
 convert "$WORK/installer-background.png" "$WORK/installer-logo.png" -geometry +610+105 -composite "$WORK/overlay/cloudless/grub.png"

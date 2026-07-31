@@ -64,6 +64,12 @@ func (e *parallelRemovalEngine) Remove(ctx context.Context, name string) error {
 }
 
 func (e *parallelRemovalEngine) RemoveImage(context.Context, string) error { return nil }
+func (e *parallelRemovalEngine) Find(_ context.Context, name string) (*engine.Container, error) {
+	if name == "cloudless-open-webui" || name == "cloudless-searxng" {
+		return &engine.Container{Name: name, State: "running"}, nil
+	}
+	return nil, nil
+}
 
 func TestUnrelatedAppRemovalsRunConcurrently(t *testing.T) {
 	first, ok := catalog.Get("open-webui")

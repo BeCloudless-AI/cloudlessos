@@ -1,6 +1,10 @@
 #!/bin/sh
 set -e
 if [ "$1" = remove ]; then
+    systemctl stop cloudless-privileged.service >/dev/null 2>&1 || true
+    systemctl disable cloudless-privileged.service >/dev/null 2>&1 || true
+    systemctl stop cloudless-engine.service >/dev/null 2>&1 || true
+    systemctl disable cloudless-engine.service >/dev/null 2>&1 || true
     systemctl stop cloudlessd.service >/dev/null 2>&1 || true
     systemctl disable cloudlessd.service >/dev/null 2>&1 || true
     systemctl disable cloudless-tailscale-install.service >/dev/null 2>&1 || true

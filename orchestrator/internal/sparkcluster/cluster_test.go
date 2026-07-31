@@ -1,6 +1,9 @@
 package sparkcluster
 
 import (
+	"errors"
+	"fmt"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -64,6 +67,98 @@ func TestCoordinatorUsesAllEightSparkRanks(t *testing.T) {
 	spec := coordinatorSpec(engine.RunSpec{Args: []string{"vllm", "serve", "Qwen/Test"}}, State{Configured: true, Nodes: nodes})
 	if joined := strings.Join(spec.Args, " "); !strings.Contains(joined, "--tensor-parallel-size 8") {
 		t.Fatalf("eight-Spark coordinator command = %s", joined)
+	}
+}
+
+func TestCoordinatorUsesExactSelectedSubset(t *testing.T) {
+	nodes := []Node{
+		{Name: "spark-b", Host: "b.local", Fingerprint: "bbb"},
+		{Name: "spark-c", Host: "c.local", Fingerprint: "ccc"},
+		{Name: "spark-d", Host: "d.local", Fingerprint: "ddd"},
+	}
+	state := State{Configured: true, Nodes: nodes, SelectedHosts: []string{"bbb", "ddd"}}
+	spec := coordinatorSpec(engine.RunSpec{Args: []string{"vllm", "serve", "Qwen/Test"}}, state)
+	if joined := strings.Join(spec.Args, " "); !strings.Contains(joined, "--tensor-parallel-size 3") {
+		t.Fatalf("selected coordinator command = %s", joined)
+	}
+	normalized := normalizeState(state)
+	if normalized.ComputeNodeCount != 3 || !normalized.Nodes[0].Selected || normalized.Nodes[1].Selected || !normalized.Nodes[2].Selected {
+		t.Fatalf("selected state = %#v", normalized)
+	}
+}
+
+func TestCoordinatorSupportsEveryClusterSizeFromTwoThroughEight(t *testing.T) {
+	nodes := make([]Node, 7)
+	for i := range nodes {
+		nodes[i] = Node{
+			Name: "worker-" + strconv.Itoa(i+2), Host: "worker-" + strconv.Itoa(i+2) + ".local",
+			Fingerprint: "fingerprint-" + strconv.Itoa(i+2), Healthy: true, WorkerReady: true,
+		}
+	}
+	for total := 2; total <= 8; total++ {
+		selectors := make([]string, total-1)
+		for i := range selectors {
+			selectors[i] = nodes[i].Fingerprint
+		}
+		state := State{Configured: true, Healthy: true, Nodes: nodes, SelectedHosts: selectors}
+		spec := coordinatorSpec(engine.RunSpec{Args: []string{"vllm", "serve", "Qwen/Test"}}, state)
+		want := "--tensor-parallel-size " + strconv.Itoa(total)
+		if joined := strings.Join(spec.Args, " "); !strings.Contains(joined, want) {
+			t.Fatalf("%d-Spark coordinator command missing %q: %s", total, want, joined)
+		}
+	}
+}
+
+func TestEmptySelectionUsesEveryEnrolledWorker(t *testing.T) {
+	state := normalizeState(State{Configured: true, Nodes: []Node{{Host: "b"}, {Host: "c"}, {Host: "d"}}})
+	if state.ComputeNodeCount != 4 {
+		t.Fatalf("compute node count = %d", state.ComputeNodeCount)
+	}
+	for _, node := range state.Nodes {
+		if !node.Selected {
+			t.Fatalf("legacy automatic selection omitted %#v", node)
+		}
+	}
+}
+
+func TestUnselectedWorkerLossDoesNotFalselyDegradeSelectedCompute(t *testing.T) {
+	state := normalizeState(State{
+		Configured: true, Healthy: false,
+		Checks:        []Check{{ID: "local-config", OK: true}, {ID: "local-links", OK: true}},
+		SelectedHosts: []string{"good"},
+		Nodes: []Node{
+			{Host: "good", Healthy: true, WorkerReady: true},
+			{Host: "standby", Healthy: false, WorkerReady: false},
+		},
+	})
+	if !state.ComputeHealthy || !state.ComputeWorkerReady || state.ComputeNodeCount != 2 {
+		t.Fatalf("selected compute was degraded by standby loss: %#v", state)
+	}
+	state.SelectedHosts = []string{"standby"}
+	state = normalizeState(state)
+	if state.ComputeHealthy || state.ComputeWorkerReady {
+		t.Fatalf("failed selected worker was reported ready: %#v", state)
+	}
+}
+
+func TestCoordinatorLinkLossDegradesEveryComputeSubset(t *testing.T) {
+	state := normalizeState(State{
+		Configured: true, Healthy: false,
+		Checks: []Check{{ID: "local-config", OK: true}, {ID: "local-links", OK: false}},
+		Nodes:  []Node{{Host: "worker", Healthy: true, WorkerReady: true}},
+	})
+	if state.ComputeHealthy {
+		t.Fatalf("coordinator link loss was reported healthy: %#v", state)
+	}
+}
+
+func TestParseStorageTelemetry(t *testing.T) {
+	total, available := parseStorageTelemetry("982345678901 456789012345\n")
+	if total != 982345678901 || available != 456789012345 {
+		t.Fatalf("storage = %d %d", total, available)
+	}
+	if total, available := parseStorageTelemetry("100 101"); total != 0 || available != 0 {
+		t.Fatalf("invalid storage accepted = %d %d", total, available)
 	}
 }
 
@@ -192,5 +287,193 @@ func TestFabricHealthProbeAllowsAddressDiscoveryToSettle(t *testing.T) {
 	got := strings.Join(fabricPingArguments("10.100.0.2"), " ")
 	if got != "-c 3 -i 0.25 -W 1 10.100.0.2" {
 		t.Fatalf("fabric ping arguments = %q", got)
+	}
+}
+
+func TestFabricHealthRequiresZeroPacketLoss(t *testing.T) {
+	if !fabricProbeHealthy("3 packets transmitted, 3 received, 0% packet loss", nil) {
+		t.Fatal("zero-loss fabric was rejected")
+	}
+	if fabricProbeHealthy("3 packets transmitted, 2 received, 33.3333% packet loss", nil) {
+		t.Fatal("partial packet loss was reported healthy")
+	}
+	if fabricProbeHealthy("", nil) {
+		t.Fatal("missing packet-loss evidence was reported healthy")
+	}
+}
+
+func TestAggregateHealthLayerKeepsFailureDomainsTruthful(t *testing.T) {
+	healthy := HealthLayer{Status: "healthy"}
+	attention := HealthLayer{Status: "attention"}
+	if got := aggregateHealthLayer("Fabric", []HealthLayer{healthy, attention}, false); got.Status != "attention" {
+		t.Fatalf("fabric aggregate = %#v", got)
+	}
+	if got := aggregateHealthLayer("Runtime", []HealthLayer{{Status: "idle"}, {Status: "idle"}}, true); got.Status != "idle" {
+		t.Fatalf("idle runtime aggregate = %#v", got)
+	}
+	if got := aggregateHealthLayer("Runtime", []HealthLayer{healthy, {Status: "idle"}}, true); got.Status != "attention" {
+		t.Fatalf("partially active runtime aggregate = %#v", got)
+	}
+}
+
+func TestClusterOperationLifecycleIsExplicit(t *testing.T) {
+	operation := Operation{ID: "connect-1", Phase: "peer-network"}
+	if !operation.Active() {
+		t.Fatal("in-flight cluster operation was not active")
+	}
+	operation.Phase = "error"
+	if operation.Active() {
+		t.Fatal("failed cluster operation remained active")
+	}
+	operation.Phase = "completed"
+	if operation.Active() {
+		t.Fatal("completed cluster operation remained active")
+	}
+}
+
+func TestInterruptedOperationRecoveryCoversServiceRestartAndMachineReboot(t *testing.T) {
+	base := State{Operation: Operation{
+		ID: "disconnect-1", Action: "disconnect", Phase: "peer-cleanup",
+		OwnerPID: 42, OwnerBootID: "boot-a",
+		Nodes: []OperationNode{
+			{Name: "spark-b", Host: "b.local", Phase: "cleaned", Cleaned: true},
+			{Name: "spark-c", Host: "c.local", Phase: "removing"},
+		},
+	}}
+	for _, test := range []struct {
+		name   string
+		pid    int
+		bootID string
+	}{
+		{name: "service restart", pid: 43, bootID: "boot-a"},
+		{name: "machine reboot with reused pid", pid: 42, bootID: "boot-b"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			recovered, changed := recoverInterruptedOperation(base, test.pid, test.bootID)
+			if !changed || recovered.Operation.Phase != "error" || !recovered.Operation.RollbackRequired {
+				t.Fatalf("recovered operation = %#v, changed = %v", recovered.Operation, changed)
+			}
+			if !recovered.Operation.Nodes[0].Cleaned || recovered.Operation.Nodes[1].Phase != "unknown" {
+				t.Fatalf("per-node cleanup evidence was lost: %#v", recovered.Operation.Nodes)
+			}
+		})
+	}
+	if _, changed := recoverInterruptedOperation(base, 42, "boot-a"); changed {
+		t.Fatal("live owner was mistaken for an interrupted operation")
+	}
+}
+
+func TestInterruptedMutationPhasesAlwaysBecomeCleanupObligations(t *testing.T) {
+	for action, phases := range map[string][]string{
+		"connect":    {"preflight", "identity", "peer-network", "coordinator-network", "saving", "verifying"},
+		"disconnect": {"stopping-workers", "peer-cleanup", "coordinator-network"},
+	} {
+		for _, phase := range phases {
+			t.Run(action+"/"+phase, func(t *testing.T) {
+				state := State{Operation: Operation{
+					ID: action + "-1", Action: action, Phase: phase,
+					OwnerPID: 10, OwnerBootID: "old-boot",
+				}}
+				recovered, changed := recoverInterruptedOperation(state, 11, "new-boot")
+				if !changed || !recovered.Operation.RollbackRequired || recovered.Operation.Phase != "error" {
+					t.Fatalf("%s/%s recovery = %#v", action, phase, recovered.Operation)
+				}
+			})
+		}
+	}
+}
+
+func TestPartialCleanupPreservesPerNodeEvidence(t *testing.T) {
+	operation := Operation{Nodes: []OperationNode{
+		{Name: "spark-b", Host: "b.local", Phase: "pending"},
+		{Name: "spark-c", Host: "c.local", Phase: "pending"},
+	}}
+	if !recordCleanupResult(&operation, "b.local", nil) ||
+		!recordCleanupResult(&operation, "c.local", errors.New("connection refused")) {
+		t.Fatal("cleanup result did not match enrolled nodes")
+	}
+	if !operation.Nodes[0].Cleaned || operation.Nodes[0].Phase != "cleaned" {
+		t.Fatalf("successful cleanup evidence = %#v", operation.Nodes[0])
+	}
+	if operation.Nodes[1].Cleaned || operation.Nodes[1].Phase != "cleanup-required" ||
+		!strings.Contains(operation.Nodes[1].Error, "connection refused") {
+		t.Fatalf("failed cleanup evidence = %#v", operation.Nodes[1])
+	}
+}
+
+func TestConfiguredLegacyStateIsCoordinatorButRoleReversalIsExplicit(t *testing.T) {
+	legacy := normalizeState(State{Configured: true, Nodes: []Node{{Host: "worker"}}})
+	if legacy.Role != "coordinator" {
+		t.Fatalf("legacy role = %q", legacy.Role)
+	}
+	reversed := normalizeState(State{Configured: true, Role: "worker", Nodes: []Node{{Host: "coordinator"}}})
+	if reversed.Role != "worker" {
+		t.Fatalf("explicit worker role was silently rewritten: %q", reversed.Role)
+	}
+}
+
+func TestFindNodeIndexUsesStableIdentityAcrossAddressChanges(t *testing.T) {
+	state := State{Nodes: []Node{
+		{Name: "spark-b", Host: "192.168.1.20", Fingerprint: "SHA256:bbb"},
+		{Name: "spark-c", Host: "192.168.1.21", Fingerprint: "SHA256:ccc"},
+	}}
+	for _, selector := range []string{"spark-b", "192.168.1.20", "sha256:BBB"} {
+		index, err := findNodeIndex(state, selector)
+		if err != nil || index != 0 {
+			t.Fatalf("selector %q = %d, %v", selector, index, err)
+		}
+	}
+}
+
+func TestClusterStateChurnAcrossTwoToEightNodes(t *testing.T) {
+	for cycle := 0; cycle < 100; cycle++ {
+		for total := 2; total <= 8; total++ {
+			nodes := make([]Node, total-1)
+			selectors := make([]string, 0, total-1)
+			for index := range nodes {
+				identity := fmt.Sprintf("fingerprint-%d-%d", cycle, index+2)
+				nodes[index] = Node{
+					Name: "spark-" + strconv.Itoa(index+2), Host: fmt.Sprintf("spark-%d.local", index+2),
+					Fingerprint: identity, Healthy: true, WorkerReady: true,
+				}
+				if (index+cycle)%2 == 0 || total == 2 {
+					selectors = append(selectors, identity)
+				}
+			}
+			connected := normalizeState(State{
+				Configured: true, Healthy: true, Role: "coordinator",
+				Checks:        []Check{{ID: "local-config", OK: true}, {ID: "local-links", OK: true}},
+				Nodes:         nodes,
+				SelectedHosts: selectors,
+			})
+			if connected.NodeCount != total || connected.ComputeNodeCount != 1+len(selectors) ||
+				!connected.ComputeHealthy || !connected.ComputeWorkerReady {
+				t.Fatalf("cycle %d total %d healthy state = %#v", cycle, total, connected)
+			}
+
+			failedIndex := cycle % len(nodes)
+			connected.Nodes[failedIndex].Healthy = false
+			connected.Nodes[failedIndex].WorkerReady = false
+			degraded := normalizeState(connected)
+			failedSelected := degraded.Nodes[failedIndex].Selected
+			if failedSelected && (degraded.ComputeHealthy || degraded.ComputeWorkerReady) {
+				t.Fatalf("cycle %d selected peer loss remained ready: %#v", cycle, degraded)
+			}
+			if !failedSelected && (!degraded.ComputeHealthy || !degraded.ComputeWorkerReady) {
+				t.Fatalf("cycle %d standby peer loss degraded selected compute: %#v", cycle, degraded)
+			}
+
+			degraded.Nodes[failedIndex].Healthy = true
+			degraded.Nodes[failedIndex].WorkerReady = true
+			reconnected := normalizeState(degraded)
+			if !reconnected.ComputeHealthy || !reconnected.ComputeWorkerReady {
+				t.Fatalf("cycle %d reconnect did not restore readiness: %#v", cycle, reconnected)
+			}
+			disconnected := normalizeState(State{})
+			if disconnected.Configured || disconnected.NodeCount != 1 || disconnected.ComputeHealthy ||
+				disconnected.ComputeWorkerReady || len(disconnected.Nodes) != 0 || len(disconnected.SelectedHosts) != 0 {
+				t.Fatalf("cycle %d disconnect retained cluster state: %#v", cycle, disconnected)
+			}
+		}
 	}
 }

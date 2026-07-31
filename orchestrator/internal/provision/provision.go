@@ -215,6 +215,7 @@ func Run(ctx context.Context, eng engine.Engine, st *state.Store, mf *manifest.S
 			}
 		}
 	}
+	reconcileInferenceOperation(ctx, eng, st, desired, clusterMode, logf)
 	EngineMu.Unlock()
 
 	// Non-engine bundled apps (Open WebUI and Hermes): pull and run.
@@ -297,6 +298,59 @@ func Run(ctx context.Context, eng engine.Engine, st *state.Store, mf *manifest.S
 	logf("done")
 }
 
+// reconcileInferenceOperation closes the durable journal only after startup
+// has recreated a process that Docker can continue supervising. If that
+// process is absent, the operation remains visible as an actionable recovery
+// error instead of leaving the desktop on an endless inferred loading state.
+func reconcileInferenceOperation(ctx context.Context, eng engine.Engine, st *state.Store, desired string, clusterMode bool, logf func(string)) {
+	operation := st.Get().InferenceOperation
+	if operation.ID == "" || operation.Phase == "error" {
+		return
+	}
+	if operation.Action == "unload" || operation.Action == "abort" {
+		if st.Get().EngineUnloaded {
+			if _, err := st.ClearInferenceOperation(operation.ID); err != nil {
+				logf("inference operation cleanup: " + err.Error())
+			}
+		}
+		return
+	}
+	selected, ok := customengine.Get(st, desired)
+	if !ok {
+		operation.Phase = "error"
+		operation.Error = "the selected inference engine is no longer registered"
+		operation.Message = "Recovery needs attention"
+		_, _ = st.UpdateInferenceOperation(operation)
+		return
+	}
+	container, err := eng.Find(ctx, selected.ContainerName())
+	if err != nil || container == nil || container.State != "running" {
+		operation.Phase = "error"
+		operation.Message = "Recovery needs attention"
+		operation.Error = "Cloudless could not recreate the selected inference engine after restart"
+		if err != nil {
+			operation.Error += ": " + err.Error()
+		}
+		_, _ = st.UpdateInferenceOperation(operation)
+		return
+	}
+	if clusterMode {
+		proxy, proxyErr := eng.Find(ctx, "cloudless-cluster-engine-proxy")
+		if proxyErr != nil || proxy == nil || proxy.State != "running" {
+			operation.Phase = "error"
+			operation.Message = "Recovery needs attention"
+			operation.Error = "Cloudless recreated the coordinator but not the stable cluster API proxy"
+			_, _ = st.UpdateInferenceOperation(operation)
+			return
+		}
+	}
+	if _, err := st.ClearInferenceOperation(operation.ID); err != nil {
+		logf("inference operation cleanup: " + err.Error())
+	} else {
+		logf("reconciled interrupted " + operation.Action + " operation")
+	}
+}
+
 // hermesRuntimeMatches prevents a healthy-looking but unusable split-brain
 // state: Hermes can remain running with an older API_SERVER_KEY while a newly
 // upgraded cloudlessd has generated its daemon-owned credential. Never log
@@ -306,12 +360,12 @@ func hermesRuntimeMatches(ctx context.Context, eng engine.Engine, st *state.Stor
 	if err != nil || want == "" {
 		return false
 	}
-	out, err := eng.Output(ctx, "inspect", "--format", "{{range .Config.Env}}{{println .}}{{end}}", app.ContainerName())
+	env, err := eng.ContainerEnvironment(ctx, app.ContainerName())
 	if err != nil {
 		return false
 	}
-	return hasEnvValue(out, apps.HermesAPIKeyEnv, want) &&
-		hasEnvValue(out, "HERMES_MAX_TOKENS", "4096") &&
+	return env[apps.HermesAPIKeyEnv] == want &&
+		env["HERMES_MAX_TOKENS"] == "4096" &&
 		hermesModelConfigMatches(ctx, eng, app.ContainerName())
 }
 
@@ -325,11 +379,11 @@ func hasEnvValue(env, key, value string) bool {
 }
 
 func hermesModelConfigMatches(ctx context.Context, eng engine.Engine, container string) bool {
-	contextLength, err := eng.Output(ctx, "exec", container, "hermes", "config", "get", "model.context_length")
+	contextLength, err := eng.HermesConfigValue(ctx, container, "model.context_length")
 	if err != nil || !hasLine(contextLength, "65536") {
 		return false
 	}
-	maxTokens, err := eng.Output(ctx, "exec", container, "hermes", "config", "get", "model.max_tokens")
+	maxTokens, err := eng.HermesConfigValue(ctx, container, "model.max_tokens")
 	return err == nil && hasLine(maxTokens, "4096")
 }
 

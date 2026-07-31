@@ -21,6 +21,8 @@ import (
 	"github.com/cloudless/orchestrator/internal/catalog"
 	"github.com/cloudless/orchestrator/internal/engine"
 	"github.com/cloudless/orchestrator/internal/hardware"
+	"github.com/cloudless/orchestrator/internal/securityaudit"
+	"github.com/cloudless/orchestrator/internal/sparkcluster"
 	"github.com/cloudless/orchestrator/internal/state"
 )
 
@@ -44,6 +46,7 @@ type Report struct {
 	GPUs      []hardware.GPU       `json:"gpus"`
 	Checks    []Check              `json:"checks"`
 	Promotion state.ModelPromotion `json:"modelPromotion,omitempty"`
+	Cluster   sparkcluster.State   `json:"sparkCluster,omitempty"`
 }
 
 // Run performs only local, read-only checks and bounds external probes by ctx.
@@ -56,6 +59,7 @@ func Run(ctx context.Context, eng engine.Engine, st *state.Store) Report {
 		Promotion: st.Get().ModelPromotion,
 	}
 	report.GPUs, _ = hardware.GPUs(ctx)
+	report.Cluster, _ = sparkcluster.Snapshot()
 	for i := range report.GPUs {
 		report.GPUs[i].Node = "local"
 	}
@@ -234,10 +238,15 @@ func BuildBundle(ctx context.Context, eng engine.Engine, st *state.Store, report
 		"executionMode": current.ExecutionMode, "localNet": current.LocalNet,
 		"display": current.Display, "modelPromotion": current.ModelPromotion,
 		"installedPacks": current.InstalledPacks,
-		"apiKeyCount": len(current.APIKeys), "customModelCount": len(current.CustomModels),
+		"apiKeyCount":    len(current.APIKeys), "customModelCount": len(current.CustomModels),
 	}
 	if err := add("state-summary.json", safeState); err != nil {
 		return nil, err
+	}
+	if events, err := securityaudit.New(st.Dir()).Latest(securityaudit.MaxEvents); err == nil {
+		if err := add("security-audit.json", events); err != nil {
+			return nil, err
+		}
 	}
 	containers, _ := eng.List(ctx)
 	sort.Slice(containers, func(i, j int) bool { return containers[i].Name < containers[j].Name })

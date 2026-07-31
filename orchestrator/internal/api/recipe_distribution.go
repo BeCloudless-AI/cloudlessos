@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -15,19 +16,26 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/cloudless/orchestrator/internal/engine"
 	"github.com/cloudless/orchestrator/internal/jobs"
 	"github.com/cloudless/orchestrator/internal/localrecipes"
+	"github.com/cloudless/orchestrator/internal/modelcache"
 	"github.com/cloudless/orchestrator/internal/sparkcluster"
 )
 
-var recipeDockerVolumePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`)
 var recipePeerUsernamePattern = regexp.MustCompile(`^[a-z_][a-z0-9_-]{0,31}$`)
+var recipeImageTransferRoot = "/run/cloudless/transfers"
 
 type recipePeer struct {
 	Alias    string
 	Name     string
 	Checkout string
 }
+
+// recipeSSHExecutable is fixed for production. Keeping the executable path
+// injectable inside the package lets the failure matrix deterministically
+// model unreachable and recovered peers without changing system SSH state.
+var recipeSSHExecutable = "/usr/bin/ssh"
 
 func recipePeerCheckout(recipeID, username string) (string, error) {
 	username = strings.TrimSpace(username)
@@ -41,6 +49,11 @@ func recipeDistributionPeers(recipe localrecipes.Recipe, cluster sparkcluster.St
 	if recipe.Distributed.Nodes <= 1 {
 		return nil, nil
 	}
+	selectedCluster, err := selectRecipeCluster(recipe, cluster)
+	if err != nil {
+		return nil, err
+	}
+	cluster = selectedCluster
 	aliases := strings.Split(strings.TrimSpace(env["WORKER_HOSTS"]), ",")
 	if len(aliases) != len(cluster.Nodes) {
 		return nil, fmt.Errorf("recipe expected %d peer aliases, found %d", len(cluster.Nodes), len(aliases))
@@ -66,6 +79,14 @@ func recipeDistributionPeers(recipe localrecipes.Recipe, cluster sparkcluster.St
 
 func recipeSSHCommand(ctx context.Context, dir string, env map[string]string, peer recipePeer, args ...string) *exec.Cmd {
 	config := filepath.Join(env["HOME"], ".ssh", "config")
+	args = decorateRecipeDockerArgs(args, env, true)
+	if operationID := strings.TrimSpace(env["CLOUDLESS_RECIPE_OPERATION_ID"]); operationID != "" {
+		owned := []string{"/usr/bin/env", "CLOUDLESS_RECIPE_OPERATION_ID=" + operationID}
+		if revision := strings.TrimSpace(env["CLOUDLESS_RECIPE_REVISION"]); revision != "" {
+			owned = append(owned, "CLOUDLESS_RECIPE_REVISION="+revision)
+		}
+		args = append(owned, args...)
+	}
 	quoted := make([]string, 0, len(args))
 	for _, arg := range args {
 		quoted = append(quoted, recipeShellQuote(arg))
@@ -74,7 +95,7 @@ func recipeSSHCommand(ctx context.Context, dir string, env map[string]string, pe
 	// login shell. Send one explicitly quoted command so spaces, dollar signs,
 	// model IDs, and shell snippets arrive as the exact argv intended for Docker.
 	sshArgs := []string{"-F", config, peer.Alias, strings.Join(quoted, " ")}
-	cmd := exec.CommandContext(ctx, "/usr/bin/ssh", sshArgs...)
+	cmd := exec.CommandContext(ctx, recipeSSHExecutable, sshArgs...)
 	cmd.Dir, cmd.Env = dir, commandEnv(env)
 	return cmd
 }
@@ -84,9 +105,39 @@ func recipeShellQuote(value string) string {
 }
 
 func recipeLocalCommand(ctx context.Context, dir string, env map[string]string, name string, args ...string) *exec.Cmd {
+	if filepath.Base(name) == "docker" {
+		if strings.TrimSpace(env["CLOUDLESS_RECIPE_OPERATION_ID"]) == "" {
+			return exec.CommandContext(ctx, "/usr/bin/false")
+		}
+		decorated := append([]string{"docker"}, args...)
+		decorated = decorateRecipeDockerArgs(decorated, env, true)
+		args = decorated[1:]
+		name = recipeDockerCompatibilityExecutable
+	}
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Dir, cmd.Env = dir, commandEnv(env)
 	return cmd
+}
+
+func decorateRecipeDockerArgs(args []string, env map[string]string, commandIncludesProgram bool) []string {
+	operationID := strings.TrimSpace(env["CLOUDLESS_RECIPE_OPERATION_ID"])
+	if operationID == "" || len(args) < 2 || !commandIncludesProgram || filepath.Base(args[0]) != "docker" || (args[1] != "run" && args[1] != "create") {
+		return args
+	}
+	for index := 2; index+1 < len(args); index++ {
+		if args[index] == "--label" && strings.HasPrefix(args[index+1], "cloudless.recipe.operation=") {
+			return args
+		}
+	}
+	labels := []string{"--label", "cloudless.recipe.operation=" + operationID}
+	if revision := strings.TrimSpace(env["CLOUDLESS_RECIPE_REVISION"]); revision != "" {
+		labels = append(labels, "--label", "cloudless.recipe.revision="+revision)
+	}
+	decorated := make([]string, 0, len(args)+len(labels))
+	decorated = append(decorated, args[:2]...)
+	decorated = append(decorated, labels...)
+	decorated = append(decorated, args[2:]...)
+	return decorated
 }
 
 func recipeCommandOutput(cmd *exec.Cmd) (string, error) {
@@ -103,22 +154,6 @@ func recipeCommandOutput(cmd *exec.Cmd) (string, error) {
 		return "", err
 	}
 	return strings.TrimSpace(stdout.String()), nil
-}
-
-func recipeImageMetadata(ctx context.Context, dir string, env map[string]string, image string) (string, int64, error) {
-	out, err := recipeCommandOutput(recipeLocalCommand(ctx, dir, env, "docker", "image", "inspect", image, "--format", "{{.Id}} {{.Size}}"))
-	if err != nil {
-		return "", 0, fmt.Errorf("inspect built recipe image: %w", err)
-	}
-	fields := strings.Fields(out)
-	if len(fields) != 2 {
-		return "", 0, errors.New("Docker returned incomplete recipe image metadata")
-	}
-	size, err := strconv.ParseInt(fields[1], 10, 64)
-	if err != nil || size <= 0 {
-		return "", 0, errors.New("Docker returned an invalid recipe image size")
-	}
-	return fields[0], size, nil
 }
 
 func recipeRemoteImageID(ctx context.Context, dir string, env map[string]string, peer recipePeer, image string) string {
@@ -222,10 +257,38 @@ func runRecipeTransfer(ctx context.Context, job *jobs.Job, phase, label string, 
 		_ = consumer.Wait()
 		return recipeTransferError(label, err, producerErr.String())
 	}
-	producerWait := producer.Wait()
-	consumerWait := consumer.Wait()
+	type transferWait struct {
+		producer bool
+		err      error
+	}
+	waits := make(chan transferWait, 2)
+	go func() { waits <- transferWait{producer: true, err: producer.Wait()} }()
+	go func() { waits <- transferWait{producer: false, err: consumer.Wait()} }()
+	first := <-waits
+	if first.err != nil {
+		if first.producer {
+			_ = consumer.Cancel()
+		} else {
+			_ = producer.Cancel()
+		}
+	}
+	second := <-waits
+	var producerWait, consumerWait error
+	for _, result := range []transferWait{first, second} {
+		if result.producer {
+			producerWait = result.err
+		} else {
+			consumerWait = result.err
+		}
+	}
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return ctxErr
+	}
+	if first.err != nil {
+		if first.producer {
+			return recipeTransferError(label, first.err, producerErr.String())
+		}
+		return recipeTransferError(label, first.err, consumerErr.String())
 	}
 	if producerWait != nil {
 		return recipeTransferError(label, producerWait, producerErr.String())
@@ -233,7 +296,6 @@ func runRecipeTransfer(ctx context.Context, job *jobs.Job, phase, label string, 
 	if consumerWait != nil {
 		return recipeTransferError(label, consumerWait, consumerErr.String())
 	}
-	job.ProgressBytes(phase, label+" — complete", total, total)
 	return nil
 }
 
@@ -245,19 +307,54 @@ func syncRecipeCheckout(ctx context.Context, job *jobs.Job, checkout string, env
 			"/usr/bin/ssh", "-F", filepath.Join(env["HOME"], ".ssh", "config"), peer.Alias, "mkdir", "-p", peer.Checkout); err != nil {
 			return err
 		}
-		if err := runRecipeCommand(ctx, job, "syncing-source", label, checkout, env,
-			"rsync", "-az", "--delete", "--exclude", ".cloudless-home/", checkout+"/", peer.Alias+":"+peer.Checkout+"/"); err != nil {
+		args := []string{"-az", "--delete", "--exclude", ".cloudless-home/"}
+		args = append(args, recipeRsyncOwnershipArgs(env)...)
+		args = append(args, checkout+"/", peer.Alias+":"+peer.Checkout+"/")
+		if err := runRecipeCommand(ctx, job, "syncing-source", label, checkout, env, "rsync", args...); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func distributeRecipeImage(ctx context.Context, job *jobs.Job, recipe localrecipes.Recipe, dir string, env map[string]string, peers []recipePeer) error {
-	localID, imageSize, err := recipeImageMetadata(ctx, dir, env, recipe.Engine.Image)
+func recipeRsyncOwnershipArgs(env map[string]string) []string {
+	operationID := strings.TrimSpace(env["CLOUDLESS_RECIPE_OPERATION_ID"])
+	if operationID == "" {
+		return nil
+	}
+	remote := "env CLOUDLESS_RECIPE_OPERATION_ID=" + recipeShellQuote(operationID)
+	if revision := strings.TrimSpace(env["CLOUDLESS_RECIPE_REVISION"]); revision != "" {
+		remote += " CLOUDLESS_RECIPE_REVISION=" + recipeShellQuote(revision)
+	}
+	remote += " /usr/bin/rsync"
+	return []string{"--rsync-path", remote}
+}
+
+func distributeRecipeImage(ctx context.Context, runtime engine.Engine, job *jobs.Job, recipe localrecipes.Recipe, dir string, env map[string]string, peers []recipePeer) error {
+	image, err := runtime.InspectImage(ctx, recipe.Engine.Image)
 	if err != nil {
 		return err
 	}
+	localID, imageSize := strings.TrimSpace(image.ID), image.Size
+	if localID == "" || imageSize <= 0 {
+		return errors.New("local runtime image metadata is unavailable")
+	}
+	if err := os.MkdirAll(recipeImageTransferRoot, 0o770); err != nil {
+		return fmt.Errorf("prepare image transfer staging: %w", err)
+	}
+	placeholder, err := os.CreateTemp(recipeImageTransferRoot, "cloudless-image-*.tar")
+	if err != nil {
+		return fmt.Errorf("reserve image transfer staging: %w", err)
+	}
+	archive := placeholder.Name()
+	if closeErr := placeholder.Close(); closeErr != nil {
+		return closeErr
+	}
+	if err := os.Remove(archive); err != nil {
+		return err
+	}
+	defer os.Remove(archive)
+	exported := false
 	grandTotal := imageSize * int64(len(peers))
 	for index, peer := range peers {
 		base := imageSize * int64(index)
@@ -269,7 +366,14 @@ func distributeRecipeImage(ctx context.Context, job *jobs.Job, recipe localrecip
 		// tag before loading the coordinator's immutable image archive.
 		_, _ = recipeCommandOutput(recipeSSHCommand(ctx, dir, env, peer, "docker", "image", "rm", "-f", recipe.Engine.Image))
 		label := fmt.Sprintf("Copying the inference runtime from %s to %s over the direct Spark fabric (%d/%d)", localRecipeNodeName(), peer.Name, index+1, len(peers))
-		producer := recipeLocalCommand(ctx, dir, env, "docker", "image", "save", recipe.Engine.Image)
+		if !exported {
+			job.Progress("exporting-image", "Preparing the verified inference runtime for transfer...", -1, -1)
+			if err := runtime.ExportImage(ctx, recipe.Engine.Image, archive); err != nil {
+				return err
+			}
+			exported = true
+		}
+		producer := exec.CommandContext(ctx, "/usr/bin/cat", archive)
 		consumer := recipeSSHCommand(ctx, dir, env, peer, "docker", "image", "load")
 		if err := runRecipeTransfer(ctx, job, "syncing-image", label, base, grandTotal, producer, consumer); err != nil {
 			return err
@@ -282,14 +386,16 @@ func distributeRecipeImage(ctx context.Context, job *jobs.Job, recipe localrecip
 }
 
 func recipeCacheVolume(recipe localrecipes.Recipe) (string, error) {
-	volume := strings.TrimSpace(recipe.Runtime.Environment["HF_CACHE"])
-	if volume == "" {
-		volume = "cloudless-hf"
+	cache := strings.TrimSpace(recipe.Runtime.Environment["HF_CACHE"])
+	if cache == "" || cache == "cloudless-hf" {
+		cache = modelcache.Root()
 	}
-	if !recipeDockerVolumePattern.MatchString(volume) {
-		return "", errors.New("download-once recipes require a named Hugging Face Docker volume")
+	cache = filepath.Clean(cache)
+	root := filepath.Clean(modelcache.Root())
+	if !filepath.IsAbs(cache) || !pathWithin(cache, root) {
+		return "", errors.New("download-once recipes require Cloudless-owned host model storage")
 	}
-	return volume, nil
+	return cache, nil
 }
 
 func recipeCacheBytes(ctx context.Context, dir string, env map[string]string, peer *recipePeer, image, volume, relative string) (int64, error) {
@@ -313,20 +419,32 @@ func recipeCacheBytes(ctx context.Context, dir string, env map[string]string, pe
 }
 
 // recipeSnapshotSignature identifies one immutable Hugging Face revision from
-// the paths and sizes of the files visible through its snapshot symlinks. It
-// deliberately ignores refs, locks, metadata, and other cached revisions: all
-// of those can change after a successful distribution without changing the
-// model that a recipe requested.
+// the path, size and SHA-256 digest of every file visible through its snapshot
+// symlinks. A path-and-size-only signature accepted same-size corruption.
 func recipeSnapshotSignature(ctx context.Context, dir string, env map[string]string, peer *recipePeer, image, volume, relative, revision string) (string, error) {
-	args := []string{"docker", "run", "--rm", "-v", volume + ":/cache:ro", "--entrypoint", "/bin/sh", image,
-		"-c", `set -eu
-root="$1"
-test -d "$root"
-manifest="$(mktemp)"
-trap 'rm -f "$manifest"' EXIT
-find -L "$root" -type f -printf '%P\t%s\n' | LC_ALL=C sort > "$manifest"
-test -s "$manifest"
-sha256sum "$manifest" | awk '{print $1}'`, "cloudless-snapshot-signature", "/cache/" + relative + "/snapshots/" + revision}
+	const verifier = `import hashlib, os, pathlib, sys
+root = pathlib.Path(sys.argv[1]).resolve()
+repository = pathlib.Path(sys.argv[2]).resolve()
+if not root.is_dir() or repository not in (root, *root.parents):
+    raise SystemExit("unsafe or missing snapshot")
+files = sorted((path for path in root.rglob("*") if path.is_file()), key=lambda path: path.relative_to(root).as_posix())
+if not files:
+    raise SystemExit("empty snapshot")
+manifest = hashlib.sha256()
+for path in files:
+    resolved = path.resolve(strict=True)
+    if repository not in (resolved, *resolved.parents) or not resolved.is_file():
+        raise SystemExit("snapshot link escapes repository")
+    digest = hashlib.sha256()
+    with resolved.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    relative = path.relative_to(root).as_posix()
+    manifest.update(relative.encode() + b"\0" + str(resolved.stat().st_size).encode() + b"\0" + digest.hexdigest().encode() + b"\n")
+print(manifest.hexdigest())`
+	repository := "/cache/" + relative
+	args := []string{"docker", "run", "--rm", "-v", volume + ":/cache:ro", "--entrypoint", "python3", image,
+		"-c", verifier, repository + "/snapshots/" + revision, repository}
 	var cmd *exec.Cmd
 	if peer == nil {
 		cmd = recipeLocalCommand(ctx, dir, env, args[0], args[1:]...)
@@ -344,7 +462,7 @@ sha256sum "$manifest" | awk '{print $1}'`, "cloudless-snapshot-signature", "/cac
 	return signature, nil
 }
 
-func distributeRecipeModel(ctx context.Context, job *jobs.Job, recipe localrecipes.Recipe, dir string, env map[string]string, peers []recipePeer) error {
+func distributeRecipeModel(ctx context.Context, runtime engine.Engine, job *jobs.Job, recipe localrecipes.Recipe, dir string, env map[string]string, peers []recipePeer) error {
 	cacheName, ok := modelCacheName(recipe.Model.ID)
 	if !ok {
 		return errors.New("recipe model ID cannot be mapped to a Hugging Face cache")
@@ -354,13 +472,15 @@ func distributeRecipeModel(ctx context.Context, job *jobs.Job, recipe localrecip
 		return err
 	}
 	relative := filepath.ToSlash(filepath.Join("hub", cacheName))
-	// Use the same runtime image on both sides so the cache inspection and tar
-	// tools are identical. This also avoids assuming the remote Docker volume's
-	// host mount path is readable by the enrolled user.
-	localSize, err := recipeCacheBytes(ctx, dir, env, nil, recipe.Engine.Image, volume, relative)
-	if err != nil || localSize <= 0 {
+	localMount, err := recipeModelVolumeMountpoint(ctx, runtime, recipe)
+	if err != nil {
+		return fmt.Errorf("inspect prepared model cache volume: %w", err)
+	}
+	localTransferManifest, err := buildRecipeTransferManifest(filepath.Join(localMount, filepath.FromSlash(relative)))
+	if err != nil || localTransferManifest.Bytes <= 0 {
 		return fmt.Errorf("inspect prepared model cache: %w", err)
 	}
+	localSize := localTransferManifest.Bytes
 	localSignature, err := recipeSnapshotSignature(ctx, dir, env, nil, recipe.Engine.Image, volume, relative, recipe.Model.Revision)
 	if err != nil {
 		return fmt.Errorf("inspect prepared model snapshot: %w", err)
@@ -373,21 +493,76 @@ func distributeRecipeModel(ctx context.Context, job *jobs.Job, recipe localrecip
 			job.ProgressBytes("syncing-model", peer.Name+" already has the exact model snapshot.", base+localSize, grandTotal)
 			continue
 		}
+		artifactKey := recipeModelArtifactKey(recipe)
+		stagingRelative := filepath.ToSlash(filepath.Join(".cloudless-staging", artifactKey, relative))
 		_, _ = recipeCommandOutput(recipeSSHCommand(ctx, dir, env, peer,
 			"docker", "run", "--rm", "-v", volume+":/cache", "--entrypoint", "/bin/sh", recipe.Engine.Image,
-			"-c", `exec rm -rf "$1"`, "cloudless-cache-remove", "/cache/"+relative))
+			"-c", `set -eu; mkdir -p "$1"`, "cloudless-cache-stage", "/cache/"+filepath.ToSlash(filepath.Dir(stagingRelative))))
 		label := fmt.Sprintf("Copying model files from %s to %s over the direct Spark fabric (%d/%d)", localRecipeNodeName(), peer.Name, index+1, len(peers))
-		producer := recipeLocalCommand(ctx, dir, env, "docker", "run", "--rm", "-v", volume+":/cache:ro",
-			"--entrypoint", "/bin/sh", recipe.Engine.Image, "-c", `exec tar -C /cache -cf - "$1"`, "cloudless-cache-send", relative)
-		consumer := recipeSSHCommand(ctx, dir, env, peer, "docker", "run", "--rm", "-i", "-v", volume+":/cache",
-			"--entrypoint", "/bin/sh", recipe.Engine.Image, "-c", `exec tar -C /cache -xf -`)
-		if err := runRecipeTransfer(ctx, job, "syncing-model", label, base, grandTotal, producer, consumer); err != nil {
+		if err := retryRecipePeerTransfer(ctx, job, peer.Name, func() error {
+			return incrementalRecipePeerTransfer(ctx, job, localMount, relative, stagingRelative, localTransferManifest,
+				dir, env, peer, recipe.Engine.Image, volume, label, base, grandTotal)
+		}); err != nil {
 			return err
+		}
+		job.ProgressBytes("verifying-peer-model", "Verifying every model file on "+peer.Name+" before activation...", base+localSize, grandTotal)
+		remoteSignature, err = recipeSnapshotSignature(ctx, dir, env, &peer, recipe.Engine.Image, volume, stagingRelative, recipe.Model.Revision)
+		if err != nil || remoteSignature != localSignature {
+			return fmt.Errorf("%s did not receive an exact, content-verified model snapshot", peer.Name)
+		}
+		promotion := `set -eu
+final="$1"
+stage="$2"
+backup="$3"
+test -d "$stage"
+rm -rf "$backup"
+mkdir -p "$(dirname "$final")" "$(dirname "$backup")"
+had_final=0
+if [ -e "$final" ]; then mv "$final" "$backup"; had_final=1; fi
+if mv "$stage" "$final"; then
+  rm -rf "$backup" "$(dirname "$(dirname "$stage")")"
+else
+  rm -rf "$final"
+  if [ "$had_final" = 1 ]; then mv "$backup" "$final"; fi
+  exit 1
+fi`
+		backupRelative := filepath.ToSlash(filepath.Join(".cloudless-backup", artifactKey, relative))
+		_, err = recipeCommandOutput(recipeSSHCommand(ctx, dir, env, peer,
+			"docker", "run", "--rm", "-v", volume+":/cache", "--entrypoint", "/bin/sh", recipe.Engine.Image,
+			"-c", promotion, "cloudless-cache-promote", "/cache/"+relative, "/cache/"+stagingRelative, "/cache/"+backupRelative))
+		if err != nil {
+			return fmt.Errorf("activate verified model cache on %s: %w", peer.Name, err)
 		}
 		remoteSignature, err = recipeSnapshotSignature(ctx, dir, env, &peer, recipe.Engine.Image, volume, relative, recipe.Model.Revision)
 		if err != nil || remoteSignature != localSignature {
-			return fmt.Errorf("%s did not receive the complete model snapshot", peer.Name)
+			return fmt.Errorf("%s model snapshot changed while it was activated", peer.Name)
+		}
+		if err := copyRecipeManifestToPeer(ctx, runtime, dir, env, peer, recipe, volume); err != nil {
+			return fmt.Errorf("record verified model manifest on %s: %w", peer.Name, err)
 		}
 	}
 	return nil
+}
+
+func copyRecipeManifestToPeer(ctx context.Context, runtime engine.Engine, dir string, env map[string]string, peer recipePeer, recipe localrecipes.Recipe, volume string) error {
+	mountpoint, err := recipeModelVolumeMountpoint(ctx, runtime, recipe)
+	if err != nil {
+		return err
+	}
+	payload, err := os.ReadFile(recipeModelCompleteMarker(recipe, mountpoint))
+	if err != nil {
+		return err
+	}
+	encoded := base64.StdEncoding.EncodeToString(payload)
+	marker := "/cache/.cloudless-complete/" + recipeModelArtifactKey(recipe) + ".json"
+	script := `set -eu
+mkdir -p "$(dirname "$1")"
+temporary="$1.tmp.$$"
+printf '%s' "$2" | base64 -d > "$temporary"
+chmod 600 "$temporary"
+mv "$temporary" "$1"`
+	_, err = recipeCommandOutput(recipeSSHCommand(ctx, dir, env, peer,
+		"docker", "run", "--rm", "-v", volume+":/cache", "--entrypoint", "/bin/sh", recipe.Engine.Image,
+		"-c", script, "cloudless-manifest-copy", marker, encoded))
+	return err
 }

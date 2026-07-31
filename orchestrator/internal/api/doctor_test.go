@@ -17,8 +17,8 @@ func TestSupportBundleRequiresExplicitActionHeader(t *testing.T) {
 
 func TestPackUninstallRequiresExplicitActionHeader(t *testing.T) {
 	recorder := httptest.NewRecorder()
-	request := httptest.NewRequest(http.MethodPost, "/api/packs/search/uninstall", nil)
-	request.SetPathValue("id", "search")
+	request := httptest.NewRequest(http.MethodPost, "/api/packs/voice/uninstall", nil)
+	request.SetPathValue("id", "voice")
 	(&Server{}).packUninstall(recorder, request)
 	if recorder.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusForbidden)

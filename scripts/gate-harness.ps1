@@ -29,6 +29,7 @@ $tmp = "$env:TEMP\gate-render.html"
 [System.IO.File]::WriteAllText($tmp, $page, (New-Object System.Text.UTF8Encoding($false)))
 $edge = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
 $out = "$env:TEMP\gate.png"; if (Test-Path $out) { Remove-Item $out }
-& $edge --headless=new --disable-gpu --hide-scrollbars --force-device-scale-factor=1 --window-size=1240,620 --screenshot="$out" ("file:///" + ($tmp -replace '\\','/')) 2>$null
+$edgeProfile = if ($env:CLOUDLESS_VISUAL_EDGE_PROFILE) { $env:CLOUDLESS_VISUAL_EDGE_PROFILE } else { Join-Path $env:TEMP "cloudless-visual-edge-$PID" }
+& $edge --headless=new --disable-gpu --hide-scrollbars --no-first-run "--user-data-dir=$edgeProfile" --force-device-scale-factor=1 --window-size=1240,620 --screenshot="$out" ("file:///" + ($tmp -replace '\\','/')) 2>$null
 Start-Sleep -Milliseconds 1100
 if (Test-Path $out) { "OK $out" } else { "NO SCREENSHOT" }

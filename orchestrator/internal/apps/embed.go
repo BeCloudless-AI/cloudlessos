@@ -11,6 +11,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 
@@ -18,12 +19,14 @@ import (
 	"github.com/cloudless/orchestrator/internal/engine"
 )
 
-//go:embed openclaw hermes nemo-rl data-designer molt axolotl locateanything
+//go:embed open-webui openclaw hermes nemo-rl data-designer molt axolotl locateanything
 var buildFS embed.FS
 
 var configMu sync.Mutex
 
 const HermesAPIKeyEnv = "API_SERVER_KEY"
+
+var managedMarkerPattern = regexp.MustCompile(`cloudless-managed://([a-z0-9][a-z0-9-]*)`)
 
 // ReadDefault returns the embedded default content of an app's config file
 // (e.g. ReadDefault("openclaw", "openclaw.json")).
@@ -45,14 +48,18 @@ func ResetHermesModel(configDir string) error {
 	if err != nil {
 		return err
 	}
+	resolvedDefaults, err := resolveManagedConfigMarkers(configDir, "hermes", string(defaults))
+	if err != nil {
+		return err
+	}
 	path := filepath.Join(configDir, "config.yaml")
 	current, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
-		current = defaults
+		current = []byte(resolvedDefaults)
 	} else if err != nil {
 		return err
 	}
-	modelBlock, ok := yamlTopLevelBlock(string(defaults), "model")
+	modelBlock, ok := yamlTopLevelBlock(resolvedDefaults, "model")
 	if !ok {
 		return fmt.Errorf("embedded Hermes config has no model block")
 	}
@@ -104,6 +111,19 @@ func replaceYAMLTopLevelBlock(content, key, replacement string) string {
 // Best-effort: unreadable files yield no overrides.
 func EnvOverrides(configDir string, app catalog.App) map[string]string {
 	out := map[string]string{}
+	for key, value := range app.Env {
+		const marker = "cloudless-managed://"
+		if !strings.HasPrefix(value, marker) {
+			continue
+		}
+		name := strings.TrimSpace(strings.TrimPrefix(value, marker))
+		if name == "" {
+			continue
+		}
+		if secret, err := managedSecret(configDir, name, "cloudless-"+app.ID+"-"); err == nil {
+			out[key] = secret
+		}
+	}
 	for _, cf := range app.Config {
 		if !cf.Env {
 			continue
@@ -162,8 +182,34 @@ func ConfigVolumes(configDir string, app catalog.App) (map[string]string, error)
 			if derr != nil {
 				return nil, fmt.Errorf("default %s/%s: %w", app.ID, cf.File, derr)
 			}
-			if err := os.WriteFile(host, def, 0o644); err != nil {
+			resolved, rerr := resolveManagedConfigMarkers(configDir, app.ID, string(def))
+			if rerr != nil {
+				return nil, fmt.Errorf("resolve managed values for %s/%s: %w", app.ID, cf.File, rerr)
+			}
+			if err := os.WriteFile(host, []byte(resolved), 0o600); err != nil {
 				return nil, fmt.Errorf("seed %s: %w", host, err)
+			}
+		} else if err == nil && app.ID == "hermes" && cf.File == "config.yaml" {
+			// Migrate only the exact legacy Cloudless placeholder. A user-set
+			// provider credential is deliberately left untouched.
+			current, rerr := os.ReadFile(host)
+			if rerr != nil {
+				return nil, rerr
+			}
+			migrated := strings.Replace(
+				string(current),
+				`  api_key: "cloudless"`,
+				`  api_key: "cloudless-managed://hermes-model-client"`,
+				1,
+			)
+			resolved, rerr := resolveManagedConfigMarkers(configDir, app.ID, migrated)
+			if rerr != nil {
+				return nil, fmt.Errorf("migrate managed values for %s/%s: %w", app.ID, cf.File, rerr)
+			}
+			if resolved != string(current) {
+				if err := os.WriteFile(host, []byte(resolved), 0o600); err != nil {
+					return nil, fmt.Errorf("migrate %s: %w", host, err)
+				}
 			}
 		}
 		if app.DataUID > 0 {
@@ -197,6 +243,26 @@ func ConfigVolumes(configDir string, app catalog.App) (map[string]string, error)
 	return vols, nil
 }
 
+func resolveManagedConfigMarkers(configDir, appID, content string) (string, error) {
+	var resolveErr error
+	resolved := managedMarkerPattern.ReplaceAllStringFunc(content, func(marker string) string {
+		if resolveErr != nil {
+			return marker
+		}
+		match := managedMarkerPattern.FindStringSubmatch(marker)
+		if len(match) != 2 {
+			return marker
+		}
+		value, err := managedSecretLocked(configDir, match[1], "cloudless-"+appID+"-")
+		if err != nil {
+			resolveErr = err
+			return marker
+		}
+		return value
+	})
+	return resolved, resolveErr
+}
+
 // HermesAPIKey returns the stable, randomly generated loopback credential used
 // between cloudlessd and Hermes. It is stored outside Hermes' container-writable
 // data mount and is never returned to the browser or clients.
@@ -204,9 +270,23 @@ func HermesAPIKey(configDir string) (string, error) {
 	return managedSecret(configDir, "hermes-api-key", "cloudless-hermes-")
 }
 
+// ManagedSecret resolves a named daemon-owned app credential. Callers expose
+// it only from the loopback settings surface when the local administrator
+// needs to sign in to that app.
+func ManagedSecret(configDir, appID, name string) (string, error) {
+	return managedSecret(configDir, name, "cloudless-"+appID+"-")
+}
+
 func managedSecret(configDir, name, prefix string) (string, error) {
 	configMu.Lock()
 	defer configMu.Unlock()
+	return managedSecretLocked(configDir, name, prefix)
+}
+
+// managedSecretLocked performs the filesystem operation while configMu is
+// already held. Keeping it separate prevents config seeding/reset paths from
+// recursively acquiring the non-reentrant mutex.
+func managedSecretLocked(configDir, name, prefix string) (string, error) {
 	stateDir := filepath.Dir(filepath.Dir(filepath.Clean(configDir)))
 	secretDir := filepath.Join(stateDir, "secrets")
 	if err := os.MkdirAll(secretDir, 0o700); err != nil {
@@ -237,7 +317,13 @@ func Materialize(name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	dir, err := os.MkdirTemp("", "cloudless-build-")
+	root := strings.TrimSpace(os.Getenv("CLOUDLESS_BUILD_ROOT"))
+	if root != "" {
+		if err := os.MkdirAll(root, 0o750); err != nil {
+			return "", fmt.Errorf("create build staging root: %w", err)
+		}
+	}
+	dir, err := os.MkdirTemp(root, "cloudless-build-")
 	if err != nil {
 		return "", err
 	}
@@ -269,7 +355,7 @@ func EnsureBuild(ctx context.Context, eng engine.Engine, build, image string, on
 	if build == "" || image == "" {
 		return nil
 	}
-	if _, err := eng.Output(ctx, "image", "inspect", image); err == nil {
+	if _, err := eng.InspectImage(ctx, image); err == nil {
 		return nil
 	}
 	dir, err := Materialize(build)

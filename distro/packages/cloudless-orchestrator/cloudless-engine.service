@@ -1,0 +1,27 @@
+[Unit]
+Description=CloudlessOS container engine broker
+Requires=docker.service
+After=docker.service
+Before=cloudlessd.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+EnvironmentFile=-/etc/cloudless/cloudless.env
+Environment=CLOUDLESS_STATE_DIR=/var/lib/cloudless
+Environment=CLOUDLESS_MODEL_CACHE=/var/lib/cloudless/models-cache
+ExecStart=/usr/lib/cloudless/cloudless-engine
+Restart=always
+RestartSec=2
+RuntimeDirectory=cloudless
+RuntimeDirectoryMode=0750
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=false
+ProtectHome=read-only
+ProtectSystem=strict
+ReadWritePaths=/run/cloudless /var/lib/cloudless -/run/docker.sock
+
+[Install]
+WantedBy=multi-user.target

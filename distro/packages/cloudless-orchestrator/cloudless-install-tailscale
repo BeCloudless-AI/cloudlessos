@@ -1,17 +1,69 @@
 #!/bin/sh
-# Install Tailscale from its official Linux distribution channel. This script
-# runs after installation and can also be retried from Cloudless Settings.
+# Install Tailscale through its signed Ubuntu 24.04 APT repository. Never pipe
+# or execute downloaded shell: this root path admits only the expected vendor
+# archive key and lets apt verify repository metadata and package signatures.
 set -eu
 export DEBIAN_FRONTEND=noninteractive
 
-if command -v tailscale >/dev/null 2>&1; then
+KEY_FINGERPRINT=2596A99EAAB33821893C0A79458CA832957F5868
+KEY_SUBKEY_FINGERPRINT=2F625B3A774B946822EDDBEEB1547A3DDAAF03C6
+KEY_URL=https://pkgs.tailscale.com/stable/ubuntu/noble.noarmor.gpg
+REPOSITORY_URL=https://pkgs.tailscale.com/stable/ubuntu
+KEYRING=/usr/share/keyrings/tailscale-archive-keyring.gpg
+SOURCE=/etc/apt/sources.list.d/tailscale.list
+
+configure_operator() {
     systemctl enable --now tailscaled.service
+    # cloudlessd may inspect status without this setting, but connect, logout,
+    # SSH and Serve changes must use Tailscale's explicit non-root operator
+    # boundary once the orchestrator drops root.
+    tailscale set --operator=cloudlessd
+}
+
+if command -v tailscale >/dev/null 2>&1; then
+    configure_operator
     exit 0
 fi
 
+for command in curl gpg apt-get dpkg; do
+    command -v "$command" >/dev/null 2>&1 || {
+        echo "Cannot install Tailscale: missing required command $command" >&2
+        exit 1
+    }
+done
+
+architecture="$(dpkg --print-architecture)"
+case "$architecture" in
+    amd64|arm64) ;;
+    *) echo "Tailscale is not qualified by CloudlessOS on architecture $architecture" >&2; exit 1 ;;
+esac
+
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
-curl --proto '=https' --tlsv1.2 -fsSL https://tailscale.com/install.sh -o "$work/install.sh"
-chmod 0700 "$work/install.sh"
-sh "$work/install.sh"
-systemctl enable --now tailscaled.service
+curl --proto '=https' --tlsv1.2 -fsSL "$KEY_URL" -o "$work/archive-keyring.gpg"
+fingerprints="$(
+    gpg --batch --quiet --show-keys --with-colons "$work/archive-keyring.gpg" |
+        awk -F: '$1 == "fpr" { print $10 }'
+)"
+expected_fingerprints="$(printf '%s\n%s' "$KEY_FINGERPRINT" "$KEY_SUBKEY_FINGERPRINT")"
+[ "$fingerprints" = "$expected_fingerprints" ] || {
+    echo "Refusing the Tailscale repository: signing-key fingerprint mismatch" >&2
+    exit 1
+}
+
+install -d -m 0755 /usr/share/keyrings /etc/apt/sources.list.d
+install -o root -g root -m 0644 "$work/archive-keyring.gpg" "$KEYRING"
+printf 'deb [arch=%s signed-by=%s] %s noble main\n' \
+    "$architecture" "$KEYRING" "$REPOSITORY_URL" > "$SOURCE.tmp"
+chmod 0644 "$SOURCE.tmp"
+mv -f "$SOURCE.tmp" "$SOURCE"
+
+# Refresh only the newly authenticated source. An unrelated broken third-party
+# repository must not prevent the user from enabling Tailscale.
+apt-get \
+    -o "Dir::Etc::sourcelist=$SOURCE" \
+    -o "Dir::Etc::sourceparts=-" \
+    -o "APT::Get::List-Cleanup=0" \
+    update
+apt-get install -y --no-install-recommends tailscale
+configure_operator

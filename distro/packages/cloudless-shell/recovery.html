@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>CloudlessOS recovery</title>
+  <style>
+    :root { color-scheme: dark; font-family: Roboto, system-ui, sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; color: #eef2ff;
+      background: radial-gradient(circle at 50% 30%, #22305e 0, #0d1428 48%, #070b16 100%); }
+    main { width: min(680px, calc(100vw - 48px)); padding: 40px; border: 1px solid #35446d;
+      border-radius: 24px; background: rgba(12,18,36,.9); box-shadow: 0 28px 80px #0008; }
+    .status { display: flex; align-items: center; gap: 14px; color: #a9b7db; }
+    .spinner { width: 22px; height: 22px; border: 3px solid #3b4767; border-top-color: #7c9cff;
+      border-radius: 50%; animation: spin 1s linear infinite; }
+    h1 { margin: 22px 0 10px; font-size: 32px; }
+    p { color: #b7c0d8; line-height: 1.55; }
+    code { display: block; margin: 18px 0; padding: 14px 16px; border-radius: 12px; color: #dbe4ff;
+      background: #070b16; font: 14px 'Roboto Mono', ui-monospace, monospace; }
+    small { color: #7f8aa8; font: 12px 'Roboto Mono', ui-monospace, monospace; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { .spinner { animation: none; border-top-color: #7c9cff; } }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="status"><span class="spinner" aria-hidden="true"></span><strong>Trying Cloudless again&hellip;</strong></div>
+    <h1>The Cloudless interface did not start</h1>
+    <p>Your files are untouched. A required local service is taking too long or needs repair. This
+      screen will reopen Cloudless automatically as soon as the service is healthy.</p>
+    <p>From a local console or SSH session, run:</p>
+    <code>sudo cloudless-repair --repair</code>
+    <p>If repair does not complete, collect a safe diagnostic report:</p>
+    <code>cloudless-diagnostics</code>
+    <small id="attempt">Waiting for the local control plane&hellip;</small>
+  </main>
+  <script>
+    let attempts = 0;
+    const target = 'http://127.0.0.1:8765/';
+    async function retry() {
+      attempts += 1;
+      document.getElementById('attempt').textContent = `Retry ${attempts} · ${new Date().toLocaleTimeString()}`;
+      try {
+        await fetch(target + 'api/health', { mode: 'no-cors', cache: 'no-store' });
+        location.replace(target);
+      } catch (_) { setTimeout(retry, 3000); }
+    }
+    setTimeout(retry, 1000);
+  </script>
+</body>
+</html>

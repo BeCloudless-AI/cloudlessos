@@ -47,6 +47,24 @@ func TestDirectoryBytesAndProgressMessage(t *testing.T) {
 	}
 }
 
+func TestModelRepoIncompleteCountsOnlyResumableChunks(t *testing.T) {
+	root := t.TempDir()
+	blobs := filepath.Join(root, "hub", "models--Qwen--Test", "blobs")
+	if err := os.MkdirAll(blobs, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for name, data := range map[string]string{
+		"one.incomplete": "partial", "two.incomplete": "partial", "complete": "ready",
+	} {
+		if err := os.WriteFile(filepath.Join(blobs, name), []byte(data), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := (&Server{}).modelRepoIncomplete(context.Background(), "Qwen/Test", root); got != 2 {
+		t.Fatalf("incomplete chunks = %d, want 2", got)
+	}
+}
+
 func TestModelCacheNameRejectsUnsafeIDs(t *testing.T) {
 	if got, ok := modelCacheName("Qwen/Qwen-Test"); !ok || got != "models--Qwen--Qwen-Test" {
 		t.Fatalf("modelCacheName valid = %q, %v", got, ok)
@@ -147,5 +165,19 @@ func TestExposeModelCacheUsesHardlinks(t *testing.T) {
 	}
 	if !os.SameFile(sourceInfo, viewInfo) {
 		t.Fatal("visible model file is not hard-linked to the cache")
+	}
+	viewDirInfo, err := os.Stat(filepath.Dir(view))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if viewDirInfo.Mode().Perm() != 0o755 {
+		t.Fatalf("model view directory mode = %o, want 755", viewDirInfo.Mode().Perm())
+	}
+	markerInfo, err := os.Stat(filepath.Join(filepath.Dir(view), ".cloudless-revision"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if markerInfo.Mode().Perm() != 0o644 {
+		t.Fatalf("model view marker mode = %o, want 644", markerInfo.Mode().Perm())
 	}
 }

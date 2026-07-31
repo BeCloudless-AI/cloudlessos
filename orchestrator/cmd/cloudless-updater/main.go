@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -19,6 +20,7 @@ import (
 	"github.com/cloudless/orchestrator/internal/nvidiaupdate"
 	"github.com/cloudless/orchestrator/internal/osupdate"
 	"github.com/cloudless/orchestrator/internal/platform"
+	"github.com/cloudless/orchestrator/internal/securityaudit"
 )
 
 var managedPackages = []string{
@@ -33,21 +35,77 @@ var managedPackages = []string{
 const (
 	defaultAPTBaseURL = "https://updates.becloudless.ai/apt"
 	archiveKeyring    = "/usr/share/keyrings/cloudless-archive-keyring.pgp"
+	controlPlaneURL   = "http://127.0.0.1:8765"
+)
+
+type workloadSnapshot struct {
+	ReadyEngine        string
+	RecipeOperationIDs []string
+}
+
+type engineContinuityState struct {
+	Active   string `json:"active"`
+	Ready    bool   `json:"ready"`
+	Unloaded bool   `json:"unloaded"`
+}
+
+type recipeContinuityState struct {
+	Operations []struct {
+		ID    string `json:"id"`
+		Phase string `json:"phase"`
+		Kind  string `json:"kind"`
+	} `json:"operations"`
+}
+
+var (
+	updaterConfigured       = osupdate.Configured
+	updaterCandidates       = candidates
+	updaterRun              = run
+	updaterRunEnv           = runEnv
+	updaterCopyDebs         = copyDebs
+	updaterCaptureWorkload  = captureWorkload
+	updaterWaitContinuity   = waitForWorkloadContinuity
+	updaterRollback         = rollback
+	updaterControlPlaneURL  = controlPlaneURL
+	updaterContinuityWindow = 90 * time.Second
+	updaterRollbackRoot     = "/var/lib/cloudless-updater/rollback"
+	updaterCurrentDir       = "/var/lib/cloudless-updater/current"
+	updaterAPTCacheDir      = "/var/cache/apt/archives"
+	updaterStagedDir        = "/var/lib/cloudless-updater/staged"
 )
 
 type releaseManifest struct {
-	Version string   `json:"version"`
-	Title   string   `json:"title"`
-	Summary string   `json:"summary"`
-	Changes []string `json:"changes"`
+	Schema        string               `json:"schema"`
+	Version       string               `json:"version"`
+	Channel       string               `json:"channel"`
+	SourceCommit  string               `json:"sourceCommit"`
+	Title         string               `json:"title"`
+	Summary       string               `json:"summary"`
+	Changes       []string             `json:"changes"`
+	Compatibility releaseCompatibility `json:"compatibility"`
+}
+
+type releaseCompatibility struct {
+	Schema  string          `json:"schema"`
+	Targets []releaseTarget `json:"targets"`
+}
+
+type releaseTarget struct {
+	Platform     string `json:"platform"`
+	Architecture string `json:"architecture"`
 }
 
 func main() {
 	if len(os.Args) != 2 {
 		fatalf("usage: cloudless-updater check|apply|status|nvidia-check|nvidia-apply|nvidia-status")
 	}
+	command := os.Args[1]
+	audited := command == "check" || command == "apply" || command == "nvidia-check" || command == "nvidia-apply"
+	if audited {
+		auditUpdater(command, "started", "")
+	}
 	var err error
-	switch os.Args[1] {
+	switch command {
 	case "check":
 		err = check()
 	case "apply":
@@ -72,8 +130,25 @@ func main() {
 		fatalf("unknown command %q", os.Args[1])
 	}
 	if err != nil {
+		if audited {
+			auditUpdater(command, "failed", err.Error())
+		}
 		fatalf("%v", err)
 	}
+	if audited {
+		auditUpdater(command, "succeeded", "")
+	}
+}
+
+func auditUpdater(command, outcome, detail string) {
+	dir := strings.TrimSpace(os.Getenv("CLOUDLESS_STATE_DIR"))
+	if dir == "" {
+		dir = "/var/lib/cloudless"
+	}
+	securityaudit.New(dir).Append(securityaudit.Event{
+		Category: "update", Event: command, Outcome: outcome, Actor: "cloudless-updater",
+		Target: "CloudlessOS", Detail: detail,
+	})
 }
 
 func checkNVIDIA() error {
@@ -367,135 +442,146 @@ func check() error {
 }
 
 func apply() error {
-	return withLock(func() error {
-		status := currentStatus("installing", "Preparing the CloudlessOS update…")
-		if !status.Configured {
-			status.State = "not_configured"
-			status.Message = "Cloudless update signing has not been configured yet."
-			return osupdate.Write(status)
-		}
-		if err := writeProgress(&status, 3, "Preparing the CloudlessOS update…"); err != nil {
-			return err
-		}
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
-		defer cancel()
-		if err := writeProgress(&status, 8, "Refreshing the signed Cloudless repository…"); err != nil {
-			return err
-		}
-		if _, err := run(ctx, "apt-get", "update"); err != nil {
-			return failStatus(status, "Could not refresh the Cloudless repository", err)
-		}
-		if err := writeProgress(&status, 18, "Resolving the verified package update…"); err != nil {
-			return err
-		}
-		var err error
-		status, err = candidates(ctx, status)
-		if err != nil {
-			return failStatus(status, "Could not inspect package updates", err)
-		}
-		if len(status.Packages) == 0 {
-			status.State = "idle"
-			status.Message = "CloudlessOS is already up to date."
-			status.CheckedAt = time.Now().UTC().Format(time.RFC3339)
-			status.Progress = 100
-			return osupdate.Write(status)
-		}
+	return withLock(applyLocked)
+}
 
-		args := []string{"install", "-y", "--only-upgrade"}
-		for _, pkg := range status.Packages {
-			args = append(args, pkg.Name)
-		}
-		if platform.IsDGXSpark() {
-			if err := validateDGXUpdatePlan(ctx, args); err != nil {
-				return failStatus(status, "Update refused to preserve the NVIDIA-managed DGX OS stack", err)
-			}
-		}
-
-		if err := writeProgress(&status, 24, "Creating a recovery snapshot…"); err != nil {
-			return err
-		}
-		rollbackDir := filepath.Join("/var/lib/cloudless-updater/rollback", time.Now().UTC().Format("20060102T150405Z"))
-		rollbackAvailable := copyDebs("/var/lib/cloudless-updater/current", rollbackDir) == nil
-
-		status.State = "installing"
-		if err := writeProgress(&status, 30, fmt.Sprintf("Downloading %d verified package update(s)…", len(status.Packages))); err != nil {
-			return err
-		}
-		downloadArgs := []string{"install", "-y", "--download-only", "--only-upgrade"}
-		for _, pkg := range status.Packages {
-			downloadArgs = append(downloadArgs, pkg.Name)
-		}
-		cachedDebs, _ := filepath.Glob("/var/cache/apt/archives/cloudless-*.deb")
-		for _, deb := range cachedDebs {
-			_ = os.Remove(deb)
-		}
-		if _, err := runEnv(ctx, []string{"DEBIAN_FRONTEND=noninteractive"}, "apt-get", downloadArgs...); err != nil {
-			return failStatus(status, "Could not download the verified update", err)
-		}
-		if err := writeProgress(&status, 55, "Verifying downloaded packages…"); err != nil {
-			return err
-		}
-		stagedDir := "/var/lib/cloudless-updater/staged"
-		_ = os.RemoveAll(stagedDir)
-		if err := copyDebs("/var/cache/apt/archives", stagedDir); err != nil {
-			return failStatus(status, "Downloaded update packages were not found", err)
-		}
-		if err := writeProgress(&status, 62, fmt.Sprintf("Installing %d verified package update(s)…", len(status.Packages))); err != nil {
-			return err
-		}
-		if _, err := runEnv(ctx, []string{"DEBIAN_FRONTEND=noninteractive", "NEEDRESTART_MODE=a"}, "apt-get", args...); err != nil {
-			return failStatus(status, "Package installation failed", err)
-		}
-
-		if err := writeProgress(&status, 86, "Restarting Cloudless services and checking their health…"); err != nil {
-			return err
-		}
-		_, _ = run(ctx, "systemctl", "try-restart", "cloudlessd.service")
-		if !waitHealthy(90 * time.Second) {
-			if !rollbackAvailable {
-				return failStatus(status, "The update failed its health check and this legacy installation had no rollback generation", errors.New("cloudlessd did not become healthy"))
-			}
-			if rollbackErr := rollback(ctx, rollbackDir); rollbackErr != nil {
-				return failStatus(status, "The update failed its health check and rollback also failed", rollbackErr)
-			}
-			return failStatus(status, "The update failed its health check and was rolled back", errors.New("cloudlessd did not become healthy"))
-		}
-
-		for _, pkg := range status.Packages {
-			if pkg.Name == "cloudless-shell" {
-				_, _ = run(ctx, "systemctl", "try-restart", "lightdm.service")
-			}
-			if pkg.Name == "cloudless-branding" || pkg.Name == "cloudless-hardware" {
-				status.RebootRequired = true
-			}
-		}
-		if _, err := os.Stat("/run/reboot-required"); err == nil {
-			status.RebootRequired = true
-		}
-		if err := writeProgress(&status, 96, "Saving recovery packages…"); err != nil {
-			return err
-		}
-		if err := copyDebs(stagedDir, "/var/lib/cloudless-updater/current"); err != nil {
-			return failStatus(status, "Update installed but its recovery packages could not be retained", err)
-		}
-		status.State = "updated"
-		status.CurrentVersion = status.AvailableVersion
-		status.AvailableVersion = ""
-		status.ReleaseTitle = ""
-		status.ReleaseSummary = ""
-		status.Changelog = nil
-		status.Packages = nil
-		status.Error = ""
-		status.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
-		status.CheckedAt = status.UpdatedAt
-		status.Message = "Update installed successfully."
-		if status.RebootRequired {
-			status.State = "reboot_required"
-			status.Message = "Update installed. Restart CloudlessOS to finish."
-		}
+func applyLocked() error {
+	status := currentStatus("installing", "Preparing the CloudlessOS update…")
+	if !status.Configured {
+		status.State = "not_configured"
+		status.Message = "Cloudless update signing has not been configured yet."
+		return osupdate.Write(status)
+	}
+	if err := writeProgress(&status, 3, "Preparing the CloudlessOS update…"); err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	defer cancel()
+	if err := writeProgress(&status, 8, "Refreshing the signed Cloudless repository…"); err != nil {
+		return err
+	}
+	if _, err := updaterRun(ctx, "apt-get", "update"); err != nil {
+		return failStatus(status, "Could not refresh the Cloudless repository", err)
+	}
+	if err := writeProgress(&status, 18, "Resolving the verified package update…"); err != nil {
+		return err
+	}
+	var err error
+	status, err = updaterCandidates(ctx, status)
+	if err != nil {
+		return failStatus(status, "Could not inspect package updates", err)
+	}
+	if len(status.Packages) == 0 {
+		status.State = "idle"
+		status.Message = "CloudlessOS is already up to date."
+		status.CheckedAt = time.Now().UTC().Format(time.RFC3339)
 		status.Progress = 100
 		return osupdate.Write(status)
-	})
+	}
+
+	args := []string{"install", "-y", "--only-upgrade"}
+	for _, pkg := range status.Packages {
+		args = append(args, pkg.Name)
+	}
+	if platform.IsDGXSpark() {
+		if err := validateDGXUpdatePlan(ctx, args); err != nil {
+			return failStatus(status, "Update refused to preserve the NVIDIA-managed DGX OS stack", err)
+		}
+	}
+
+	if err := writeProgress(&status, 24, "Creating a recovery snapshot…"); err != nil {
+		return err
+	}
+	rollbackDir := filepath.Join(updaterRollbackRoot, time.Now().UTC().Format("20060102T150405Z"))
+	rollbackAvailable := updaterCopyDebs(updaterCurrentDir, rollbackDir) == nil
+
+	status.State = "installing"
+	if err := writeProgress(&status, 30, fmt.Sprintf("Downloading %d verified package update(s)…", len(status.Packages))); err != nil {
+		return err
+	}
+	downloadArgs := []string{"install", "-y", "--download-only", "--only-upgrade"}
+	for _, pkg := range status.Packages {
+		downloadArgs = append(downloadArgs, pkg.Name)
+	}
+	cachedDebs, _ := filepath.Glob(filepath.Join(updaterAPTCacheDir, "cloudless-*.deb"))
+	for _, deb := range cachedDebs {
+		_ = os.Remove(deb)
+	}
+	if _, err := updaterRunEnv(ctx, []string{"DEBIAN_FRONTEND=noninteractive"}, "apt-get", downloadArgs...); err != nil {
+		return failStatus(status, "Could not download the verified update", err)
+	}
+	if err := writeProgress(&status, 55, "Verifying downloaded packages…"); err != nil {
+		return err
+	}
+	stagedDir := updaterStagedDir
+	_ = os.RemoveAll(stagedDir)
+	if err := updaterCopyDebs(updaterAPTCacheDir, stagedDir); err != nil {
+		return failStatus(status, "Downloaded update packages were not found", err)
+	}
+	if err := writeProgress(&status, 62, fmt.Sprintf("Installing %d verified package update(s)…", len(status.Packages))); err != nil {
+		return err
+	}
+	workload, err := updaterCaptureWorkload(ctx, updaterControlPlaneURL)
+	if err != nil {
+		return failStatus(status, "The update could not safely snapshot the current AI workload", err)
+	}
+	if _, err := updaterRunEnv(ctx, []string{"DEBIAN_FRONTEND=noninteractive", "NEEDRESTART_MODE=a"}, "apt-get", args...); err != nil {
+		return failStatus(status, "Package installation failed", err)
+	}
+
+	if err := writeProgress(&status, 86, "Restarting Cloudless services and checking their health…"); err != nil {
+		return err
+	}
+	_, _ = updaterRun(ctx, "systemctl", "try-restart", "cloudlessd.service")
+	if err := updaterWaitContinuity(updaterControlPlaneURL, workload, updaterContinuityWindow); err != nil {
+		if !rollbackAvailable {
+			return failStatus(status, "The update failed its workload continuity check and this legacy installation had no rollback generation", err)
+		}
+		if rollbackErr := updaterRollback(ctx, rollbackDir); rollbackErr != nil {
+			return failStatus(status, "The update failed its workload continuity check and rollback also failed", errors.Join(err, rollbackErr))
+		}
+		if rollbackContinuityErr := updaterWaitContinuity(updaterControlPlaneURL, workload, updaterContinuityWindow); rollbackContinuityErr != nil {
+			return failStatus(status, "The update was rolled back but the previous AI workload could not be recovered", errors.Join(err, rollbackContinuityErr))
+		}
+		return failStatus(status, "The update failed its workload continuity check and was rolled back", err)
+	}
+
+	for _, pkg := range status.Packages {
+		if pkg.Name == "cloudless-shell" {
+			_, _ = updaterRun(ctx, "systemctl", "try-restart", "lightdm.service")
+		}
+		if pkg.Name == "cloudless-branding" || pkg.Name == "cloudless-hardware" {
+			status.RebootRequired = true
+		}
+	}
+	if _, err := os.Stat("/run/reboot-required"); err == nil {
+		status.RebootRequired = true
+	}
+	if err := writeProgress(&status, 96, "Saving recovery packages…"); err != nil {
+		return err
+	}
+	if err := updaterCopyDebs(stagedDir, updaterCurrentDir); err != nil {
+		return failStatus(status, "Update installed but its recovery packages could not be retained", err)
+	}
+	status.State = "updated"
+	status.CurrentVersion = status.AvailableVersion
+	status.CurrentSourceCommit = status.AvailableSourceCommit
+	status.AvailableVersion = ""
+	status.AvailableSourceCommit = ""
+	status.ReleaseTitle = ""
+	status.ReleaseSummary = ""
+	status.Changelog = nil
+	status.Packages = nil
+	status.Error = ""
+	status.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+	status.CheckedAt = status.UpdatedAt
+	status.Message = "Update installed successfully."
+	if status.RebootRequired {
+		status.State = "reboot_required"
+		status.Message = "Update installed. Restart CloudlessOS to finish."
+	}
+	status.Progress = 100
+	return osupdate.Write(status)
 }
 
 func validateDGXUpdatePlan(ctx context.Context, installArgs []string) error {
@@ -543,7 +629,7 @@ func currentStatus(state, message string) osupdate.Status {
 	status.Message = message
 	status.Error = ""
 	status.Progress = 0
-	status.Configured = osupdate.Configured()
+	status.Configured = updaterConfigured()
 	return status
 }
 
@@ -559,8 +645,13 @@ func writeProgress(status *osupdate.Status, progress int, message string) error 
 }
 
 func candidates(ctx context.Context, status osupdate.Status) (osupdate.Status, error) {
+	previousVersion := status.CurrentVersion
+	previousSourceCommit := status.CurrentSourceCommit
 	status.Packages = nil
+	status.CurrentVersion = ""
 	status.AvailableVersion = ""
+	status.AvailableSourceCommit = ""
+	status.CurrentSourceCommit = ""
 	status.ReleaseTitle = ""
 	status.ReleaseSummary = ""
 	status.Changelog = nil
@@ -588,6 +679,9 @@ func candidates(ctx context.Context, status osupdate.Status) (osupdate.Status, e
 			status.AvailableVersion = candidate
 		}
 	}
+	if status.CurrentVersion == previousVersion && validSourceCommit(previousSourceCommit) {
+		status.CurrentSourceCommit = strings.ToLower(previousSourceCommit)
+	}
 	if status.AvailableVersion == "" && len(status.Packages) > 0 {
 		status.AvailableVersion = status.Packages[0].Candidate
 	}
@@ -599,8 +693,23 @@ func candidates(ctx context.Context, status osupdate.Status) (osupdate.Status, e
 		status.ReleaseTitle = release.Title
 		status.ReleaseSummary = release.Summary
 		status.Changelog = release.Changes
+		status.AvailableSourceCommit = release.SourceCommit
+	} else if status.CurrentVersion != "" {
+		release, err := loadReleaseManifest(ctx, status.Channel, status.CurrentVersion)
+		if err != nil {
+			return status, fmt.Errorf("could not verify installed release identity: %w", err)
+		}
+		status.CurrentSourceCommit = release.SourceCommit
 	}
 	return status, nil
+}
+
+func validSourceCommit(commit string) bool {
+	if len(commit) != 40 {
+		return false
+	}
+	_, err := hex.DecodeString(commit)
+	return err == nil
 }
 
 func loadReleaseManifest(ctx context.Context, channel, version string) (releaseManifest, error) {
@@ -612,11 +721,6 @@ func loadReleaseManifest(ctx context.Context, channel, version string) (releaseM
 	if err != nil {
 		return releaseManifest{}, err
 	}
-	manifest, err := fetch(ctx, fmt.Sprintf("%s/dists/%s/cloudless-release.json", baseURL, channel))
-	if err != nil {
-		return releaseManifest{}, err
-	}
-
 	tmp, err := os.MkdirTemp("", "cloudless-release-verify-")
 	if err != nil {
 		return releaseManifest{}, err
@@ -634,7 +738,15 @@ func loadReleaseManifest(ctx context.Context, channel, version string) (releaseM
 	if err != nil {
 		return releaseManifest{}, err
 	}
-	return validateReleaseManifest(release, manifest, version)
+	hash, _, err := releaseManifestIdentity(release)
+	if err != nil {
+		return releaseManifest{}, err
+	}
+	manifest, err := fetch(ctx, fmt.Sprintf("%s/dists/%s/by-hash/SHA256/%s", baseURL, channel, hash))
+	if err != nil {
+		return releaseManifest{}, err
+	}
+	return validateReleaseManifest(release, manifest, version, channel)
 }
 
 func fetch(ctx context.Context, url string) ([]byte, error) {
@@ -653,11 +765,57 @@ func fetch(ctx context.Context, url string) ([]byte, error) {
 	return io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 }
 
-func validateReleaseManifest(release, manifest []byte, version string) (releaseManifest, error) {
-	wantHash := fmt.Sprintf("%x", sha256.Sum256(manifest))
-	wantSize := strconv.Itoa(len(manifest))
-	covered := false
+func validateReleaseManifest(release, manifest []byte, version, channel string) (releaseManifest, error) {
+	wantHash, wantSize, err := releaseManifestIdentity(release)
+	if err != nil {
+		return releaseManifest{}, err
+	}
+	if fmt.Sprintf("%x", sha256.Sum256(manifest)) != wantHash || int64(len(manifest)) != wantSize {
+		return releaseManifest{}, errors.New("release notes do not match signed metadata")
+	}
+	var parsed releaseManifest
+	if err := json.Unmarshal(manifest, &parsed); err != nil {
+		return releaseManifest{}, fmt.Errorf("invalid release notes: %w", err)
+	}
+	if parsed.Version != version {
+		return releaseManifest{}, fmt.Errorf("release notes describe %s, expected %s", parsed.Version, version)
+	}
+	if parsed.Schema != "cloudless.release.v2" || parsed.Channel != channel {
+		return releaseManifest{}, errors.New("release identity or channel is incompatible")
+	}
+	if len(parsed.SourceCommit) != 40 {
+		return releaseManifest{}, errors.New("release source identity is incomplete")
+	}
+	if _, err := hex.DecodeString(parsed.SourceCommit); err != nil {
+		return releaseManifest{}, errors.New("release source identity is malformed")
+	}
+	compatible := false
+	if parsed.Compatibility.Schema == "cloudless.compatibility.v1" {
+		for _, target := range parsed.Compatibility.Targets {
+			if target.Platform == platform.Detect() && target.Architecture == platform.Architecture() {
+				compatible = true
+				break
+			}
+		}
+	}
+	if !compatible {
+		return releaseManifest{}, fmt.Errorf("release does not support %s/%s", platform.Detect(), platform.Architecture())
+	}
+	if strings.TrimSpace(parsed.Title) == "" || len(parsed.Changes) == 0 {
+		return releaseManifest{}, errors.New("release notes are incomplete")
+	}
+	for _, change := range parsed.Changes {
+		if strings.TrimSpace(change) == "" {
+			return releaseManifest{}, errors.New("release notes contain an empty change")
+		}
+	}
+	return parsed, nil
+}
+
+func releaseManifestIdentity(release []byte) (string, int64, error) {
 	inSHA256 := false
+	foundHash := ""
+	var foundSize int64
 	for _, line := range strings.Split(string(release), "\n") {
 		if line == "SHA256:" {
 			inSHA256 = true
@@ -670,30 +828,28 @@ func validateReleaseManifest(release, manifest []byte, version string) (releaseM
 			continue
 		}
 		fields := strings.Fields(line)
-		if len(fields) == 3 && fields[0] == wantHash && fields[1] == wantSize && fields[2] == "cloudless-release.json" {
-			covered = true
-			break
+		if len(fields) != 3 || fields[2] != "cloudless-release.json" {
+			continue
 		}
-	}
-	if !covered {
-		return releaseManifest{}, errors.New("release notes are not covered by signed metadata")
-	}
-	var parsed releaseManifest
-	if err := json.Unmarshal(manifest, &parsed); err != nil {
-		return releaseManifest{}, fmt.Errorf("invalid release notes: %w", err)
-	}
-	if parsed.Version != version {
-		return releaseManifest{}, fmt.Errorf("release notes describe %s, expected %s", parsed.Version, version)
-	}
-	if strings.TrimSpace(parsed.Title) == "" || len(parsed.Changes) == 0 {
-		return releaseManifest{}, errors.New("release notes are incomplete")
-	}
-	for _, change := range parsed.Changes {
-		if strings.TrimSpace(change) == "" {
-			return releaseManifest{}, errors.New("release notes contain an empty change")
+		if len(fields[0]) != sha256.Size*2 {
+			return "", 0, errors.New("release notes have an invalid signed SHA-256 identity")
 		}
+		if _, err := hex.DecodeString(fields[0]); err != nil {
+			return "", 0, errors.New("release notes have an invalid signed SHA-256 identity")
+		}
+		size, err := strconv.ParseInt(fields[1], 10, 64)
+		if err != nil || size < 1 || size > 1<<20 {
+			return "", 0, errors.New("release notes have an invalid signed size")
+		}
+		if foundHash != "" {
+			return "", 0, errors.New("release notes have an ambiguous signed identity")
+		}
+		foundHash, foundSize = strings.ToLower(fields[0]), size
 	}
-	return parsed, nil
+	if foundHash == "" {
+		return "", 0, errors.New("release notes are not covered by signed metadata")
+	}
+	return foundHash, foundSize, nil
 }
 
 func installedVersion(ctx context.Context, name string) (string, error) {
@@ -732,21 +888,111 @@ func rollback(ctx context.Context, dir string) error {
 	return nil
 }
 
-func waitHealthy(timeout time.Duration) bool {
+func captureWorkload(ctx context.Context, baseURL string) (workloadSnapshot, error) {
+	var engine engineContinuityState
+	if err := fetchJSON(ctx, baseURL+"/api/engine", &engine); err != nil {
+		return workloadSnapshot{}, fmt.Errorf("read engine state: %w", err)
+	}
+	var recipes recipeContinuityState
+	if err := fetchJSON(ctx, baseURL+"/api/recipes", &recipes); err != nil {
+		return workloadSnapshot{}, fmt.Errorf("read recipe operation journal: %w", err)
+	}
+	snapshot := workloadSnapshot{}
+	if engine.Ready && !engine.Unloaded {
+		snapshot.ReadyEngine = strings.TrimSpace(engine.Active)
+		if snapshot.ReadyEngine == "" {
+			return workloadSnapshot{}, errors.New("engine reported ready without an active engine identity")
+		}
+	}
+	for _, operation := range recipes.Operations {
+		if recipeOperationNeedsContinuity(operation.Kind, operation.Phase) {
+			snapshot.RecipeOperationIDs = append(snapshot.RecipeOperationIDs, operation.ID)
+		}
+	}
+	return snapshot, nil
+}
+
+func recipeOperationNeedsContinuity(kind, phase string) bool {
+	if kind == "check" && phase == "prepared" {
+		return false
+	}
+	switch phase {
+	case "active", "stopped", "failed", "aborted", "":
+		return false
+	default:
+		return true
+	}
+}
+
+func fetchJSON(ctx context.Context, url string, target any) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return err
+	}
+	client := &http.Client{Timeout: 3 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		_, _ = io.Copy(io.Discard, resp.Body)
+		return fmt.Errorf("%s returned %s", url, resp.Status)
+	}
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 4<<20)).Decode(target); err != nil {
+		return fmt.Errorf("decode %s: %w", url, err)
+	}
+	return nil
+}
+
+func workloadContinuityError(ctx context.Context, baseURL string, snapshot workloadSnapshot) error {
+	var engine engineContinuityState
+	if err := fetchJSON(ctx, baseURL+"/api/engine", &engine); err != nil {
+		return fmt.Errorf("cloudlessd health is unavailable: %w", err)
+	}
+	if snapshot.ReadyEngine != "" && (!engine.Ready || engine.Unloaded || engine.Active != snapshot.ReadyEngine) {
+		return fmt.Errorf("ready engine %q was not preserved (active=%q ready=%t unloaded=%t)", snapshot.ReadyEngine, engine.Active, engine.Ready, engine.Unloaded)
+	}
+	if len(snapshot.RecipeOperationIDs) == 0 {
+		return nil
+	}
+	var recipes recipeContinuityState
+	if err := fetchJSON(ctx, baseURL+"/api/recipes", &recipes); err != nil {
+		return fmt.Errorf("recipe operation journal is unavailable: %w", err)
+	}
+	byID := make(map[string]string, len(recipes.Operations))
+	for _, operation := range recipes.Operations {
+		byID[operation.ID] = operation.Phase
+	}
+	for _, operationID := range snapshot.RecipeOperationIDs {
+		phase, ok := byID[operationID]
+		if !ok {
+			return fmt.Errorf("recipe operation %s disappeared during the update", operationID)
+		}
+		switch phase {
+		case "failed", "aborted", "stopped":
+			return fmt.Errorf("recipe operation %s ended as %s during the update", operationID, phase)
+		}
+	}
+	return nil
+}
+
+func waitForWorkloadContinuity(baseURL string, snapshot workloadSnapshot, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
-	client := &http.Client{Timeout: 2 * time.Second}
+	var lastErr error
 	for time.Now().Before(deadline) {
-		resp, err := client.Get("http://127.0.0.1:8765/api/health")
-		if err == nil {
-			_, _ = io.Copy(io.Discard, resp.Body)
-			resp.Body.Close()
-			if resp.StatusCode == http.StatusOK {
-				return true
-			}
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		lastErr = workloadContinuityError(ctx, baseURL, snapshot)
+		cancel()
+		if lastErr == nil {
+			return nil
 		}
 		time.Sleep(time.Second)
 	}
-	return false
+	if lastErr == nil {
+		lastErr = errors.New("workload continuity was not established")
+	}
+	return lastErr
 }
 
 func failStatus(status osupdate.Status, message string, err error) error {

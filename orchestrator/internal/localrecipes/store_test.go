@@ -1,9 +1,40 @@
 package localrecipes
 
 import (
+	"os"
 	"reflect"
 	"testing"
 )
+
+func TestTombstoneHidesRecipeButRetainsCleanupSnapshot(t *testing.T) {
+	store := New(t.TempDir())
+	recipe, err := store.Import(DeepSeekDSparkSource)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Tombstone(recipe.ID); err != nil {
+		t.Fatal(err)
+	}
+	if recipes, err := store.List(); err != nil || len(recipes) != 0 {
+		t.Fatalf("executable recipes = %#v, %v", recipes, err)
+	}
+	if _, ok, err := store.Get(recipe.ID); err != nil || ok {
+		t.Fatalf("executable lookup = %v, %v", ok, err)
+	}
+	retained, ok, err := store.GetAny(recipe.ID)
+	if err != nil || !ok || retained.TombstonedAt == "" {
+		t.Fatalf("retained tombstone = %#v, %v, %v", retained, ok, err)
+	}
+	if err := store.Delete(recipe.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, err := store.GetAny(recipe.ID); err != nil || ok {
+		t.Fatalf("purged lookup = %v, %v", ok, err)
+	}
+	if err := store.Tombstone(recipe.ID); !os.IsNotExist(err) {
+		t.Fatalf("missing tombstone error = %v", err)
+	}
+}
 
 func TestNormalizeRepairsWindowsCheckoutFingerprints(t *testing.T) {
 	recipe := recipeFromDraft(DeepSeekDSparkID, "github", "reviewed-import", "now", deepSeekDraft())
@@ -11,6 +42,14 @@ func TestNormalizeRepairsWindowsCheckoutFingerprints(t *testing.T) {
 	recipe = normalize(recipe)
 	if !reflect.DeepEqual(recipe.Source.Files, deepSeekCanonicalFiles()) {
 		t.Fatalf("fingerprints were not migrated: %#v", recipe.Source.Files)
+	}
+}
+
+func TestNormalizeDisablesIndependentRecipeAutoStart(t *testing.T) {
+	recipe := recipeFromDraft(DeepSeekDSparkID, "github", "reviewed-import", "now", deepSeekDraft())
+	recipe.Engine.RestartPolicy = "unless-stopped"
+	if normalized := normalize(recipe); normalized.Engine.RestartPolicy != "no" {
+		t.Fatalf("restart policy = %q", normalized.Engine.RestartPolicy)
 	}
 }
 
@@ -51,6 +90,23 @@ func TestImportPrefillsEditableDeepSeekRecipe(t *testing.T) {
 	}
 	if _, err := store.Import("https://github.com/example/unreviewed"); err == nil {
 		t.Fatal("unknown repository was imported without an import profile")
+	}
+}
+
+func TestImportPrefillsMiaAIDualSparkRecipe(t *testing.T) {
+	store := New(t.TempDir())
+	preview, err := store.PreviewImport(DeepSeekV4Flash1MSource)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preview.ID != DeepSeekV4Flash1MID || preview.Source.Revision != DeepSeekV4Flash1MRevision {
+		t.Fatalf("preview = %#v", preview)
+	}
+	if preview.Model.MaxContext != 1000000 || preview.Distributed.Nodes != 2 || preview.Engine.ContainerPort != DefaultRuntimePort {
+		t.Fatalf("runtime profile = %#v", preview)
+	}
+	if !preview.Runtime.DownloadOnce || preview.Runtime.Lifecycle.Download.Program == "" {
+		t.Fatalf("reviewed recipe can bypass managed model staging: %#v", preview.Runtime)
 	}
 }
 
@@ -117,6 +173,31 @@ func TestRecipeValidationRejectsInvalidRuntimeValues(t *testing.T) {
 		if _, err := store.Create(draft); err == nil {
 			t.Fatalf("%s was accepted", name)
 		}
+	}
+}
+
+func TestRecipeValidationRequiresExactUniqueWorkerSelection(t *testing.T) {
+	store := New(t.TempDir())
+	for name, selected := range map[string][]string{
+		"too few workers":  {"spark-b"},
+		"duplicate worker": {"spark-b", "spark-b"},
+	} {
+		draft := NewDraft()
+		draft.Distributed.Nodes = 3
+		draft.Distributed.SelectedNodes = selected
+		if _, err := store.Create(draft); err == nil {
+			t.Fatalf("%s was accepted", name)
+		}
+	}
+	draft := NewDraft()
+	draft.Distributed.Nodes = 3
+	draft.Distributed.SelectedNodes = []string{"spark-b", "spark-c"}
+	recipe, err := store.Create(draft)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(recipe.Distributed.SelectedNodes) != 2 || recipe.Distributed.SelectedNodes[1] != "spark-c" {
+		t.Fatalf("selected workers were not persisted: %#v", recipe.Distributed.SelectedNodes)
 	}
 }
 

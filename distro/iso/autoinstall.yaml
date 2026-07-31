@@ -1,6 +1,8 @@
 #cloud-config
 autoinstall:
   version: 1
+  early-commands:
+    - /cdrom/cloudless/preinstall --installer
   interactive-sections:
     - network
     - storage

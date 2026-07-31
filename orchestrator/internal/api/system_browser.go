@@ -21,7 +21,14 @@ func browserAvailable() bool {
 
 func (s *Server) systemBrowserStatus(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
-	status := map[string]any{"available": browserAvailable(), "running": false, "minimized": false}
+	status := map[string]any{
+		"available":          browserAvailable(),
+		"running":            false,
+		"minimized":          false,
+		"profilePersistence": "persistent",
+		"downloadsPath":      "/home/cloudless/Downloads",
+		"updatePolicy":       "managed by the CloudlessOS package or Snap update channel",
+	}
 	if payload, err := os.ReadFile(browserStatusPath); err == nil && len(payload) <= 4096 {
 		var runtime map[string]bool
 		if json.Unmarshal(payload, &runtime) == nil {
@@ -75,9 +82,36 @@ func (s *Server) systemBrowserOpen(w http.ResponseWriter, r *http.Request) {
 	}
 	payload, _ := json.Marshal(map[string]string{"url": target, "action": input.Action})
 	name := fmt.Sprintf("%d-%d.json", time.Now().UnixNano(), os.Getpid())
-	if err := os.WriteFile(filepath.Join(browserRequestDir, name), payload, 0660); err != nil {
+	if err := queueBrowserRequest(filepath.Join(browserRequestDir, name), payload); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "could not queue the browser window"})
 		return
 	}
 	writeJSON(w, http.StatusAccepted, map[string]any{"opened": true, "url": target})
+}
+
+func queueBrowserRequest(path string, payload []byte) error {
+	temporary, err := os.CreateTemp(filepath.Dir(path), ".cloudless-browser-*")
+	if err != nil {
+		return err
+	}
+	tempName := temporary.Name()
+	defer os.Remove(tempName)
+	if _, err := temporary.Write(payload); err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	if err := temporary.Sync(); err != nil {
+		_ = temporary.Close()
+		return err
+	}
+	if err := temporary.Close(); err != nil {
+		return err
+	}
+	// cloudlessd has a private service umask. The desktop browser agent is a
+	// separate, unprivileged process in the cloudless group and must be able to
+	// consume only this typed request file.
+	if err := os.Chmod(tempName, 0o660); err != nil {
+		return err
+	}
+	return os.Rename(tempName, path)
 }

@@ -40,11 +40,12 @@ type ConfigFile struct {
 
 // AdminInfo explains how an app is administered beyond Cloudless's own settings —
 // shown as an info panel on the app's settings page (e.g. "use the app's own admin
-// panel"), optionally with default admin credentials.
+// panel"), optionally with administrator onboarding information.
 type AdminInfo struct {
-	Note string `json:"note"`           // where/how to manage the app (its own admin UI)
-	User string `json:"user,omitempty"` // default admin username/email
-	Pass string `json:"pass,omitempty"` // default admin password
+	Note            string `json:"note"`                      // where/how to manage the app (its own admin UI)
+	User            string `json:"user,omitempty"`            // administrator username/email
+	Pass            string `json:"pass,omitempty"`            // fixed password (discouraged; rejected for published apps)
+	ManagedPassword string `json:"managedPassword,omitempty"` // daemon-owned secret name, resolved only by local settings
 }
 
 // Field is an intuitive (form) config parameter, mapped into a config file.
@@ -113,6 +114,7 @@ type App struct {
 	ArchPlatforms       map[string][]string `json:"archPlatforms,omitempty"` // architecture-specific platform restriction
 	MinCloudlessVersion string              `json:"minCloudlessVersion,omitempty"`
 	MinDGXOSVersion     string              `json:"minDgxOsVersion,omitempty"`
+	SupportLevel        string              `json:"supportLevel,omitempty"` // experimental | preview | supported
 	RequiredFeatures    []string            `json:"requiredFeatures,omitempty"`
 	Ports               map[int]int         `json:"ports"` // hostPort -> containerPort
 	Env                 map[string]string   `json:"env,omitempty"`

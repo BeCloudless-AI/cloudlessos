@@ -22,6 +22,14 @@ echo "==> Building cloudlessd $VERSION for linux/$ARCH"
 ( cd "$ROOT/orchestrator"; CGO_ENABLED=0 GOOS=linux GOARCH="$ARCH" go build \
     -ldflags="-s -w -X github.com/cloudless/orchestrator/internal/capabilities.BuildVersion=$VERSION" \
     -o "$WORK/cloudlessd" ./cmd/cloudlessd )
+( cd "$ROOT/orchestrator"; CGO_ENABLED=0 GOOS=linux GOARCH="$ARCH" go build \
+    -ldflags="-s -w" -o "$WORK/cloudless-privileged" ./cmd/cloudless-privileged )
+( cd "$ROOT/orchestrator"; CGO_ENABLED=0 GOOS=linux GOARCH="$ARCH" go build \
+    -ldflags="-s -w" -o "$WORK/cloudless-engine" ./cmd/cloudless-engine )
+( cd "$ROOT/orchestrator"; CGO_ENABLED=0 GOOS=linux GOARCH="$ARCH" go build \
+    -ldflags="-s -w" -o "$WORK/cloudless-docker" ./cmd/cloudless-docker )
+( cd "$ROOT/orchestrator"; CGO_ENABLED=0 GOOS=linux GOARCH="$ARCH" go build \
+    -ldflags="-s -w" -o "$WORK/cloudless-desktop-agent" ./cmd/cloudless-desktop-agent )
 ( cd "$ROOT/orchestrator"; CGO_ENABLED=0 GOOS=linux GOARCH="$ARCH" go build -ldflags="-s -w" -o "$WORK/cloudless-updater-bin" ./cmd/cloudless-updater )
 
 make_control() {
@@ -45,13 +53,19 @@ finish_package() {
 }
 
 PKG="$WORK/cloudless-orchestrator"
-ORCHESTRATOR_DEPS="docker.io | docker-ce, ca-certificates, gpgv, openssh-client, sshpass, avahi-utils, netplan.io, iputils-ping, xdotool"
+ORCHESTRATOR_DEPS="docker.io | docker-ce, ca-certificates, git, gnupg, gpgv, python3, util-linux, openssh-client, sshpass, avahi-utils, netplan.io, iputils-ping"
 make_control "$PKG" cloudless-orchestrator "CloudlessOS local AI orchestrator" "$ORCHESTRATOR_DEPS"
 install -Dm0755 "$WORK/cloudlessd" "$PKG/usr/lib/cloudless/cloudlessd"
+install -Dm0755 "$WORK/cloudless-privileged" "$PKG/usr/lib/cloudless/cloudless-privileged"
+install -Dm0755 "$WORK/cloudless-engine" "$PKG/usr/lib/cloudless/cloudless-engine"
+install -Dm0755 "$WORK/cloudless-docker" "$PKG/usr/lib/cloudless/cloudless-docker"
 install -Dm0644 "$DISTRO/release/keys/cloudless-archive-keyring.pgp" \
     "$PKG/usr/share/cloudless/cloudless-archive-keyring.pgp"
 install -Dm0644 "$DISTRO/packages/cloudless-orchestrator/cloudlessd.service" "$PKG/lib/systemd/system/cloudlessd.service"
+install -Dm0644 "$DISTRO/packages/cloudless-orchestrator/cloudless-privileged.service" "$PKG/lib/systemd/system/cloudless-privileged.service"
+install -Dm0644 "$DISTRO/packages/cloudless-orchestrator/cloudless-engine.service" "$PKG/lib/systemd/system/cloudless-engine.service"
 install -Dm0755 "$DISTRO/packages/cloudless-orchestrator/cloudless-install-tailscale" "$PKG/usr/lib/cloudless/cloudless-install-tailscale"
+install -Dm0755 "$DISTRO/packages/cloudless-orchestrator/cloudless-backup" "$PKG/usr/sbin/cloudless-backup"
 install -Dm0644 "$DISTRO/packages/cloudless-orchestrator/cloudless-tailscale-install.service" "$PKG/lib/systemd/system/cloudless-tailscale-install.service"
 install -Dm0644 "$DISTRO/packages/cloudless-orchestrator/cloudless.env" "$PKG/etc/cloudless/cloudless.env"
 install -Dm0755 "$DISTRO/packages/cloudless-orchestrator/postinst" "$PKG/DEBIAN/postinst"
@@ -59,10 +73,13 @@ install -Dm0755 "$DISTRO/packages/cloudless-orchestrator/prerm" "$PKG/DEBIAN/pre
 finish_package "$PKG" cloudless-orchestrator
 
 PKG="$WORK/cloudless-shell"
-make_control "$PKG" cloudless-shell "CloudlessOS fullscreen web shell" "lightdm, lightdm-gtk-greeter, openbox, pcmanfm, xorg, curl, feh, unclutter, x11-xserver-utils, x11-utils, wmctrl, ttyd, python3"
+make_control "$PKG" cloudless-shell "CloudlessOS fullscreen web shell" "lightdm, lightdm-gtk-greeter, openbox, pcmanfm, xorg, curl, feh, unclutter, x11-xserver-utils, x11-utils, wmctrl, xdotool, ttyd, python3"
 install -Dm0755 "$DISTRO/packages/cloudless-shell/cloudless-kiosk" "$PKG/usr/bin/cloudless-kiosk"
+install -Dm0644 "$DISTRO/packages/cloudless-shell/recovery.html" "$PKG/usr/share/cloudless/recovery.html"
 install -Dm0755 "$DISTRO/packages/cloudless-shell/cloudless-browser-agent" "$PKG/usr/bin/cloudless-browser-agent"
+install -Dm0755 "$WORK/cloudless-desktop-agent" "$PKG/usr/bin/cloudless-desktop-agent"
 install -Dm0644 "$DISTRO/packages/cloudless-shell/cloudless-browser.tmpfiles" "$PKG/usr/lib/tmpfiles.d/cloudless-browser.conf"
+install -Dm0644 "$DISTRO/packages/cloudless-shell/cloudless-desktop.tmpfiles" "$PKG/usr/lib/tmpfiles.d/cloudless-desktop.conf"
 install -Dm0755 "$DISTRO/packages/cloudless-shell/cloudless-dgx-desktop-mode" "$PKG/usr/sbin/cloudless-dgx-desktop-mode"
 install -Dm0755 "$DISTRO/packages/cloudless-shell/cloudless-developer-tools" "$PKG/usr/sbin/cloudless-developer-tools"
 install -Dm0644 "$DISTRO/packages/cloudless-shell/cloudless-terminal.service" "$PKG/lib/systemd/system/cloudless-terminal.service"
@@ -99,10 +116,17 @@ install -Dm0755 "$DISTRO/packages/cloudless-hardware/postinst" "$PKG/DEBIAN/post
 finish_package "$PKG" cloudless-hardware
 
 PKG="$WORK/cloudless-firstboot"
-make_control "$PKG" cloudless-firstboot "CloudlessOS first-boot validation" "curl"
+make_control "$PKG" cloudless-firstboot "CloudlessOS first-boot validation and recovery" "curl, procps, python3"
 install -Dm0755 "$DISTRO/packages/cloudless-firstboot/cloudless-validate" "$PKG/usr/lib/cloudless/cloudless-validate"
+install -Dm0755 "$DISTRO/packages/cloudless-firstboot/cloudless-boot-audit" "$PKG/usr/lib/cloudless/cloudless-boot-audit"
+install -Dm0755 "$DISTRO/packages/cloudless-firstboot/cloudless-graphical-recovery" "$PKG/usr/lib/cloudless/cloudless-graphical-recovery"
 install -Dm0755 "$DISTRO/packages/cloudless-firstboot/cloudless-diagnostics" "$PKG/usr/bin/cloudless-diagnostics"
+install -Dm0755 "$DISTRO/packages/cloudless-firstboot/cloudless-repair" "$PKG/usr/bin/cloudless-repair"
+install -Dm0755 "$DISTRO/packages/cloudless-firstboot/cloudless-qualify" "$PKG/usr/bin/cloudless-qualify"
+install -Dm0644 "$DISTRO/release/physical-validation-matrix.json" \
+    "$PKG/usr/share/cloudless/physical-validation-matrix.json"
 install -Dm0644 "$DISTRO/packages/cloudless-firstboot/cloudless-firstboot.service" "$PKG/lib/systemd/system/cloudless-firstboot.service"
+install -Dm0644 "$DISTRO/packages/cloudless-firstboot/cloudless-graphical-recovery.service" "$PKG/lib/systemd/system/cloudless-graphical-recovery.service"
 install -Dm0755 "$DISTRO/packages/cloudless-firstboot/postinst" "$PKG/DEBIAN/postinst"
 finish_package "$PKG" cloudless-firstboot
 

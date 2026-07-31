@@ -1,13 +1,14 @@
 package api
 
 import (
-	"fmt"
+	"context"
+	"errors"
 	"net/http"
-	"os/exec"
 
 	"github.com/cloudless/orchestrator/internal/capabilities"
 	"github.com/cloudless/orchestrator/internal/nvidiaupdate"
 	"github.com/cloudless/orchestrator/internal/osupdate"
+	"github.com/cloudless/orchestrator/internal/privileged"
 )
 
 func (s *Server) systemUpdateGet(w http.ResponseWriter, _ *http.Request) {
@@ -19,11 +20,13 @@ func (s *Server) systemUpdateGet(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, status)
 }
 
-func (s *Server) systemUpdateCheck(w http.ResponseWriter, _ *http.Request) {
-	if err := startUpdateUnit("cloudless-update-check.service"); err != nil {
+func (s *Server) systemUpdateCheck(w http.ResponseWriter, r *http.Request) {
+	if err := s.runPrivileged(r.Context(), privileged.ActionSystemUpdateCheck); err != nil {
+		s.auditSecurity(gatewayAuditEvent{Category: "update", Event: "system-check", Outcome: "failed", Actor: "local-ui", Detail: err.Error()})
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
 		return
 	}
+	s.auditSecurity(gatewayAuditEvent{Category: "update", Event: "system-check", Outcome: "started", Actor: "local-ui", Target: "cloudless-update-check.service"})
 	writeJSON(w, http.StatusAccepted, map[string]any{"started": true, "operation": "check"})
 }
 
@@ -32,19 +35,27 @@ func (s *Server) systemUpdateApply(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "update confirmation required"})
 		return
 	}
-	if err := startUpdateUnit("cloudless-update-apply.service"); err != nil {
+	if err := s.runPrivileged(r.Context(), privileged.ActionSystemUpdateApply); err != nil {
+		s.auditSecurity(gatewayAuditEvent{Category: "update", Event: "system-apply", Outcome: "failed", Actor: "local-ui", Detail: err.Error()})
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
 		return
 	}
+	s.auditSecurity(gatewayAuditEvent{Category: "update", Event: "system-apply", Outcome: "started", Actor: "local-ui", Target: "cloudless-update-apply.service"})
 	writeJSON(w, http.StatusAccepted, map[string]any{"started": true, "operation": "apply"})
 }
 
-func startUpdateUnit(unit string) error {
-	out, err := exec.Command("systemctl", "start", "--no-block", unit).CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("start %s: %w: %s", unit, err, out)
+func (s *Server) runPrivileged(ctx context.Context, action privileged.Action) error {
+	if s.privilegedAction == nil {
+		return errors.New("privileged broker is not configured")
 	}
-	return nil
+	return s.privilegedAction(ctx, action)
+}
+
+func (s *Server) runPrivilegedValue(ctx context.Context, action privileged.Action, value string) error {
+	if s.privilegedValue == nil {
+		return errors.New("privileged broker is not configured")
+	}
+	return s.privilegedValue(ctx, action, value)
 }
 
 func (s *Server) nvidiaDriverGet(w http.ResponseWriter, _ *http.Request) {
@@ -56,14 +67,16 @@ func (s *Server) nvidiaDriverGet(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, status)
 }
 
-func (s *Server) nvidiaDriverCheck(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) nvidiaDriverCheck(w http.ResponseWriter, r *http.Request) {
 	if !s.requireCapability(w, capabilities.GenericDriverUpdates) {
 		return
 	}
-	if err := startUpdateUnit("cloudless-nvidia-check.service"); err != nil {
+	if err := s.runPrivileged(r.Context(), privileged.ActionNVIDIAUpdateCheck); err != nil {
+		s.auditSecurity(gatewayAuditEvent{Category: "update", Event: "nvidia-check", Outcome: "failed", Actor: "local-ui", Detail: err.Error()})
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
 		return
 	}
+	s.auditSecurity(gatewayAuditEvent{Category: "update", Event: "nvidia-check", Outcome: "started", Actor: "local-ui", Target: "cloudless-nvidia-check.service"})
 	writeJSON(w, http.StatusAccepted, map[string]any{"started": true, "operation": "nvidia-check"})
 }
 
@@ -75,9 +88,11 @@ func (s *Server) nvidiaDriverApply(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "driver update confirmation required"})
 		return
 	}
-	if err := startUpdateUnit("cloudless-nvidia-apply.service"); err != nil {
+	if err := s.runPrivileged(r.Context(), privileged.ActionNVIDIAUpdateApply); err != nil {
+		s.auditSecurity(gatewayAuditEvent{Category: "update", Event: "nvidia-apply", Outcome: "failed", Actor: "local-ui", Detail: err.Error()})
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
 		return
 	}
+	s.auditSecurity(gatewayAuditEvent{Category: "update", Event: "nvidia-apply", Outcome: "started", Actor: "local-ui", Target: "cloudless-nvidia-apply.service"})
 	writeJSON(w, http.StatusAccepted, map[string]any{"started": true, "operation": "nvidia-apply"})
 }

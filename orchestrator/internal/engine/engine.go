@@ -11,6 +11,7 @@ type RunSpec struct {
 	Image        string            // image ref to run
 	Ports        map[int]int       // hostPort -> containerPort (bound to 127.0.0.1)
 	Env          map[string]string // environment variables
+	Labels       map[string]string // orchestrator-owned lifecycle labels
 	Volumes      map[string]string // hostPath-or-named-volume -> containerPath
 	GPUs         string            // "all", "0", ... or "" for no GPU
 	Network      string            // docker network to join (container-name DNS), or ""
@@ -19,7 +20,14 @@ type RunSpec struct {
 	Ulimits      []string          // Docker ulimit assignments (for example "memlock=-1")
 	ExtraHosts   []string          // host mappings (for example host.docker.internal:host-gateway)
 	EntryPoint   string            // optional container entrypoint override
+	User         string            // optional numeric container user ("0" is permitted for managed maintenance helpers)
 	Args         []string          // extra args appended after the image (container command)
+	ReadOnly     bool              // mount the image root filesystem read-only
+	CapDrop      []string          // Linux capabilities removed from the container
+	SecurityOpts []string          // Docker security options (for example no-new-privileges:true)
+	Tmpfs        []string          // isolated writable tmpfs mounts
+	PidsLimit    int               // maximum number of container processes (0 = Docker default)
+	ShmSize      string            // private /dev/shm allocation (for example 16g)
 }
 
 // Container is the orchestrator's view of a container.
@@ -32,16 +40,54 @@ type Container struct {
 	Ports  string `json:"ports"`
 }
 
+// ImageInfo is the bounded metadata Cloudless needs from a local image.
+type ImageInfo struct {
+	ID           string
+	OS           string
+	Architecture string
+	Size         int64
+	EntryPoint   []string
+	Command      []string
+	RepoDigests  []string
+}
+
+// ImageDigestRef identifies one locally available repository tag and digest.
+type ImageDigestRef struct {
+	Repository string
+	Tag        string
+	Digest     string
+}
+
 // Engine is the container runtime abstraction.
 type Engine interface {
 	// Available reports whether the runtime is reachable.
 	Available(ctx context.Context) error
 	// EnsureNetwork creates the named docker network if it does not exist.
 	EnsureNetwork(ctx context.Context, name string) error
+	// EnsureVolume creates a Cloudless-owned named volume if it does not exist.
+	EnsureVolume(ctx context.Context, name string) error
+	// VolumeMountpoint returns the host mountpoint for a Cloudless-owned named volume.
+	VolumeMountpoint(ctx context.Context, name string) (string, error)
+	// ListVolumes returns every Cloudless-owned named volume.
+	ListVolumes(ctx context.Context) ([]string, error)
+	// RemoveVolume removes a Cloudless-owned named volume.
+	RemoveVolume(ctx context.Context, name string) error
 	// ConnectNetwork attaches a running container to a network (no-op if already attached).
 	ConnectNetwork(ctx context.Context, network, container string) error
 	// HasAlias reports whether a container has the given network alias.
 	HasAlias(ctx context.Context, container, alias string) (bool, error)
+	// ContainerEnvironment returns a managed container's configured environment.
+	ContainerEnvironment(ctx context.Context, container string) (map[string]string, error)
+	// HermesConfigValue reads one admitted Hermes model setting.
+	HermesConfigValue(ctx context.Context, container, key string) (string, error)
+	// HasNVIDIARuntime reports whether Docker advertises the NVIDIA runtime.
+	HasNVIDIARuntime(ctx context.Context) (bool, error)
+	// ContainerNamesByLabel returns managed containers with an admitted ownership label.
+	ContainerNamesByLabel(ctx context.Context, key, value string) ([]string, error)
+	// ContainerNamesByAncestor returns managed containers created from an image.
+	ContainerNamesByAncestor(ctx context.Context, image string) ([]string, error)
+	// LogsTail returns a bounded tail of a managed container's logs.
+	LogsTail(ctx context.Context, container string, lines int) (string, error)
 	// Exec runs a command inside a running container.
 	Exec(ctx context.Context, container string, args ...string) error
 	// Pull fetches an image.
@@ -52,8 +98,22 @@ type Engine interface {
 	Build(ctx context.Context, image, contextDir string, onLine func(string)) error
 	// RemoveImage force-removes an image (used by reset/uninstall).
 	RemoveImage(ctx context.Context, image string) error
+	// InspectImage returns bounded metadata for one local image.
+	InspectImage(ctx context.Context, image string) (ImageInfo, error)
+	// TagImage creates a second local reference for an already admitted image.
+	TagImage(ctx context.Context, source, target string) error
+	// RemoteImageManifest returns registry manifest JSON for an immutable or tagged image.
+	RemoteImageManifest(ctx context.Context, image string) (string, error)
+	// RemoteImageConfig returns registry image-configuration JSON.
+	RemoteImageConfig(ctx context.Context, image string) (string, error)
+	// ExportImage writes an immutable local image archive to Cloudless's bounded transfer staging.
+	ExportImage(ctx context.Context, image, destination string) error
+	// ListImageDigests returns the local repository/tag/digest inventory.
+	ListImageDigests(ctx context.Context) ([]ImageDigestRef, error)
 	// Run starts a detached container and returns its ID.
 	Run(ctx context.Context, spec RunSpec) (string, error)
+	// RunTransient runs an automatically removed helper container and returns its output.
+	RunTransient(ctx context.Context, spec RunSpec) (string, error)
 	// Stop stops a running container by name.
 	Stop(ctx context.Context, name string) error
 	// Remove force-removes a container by name.
@@ -70,6 +130,4 @@ type Engine interface {
 	RemoteDigest(ctx context.Context, image string) (string, error)
 	// ContainerImageDigest returns the repo digest of the image a container runs ("" if absent).
 	ContainerImageDigest(ctx context.Context, name string) (string, error)
-	// Output runs `docker <args>` and returns stdout (for read-only queries, e.g. listing a volume).
-	Output(ctx context.Context, args ...string) (string, error)
 }

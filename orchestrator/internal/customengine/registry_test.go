@@ -7,12 +7,18 @@ import (
 )
 
 func TestAppInheritsVLLMContract(t *testing.T) {
-	app, ok := App(state.CustomEngine{ID: "custom-sm121", Name: "SM121 vLLM", Image: "cloudless/vllm-sm121:dev", Base: "vllm", CommandMode: "vllm-entrypoint"})
-	if !ok || app.ID != "custom-sm121" || app.Image != "cloudless/vllm-sm121:dev" || !app.Engine {
+	app, ok := App(state.CustomEngine{
+		ID: "custom-sm121", Name: "SM121 vLLM", Image: "cloudless/vllm-sm121:dev",
+		ResolvedImage: "sha256:immutable", Base: "vllm", CommandMode: "vllm-entrypoint",
+	})
+	if !ok || app.ID != "custom-sm121" || app.Image != "sha256:immutable" || !app.Engine {
 		t.Fatalf("unexpected custom engine: %#v", app)
 	}
 	if app.Preinstall || app.Prefetch || app.Verified {
 		t.Fatal("a local build must not masquerade as a managed verified engine")
+	}
+	if app.SupportLevel != "experimental" {
+		t.Fatalf("local build support = %q, want experimental", app.SupportLevel)
 	}
 	if app.Network != "cloudless" || app.GPUs != "all" || app.Ports[8000] != 8000 {
 		t.Fatal("custom engine lost the managed runtime contract")

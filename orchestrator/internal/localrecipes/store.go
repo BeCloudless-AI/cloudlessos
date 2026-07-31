@@ -19,10 +19,13 @@ import (
 )
 
 const (
-	DeepSeekDSparkID       = "deepseek-v4-flash-dspark-2x"
-	DeepSeekDSparkSource   = "https://github.com/tonyd2wild/DeepSeek-v4-Flash-DSpark-60-tok-s-900K-ctx-2x-DGX-Spark"
-	DeepSeekDSparkRevision = "51261f419a4a35a02966405ea9774b41735ec412"
-	CloudlessModelAlias    = "cloudless"
+	DeepSeekDSparkID          = "deepseek-v4-flash-dspark-2x"
+	DeepSeekDSparkSource      = "https://github.com/tonyd2wild/DeepSeek-v4-Flash-DSpark-60-tok-s-900K-ctx-2x-DGX-Spark"
+	DeepSeekDSparkRevision    = "51261f419a4a35a02966405ea9774b41735ec412"
+	DeepSeekV4Flash1MID       = "deepseek-v4-flash-dual-dspark-1m"
+	DeepSeekV4Flash1MSource   = "https://github.com/MiaAI-Lab/DeepSeek-V4-Flash-Dual-DGX-Spark-1M-Context"
+	DeepSeekV4Flash1MRevision = "ffa38f9e1bea5c06a6195fca9bff17c04f4785da"
+	CloudlessModelAlias       = "cloudless"
 	// 8888 belongs to the bundled SearXNG service. Recipe engines use their own
 	// host port so installing Research cannot prevent an inference runtime from
 	// starting.
@@ -68,13 +71,14 @@ type Model struct {
 }
 
 type Distributed struct {
-	Nodes       int    `json:"nodes" yaml:"nodes"`
-	Backend     string `json:"backend" yaml:"backend"`
-	MasterPort  int    `json:"masterPort" yaml:"masterPort"`
-	Interface   string `json:"interface" yaml:"interface"`
-	HCA         string `json:"hca" yaml:"hca"`
-	IBGIDIndex  int    `json:"ibGidIndex" yaml:"ibGidIndex"`
-	WorkerAlias string `json:"workerAlias" yaml:"workerAlias"`
+	Nodes         int      `json:"nodes" yaml:"nodes"`
+	Backend       string   `json:"backend" yaml:"backend"`
+	MasterPort    int      `json:"masterPort" yaml:"masterPort"`
+	Interface     string   `json:"interface" yaml:"interface"`
+	HCA           string   `json:"hca" yaml:"hca"`
+	IBGIDIndex    int      `json:"ibGidIndex" yaml:"ibGidIndex"`
+	WorkerAlias   string   `json:"workerAlias" yaml:"workerAlias"`
+	SelectedNodes []string `json:"selectedNodes,omitempty" yaml:"selectedNodes,omitempty"`
 }
 
 type Lifecycle struct {
@@ -138,6 +142,7 @@ type Recipe struct {
 	Trust         string            `json:"trust"`
 	ImportedAt    string            `json:"importedAt"`
 	UpdatedAt     string            `json:"updatedAt"`
+	TombstonedAt  string            `json:"tombstonedAt,omitempty"`
 	Source        Source            `json:"source"`
 	Engine        Engine            `json:"engine"`
 	Model         Model             `json:"model"`
@@ -179,6 +184,15 @@ func deepSeekCanonicalFiles() map[string]string {
 	}
 }
 
+func deepSeekV4Flash1MFiles() map[string]string {
+	return map[string]string{
+		"docker-compose.yml":         "9b660f696c86ffbf59ce0a139568545977819ff218f6f5356cb8b536f851ce87",
+		"start-deepseek-v4-flash.sh": "a6a279947a6714a7775eadb8764b4340e0765f29f679255544b912ab28eb397e",
+		"stop-deepseek-v4-flash.sh":  "efcd7350cec2d27d9d98f0ad541678ec2bd009e97935f95b72e8bb38dd096ee0",
+		".env.example":               "8d0a0346e3d87aed2c1c0d670958bd51ecdc3a89135b0e8032aa574f6888598f",
+	}
+}
+
 func deepSeekWindowsCheckoutFiles() map[string]string {
 	return map[string]string{
 		"build-dspark-vllm-runtime.sh":      "82d6c7e386ba16c59590a95a1e37d0f63e980bc6f6ccb6772cdcda96b9fb95f4",
@@ -206,13 +220,39 @@ func sameFiles(left, right map[string]string) bool {
 func NewDraft() Draft {
 	return Draft{
 		Name: "My inference recipe", Description: "A repeatable local inference setup.", Platform: "dgx-spark",
-		Engine:      Engine{Type: "vllm", Image: "cloudless/dspark-vllm:latest", ServedModelName: CloudlessModelAlias, ContainerPort: DefaultRuntimePort, APIPath: "/v1", ProxyHost: "host.docker.internal", RestartPolicy: "unless-stopped", Arguments: []string{}},
+		Engine:      Engine{Type: "vllm", Image: "cloudless/dspark-vllm:latest", ServedModelName: CloudlessModelAlias, ContainerPort: DefaultRuntimePort, APIPath: "/v1", ProxyHost: "host.docker.internal", RestartPolicy: "no", Arguments: []string{}},
 		Model:       Model{ID: "deepseek-ai/DeepSeek-V4-Flash-DSpark", Revision: "main", Quantization: "none", DType: "auto", KVCacheDType: "auto", MaxContext: 131072, MaxSequences: 1, GPUMemoryUtilization: 0.80, TensorParallel: 2, PipelineParallel: 1},
 		Distributed: Distributed{Nodes: 2, Backend: "nccl", MasterPort: 25000, Interface: "auto", HCA: "auto", IBGIDIndex: 0, WorkerAlias: "cloudless-recipe-worker"},
 		Runtime: Runtime{Adapter: "source-scripts-v1", WorkingDir: ".", TimeoutMinutes: 480,
-			Prerequisites: []string{"git", "bash", "docker", "ssh", "scp", "rsync"}, Environment: map[string]string{"HF_HUB_DISABLE_XET": "1", "HF_CACHE": "cloudless-hf"},
+			Prerequisites: []string{"git", "bash", "docker", "ssh", "scp", "rsync"}, Environment: map[string]string{"HF_HUB_DISABLE_XET": "1", "HF_CACHE": "/var/lib/cloudless/models-cache"},
 			Lifecycle: Lifecycle{Build: command("bash", "./build-dspark-vllm-runtime.sh"), Download: command("bash", "./prepare-dspark-model-cache.sh"), Start: command("bash", "./start-deepseek-v4-flash-dspark.sh"), Stop: command("bash", "./stop-deepseek-v4-flash-dspark.sh")}},
 		Health: Health{Scheme: "http", Host: "127.0.0.1", Port: DefaultRuntimePort, Path: "/health", TimeoutSeconds: 180, IntervalSeconds: 3},
+	}
+}
+
+// NewManagedDraft is the safe starting point exposed by the recipe builder.
+// It deliberately leaves immutable identities blank: the user must select an
+// exact image digest and model revision before the store accepts the recipe.
+func NewManagedDraft() Draft {
+	return Draft{
+		Name: "My inference recipe", Description: "A repeatable, Cloudless-managed inference setup.", Platform: "generic",
+		Engine: Engine{
+			Type: "vllm", ServedModelName: CloudlessModelAlias, ContainerPort: DefaultRuntimePort,
+			APIPath: "/v1", ProxyHost: "host.docker.internal", RestartPolicy: "no",
+		},
+		Model: Model{
+			MaxContext: 32768, MaxSequences: 1, GPUMemoryUtilization: 0.8,
+			TensorParallel: 1, PipelineParallel: 1, Quantization: "none", DType: "auto", KVCacheDType: "auto",
+		},
+		Distributed: Distributed{Nodes: 1, Backend: "nccl", MasterPort: 25000, WorkerAlias: "cloudless-recipe-worker"},
+		Runtime: Runtime{
+			Adapter: ManagedContainerAdapter, WorkingDir: ".", TimeoutMinutes: 480,
+			Environment: map[string]string{"HF_HUB_DISABLE_XET": "1"},
+		},
+		Health: Health{
+			Scheme: "http", Host: "127.0.0.1", Port: DefaultRuntimePort,
+			Path: "/health", TimeoutSeconds: 7200, IntervalSeconds: 3,
+		},
 	}
 }
 
@@ -234,6 +274,30 @@ func deepSeekDraft() Draft {
 	d.Runtime.Environment["GPU_MEMORY_UTILIZATION"] = "0.80"
 	d.Runtime.BuildOnce = true
 	d.Runtime.DownloadOnce = true
+	return d
+}
+
+func deepSeekV4Flash1MDraft() Draft {
+	d := NewDraft()
+	d.Name = "DeepSeek V4 Flash · Dual Spark · 1M"
+	d.Description = "The reviewed MiaAI-Lab two-DGX-Spark vLLM recipe for DeepSeek V4 Flash with a one-million-token context window."
+	d.Source = Source{URL: DeepSeekV4Flash1MSource, Revision: DeepSeekV4Flash1MRevision, Files: deepSeekV4Flash1MFiles()}
+	d.Engine.Image = "aidendle94/sparkrun-vllm-ds4-gb10:production-ready"
+	d.Model.ID = "deepseek-ai/DeepSeek-V4-Flash"
+	d.Model.Revision = "60d8d70770c6776ff598c94bb586a859a38244f1"
+	d.Model.KVCacheDType = "fp8"
+	d.Model.MaxContext = 1000000
+	d.Model.MaxSequences = 6
+	d.Model.GPUMemoryUtilization = 0.83
+	d.Model.TrustRemoteCode = true
+	d.Runtime.BuildOnce = false
+	d.Runtime.DownloadOnce = true
+	d.Runtime.Lifecycle.Build = Command{}
+	d.Runtime.Lifecycle.Download = command("bash", "./prepare-deepseek-v4-flash-model.sh")
+	d.Runtime.Lifecycle.Start = command("bash", "./start-deepseek-v4-flash.sh")
+	d.Runtime.Lifecycle.Stop = command("bash", "./stop-deepseek-v4-flash.sh")
+	d.Runtime.Environment["VLLM_ALLOW_LONG_MAX_MODEL_LEN"] = "1"
+	d.Health.TimeoutSeconds = 7200
 	return d
 }
 
@@ -273,17 +337,24 @@ func recognized(raw string) (Recipe, error) {
 	if err != nil {
 		return Recipe{}, err
 	}
-	if !strings.EqualFold(source, DeepSeekDSparkSource) {
+	var id string
+	var d Draft
+	switch {
+	case strings.EqualFold(source, DeepSeekDSparkSource):
+		id, d = DeepSeekDSparkID, deepSeekDraft()
+	case strings.EqualFold(source, DeepSeekV4Flash1MSource):
+		id, d = DeepSeekV4Flash1MID, deepSeekV4Flash1MDraft()
+	default:
 		return Recipe{}, errors.New("this repository has no Cloudless import profile yet; create a recipe manually and enter its source details instead")
 	}
-	d := deepSeekDraft()
 	now := time.Now().UTC().Format(time.RFC3339)
-	return recipeFromDraft(DeepSeekDSparkID, "github", "reviewed-import", now, d), nil
+	return recipeFromDraft(id, "github", "reviewed-import", now, d), nil
 }
 
 func normalize(recipe Recipe) Recipe {
 	// Migrate the version-1 fixed-adapter document in place.
 	if recipe.Engine.Type == "" {
+		tombstonedAt := recipe.TombstonedAt
 		d := deepSeekDraft()
 		if recipe.Name != "" {
 			d.Name = recipe.Name
@@ -323,6 +394,7 @@ func normalize(recipe Recipe) Recipe {
 		}
 		migrated := recipeFromDraft(recipe.ID, recipe.Origin, recipe.Trust, recipe.ImportedAt, d)
 		migrated.UpdatedAt = recipe.UpdatedAt
+		migrated.TombstonedAt = tombstonedAt
 		recipe = migrated
 	}
 	// Repair the original built-in profile, whose fingerprints were generated
@@ -344,6 +416,14 @@ func normalize(recipe Recipe) Recipe {
 			recipe.Health.Port = DefaultRuntimePort
 		}
 	}
+	// Upgrade the reviewed MiaAI-Lab profile to Cloudless-owned model staging.
+	// Letting vLLM discover an incomplete snapshot during startup hides hundreds
+	// of gigabytes of Internet transfer behind a misleading "launching" state.
+	if recipe.Source.URL == DeepSeekV4Flash1MSource && recipe.Source.Revision == DeepSeekV4Flash1MRevision {
+		recipe.Runtime.DownloadOnce = true
+		recipe.Runtime.Lifecycle.Download = command("bash", "./prepare-deepseek-v4-flash-model.sh")
+		recipe.Health.TimeoutSeconds = 7200
+	}
 	if recipe.Origin == "" {
 		recipe.Origin = "local"
 	}
@@ -359,13 +439,16 @@ func normalize(recipe Recipe) Recipe {
 	if recipe.Engine.ProxyHost == "" {
 		recipe.Engine.ProxyHost = "host.docker.internal"
 	}
+	if strings.TrimSpace(recipe.Engine.APIPath) == "" {
+		recipe.Engine.APIPath = "/v1"
+	}
 	// Cloudless applications and the public API use one permanent model name.
 	// A recipe selects the underlying weights and runtime, never the client
 	// contract exposed by the OS.
 	recipe.Engine.ServedModelName = CloudlessModelAlias
-	if recipe.Engine.RestartPolicy == "" {
-		recipe.Engine.RestartPolicy = "unless-stopped"
-	}
+	// Distributed containers must never independently auto-start after a boot.
+	// cloudlessd reconciles topology first and starts coordinator then workers.
+	recipe.Engine.RestartPolicy = "no"
 	return syncCompatibility(recipe)
 }
 
@@ -436,6 +519,9 @@ func validateDraft(d Draft) (Draft, error) {
 		}
 	}
 	d.Engine.Type, d.Engine.Image, d.Engine.APIPath = strings.TrimSpace(d.Engine.Type), strings.TrimSpace(d.Engine.Image), strings.TrimSpace(d.Engine.APIPath)
+	if d.Engine.APIPath == "" {
+		d.Engine.APIPath = "/v1"
+	}
 	d.Engine.ServedModelName = CloudlessModelAlias
 	d.Engine.ProxyHost, d.Engine.RestartPolicy = strings.TrimSpace(d.Engine.ProxyHost), strings.TrimSpace(d.Engine.RestartPolicy)
 	if d.Engine.Type == "" || len(d.Engine.Type) > 64 {
@@ -447,12 +533,16 @@ func validateDraft(d Draft) (Draft, error) {
 	if d.Engine.ContainerPort < 1 || d.Engine.ContainerPort > 65535 {
 		return Draft{}, errors.New("engine port must be between 1 and 65535")
 	}
+	if strings.TrimRight(d.Engine.APIPath, "/") != "/v1" {
+		return Draft{}, errors.New("engine API path must preserve the OpenAI-compatible /v1 contract")
+	}
 	if d.Engine.ProxyHost == "" || len(d.Engine.ProxyHost) > 253 || strings.ContainsAny(d.Engine.ProxyHost, "\x00\r\n /\\") {
 		return Draft{}, errors.New("engine proxy host is invalid")
 	}
-	if d.Engine.RestartPolicy == "" || len(d.Engine.RestartPolicy) > 64 || strings.ContainsAny(d.Engine.RestartPolicy, "\x00\r\n") {
+	if len(d.Engine.RestartPolicy) > 64 || strings.ContainsAny(d.Engine.RestartPolicy, "\x00\r\n") {
 		return Draft{}, errors.New("engine restart policy is invalid")
 	}
+	d.Engine.RestartPolicy = "no"
 	var err error
 	if d.Engine.Arguments, err = cleanStrings(d.Engine.Arguments, 256); err != nil {
 		return Draft{}, fmt.Errorf("engine arguments: %w", err)
@@ -485,6 +575,19 @@ func validateDraft(d Draft) (Draft, error) {
 	if d.Distributed.WorkerAlias == "" || len(d.Distributed.WorkerAlias) > 64 {
 		return Draft{}, errors.New("enter a worker alias")
 	}
+	if d.Distributed.SelectedNodes, err = cleanStrings(d.Distributed.SelectedNodes, 63); err != nil {
+		return Draft{}, fmt.Errorf("selected nodes: %w", err)
+	}
+	if len(d.Distributed.SelectedNodes) != 0 && len(d.Distributed.SelectedNodes) != d.Distributed.Nodes-1 {
+		return Draft{}, fmt.Errorf("select exactly %d worker node(s), or leave selection empty for automatic placement", d.Distributed.Nodes-1)
+	}
+	seenNodes := make(map[string]struct{}, len(d.Distributed.SelectedNodes))
+	for _, node := range d.Distributed.SelectedNodes {
+		if _, duplicate := seenNodes[node]; duplicate {
+			return Draft{}, errors.New("selected worker nodes must be unique")
+		}
+		seenNodes[node] = struct{}{}
+	}
 	if d.Runtime.Adapter == "" || len(d.Runtime.Adapter) > 64 {
 		return Draft{}, errors.New("choose a runtime adapter")
 	}
@@ -512,7 +615,11 @@ func validateDraft(d Draft) (Draft, error) {
 		}
 		*value = validated
 	}
-	if d.Runtime.Lifecycle.Start.Program == "" {
+	if d.Runtime.Adapter == ManagedContainerAdapter {
+		if err := validateManagedContainerDraft(d); err != nil {
+			return Draft{}, err
+		}
+	} else if d.Runtime.Lifecycle.Start.Program == "" {
 		return Draft{}, errors.New("a start command is required")
 	}
 	if d.Health.Scheme != "http" && d.Health.Scheme != "https" {
@@ -582,6 +689,22 @@ func (s *Store) save(doc document) error {
 }
 
 func (s *Store) List() ([]Recipe, error) {
+	all, err := s.ListAll()
+	if err != nil {
+		return nil, err
+	}
+	result := make([]Recipe, 0, len(all))
+	for _, recipe := range all {
+		if recipe.TombstonedAt == "" {
+			result = append(result, recipe)
+		}
+	}
+	return result, nil
+}
+
+// ListAll includes deletion tombstones for recovery and management surfaces.
+// Executable catalog paths should use List instead.
+func (s *Store) ListAll() ([]Recipe, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	doc, err := s.load()
@@ -595,6 +718,21 @@ func (s *Store) List() ([]Recipe, error) {
 }
 func (s *Store) Get(id string) (Recipe, bool, error) {
 	all, err := s.List()
+	if err != nil {
+		return Recipe{}, false, err
+	}
+	for _, recipe := range all {
+		if recipe.ID == id {
+			return recipe, true, nil
+		}
+	}
+	return Recipe{}, false, nil
+}
+
+// GetAny includes a tombstoned recipe so cleanup and diagnostics can still
+// reconstruct its lifecycle until every owned resource has been reconciled.
+func (s *Store) GetAny(id string) (Recipe, bool, error) {
+	all, err := s.ListAll()
 	if err != nil {
 		return Recipe{}, false, err
 	}
@@ -720,4 +858,25 @@ func (s *Store) Delete(id string) error {
 	}
 	doc.Recipes = next
 	return s.save(doc)
+}
+
+// Tombstone immediately removes a recipe from executable catalog lookups but
+// retains its exact lifecycle specification for cleanup and diagnostics.
+func (s *Store) Tombstone(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	doc, err := s.load()
+	if err != nil {
+		return err
+	}
+	for index := range doc.Recipes {
+		if doc.Recipes[index].ID != id {
+			continue
+		}
+		if doc.Recipes[index].TombstonedAt == "" {
+			doc.Recipes[index].TombstonedAt = time.Now().UTC().Format(time.RFC3339Nano)
+		}
+		return s.save(doc)
+	}
+	return os.ErrNotExist
 }

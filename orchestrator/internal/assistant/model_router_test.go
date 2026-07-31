@@ -55,8 +55,13 @@ func TestRecentUserTextExcludesAssistantClaims(t *testing.T) {
 		t.Fatalf("unsafe follow-up context: %q", text)
 	}
 	advice := ForcedModelGuidance(text, modelTestContext())
-	if !strings.Contains(advice.Reply, "about 26 GB") {
-		t.Fatalf("forced advice did not use user-provided model facts: %q", advice.Reply)
+	for _, want := range []string{"can’t determine", "parameter count", "Not reviewed"} {
+		if !strings.Contains(advice.Reply, want) {
+			t.Fatalf("forced advice did not preserve evidence boundaries: %q", advice.Reply)
+		}
+	}
+	if strings.Contains(advice.Reply, "2 GB") || strings.Contains(advice.Reply, "26 GB") {
+		t.Fatalf("forced advice invented or repeated a memory claim: %q", advice.Reply)
 	}
 }
 

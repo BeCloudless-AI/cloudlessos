@@ -35,8 +35,9 @@ var inferenceAliasPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:/-]{0,6
 func (s *Server) inferenceContract() state.InferenceContract { return s.state.InferenceContract() }
 
 // GatewayHandler exposes two authenticated surfaces on one shareable listener:
-// /v1/* proxies raw model inference, while /agent/v1/* and /agent/api/* proxy
-// Hermes' agent APIs. Hermes' dashboard is deliberately not reachable here.
+// /v1/* proxies an allow-listed model inference surface, while /agent/v1/*
+// proxies only Hermes' OpenAI-compatible chat surface. Administrative APIs and
+// Hermes' dashboard are deliberately not reachable here.
 func (s *Server) GatewayHandler() http.Handler {
 	engineTarget, _ := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", catalog.EnginePort))
 	engineProxy := httputil.NewSingleHostReverseProxy(engineTarget)
@@ -90,6 +91,10 @@ func (s *Server) GatewayHandler() http.Handler {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/v1/", func(w http.ResponseWriter, r *http.Request) {
+		if !gatewayRouteAllowed(r.Method, r.URL.Path, false) {
+			writeOpenAIError(w, http.StatusNotFound, "This route is not exposed by the Cloudless model gateway.")
+			return
+		}
 		id, ok := s.authorizeGateway(w, r, state.APIKeyScopeModel)
 		if !ok {
 			return
@@ -99,6 +104,10 @@ func (s *Server) GatewayHandler() http.Handler {
 		s.serveGatewayProxy(w, r, id, state.APIKeyScopeModel, engineProxy)
 	})
 	agent := func(w http.ResponseWriter, r *http.Request) {
+		if !gatewayRouteAllowed(r.Method, strings.TrimPrefix(r.URL.Path, "/agent"), true) {
+			writeOpenAIError(w, http.StatusNotFound, "This route is not exposed by the Cloudless agent gateway.")
+			return
+		}
 		id, ok := s.authorizeGateway(w, r, state.APIKeyScopeAgent)
 		if !ok {
 			return
@@ -106,19 +115,39 @@ func (s *Server) GatewayHandler() http.Handler {
 		s.serveGatewayProxy(w, r, id, state.APIKeyScopeAgent, hermesProxy)
 	}
 	mux.HandleFunc("/agent/v1/", agent)
-	mux.HandleFunc("/agent/api/", agent)
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{
 			"status": "ok", "service": "cloudless-proxy", "agentReady": hermesReady(r.Context()),
 		})
 	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			writeOpenAIError(w, http.StatusNotFound, "This route is not exposed by the Cloudless gateway.")
+			return
+		}
 		writeJSON(w, http.StatusOK, map[string]string{
 			"service": "Cloudless Proxy",
 			"hint":    "Use /v1 for model inference or /agent/v1 for Hermes. Both require a scoped Cloudless key.",
 		})
 	})
 	return mux
+}
+
+func gatewayRouteAllowed(method, path string, agent bool) bool {
+	if method == http.MethodGet && path == "/v1/models" {
+		return true
+	}
+	if method != http.MethodPost {
+		return false
+	}
+	switch path {
+	case "/v1/chat/completions":
+		return true
+	case "/v1/completions", "/v1/embeddings":
+		return !agent
+	default:
+		return false
+	}
 }
 
 // gatewayAliasBody rewrites line-oriented JSON/SSE without buffering a streamed
@@ -151,26 +180,71 @@ func (b *gatewayAliasBody) Read(dst []byte) (int, error) {
 func (b *gatewayAliasBody) Close() error { return b.src.Close() }
 
 func (s *Server) authorizeGateway(w http.ResponseWriter, r *http.Request, scope string) (string, bool) {
+	source := gatewayRequestSource(r)
+	if allowed, retryAfter := s.gatewaySourceRateLimiter().allow(source); !allowed {
+		w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
+		s.auditGateway(gatewayAuditEvent{
+			Event: "gateway-rate-limit", Outcome: "denied", Scope: scope,
+			Method: r.Method, Path: r.URL.Path, Source: source,
+			Status: http.StatusTooManyRequests, Detail: "source request limit exceeded",
+		})
+		writeOpenAIError(w, http.StatusTooManyRequests, "This client is sending requests too quickly. Retry after the indicated delay.")
+		return "", false
+	}
 	token := bearerToken(r)
-	if _, ok := s.state.ValidateAPIKey(token); !ok {
+	id, authenticated := s.state.ValidateAPIKey(token)
+	if !authenticated {
+		s.auditGateway(gatewayAuditEvent{
+			Event: "gateway-auth", Outcome: "denied", Scope: scope,
+			Method: r.Method, Path: r.URL.Path, Source: gatewayRequestSource(r),
+			Status: http.StatusUnauthorized, Detail: "invalid credential",
+		})
 		writeOpenAIError(w, http.StatusUnauthorized, "Invalid API key. Pass a Cloudless key as 'Authorization: Bearer sk-cloudless-…'.")
 		return "", false
 	}
 	id, ok := s.state.ValidateAPIKeyFor(token, scope)
 	if !ok {
+		s.auditGateway(gatewayAuditEvent{
+			Event: "gateway-auth", Outcome: "denied", KeyID: id, Scope: scope,
+			Method: r.Method, Path: r.URL.Path, Source: gatewayRequestSource(r),
+			Status: http.StatusForbidden, Detail: "scope denied",
+		})
 		writeOpenAIError(w, http.StatusForbidden, "This API key does not have permission to use the requested Cloudless service.")
+		return "", false
+	}
+	limiter, _ := s.gatewaySecurity()
+	if allowed, retryAfter := limiter.allow(id); !allowed {
+		w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
+		s.auditGateway(gatewayAuditEvent{
+			Event: "gateway-rate-limit", Outcome: "denied", KeyID: id, Scope: scope,
+			Method: r.Method, Path: r.URL.Path, Source: gatewayRequestSource(r),
+			Status: http.StatusTooManyRequests, Detail: "per-key request limit exceeded",
+		})
+		writeOpenAIError(w, http.StatusTooManyRequests, "This API key is sending requests too quickly. Retry after the indicated delay.")
 		return "", false
 	}
 	return id, true
 }
 
 func (s *Server) serveGatewayProxy(w http.ResponseWriter, r *http.Request, id, kind string, proxy http.Handler) {
+	started := time.Now()
 	rec := &statusRec{ResponseWriter: w, status: http.StatusOK}
 	proxy.ServeHTTP(rec, r)
 	success := rec.status < 400
 	promptTokens, completionTokens := responseUsage(rec.capture)
 	s.state.RecordAPIUsageKind(id, kind, success, promptTokens, completionTokens)
-	s.usage.RecordAPI(success)
+	if s.usage != nil {
+		s.usage.RecordAPI(success)
+	}
+	outcome := "success"
+	if !success {
+		outcome = "error"
+	}
+	s.auditGateway(gatewayAuditEvent{
+		Event: "gateway-request", Outcome: outcome, KeyID: id, Scope: kind,
+		Method: r.Method, Path: r.URL.Path, Source: gatewayRequestSource(r),
+		Status: rec.status, DurationMS: time.Since(started).Milliseconds(),
+	})
 }
 
 // statusRec wraps a ResponseWriter to capture the response status for usage tracking,
@@ -283,19 +357,10 @@ func bearerToken(r *http.Request) string {
 // caller can send any model id (e.g. the real HF id, or "gpt-4") and it just works.
 // Best-effort: on any parse issue the original body is preserved untouched.
 func (s *Server) activeRecipeGatewaySettings() (string, string) {
-	current := s.state.Get()
-	if current.LocalRecipeID != "" && !current.EngineUnloaded {
-		if recipe, ok, err := s.recipes.Get(current.LocalRecipeID); err == nil && ok {
-			path, name := recipe.Engine.APIPath, recipe.Engine.ServedModelName
-			if path == "" {
-				path = "/v1"
-			}
-			if name == "" {
-				name = servedModelName
-			}
-			return path, name
-		}
-	}
+	// This is deliberately independent of persisted recipe data. Recipes,
+	// custom engines and command overrides may choose implementation details,
+	// but none of them can redirect the OS gateway or change the private model
+	// identity used by every Cloudless client.
 	return "/v1", servedModelName
 }
 
@@ -403,7 +468,32 @@ func (s *Server) gatewayGet(w http.ResponseWriter, r *http.Request) {
 		"tunnel": map[string]any{
 			"enabled": tunOn, "url": tunURL, "modelURL": appendURLPath(tunURL, "/v1"), "agentURL": appendURLPath(tunURL, "/agent/v1"),
 		},
+		"policy": map[string]any{
+			"authenticationRequired": true,
+			"scopedKeys":             true,
+			"requestsPerMinute":      gatewayRequestsPerMinute,
+			"burst":                  gatewayBurst,
+			"auditEnabled":           true,
+		},
 	})
+}
+
+func (s *Server) gatewayAuditGet(w http.ResponseWriter, r *http.Request) {
+	s.securityAuditGet(w, r)
+}
+
+func (s *Server) securityAuditGet(w http.ResponseWriter, r *http.Request) {
+	_, audit := s.gatewaySecurity()
+	if audit == nil {
+		writeJSON(w, http.StatusOK, map[string]any{"events": []gatewayAuditEvent{}})
+		return
+	}
+	events, err := audit.Latest(100)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "could not read security audit history"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"events": events})
 }
 
 func validateInferenceContract(contract state.InferenceContract) error {
@@ -426,6 +516,10 @@ func validateInferenceContract(contract state.InferenceContract) error {
 // custom engines cannot override it; their private details stay behind the
 // authenticated gateway.
 func (s *Server) inferenceContractSet(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("X-Cloudless-Action") != "gateway-contract" {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "explicit API identity confirmation required"})
+		return
+	}
 	var requested state.InferenceContract
 	if err := json.NewDecoder(r.Body).Decode(&requested); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad request"})
@@ -504,6 +598,10 @@ func appendURLPath(base, path string) string {
 }
 
 func (s *Server) keyCreate(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("X-Cloudless-Action") != "gateway-key-create" {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "explicit API key creation confirmation required"})
+		return
+	}
 	var body struct {
 		Name  string `json:"name"`
 		Scope string `json:"scope"`
@@ -519,6 +617,7 @@ func (s *Server) keyCreate(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
+	s.auditGateway(gatewayAuditEvent{Event: "gateway-key", Outcome: "created", KeyID: k.ID, Scope: k.Scope})
 	// The full secret is returned ONCE here and never again.
 	writeJSON(w, http.StatusOK, map[string]any{
 		"id": k.ID, "name": k.Name, "prefix": k.Prefix, "created": k.Created, "scope": k.Scope, "key": secret,
@@ -526,16 +625,26 @@ func (s *Server) keyCreate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) keyDelete(w http.ResponseWriter, r *http.Request) {
-	if err := s.state.DeleteAPIKey(r.PathValue("id")); err != nil {
+	if r.Header.Get("X-Cloudless-Action") != "gateway-key-revoke" {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "explicit API key revocation confirmation required"})
+		return
+	}
+	id := r.PathValue("id")
+	if err := s.state.DeleteAPIKey(id); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
+	s.auditGateway(gatewayAuditEvent{Event: "gateway-key", Outcome: "revoked", KeyID: id})
 	writeJSON(w, http.StatusOK, map[string]string{"status": "revoked"})
 }
 
 // gatewayLanSet / gatewayTunnelSet expose the gateway port on the LAN / online,
 // using the same host-networked socat + cloudflared sidecars apps use.
 func (s *Server) gatewayLanSet(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("X-Cloudless-Action") != "gateway-lan" {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "explicit local-network access confirmation required"})
+		return
+	}
 	var body struct {
 		Enable bool `json:"enable"`
 	}
@@ -547,7 +656,12 @@ func (s *Server) gatewayLanSet(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), 25*time.Second)
 		defer cancel()
 		_ = s.eng.Remove(ctx, gatewayLanName)
+		s.auditGateway(gatewayAuditEvent{Event: "gateway-exposure", Outcome: "disabled", Scope: "lan"})
 		writeJSON(w, http.StatusOK, map[string]any{"enabled": false, "url": ""})
+		return
+	}
+	if len(s.state.APIKeys()) == 0 {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "create a scoped API key before enabling network access"})
 		return
 	}
 	ip := provision.PrimaryLANIP()
@@ -569,6 +683,7 @@ func (s *Server) gatewayLanSet(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
+	s.auditGateway(gatewayAuditEvent{Event: "gateway-exposure", Outcome: "enabled", Scope: "lan", Source: ip})
 	writeJSON(w, http.StatusOK, map[string]any{
 		"enabled": true, "ip": ip, "url": lanURL(true, ip, port), "agentURL": agentLanURL(true, ip, port),
 	})
@@ -582,6 +697,10 @@ func gatewayLANSpec(image, ip string, port int) engine.RunSpec {
 }
 
 func (s *Server) gatewayTunnelSet(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("X-Cloudless-Action") != "gateway-public" {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "explicit public-access confirmation required"})
+		return
+	}
 	var body struct {
 		Enable bool `json:"enable"`
 	}
@@ -593,7 +712,12 @@ func (s *Server) gatewayTunnelSet(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), 25*time.Second)
 		defer cancel()
 		_ = s.eng.Remove(ctx, gatewayTunnelName)
+		s.auditGateway(gatewayAuditEvent{Event: "gateway-exposure", Outcome: "disabled", Scope: "public"})
 		writeJSON(w, http.StatusOK, map[string]any{"enabled": false, "url": ""})
+		return
+	}
+	if len(s.state.APIKeys()) == 0 {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "create a scoped API key before enabling public access"})
 		return
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 70*time.Second)
@@ -608,6 +732,7 @@ func (s *Server) gatewayTunnelSet(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
+	s.auditGateway(gatewayAuditEvent{Event: "gateway-exposure", Outcome: "enabled", Scope: "public"})
 	url := ""
 	for url == "" {
 		if url = s.tunnelURL(ctx, gatewayTunnelName); url != "" {

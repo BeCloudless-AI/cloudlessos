@@ -2,39 +2,103 @@
 // (used when the hosted "Cloudless highlights" manifest is unreachable). Like the app
 // catalog, curation is the reliability bet: every entry is vLLM-servable and
 // (deliberately) NON-GATED on Hugging Face, so the engine can auto-download it without
-// a license wall or token. VRAM figures are rough "total GPU memory to run it usefully
-// on vLLM" estimates (weights + KV-cache headroom).
+// a license wall or token. Compatibility is expressed through explicit runtime
+// profiles. MinVRAMGB remains as display and migration metadata; it is never
+// sufficient by itself to claim that an arbitrary runtime or topology will fit.
 package models
+
+// FitProfile is one reviewed runtime envelope for one model artifact. Profiles
+// are exact about engine, architecture, memory type and node topology so the
+// Model Manager never infers loaded memory from a parameter-count label.
+type FitProfile struct {
+	ID                string   `json:"id"`
+	Evidence          string   `json:"evidence"` // reviewed-estimate | measured
+	Source            string   `json:"source"`
+	Engine            string   `json:"engine"`
+	Architectures     []string `json:"architectures,omitempty"`
+	Platforms         []string `json:"platforms,omitempty"`
+	MemoryTypes       []string `json:"memoryTypes,omitempty"`
+	MinNodes          int      `json:"minNodes"`
+	MaxNodes          int      `json:"maxNodes"`
+	Sharded           bool     `json:"sharded,omitempty"`
+	ContextK          int      `json:"contextK"`
+	RequiredPerNodeGB float64  `json:"requiredPerNodeGB"`
+}
 
 // Model is a curated, servable LLM with display + capability metadata.
 type Model struct {
-	ID              string   `json:"id"`              // Hugging Face model id (what vLLM serves)
-	Name            string   `json:"name"`            // display name
-	Family          string   `json:"family"`          // "Qwen", "Phi", …
-	Params          string   `json:"params"`          // "7B"
-	Quant           string   `json:"quant,omitempty"` // "", "AWQ" (4-bit), …
-	ContextK        int      `json:"contextK"`        // context window in K tokens
-	MinVRAMGB       int      `json:"minVramGB"`       // rough total GPU VRAM to run it
-	Use             string   `json:"use"`             // primary: "general" | "coding" | "vision"
-	Tags            []string `json:"tags"`            // use-case tags for display
-	ToolCalling     bool     `json:"toolCalling"`     // supports function/tool calling
-	Vision          bool     `json:"vision"`          // accepts image input
-	License         string   `json:"license"`
-	Description     string   `json:"description"`
-	Default         bool     `json:"default,omitempty"`
-	Region          string   `json:"region,omitempty"` // ISO-3166 alpha-2 this model is recommended in (e.g. "FR"); "" = global
-	Gated           bool     `json:"gated,omitempty"`  // HF repo requires accepting terms / a token before download
-	Source          string   `json:"source,omitempty"` // "huggingface" for user-imported Hub models
-	SourceURL       string   `json:"sourceUrl,omitempty"`
-	RuntimeStatus   string   `json:"runtimeStatus,omitempty"` // likely | unverified (curated models leave this empty)
-	RuntimeNote     string   `json:"runtimeNote,omitempty"`
-	Revision        string   `json:"revision,omitempty"`        // reviewed Hugging Face commit
-	PreferredEngine string   `json:"preferredEngine,omitempty"` // managed engine selected for this model
-	RuntimeImage    string   `json:"runtimeImage,omitempty"`    // model-specific multi-arch inference image
-	RuntimeBuild    string   `json:"runtimeBuild,omitempty"`    // embedded build context for a local adapter image
-	RuntimeEntry    string   `json:"runtimeEntry,omitempty"`    // optional container entrypoint override
-	RuntimeCommand  []string `json:"runtimeCommand,omitempty"`  // reviewed command replacing the engine default
-	SingleNodeOnly  bool     `json:"singleNodeOnly,omitempty"`  // distributed Spark launch is not reviewed
+	ID              string       `json:"id"`              // Hugging Face model id (what vLLM serves)
+	Name            string       `json:"name"`            // display name
+	Family          string       `json:"family"`          // "Qwen", "Phi", …
+	Params          string       `json:"params"`          // "7B"
+	Quant           string       `json:"quant,omitempty"` // "", "AWQ" (4-bit), …
+	ContextK        int          `json:"contextK"`        // context window in K tokens
+	MinVRAMGB       int          `json:"minVramGB"`       // rough total GPU VRAM to run it
+	Use             string       `json:"use"`             // primary: "general" | "coding" | "vision"
+	Tags            []string     `json:"tags"`            // use-case tags for display
+	ToolCalling     bool         `json:"toolCalling"`     // supports function/tool calling
+	Vision          bool         `json:"vision"`          // accepts image input
+	License         string       `json:"license"`
+	Description     string       `json:"description"`
+	Default         bool         `json:"default,omitempty"`
+	Region          string       `json:"region,omitempty"` // ISO-3166 alpha-2 this model is recommended in (e.g. "FR"); "" = global
+	Gated           bool         `json:"gated,omitempty"`  // HF repo requires accepting terms / a token before download
+	Source          string       `json:"source,omitempty"` // "huggingface" for user-imported Hub models
+	SourceURL       string       `json:"sourceUrl,omitempty"`
+	RuntimeStatus   string       `json:"runtimeStatus,omitempty"` // likely | unverified (curated models leave this empty)
+	RuntimeNote     string       `json:"runtimeNote,omitempty"`
+	Revision        string       `json:"revision,omitempty"`        // reviewed Hugging Face commit
+	PreferredEngine string       `json:"preferredEngine,omitempty"` // managed engine selected for this model
+	RuntimeImage    string       `json:"runtimeImage,omitempty"`    // model-specific multi-arch inference image
+	RuntimeBuild    string       `json:"runtimeBuild,omitempty"`    // embedded build context for a local adapter image
+	RuntimeEntry    string       `json:"runtimeEntry,omitempty"`    // optional container entrypoint override
+	RuntimeCommand  []string     `json:"runtimeCommand,omitempty"`  // reviewed command replacing the engine default
+	SingleNodeOnly  bool         `json:"singleNodeOnly,omitempty"`  // distributed Spark launch is not reviewed
+	FitProfiles     []FitProfile `json:"fitProfiles,omitempty"`     // reviewed artifact/runtime/topology envelopes
+}
+
+func normalized(m Model) Model {
+	if len(m.FitProfiles) == 0 && m.MinVRAMGB > 0 {
+		engine := m.PreferredEngine
+		if engine == "" {
+			engine = "vllm"
+		}
+		contextK := m.ContextK
+		if contextK <= 0 || contextK > 32 {
+			contextK = 32
+		}
+		m.FitProfiles = []FitProfile{{
+			ID: "cloudless-single-v1", Evidence: "reviewed-estimate",
+			Source: "Cloudless curated single-node runtime requirement",
+			Engine: engine, Architectures: []string{"amd64", "arm64"},
+			MemoryTypes: []string{"dedicated", "unified"},
+			MinNodes:    1, MaxNodes: 1, ContextK: contextK,
+			RequiredPerNodeGB: float64(m.MinVRAMGB),
+		}}
+	}
+	// CloudlessOS 0.2.2 physically qualified its Spark default on one Spark
+	// pair through the
+	// managed vLLM/Ray path. vLLM reserves most of each Spark's unified memory,
+	// so this profile records the observed per-node envelope instead of dividing
+	// the parameter count or pretending aggregate memory is one pool. Larger
+	// topologies remain unavailable until they are independently measured.
+	if m.ID == "Qwen/Qwen3.6-35B-A3B" {
+		hasCluster := false
+		for _, profile := range m.FitProfiles {
+			hasCluster = hasCluster || profile.Sharded
+		}
+		if !hasCluster {
+			m.FitProfiles = append(m.FitProfiles, FitProfile{
+				ID: "cloudless-spark-pair-0.2.2", Evidence: "measured",
+				Source: "CloudlessOS 0.2.2 two-DGX-Spark qualification",
+				Engine: "vllm", Architectures: []string{"arm64"},
+				Platforms: []string{"dgx-spark"}, MemoryTypes: []string{"unified"},
+				MinNodes: 2, MaxNodes: 2, Sharded: true, ContextK: 32,
+				RequiredPerNodeGB: 100,
+			})
+		}
+	}
+	return m
 }
 
 // RegionModels returns the curated models recommended for a given ISO country code.
@@ -44,6 +108,7 @@ func RegionModels(country string) []Model {
 		return out
 	}
 	for _, m := range curated {
+		m = normalized(m)
 		if m.Region == country {
 			out = append(out, m)
 		}
@@ -99,6 +164,7 @@ var curated = []Model{
 		Description: "Full-precision Qwen3.6 27B multimodal checkpoint for larger multi-GPU systems."},
 	{ID: "Qwen/Qwen3.6-35B-A3B", Name: "Qwen3.6 35B-A3B", Family: "Qwen", Params: "35B / 3B active", ContextK: 262, MinVRAMGB: 81,
 		Use: "coding", Tags: []string{"coding", "reasoning", "vision", "agentic", "moe"}, ToolCalling: true, Vision: true, License: "Apache-2.0",
+		Revision:    "995ad96eacd98c81ed38be0c5b274b04031597b0",
 		Description: "Full-precision Qwen3.6 MoE checkpoint; all 35B weights must be resident even though only 3B activate per token."},
 	{ID: "deepseek-ai/DeepSeek-V4-Flash", Name: "DeepSeek V4 Flash", Family: "DeepSeek", Params: "284B / 13B active", Quant: "FP4 + FP8", ContextK: 1000, MinVRAMGB: 180,
 		Use: "coding", Tags: []string{"coding", "reasoning", "agentic", "moe", "long-context"}, ToolCalling: true, License: "MIT",
@@ -127,7 +193,13 @@ var curated = []Model{
 }
 
 // All returns the built-in fallback model catalog.
-func All() []Model { return curated }
+func All() []Model {
+	out := make([]Model, 0, len(curated))
+	for _, model := range curated {
+		out = append(out, normalized(model))
+	}
+	return out
+}
 
 // Merge keeps hosted metadata authoritative for matching ids while ensuring a
 // temporarily stale hosted manifest cannot hide newly verified built-ins.
@@ -138,6 +210,7 @@ func Merge(hosted []Model) []Model {
 		seen[m.ID] = i
 	}
 	for _, m := range curated {
+		m = normalized(m)
 		if index, ok := seen[m.ID]; ok {
 			// Hosted display metadata may evolve independently, but a stale hosted
 			// manifest must never erase the reviewed runtime contract compiled into
@@ -154,6 +227,10 @@ func Merge(hosted []Model) []Model {
 					out[index].RuntimeNote = m.RuntimeNote
 				}
 			}
+			// A hosted display manifest may lag the package that knows how to run
+			// the model. Never let it erase a runtime-fit contract qualified by
+			// this exact CloudlessOS build.
+			out[index].FitProfiles = append([]FitProfile(nil), m.FitProfiles...)
 		} else {
 			out = append(out, m)
 		}
@@ -165,7 +242,7 @@ func Merge(hosted []Model) []Model {
 func Get(id string) (Model, bool) {
 	for _, m := range curated {
 		if m.ID == id {
-			return m, true
+			return normalized(m), true
 		}
 	}
 	return Model{}, false

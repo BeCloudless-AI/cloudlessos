@@ -15,6 +15,8 @@ func TestEmbeddedWebPlaysIntroOncePerSystemBoot(t *testing.T) {
 		"cloudless.lastBootIntro.v1",
 		"function showStartupIntro(next, bootID = '', force = false)",
 		"showStartupIntro(afterIntro, (o && o.bootID) || '')",
+		"'/api/system/boot-health'",
+		"consecutive verified boot",
 	} {
 		if !strings.Contains(page, want) {
 			t.Fatalf("embedded UI is missing %q", want)

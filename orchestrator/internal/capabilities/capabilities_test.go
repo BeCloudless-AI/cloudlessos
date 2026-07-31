@@ -16,6 +16,9 @@ func TestDGXFeatureRegistryIsPlatformLocked(t *testing.T) {
 	if !dgx.Features[DGXAppliance].Available || dgx.Features[GenericDriverUpdates].Available {
 		t.Fatalf("unexpected DGX capabilities: %#v", dgx.Features)
 	}
+	if dgx.Features[DGXAppliance].SupportLevel != "supported" || dgx.Features[SparkCluster].SupportLevel != "preview" {
+		t.Fatalf("unexpected DGX support levels: %#v", dgx.Features)
+	}
 
 	generic := Evaluate(Facts{
 		Platform: platform.Generic, Architecture: "amd64", CloudlessVersion: "0.3.0",
@@ -64,6 +67,9 @@ func TestFeatureDependenciesFailClosed(t *testing.T) {
 	snapshot := Evaluate(Facts{Platform: platform.Generic, Architecture: "amd64", CloudlessVersion: "1.0.0"}, registry)
 	if snapshot.Features["feature"].Available {
 		t.Fatalf("dependent feature ignored unavailable base: %#v", snapshot.Features)
+	}
+	if snapshot.Features["base"].SupportLevel != "experimental" || snapshot.Features["feature"].SupportLevel != "experimental" {
+		t.Fatalf("unknown feature support must fail to experimental: %#v", snapshot.Features)
 	}
 }
 

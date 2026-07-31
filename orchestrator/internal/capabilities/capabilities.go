@@ -43,9 +43,10 @@ type Facts struct {
 
 // Status is a user- and client-readable feature verdict.
 type Status struct {
-	Available   bool        `json:"available"`
-	Reason      string      `json:"reason,omitempty"`
-	Requirement Requirement `json:"requirement,omitempty"`
+	Available    bool        `json:"available"`
+	Reason       string      `json:"reason,omitempty"`
+	SupportLevel string      `json:"supportLevel"`
+	Requirement  Requirement `json:"requirement,omitempty"`
 }
 
 // Snapshot is the complete capability contract exposed by the local API.
@@ -61,6 +62,15 @@ var definitions = map[string]Requirement{
 	DGXVendorUpdateBoundary: {Platforms: []string{platform.DGXSpark}},
 	SparkCluster:            {Platforms: []string{platform.DGXSpark}, Architectures: []string{"arm64"}},
 	GenericDriverUpdates:    {Platforms: []string{platform.Generic}},
+}
+
+var supportLevels = map[string]string{
+	DGXAppliance:            "supported",
+	UnifiedAcceleratorRAM:   "supported",
+	NVIDIACDI:               "supported",
+	DGXVendorUpdateBoundary: "supported",
+	SparkCluster:            "preview",
+	GenericDriverUpdates:    "preview",
 }
 
 // Current evaluates the built-in feature registry for this machine.
@@ -119,7 +129,12 @@ func Evaluate(facts Facts, registry map[string]Requirement) Snapshot {
 		return status
 	}
 	for id := range registry {
-		resolve(id)
+		status := resolve(id)
+		status.SupportLevel = supportLevels[id]
+		if status.SupportLevel == "" {
+			status.SupportLevel = "experimental"
+		}
+		snapshot.Features[id] = status
 	}
 	return snapshot
 }

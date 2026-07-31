@@ -97,6 +97,9 @@ $tmp = "$env:TEMP\$Name.html"
 [System.IO.File]::WriteAllText($tmp, $page, (New-Object System.Text.UTF8Encoding($false)))
 $edge = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
 $out = "$env:TEMP\$Name.png"
-& $edge --headless=new --disable-gpu --hide-scrollbars --force-device-scale-factor=1 "--window-size=$Width,$Height" --screenshot="$out" ("file:///" + ($tmp -replace '\\','/')) 2>$null
-Start-Sleep -Milliseconds 900
+$edgeProfile = if ($env:CLOUDLESS_VISUAL_EDGE_PROFILE) { $env:CLOUDLESS_VISUAL_EDGE_PROFILE } else { Join-Path $env:TEMP "cloudless-visual-edge-$PID" }
+& $edge --headless=new --disable-gpu --hide-scrollbars --no-first-run "--user-data-dir=$edgeProfile" --force-device-scale-factor=1 "--window-size=$Width,$Height" --screenshot="$out" ("file:///" + ($tmp -replace '\\','/')) 2>$null
+for ($attempt = 0; $attempt -lt 20 -and -not (Test-Path -LiteralPath $out); $attempt++) {
+  Start-Sleep -Milliseconds 250
+}
 if (Test-Path $out) { "OK $out" } else { "NO SHOT" }

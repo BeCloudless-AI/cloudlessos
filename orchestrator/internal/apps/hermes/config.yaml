@@ -2,7 +2,7 @@ model:
   provider: custom
   model: "cloudless"
   base_url: "http://127.0.0.1:8000/v1"
-  api_key: "cloudless"
+  api_key: "cloudless-managed://hermes-model-client"
   # Hermes requires a 64K planning window. Cloudless caps generation
   # separately so local servers never mistake the context size for output size.
   context_length: 65536

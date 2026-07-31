@@ -17,6 +17,7 @@ import (
 	"github.com/cloudless/orchestrator/internal/jobs"
 	"github.com/cloudless/orchestrator/internal/manifest"
 	"github.com/cloudless/orchestrator/internal/osupdate"
+	"github.com/cloudless/orchestrator/internal/state"
 )
 
 type updateInventoryEngine struct {
@@ -28,6 +29,7 @@ type updateInventoryEngine struct {
 	found      map[string]*engine.Container
 	imageRows  string
 	pulled     []string
+	pullDigest map[string]string
 }
 
 func (e *updateInventoryEngine) ContainerImageDigest(_ context.Context, name string) (string, error) {
@@ -53,13 +55,34 @@ func (e *updateInventoryEngine) Output(context.Context, ...string) (string, erro
 	defer e.mu.Unlock()
 	return e.imageRows, nil
 }
+func (e *updateInventoryEngine) ListImageDigests(context.Context) ([]engine.ImageDigestRef, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	var result []engine.ImageDigestRef
+	for _, line := range strings.Split(e.imageRows, "\n") {
+		parts := strings.Split(strings.TrimSpace(line), "|")
+		if len(parts) == 3 {
+			result = append(result, engine.ImageDigestRef{Repository: parts[0], Tag: parts[1], Digest: parts[2]})
+		}
+	}
+	return result, nil
+}
 func (e *updateInventoryEngine) PullStream(_ context.Context, image string, onLine func(string)) error {
 	e.mu.Lock()
 	e.pulled = append(e.pulled, image)
 	if e.images == nil {
 		e.images = map[string]string{}
 	}
-	if digest := e.remote[image]; digest != "" {
+	digest := e.pullDigest[image]
+	if digest == "" {
+		digest = e.remote[image]
+	}
+	if digest == "" {
+		if at := strings.LastIndex(image, "@sha256:"); at >= 0 {
+			digest = image[at+1:]
+		}
+	}
+	if digest != "" {
 		e.images[image] = digest
 	}
 	e.mu.Unlock()
@@ -226,8 +249,12 @@ func TestInactiveManagedEngineUpdatePullsInBackgroundWithoutRestart(t *testing.T
 		images:     map[string]string{app.Image: "sha256:old-engine"},
 		remote:     map[string]string{app.Image: "sha256:new-engine"},
 	}
+	store, err := state.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
 	manager := jobs.NewManager()
-	server := &Server{eng: eng, jobs: manager}
+	server := &Server{eng: eng, jobs: manager, state: store}
 	request := httptest.NewRequest(http.MethodPost, "/api/updates/engines/sglang/apply", nil)
 	request.SetPathValue("id", "sglang")
 	request.Header.Set("X-Cloudless-Action", "update-engine")
@@ -252,9 +279,62 @@ func TestInactiveManagedEngineUpdatePullsInBackgroundWithoutRestart(t *testing.T
 		t.Fatalf("engine update did not complete: %#v", snapshot)
 	}
 	eng.mu.Lock()
-	defer eng.mu.Unlock()
-	if len(eng.pulled) != 1 || eng.pulled[0] != app.Image {
-		t.Fatalf("pulled images=%v, want %q", eng.pulled, app.Image)
+	pulled := append([]string(nil), eng.pulled...)
+	eng.mu.Unlock()
+	exactImage := imageRepository(app.Image) + "@sha256:new-engine"
+	if len(pulled) != 1 || pulled[0] != exactImage {
+		t.Fatalf("pulled images=%v, want %q", pulled, exactImage)
+	}
+	artifact, ok := store.ManagedEngineArtifact(app.ID)
+	if !ok || artifact.Image != exactImage || artifact.DownloadedDigest != "sha256:new-engine" || artifact.ActiveDigest != "" {
+		t.Fatalf("unexpected managed artifact: %#v, ok=%v", artifact, ok)
+	}
+	if status := server.managedEngineUpdate(context.Background(), app, app.ID); status.HasUpdate {
+		t.Fatalf("downloaded exact engine target was offered again: %#v", status)
+	}
+}
+
+func TestManagedEngineUpdateRejectsPulledDigestMismatch(t *testing.T) {
+	t.Setenv("CLOUDLESS_PLATFORM", "generic")
+	app, ok := catalog.Get("sglang")
+	if !ok {
+		t.Fatal("managed SGLang catalog entry is missing")
+	}
+	exactImage := imageRepository(app.Image) + "@sha256:expected"
+	eng := &updateInventoryEngine{
+		containers: map[string]string{},
+		images:     map[string]string{app.Image: "sha256:old"},
+		remote:     map[string]string{app.Image: "sha256:expected"},
+		pullDigest: map[string]string{exactImage: "sha256:unexpected"},
+	}
+	store, err := state.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager := jobs.NewManager()
+	server := &Server{eng: eng, jobs: manager, state: store}
+	request := httptest.NewRequest(http.MethodPost, "/api/updates/engines/sglang/apply", nil)
+	request.SetPathValue("id", "sglang")
+	request.Header.Set("X-Cloudless-Action", "update-engine")
+	recorder := httptest.NewRecorder()
+	server.updateCenterEngineApply(recorder, request)
+	if recorder.Code != http.StatusAccepted {
+		t.Fatalf("status=%d body=%s", recorder.Code, recorder.Body.String())
+	}
+	var response map[string]string
+	if err := json.Unmarshal(recorder.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	job, _ := manager.Get(response["jobId"])
+	deadline := time.Now().Add(2 * time.Second)
+	for !job.Snapshot().Done && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if snapshot := job.Snapshot(); snapshot.Error == "" || !strings.Contains(snapshot.Error, "does not match target") {
+		t.Fatalf("digest mismatch was not rejected: %#v", snapshot)
+	}
+	if _, ok := store.ManagedEngineArtifact(app.ID); ok {
+		t.Fatal("unverified engine artifact was persisted")
 	}
 }
 

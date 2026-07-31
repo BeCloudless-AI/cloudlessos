@@ -1,0 +1,21 @@
+#!/bin/sh
+# One bounded automatic recovery attempt per kernel boot. The marker prevents an
+# OnFailure loop if the display stack has a hardware or package-level fault.
+set -u
+
+boot_id="$(cat /proc/sys/kernel/random/boot_id 2>/dev/null || echo unknown)"
+marker="/run/cloudless-graphical-recovery-$boot_id"
+if [ -e "$marker" ]; then
+    echo "Cloudless graphical recovery was already attempted during this boot."
+    exit 0
+fi
+install -m 0600 /dev/null "$marker"
+
+echo "Attempting one bounded repair of the Cloudless graphical ownership chain..."
+if /usr/bin/cloudless-repair --repair; then
+    echo "Cloudless graphical recovery completed; the boot audit is running again."
+    exit 0
+fi
+echo "Automatic graphical recovery did not restore the complete chain." >&2
+echo "Run cloudless-diagnostics from a local console or SSH session." >&2
+exit 1

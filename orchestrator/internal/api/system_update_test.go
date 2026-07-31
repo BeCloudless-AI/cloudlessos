@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 	"github.com/cloudless/orchestrator/internal/capabilities"
 	"github.com/cloudless/orchestrator/internal/nvidiaupdate"
 	"github.com/cloudless/orchestrator/internal/osupdate"
+	"github.com/cloudless/orchestrator/internal/privileged"
 )
 
 func TestSystemUpdateGet(t *testing.T) {
@@ -34,6 +36,60 @@ func TestSystemUpdateApplyRequiresConfirmation(t *testing.T) {
 	(&Server{}).systemUpdateApply(rec, httptest.NewRequest(http.MethodPost, "/api/system/update/apply", nil))
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestSystemUpdateActionsUsePrivilegedBroker(t *testing.T) {
+	tests := []struct {
+		name   string
+		path   string
+		header string
+		action privileged.Action
+		call   func(*Server, http.ResponseWriter, *http.Request)
+	}{
+		{"check", "/api/system/update/check", "", privileged.ActionSystemUpdateCheck, (*Server).systemUpdateCheck},
+		{"apply", "/api/system/update/apply", "update", privileged.ActionSystemUpdateApply, (*Server).systemUpdateApply},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			called := make(chan privileged.Action, 1)
+			server := &Server{privilegedAction: func(_ context.Context, action privileged.Action) error {
+				called <- action
+				return nil
+			}}
+			req := httptest.NewRequest(http.MethodPost, tt.path, nil)
+			if tt.header != "" {
+				req.Header.Set("X-Cloudless-Action", tt.header)
+			}
+			rec := httptest.NewRecorder()
+			tt.call(server, rec, req)
+			if rec.Code != http.StatusAccepted {
+				t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+			}
+			if action := <-called; action != tt.action {
+				t.Fatalf("action=%q want=%q", action, tt.action)
+			}
+		})
+	}
+}
+
+func TestEmbeddedSystemUpdateUIKeepsTruthfulLifecycleStates(t *testing.T) {
+	payload, err := webFS.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	source := string(payload)
+	for _, contract := range []string{
+		"const showProgress = state === 'installing'",
+		"state === 'available' && changelog.length",
+		"state === 'reboot_required'",
+		"sys-update-error",
+		"Installing verified update",
+		"openCloudlessDecision({",
+	} {
+		if !strings.Contains(source, contract) {
+			t.Fatalf("embedded update UI is missing contract %q", contract)
+		}
 	}
 }
 

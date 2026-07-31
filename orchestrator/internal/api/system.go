@@ -10,6 +10,7 @@ import (
 	"github.com/cloudless/orchestrator/internal/capabilities"
 	"github.com/cloudless/orchestrator/internal/hardware"
 	"github.com/cloudless/orchestrator/internal/locale"
+	"github.com/cloudless/orchestrator/internal/privileged"
 	"github.com/cloudless/orchestrator/internal/state"
 )
 
@@ -88,7 +89,7 @@ func (s *Server) profileSet(w http.ResponseWriter, r *http.Request) {
 	if zone := locale.DefaultTimezone(region); zone != "" && zone != locale.Detect().Timezone {
 		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 		defer cancel()
-		if err := locale.SetSystemTimezone(ctx, zone); err != nil {
+		if err := s.runPrivilegedValue(ctx, privileged.ActionTimezoneSet, zone); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}

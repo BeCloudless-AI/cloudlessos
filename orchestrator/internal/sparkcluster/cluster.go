@@ -24,6 +24,7 @@ import (
 
 	"github.com/cloudless/orchestrator/internal/engine"
 	"github.com/cloudless/orchestrator/internal/hardware"
+	"github.com/cloudless/orchestrator/internal/privileged"
 )
 
 const (
@@ -46,8 +47,8 @@ case "$action" in
     iface=$(printf %s "$5" | base64 -d)
     docker rm -f cloudless-cluster-worker >/dev/null 2>&1 || true
     docker pull "$image"
-    docker volume create cloudless-hf >/dev/null
-    docker run -d --name cloudless-cluster-worker --restart unless-stopped --network host --ipc host --device nvidia.com/gpu=all --ulimit memlock=-1 --ulimit stack=67108864 -v cloudless-hf:/root/.cache/huggingface -e VLLM_HOST_IP="$worker_ip" -e UCX_NET_DEVICES="$iface" -e NCCL_SOCKET_IFNAME="$iface" -e GLOO_SOCKET_IFNAME="$iface" -e TP_SOCKET_IFNAME="$iface" -e RAY_memory_monitor_refresh_ms=0 --entrypoint /bin/bash "$image" -lc "pip install -q --root-user-action=ignore 'ray[default]>=2.9' && exec ray start --block --address=$head_ip:6379 --node-ip-address=$worker_ip --num-gpus=1"
+    install -d -m 0770 /var/lib/cloudless/models-cache
+    docker run -d --name cloudless-cluster-worker --restart unless-stopped --network host --ipc host --device nvidia.com/gpu=all --ulimit memlock=-1 --ulimit stack=67108864 -v /var/lib/cloudless/models-cache:/root/.cache/huggingface -e VLLM_HOST_IP="$worker_ip" -e UCX_NET_DEVICES="$iface" -e NCCL_SOCKET_IFNAME="$iface" -e GLOO_SOCKET_IFNAME="$iface" -e TP_SOCKET_IFNAME="$iface" -e RAY_memory_monitor_refresh_ms=0 --entrypoint /bin/bash "$image" -lc "pip install -q --root-user-action=ignore 'ray[default]>=2.9' && exec ray start --block --address=$head_ip:6379 --node-ip-address=$worker_ip --num-gpus=1"
     ;;
   stop)
     docker rm -f cloudless-cluster-worker >/dev/null 2>&1 || true
@@ -61,8 +62,7 @@ case "$action" in
       ""|/*|*'..'*) echo "invalid model" >&2; exit 2 ;;
     esac
     cache_name=models--$(printf %s "$model" | sed 's#/#--#g')
-    mount=$(docker volume inspect cloudless-hf --format '{{.Mountpoint}}' 2>/dev/null || true)
-    path=$mount/hub/$cache_name
+    path=/var/lib/cloudless/models-cache/hub/$cache_name
     bytes=0
     incomplete=0
     loaded=0
@@ -91,25 +91,28 @@ esac
 )
 
 var (
-	hostPattern    = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$`)
-	userPattern    = regexp.MustCompile(`^[a-z_][a-z0-9_-]{0,31}$`)
-	ifacePattern   = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,64}$`)
-	commandContext = exec.CommandContext
-	now            = time.Now
-	mutationMu     sync.Mutex
-	telemetryMu    sync.Mutex
-	telemetryCache []PeerTelemetry
-	telemetryErr   error
-	telemetryAt    time.Time
+	hostPattern       = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$`)
+	userPattern       = regexp.MustCompile(`^[a-z_][a-z0-9_-]{0,31}$`)
+	ifacePattern      = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,64}$`)
+	packetLossPattern = regexp.MustCompile(`([0-9]+(?:\.[0-9]+)?)%\s+packet loss`)
+	commandContext    = exec.CommandContext
+	now               = time.Now
+	mutationMu        sync.Mutex
+	telemetryMu       sync.Mutex
+	telemetryCache    []PeerTelemetry
+	telemetryErr      error
+	telemetryAt       time.Time
 )
 
 type PeerTelemetry struct {
-	Connected bool           `json:"connected"`
-	Reachable bool           `json:"reachable"`
-	Name      string         `json:"name,omitempty"`
-	Host      string         `json:"host,omitempty"`
-	GPUs      []hardware.GPU `json:"gpus,omitempty"`
-	Error     string         `json:"error,omitempty"`
+	Connected             bool           `json:"connected"`
+	Reachable             bool           `json:"reachable"`
+	Name                  string         `json:"name,omitempty"`
+	Host                  string         `json:"host,omitempty"`
+	GPUs                  []hardware.GPU `json:"gpus,omitempty"`
+	StorageTotalBytes     uint64         `json:"storageTotalBytes,omitempty"`
+	StorageAvailableBytes uint64         `json:"storageAvailableBytes,omitempty"`
+	Error                 string         `json:"error,omitempty"`
 }
 
 // ModelProgress is the peer's observable model preparation state. Bytes are
@@ -134,6 +137,31 @@ type Check struct {
 	Label   string `json:"label"`
 	OK      bool   `json:"ok"`
 	Details string `json:"details,omitempty"`
+}
+
+// HealthLayer keeps physically different failure domains separate. Status is
+// healthy, attention, idle, or unknown; only attention makes a configured
+// cluster unhealthy.
+type HealthLayer struct {
+	Status  string `json:"status"`
+	Label   string `json:"label"`
+	Details string `json:"details,omitempty"`
+}
+
+type NodeHealth struct {
+	PhysicalLink  HealthLayer `json:"physicalLink"`
+	ManagementIP  HealthLayer `json:"managementIp"`
+	SSH           HealthLayer `json:"ssh"`
+	Fabric        HealthLayer `json:"fabric"`
+	WorkerRuntime HealthLayer `json:"workerRuntime"`
+}
+
+type ClusterHealth struct {
+	PhysicalLink  HealthLayer `json:"physicalLink"`
+	ManagementIP  HealthLayer `json:"managementIp"`
+	SSH           HealthLayer `json:"ssh"`
+	Fabric        HealthLayer `json:"fabric"`
+	WorkerRuntime HealthLayer `json:"workerRuntime"`
 }
 
 type PreflightRequest struct {
@@ -162,41 +190,90 @@ type CreateRequest struct {
 	Fingerprint string `json:"fingerprint"`
 }
 
+type RebindRequest struct {
+	Node     string `json:"node"`
+	Host     string `json:"host"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
 // Node is one remote Spark enrolled into the coordinator's cluster. Passwords
 // are deliberately never persisted; the installed, restricted SSH identity is
 // used for normal operation.
 type Node struct {
-	Name        string   `json:"name"`
-	Host        string   `json:"host"`
-	Username    string   `json:"username"`
-	Fingerprint string   `json:"fingerprint,omitempty"`
-	Links       []string `json:"links,omitempty"`
-	IPs         []string `json:"ips,omitempty"`
-	WorkerReady bool     `json:"workerReady"`
-	Healthy     bool     `json:"healthy"`
+	Name        string         `json:"name"`
+	Host        string         `json:"host"`
+	Username    string         `json:"username"`
+	Fingerprint string         `json:"fingerprint,omitempty"`
+	Links       []string       `json:"links,omitempty"`
+	IPs         []string       `json:"ips,omitempty"`
+	WorkerReady bool           `json:"workerReady"`
+	Healthy     bool           `json:"healthy"`
+	Selected    bool           `json:"selected"`
+	Health      NodeHealth     `json:"health"`
+	Telemetry   *PeerTelemetry `json:"telemetry,omitempty"`
 }
 
 type State struct {
-	Configured  bool      `json:"configured"`
-	Healthy     bool      `json:"healthy"`
-	WorkerReady bool      `json:"workerReady"`
-	Role        string    `json:"role,omitempty"`
-	LocalName   string    `json:"localName,omitempty"`
-	PeerName    string    `json:"peerName,omitempty"`
-	PeerHost    string    `json:"peerHost,omitempty"`
-	Username    string    `json:"username,omitempty"`
-	Fingerprint string    `json:"fingerprint,omitempty"`
-	LocalLinks  []string  `json:"localLinks,omitempty"`
-	PeerLinks   []string  `json:"peerLinks,omitempty"`
-	LocalIPs    []string  `json:"localIps,omitempty"`
-	PeerIPs     []string  `json:"peerIps,omitempty"`
-	Nodes       []Node    `json:"nodes,omitempty"`
-	NodeCount   int       `json:"nodeCount,omitempty"`
-	Topology    string    `json:"topology,omitempty"`
-	CreatedAt   time.Time `json:"createdAt,omitempty"`
-	Checks      []Check   `json:"checks,omitempty"`
-	Error       string    `json:"error,omitempty"`
+	Configured         bool           `json:"configured"`
+	Healthy            bool           `json:"healthy"`
+	WorkerReady        bool           `json:"workerReady"`
+	ComputeHealthy     bool           `json:"computeHealthy"`
+	ComputeWorkerReady bool           `json:"computeWorkerReady"`
+	Role               string         `json:"role,omitempty"`
+	LocalName          string         `json:"localName,omitempty"`
+	PeerName           string         `json:"peerName,omitempty"`
+	PeerHost           string         `json:"peerHost,omitempty"`
+	Username           string         `json:"username,omitempty"`
+	Fingerprint        string         `json:"fingerprint,omitempty"`
+	LocalLinks         []string       `json:"localLinks,omitempty"`
+	PeerLinks          []string       `json:"peerLinks,omitempty"`
+	LocalIPs           []string       `json:"localIps,omitempty"`
+	PeerIPs            []string       `json:"peerIps,omitempty"`
+	Nodes              []Node         `json:"nodes,omitempty"`
+	NodeCount          int            `json:"nodeCount,omitempty"`
+	ComputeNodeCount   int            `json:"computeNodeCount,omitempty"`
+	SelectedHosts      []string       `json:"selectedHosts,omitempty"`
+	Topology           string         `json:"topology,omitempty"`
+	CreatedAt          time.Time      `json:"createdAt,omitempty"`
+	Checks             []Check        `json:"checks,omitempty"`
+	Error              string         `json:"error,omitempty"`
+	Health             ClusterHealth  `json:"health"`
+	Operation          Operation      `json:"operation,omitempty"`
+	LocalTelemetry     *PeerTelemetry `json:"localTelemetry,omitempty"`
 }
+
+type Operation struct {
+	ID               string          `json:"id,omitempty"`
+	Action           string          `json:"action,omitempty"` // connect | disconnect
+	Phase            string          `json:"phase,omitempty"`
+	Message          string          `json:"message,omitempty"`
+	Percent          int             `json:"percent,omitempty"`
+	PeerHost         string          `json:"peerHost,omitempty"`
+	PeerName         string          `json:"peerName,omitempty"`
+	OwnerPID         int             `json:"ownerPid,omitempty"`
+	OwnerBootID      string          `json:"ownerBootId,omitempty"`
+	RollbackRequired bool            `json:"rollbackRequired,omitempty"`
+	StartedAt        time.Time       `json:"startedAt,omitempty"`
+	UpdatedAt        time.Time       `json:"updatedAt,omitempty"`
+	Error            string          `json:"error,omitempty"`
+	Nodes            []OperationNode `json:"nodes,omitempty"`
+}
+
+type OperationNode struct {
+	Name    string `json:"name,omitempty"`
+	Host    string `json:"host,omitempty"`
+	Phase   string `json:"phase,omitempty"`
+	Message string `json:"message,omitempty"`
+	Cleaned bool   `json:"cleaned"`
+	Error   string `json:"error,omitempty"`
+}
+
+func (o Operation) Active() bool {
+	return o.ID != "" && o.Phase != "completed" && o.Phase != "error"
+}
+
+type ProgressFunc func(phase, message string, percent int)
 
 func normalizeState(state State) State {
 	if len(state.Nodes) == 0 && strings.TrimSpace(state.PeerHost) != "" {
@@ -207,8 +284,41 @@ func normalizeState(state State) State {
 		}}
 	}
 	state.NodeCount = 1 + len(state.Nodes)
+	if state.Configured && strings.TrimSpace(state.Role) == "" {
+		state.Role = "coordinator"
+	}
+	selected := make(map[string]bool, len(state.SelectedHosts))
+	for _, host := range state.SelectedHosts {
+		selected[strings.ToLower(strings.TrimSpace(host))] = true
+	}
+	localHealthy, localHealthKnown := true, false
+	for _, check := range state.Checks {
+		if check.ID == "local-config" || check.ID == "local-links" {
+			localHealthKnown = true
+			localHealthy = localHealthy && check.OK
+		}
+	}
+	if !localHealthKnown {
+		localHealthy = state.Healthy
+	}
+	state.ComputeNodeCount = 1
+	state.ComputeHealthy = state.Configured && localHealthy
+	state.ComputeWorkerReady = state.Configured
+	for index := range state.Nodes {
+		state.Nodes[index].Selected = len(selected) == 0 || selected[nodeIdentity(state.Nodes[index])]
+		if state.Nodes[index].Selected {
+			state.ComputeNodeCount++
+			state.ComputeHealthy = state.ComputeHealthy && state.Nodes[index].Healthy
+			state.ComputeWorkerReady = state.ComputeWorkerReady && state.Nodes[index].WorkerReady
+		}
+	}
+	if state.ComputeNodeCount < 2 {
+		state.ComputeHealthy = false
+		state.ComputeWorkerReady = false
+	}
 	if state.NodeCount < 2 && !state.Configured {
 		state.NodeCount = 1
+		state.ComputeNodeCount = 1
 	}
 	if state.Topology == "" && state.Configured {
 		if state.NodeCount == 2 {
@@ -229,6 +339,26 @@ func normalizeState(state State) State {
 		state.Fingerprint, state.PeerLinks, state.PeerIPs = first.Fingerprint, first.Links, first.IPs
 	}
 	return state
+}
+
+func nodeIdentity(node Node) string {
+	for _, value := range []string{node.Fingerprint, node.Host, node.Name} {
+		if value = strings.ToLower(strings.TrimSpace(value)); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func selectedNodesForState(state State) []Node {
+	state = normalizeState(state)
+	nodes := make([]Node, 0, len(state.Nodes))
+	for _, node := range state.Nodes {
+		if node.Selected {
+			nodes = append(nodes, node)
+		}
+	}
+	return nodes
 }
 
 func validateTarget(host, username string) error {
@@ -256,6 +386,28 @@ func enrollmentIndex(state State, host string) (int, error) {
 		}
 	}
 	return 2 + len(state.Nodes), nil
+}
+
+func findNodeIndex(state State, selector string) (int, error) {
+	selector = strings.ToLower(strings.TrimSpace(selector))
+	if selector == "" {
+		return -1, errors.New("choose an enrolled Spark")
+	}
+	match := -1
+	for index, node := range state.Nodes {
+		if selector == strings.ToLower(strings.TrimSpace(node.Fingerprint)) ||
+			selector == strings.ToLower(strings.TrimSpace(node.Host)) ||
+			selector == strings.ToLower(strings.TrimSpace(node.Name)) {
+			if match >= 0 {
+				return -1, fmt.Errorf("Spark selector %q is ambiguous", selector)
+			}
+			match = index
+		}
+	}
+	if match < 0 {
+		return -1, fmt.Errorf("Spark %q is not enrolled", selector)
+	}
+	return match, nil
 }
 
 func run(ctx context.Context, env []string, stdin []byte, name string, args ...string) (string, error) {
@@ -617,35 +769,18 @@ func ensureKey(ctx context.Context) (string, error) {
 	return strings.TrimSpace(string(data)), err
 }
 
-func applyLocal(ctx context.Context, content string) error {
-	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
-		return err
-	}
-	tmp := configPath + ".new"
-	if err := os.WriteFile(tmp, []byte(content), 0o600); err != nil {
-		return err
-	}
-	if err := os.Rename(tmp, configPath); err != nil {
-		return err
-	}
-	if _, err := run(ctx, nil, nil, "netplan", "generate"); err != nil {
-		rollbackLocal()
-		return err
-	}
-	if _, err := run(ctx, nil, nil, "netplan", "apply"); err != nil {
-		rollbackLocal()
-		return err
-	}
-	return nil
+func localPrivilegeClient() privileged.Client {
+	return privileged.Client{SocketPath: os.Getenv("CLOUDLESS_PRIVILEGED_SOCKET")}
+}
+
+func applyLocal(ctx context.Context, links []string, nodeIndex int) error {
+	return localPrivilegeClient().ConfigureClusterNetwork(ctx, links, nodeIndex)
 }
 
 func rollbackLocal() {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
-	_ = os.Remove(configPath)
-	_, _ = run(ctx, nil, nil, "netplan", "generate")
-	_, _ = run(ctx, nil, nil, "netplan", "apply")
-	removeLocalClusterAddresses(ctx)
+	_ = localPrivilegeClient().Do(ctx, privileged.ActionClusterNetworkRemove)
 }
 
 func isClusterAddress(cidr string) bool {
@@ -657,20 +792,6 @@ func isClusterAddress(cidr string) bool {
 	return v4 != nil && v4[0] == 10 && v4[1] == 100 && (v4[2] == 0 || v4[2] == 1)
 }
 
-func removeLocalClusterAddresses(ctx context.Context) {
-	output, err := run(ctx, nil, nil, "ip", "-o", "-4", "addr", "show")
-	if err != nil {
-		return
-	}
-	for _, line := range strings.Split(output, "\n") {
-		fields := strings.Fields(line)
-		if len(fields) < 4 || fields[2] != "inet" || !isClusterAddress(fields[3]) {
-			continue
-		}
-		_, _ = run(ctx, nil, nil, "ip", "addr", "del", fields[3], "dev", fields[1])
-	}
-}
-
 func rollbackRemote(host, username, password, publicKey string) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
@@ -680,6 +801,82 @@ func rollbackRemote(host, username, password, publicKey string) {
 }
 
 func Create(ctx context.Context, request CreateRequest) (State, error) {
+	return CreateWithProgress(ctx, request, nil)
+}
+
+// RebindManagementAddress updates only the normal-network address used to
+// reach an enrolled worker. The private fabric identity and addresses remain
+// unchanged. The saved SSH fingerprint must match at the new address, which
+// prevents silently replacing a failed Spark with another machine.
+func RebindManagementAddress(ctx context.Context, request RebindRequest) (State, error) {
+	mutationMu.Lock()
+	defer mutationMu.Unlock()
+	request.Node, request.Host = strings.TrimSpace(request.Node), strings.TrimSpace(request.Host)
+	request.Username = strings.TrimSpace(request.Username)
+	if err := validateTarget(request.Host, request.Username); err != nil {
+		return State{}, err
+	}
+	if request.Password == "" {
+		return State{}, errors.New("the peer administrator password is required and will not be saved")
+	}
+	state, err := load()
+	if err != nil {
+		return State{}, err
+	}
+	if !state.Configured {
+		return State{}, errors.New("no Spark cluster is configured")
+	}
+	index, err := findNodeIndex(state, request.Node)
+	if err != nil {
+		return State{}, err
+	}
+	for otherIndex, node := range state.Nodes {
+		if otherIndex != index && strings.EqualFold(strings.TrimSpace(node.Host), request.Host) {
+			return State{}, errors.New("the new address already belongs to another enrolled Spark")
+		}
+	}
+	line, fingerprint, err := hostKey(ctx, request.Host)
+	if err != nil {
+		return State{}, fmt.Errorf("read the Spark identity at its new address: %w", err)
+	}
+	if state.Nodes[index].Fingerprint == "" || fingerprint != state.Nodes[index].Fingerprint {
+		return State{}, errors.New("the SSH fingerprint at the new address does not match the enrolled Spark")
+	}
+	name, arch, dgx, _, _, err := remoteFacts(ctx, PreflightRequest{
+		Host: request.Host, Username: request.Username, Password: request.Password,
+	})
+	if err != nil {
+		return State{}, err
+	}
+	if arch != "aarch64" && arch != "arm64" {
+		return State{}, errors.New("the machine at the new address is not ARM64 DGX Spark hardware")
+	}
+	dgx = strings.ToLower(dgx)
+	if !strings.Contains(dgx, "dgx") && !strings.Contains(dgx, "gb10") {
+		return State{}, errors.New("the machine at the new address is not a DGX Spark")
+	}
+	if err := writeKnownHost(line); err != nil {
+		return State{}, err
+	}
+	state.Nodes[index].Host = request.Host
+	state.Nodes[index].Username = request.Username
+	if strings.TrimSpace(name) != "" {
+		state.Nodes[index].Name = strings.TrimSpace(name)
+	}
+	state.Nodes[index].Healthy = false
+	state.Nodes[index].Health = NodeHealth{}
+	state.Nodes[index].Telemetry = nil
+	state.Error = ""
+	if err := save(state); err != nil {
+		return State{}, err
+	}
+	telemetryMu.Lock()
+	telemetryAt, telemetryCache, telemetryErr = time.Time{}, nil, nil
+	telemetryMu.Unlock()
+	return normalizeState(state), nil
+}
+
+func CreateWithProgress(ctx context.Context, request CreateRequest, report ProgressFunc) (result State, resultErr error) {
 	mutationMu.Lock()
 	defer mutationMu.Unlock()
 	if err := validateTarget(request.Host, request.Username); err != nil {
@@ -695,6 +892,37 @@ func Create(ctx context.Context, request CreateRequest) (State, error) {
 	if request.Password == "" || request.Fingerprint == "" {
 		return State{}, errors.New("peer authentication and fingerprint confirmation are required")
 	}
+	operation := newOperation("connect", request.Host)
+	operation.Nodes = []OperationNode{{
+		Host: request.Host, Phase: "preflight",
+		Message: "Waiting for identity, hardware, and fabric verification.",
+	}}
+	mutationStarted := false
+	progress := func(phase, message string, percent int) {
+		operation.Phase, operation.Message, operation.Percent = phase, message, percent
+		operation.Nodes[0].Phase, operation.Nodes[0].Message = phase, message
+		_ = persistOperation(operation)
+		if report != nil {
+			report(phase, message, percent)
+		}
+	}
+	if err := persistOperation(operation); err != nil {
+		return State{}, fmt.Errorf("record cluster operation: %w", err)
+	}
+	defer func() {
+		if resultErr == nil {
+			return
+		}
+		operation.Phase = "error"
+		operation.Message = "CloudlessOS could not finish adding this Spark."
+		operation.Error = resultErr.Error()
+		operation.RollbackRequired = mutationStarted
+		operation.Nodes[0].Phase = "error"
+		operation.Nodes[0].Message = operation.Message
+		operation.Nodes[0].Error = resultErr.Error()
+		_ = persistOperation(operation)
+	}()
+	progress("preflight", "Rechecking identity, login, hardware, and both high-speed ports.", 8)
 	preflight, err := PreflightCheck(ctx, PreflightRequest{Host: request.Host, Username: request.Username, Password: request.Password})
 	if err != nil {
 		return State{}, err
@@ -705,6 +933,9 @@ func Create(ctx context.Context, request CreateRequest) (State, error) {
 	if preflight.Fingerprint != request.Fingerprint {
 		return State{}, errors.New("the peer SSH fingerprint changed; stop and verify the other Spark")
 	}
+	operation.PeerName = preflight.PeerName
+	operation.Nodes[0].Name = preflight.PeerName
+	progress("identity", "Creating a restricted Spark-to-Spark identity.", 20)
 	publicKey, err := ensureKey(ctx)
 	if err != nil {
 		return State{}, fmt.Errorf("create cluster identity: %w", err)
@@ -714,12 +945,15 @@ func Create(ctx context.Context, request CreateRequest) (State, error) {
 	remoteWorker := base64.StdEncoding.EncodeToString([]byte(workerScript))
 	remoteSudoers := base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s ALL=(root) NOPASSWD: %s *\n", request.Username, workerPath)))
 	remoteCommand := fmt.Sprintf(`sudo -S -p '' sh -c 'set -eu; printf %%s "$1" | base64 -d > %s; chmod 600 %s; home=$(getent passwd "$2" | cut -d: -f6); test -n "$home"; install -d -m 700 -o "$2" "$home/.ssh"; touch "$home/.ssh/authorized_keys"; chown "$2" "$home/.ssh/authorized_keys"; chmod 600 "$home/.ssh/authorized_keys"; key=$(printf %%s "$3" | base64 -d); grep -qxF "$key" "$home/.ssh/authorized_keys" || printf "%%s\\n" "$key" >> "$home/.ssh/authorized_keys"; install -d -m 755 /usr/lib/cloudless; printf %%s "$4" | base64 -d > %s; chown root:root %s; chmod 755 %s; printf %%s "$5" | base64 -d > %s; chown root:root %s; chmod 440 %s; visudo -cf %s >/dev/null; netplan generate; netplan apply' sh %s %s %s %s %s`, configPath, configPath, workerPath, workerPath, workerPath, sudoersPath, sudoersPath, sudoersPath, sudoersPath, remoteConfig, request.Username, remoteKey, remoteWorker, remoteSudoers)
+	mutationStarted = true
+	progress("peer-network", "Configuring the private fabric on "+preflight.PeerName+".", 38)
 	if _, err := remote(ctx, request.Host, request.Username, request.Password, remoteCommand, []byte(request.Password+"\n")); err != nil {
 		rollbackRemote(request.Host, request.Username, request.Password, publicKey)
 		return State{}, fmt.Errorf("configure the other Spark: %w", err)
 	}
 	if !existing.Configured {
-		if err := applyLocal(ctx, netplan(preflight.LocalLinks, 1)); err != nil {
+		progress("coordinator-network", "Configuring the private fabric on this Spark.", 58)
+		if err := applyLocal(ctx, preflight.LocalLinks, 1); err != nil {
 			rollbackRemote(request.Host, request.Username, request.Password, publicKey)
 			return State{}, fmt.Errorf("configure this Spark: %w", err)
 		}
@@ -739,6 +973,11 @@ func Create(ctx context.Context, request CreateRequest) (State, error) {
 		state.Topology = "direct"
 	}
 	state = normalizeState(state)
+	progress("saving", "Saving the enrolled Spark and restricted runtime profile.", 76)
+	operation.Phase = "verifying"
+	operation.Message = "Waiting for both private fabric paths to settle."
+	operation.Percent = 84
+	state.Operation = operation
 	if err := save(state); err != nil {
 		if !existing.Configured {
 			rollbackLocal()
@@ -751,7 +990,24 @@ func Create(ctx context.Context, request CreateRequest) (State, error) {
 	// a few more seconds to become usable. Absorb that normal convergence here
 	// so a successful setup does not immediately ask the user to run a second
 	// health check.
-	return waitForHealthy(ctx, 15*time.Second)
+	result, resultErr = waitForHealthy(ctx, 15*time.Second)
+	if resultErr != nil {
+		return result, resultErr
+	}
+	operation.Phase = "completed"
+	operation.Message = fmt.Sprintf("%d-Spark cluster is connected and healthy.", result.NodeCount)
+	operation.Percent = 100
+	operation.RollbackRequired = false
+	operation.Nodes[0].Phase = "connected"
+	operation.Nodes[0].Message = "The Spark is enrolled and both fabric paths are verified."
+	result.Operation = operation
+	if err := save(result); err != nil {
+		return State{}, err
+	}
+	if report != nil {
+		report(operation.Phase, operation.Message, operation.Percent)
+	}
+	return result, nil
 }
 
 func waitForHealthy(ctx context.Context, timeout time.Duration) (State, error) {
@@ -806,7 +1062,66 @@ func load() (State, error) {
 	if err := json.Unmarshal(data, &state); err != nil {
 		return State{}, err
 	}
+	if recovered, interrupted := recoverInterruptedOperation(state, os.Getpid(), currentBootID()); interrupted {
+		state = recovered
+		_ = save(state)
+	}
 	return normalizeState(state), nil
+}
+
+func recoverInterruptedOperation(state State, pid int, bootID string) (State, bool) {
+	operation := state.Operation
+	if !operation.Active() || operation.OwnerPID == 0 {
+		return state, false
+	}
+	sameProcess := operation.OwnerPID == pid
+	if operation.OwnerBootID != "" && bootID != "" {
+		sameProcess = sameProcess && operation.OwnerBootID == bootID
+	}
+	if sameProcess {
+		return state, false
+	}
+	operation.Phase = "error"
+	operation.Message = "Cluster setup was interrupted. Re-enter the peer credentials to check or clean up the connection."
+	operation.Error = "the Cloudless service or machine restarted during cluster mutation"
+	operation.RollbackRequired = true
+	operation.UpdatedAt = now().UTC()
+	for index := range operation.Nodes {
+		if !operation.Nodes[index].Cleaned && operation.Nodes[index].Error == "" {
+			operation.Nodes[index].Phase = "unknown"
+			operation.Nodes[index].Message = "The previous operation ended before cleanup could be verified."
+		}
+	}
+	state.Operation = operation
+	return state, true
+}
+
+func currentBootID() string {
+	data, err := os.ReadFile("/proc/sys/kernel/random/boot_id")
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(data))
+}
+
+func newOperation(action, peerHost string) Operation {
+	timestamp := now().UTC()
+	return Operation{
+		ID: fmt.Sprintf("%s-%d", action, timestamp.UnixNano()), Action: action,
+		Phase: "starting", Message: "Preparing cluster operation.", Percent: 1,
+		PeerHost: peerHost, OwnerPID: os.Getpid(), OwnerBootID: currentBootID(),
+		StartedAt: timestamp, UpdatedAt: timestamp,
+	}
+}
+
+func persistOperation(operation Operation) error {
+	current, err := load()
+	if err != nil {
+		return err
+	}
+	operation.UpdatedAt = now().UTC()
+	current.Operation = operation
+	return save(current)
 }
 
 // NodeCount returns the coordinator plus all enrolled workers. It is safe for
@@ -819,12 +1134,98 @@ func NodeCount() int {
 	return nodeCountForState(state)
 }
 
+// ComputeNodes returns the coordinator plus the explicitly selected workers.
+// An empty selection preserves the historical behaviour of using every
+// enrolled worker.
+func ComputeNodes() int {
+	state, err := load()
+	if err != nil || !state.Configured {
+		return 1
+	}
+	return computeNodeCountForState(state)
+}
+
+// SetSelection persists an exact worker subset for managed distributed
+// inference. Selectors may be stable fingerprints, hosts, or node names.
+// Passing no selectors restores automatic use of every enrolled worker.
+func SetSelection(ctx context.Context, selectors []string) (State, error) {
+	mutationMu.Lock()
+	defer mutationMu.Unlock()
+	state, err := Status(ctx)
+	if err != nil {
+		return State{}, err
+	}
+	if !state.Configured {
+		return State{}, errors.New("connect a Spark cluster before selecting compute nodes")
+	}
+	if len(selectors) == 0 {
+		state.SelectedHosts = nil
+		if err := save(state); err != nil {
+			return State{}, err
+		}
+		return normalizeState(state), nil
+	}
+	if len(selectors) > maxNodes-1 {
+		return State{}, fmt.Errorf("select between 1 and %d worker Sparks", maxNodes-1)
+	}
+	chosen := make([]string, 0, len(selectors))
+	used := make(map[string]bool, len(selectors))
+	for _, selector := range selectors {
+		selector = strings.ToLower(strings.TrimSpace(selector))
+		if selector == "" {
+			return State{}, errors.New("worker selection contains an empty node")
+		}
+		var match *Node
+		for index := range state.Nodes {
+			node := &state.Nodes[index]
+			if selector == strings.ToLower(strings.TrimSpace(node.Fingerprint)) ||
+				selector == strings.ToLower(strings.TrimSpace(node.Host)) ||
+				selector == strings.ToLower(strings.TrimSpace(node.Name)) {
+				if match != nil {
+					return State{}, fmt.Errorf("worker selector %q is ambiguous", selector)
+				}
+				match = node
+			}
+		}
+		if match == nil {
+			return State{}, fmt.Errorf("selected worker %q is not enrolled", selector)
+		}
+		identity := nodeIdentity(*match)
+		if used[identity] {
+			return State{}, fmt.Errorf("worker %q was selected more than once", selector)
+		}
+		if !match.Healthy || !match.WorkerReady {
+			return State{}, fmt.Errorf("%s must be healthy and worker-ready before it can be selected", match.Name)
+		}
+		used[identity] = true
+		chosen = append(chosen, identity)
+	}
+	state.SelectedHosts = chosen
+	if err := save(state); err != nil {
+		return State{}, err
+	}
+	return normalizeState(state), nil
+}
+
+// Snapshot returns persisted, credential-free cluster state without network
+// probes. Support bundles use it so interrupted operations remain diagnosable.
+func Snapshot() (State, error) { return load() }
+
 func nodeCountForState(state State) int { return max(1, normalizeState(state).NodeCount) }
+
+func computeNodeCountForState(state State) int {
+	return max(1, normalizeState(state).ComputeNodeCount)
+}
 
 func Status(ctx context.Context) (State, error) {
 	state, err := load()
 	if err != nil || !state.Configured {
 		return state, err
+	}
+	if state.Role != "coordinator" {
+		state.Healthy, state.ComputeHealthy = false, false
+		state.Error = "this Spark is not the enrolled cluster coordinator; disconnect the existing cluster before reversing roles"
+		return state, errors.New(state.Error)
 	}
 	state.Checks = nil
 	state.Healthy = true
@@ -836,6 +1237,14 @@ func Status(ctx context.Context) (State, error) {
 	}
 	links, linkErr := localLinks(ctx)
 	linksOK := linkErr == nil && strings.Join(links, "\x00") == strings.Join(state.LocalLinks, "\x00")
+	localPhysical := HealthLayer{Status: "healthy", Label: "High-speed cable", Details: strings.Join(links, ", ")}
+	if !linksOK {
+		localPhysical.Status = "attention"
+		localPhysical.Details = "The coordinator cannot see the two expected ConnectX-7 paths."
+		if linkErr != nil {
+			localPhysical.Details = linkErr.Error()
+		}
+	}
 	linkCheck := Check{ID: "local-links", Label: "ConnectX-7 cable and interfaces", OK: linksOK, Details: strings.Join(links, ", ")}
 	if !linksOK {
 		state.Healthy = false
@@ -850,21 +1259,100 @@ func Status(ctx context.Context) (State, error) {
 		wg.Add(1)
 		go func(nodeIndex int, node Node) {
 			defer wg.Done()
-			checks := make([]Check, 0, max(1, len(node.IPs)))
+			checks := make([]Check, 0, 6+len(node.IPs))
+			health := NodeHealth{
+				PhysicalLink:  HealthLayer{Status: "unknown", Label: "High-speed cable"},
+				ManagementIP:  HealthLayer{Status: "unknown", Label: "Normal network"},
+				SSH:           HealthLayer{Status: "unknown", Label: "Secure login"},
+				Fabric:        HealthLayer{Status: "unknown", Label: "Spark fabric"},
+				WorkerRuntime: HealthLayer{Status: "unknown", Label: "Distributed runtime"},
+			}
+			_, managementErr := run(ctx, nil, nil, "ping", "-c", "1", "-W", "1", node.Host)
+			health.ManagementIP.Status = "healthy"
+			health.ManagementIP.Details = node.Host + " is reachable."
+			if managementErr != nil {
+				health.ManagementIP.Status = "attention"
+				health.ManagementIP.Details = managementErr.Error()
+			}
+			checks = append(checks, Check{ID: "management-" + node.Host, Label: node.Name + " management network", OK: managementErr == nil, Details: health.ManagementIP.Details})
+
+			_, sshErr := remote(ctx, node.Host, node.Username, "", "true", nil)
+			health.SSH.Status = "healthy"
+			health.SSH.Details = "Cloudless restricted-key login works."
+			if sshErr != nil {
+				health.SSH.Status = "attention"
+				health.SSH.Details = sshErr.Error()
+			}
+			checks = append(checks, Check{ID: "ssh-" + node.Host, Label: node.Name + " secure login", OK: sshErr == nil, Details: health.SSH.Details})
+
+			if sshErr == nil {
+				remoteLinksRaw, remoteLinksErr := remote(ctx, node.Host, node.Username, "", "ibdev2netdev", nil)
+				remoteLinks := activeLinks(remoteLinksRaw)
+				remoteLinksOK := remoteLinksErr == nil && len(remoteLinks) == 2
+				health.PhysicalLink.Status = "healthy"
+				health.PhysicalLink.Details = strings.Join(remoteLinks, ", ")
+				if !remoteLinksOK {
+					health.PhysicalLink.Status = "attention"
+					health.PhysicalLink.Details = "The peer cannot see both expected ConnectX-7 paths."
+					if remoteLinksErr != nil {
+						health.PhysicalLink.Details = remoteLinksErr.Error()
+					}
+				}
+				checks = append(checks, Check{ID: "links-" + node.Host, Label: node.Name + " high-speed interfaces", OK: remoteLinksOK, Details: health.PhysicalLink.Details})
+
+				_, helperErr := remote(ctx, node.Host, node.Username, "", "test -x "+workerPath, nil)
+				if helperErr != nil {
+					health.WorkerRuntime.Status = "attention"
+					health.WorkerRuntime.Details = "The Cloudless worker helper is missing; reconnect this Spark."
+				} else {
+					runtimeOutput, runtimeErr := remote(ctx, node.Host, node.Username, "", "sudo -n "+workerPath+" status", nil)
+					if runtimeErr == nil && strings.TrimSpace(runtimeOutput) == "running" {
+						health.WorkerRuntime.Status = "healthy"
+						health.WorkerRuntime.Details = "Distributed inference worker is active."
+					} else {
+						health.WorkerRuntime.Status = "idle"
+						health.WorkerRuntime.Details = "Worker is ready and will start when a distributed model is loaded."
+					}
+				}
+				checks = append(checks, Check{ID: "worker-helper-" + node.Host, Label: node.Name + " distributed runtime", OK: helperErr == nil, Details: health.WorkerRuntime.Details})
+			} else {
+				health.PhysicalLink.Status = "unknown"
+				health.PhysicalLink.Details = "Secure login must work before the peer cable can be inspected."
+				health.WorkerRuntime.Status = "unknown"
+				health.WorkerRuntime.Details = "Secure login must work before the worker can be inspected."
+			}
 			if len(node.IPs) != 2 {
 				checks = append(checks, Check{ID: "addresses-" + node.Host, Label: node.Name + " fabric addresses", OK: false, Details: "Reconnect this Spark to assign both private fabric paths."})
 			}
+			fabricOK := len(node.IPs) == 2
+			var fabricFailures []string
 			for _, ip := range node.IPs {
 				// Netplan can return before address discovery on the new fabric has
 				// completely settled. A short burst prevents that normal warm-up from
 				// being presented as packet loss immediately after cluster creation.
-				_, pingErr := run(ctx, nil, nil, "ping", fabricPingArguments(ip)...)
-				check := Check{ID: "ping-" + ip, Label: node.Name + " · ConnectX-7 path " + ip, OK: pingErr == nil}
-				if pingErr != nil {
-					check.Details = pingErr.Error()
+				pingOutput, pingErr := run(ctx, nil, nil, "ping", fabricPingArguments(ip)...)
+				pathOK := fabricProbeHealthy(pingOutput, pingErr)
+				check := Check{ID: "ping-" + ip, Label: node.Name + " · ConnectX-7 path " + ip, OK: pathOK}
+				if !pathOK {
+					check.Details = strings.TrimSpace(pingOutput)
+					if check.Details == "" && pingErr != nil {
+						check.Details = pingErr.Error()
+					}
+					fabricOK = false
+					fabricFailures = append(fabricFailures, ip)
 				}
 				checks = append(checks, check)
 			}
+			health.Fabric.Status = "healthy"
+			health.Fabric.Details = "Both private high-speed paths pass traffic."
+			if !fabricOK {
+				health.Fabric.Status = "attention"
+				health.Fabric.Details = "One or more private high-speed paths cannot pass traffic."
+				if len(fabricFailures) > 0 {
+					health.Fabric.Details += " Failed: " + strings.Join(fabricFailures, ", ")
+				}
+			}
+			state.Nodes[nodeIndex].Health = health
 			nodeChecks[nodeIndex] = checks
 		}(nodeIndex, node)
 	}
@@ -879,12 +1367,97 @@ func Status(ctx context.Context) (State, error) {
 			state.Checks = append(state.Checks, check)
 		}
 	}
+	physicalLayers := []HealthLayer{localPhysical}
+	managementLayers := make([]HealthLayer, 0, len(state.Nodes))
+	sshLayers := make([]HealthLayer, 0, len(state.Nodes))
+	fabricLayers := make([]HealthLayer, 0, len(state.Nodes))
+	runtimeLayers := make([]HealthLayer, 0, len(state.Nodes))
+	for _, node := range state.Nodes {
+		physicalLayers = append(physicalLayers, node.Health.PhysicalLink)
+		managementLayers = append(managementLayers, node.Health.ManagementIP)
+		sshLayers = append(sshLayers, node.Health.SSH)
+		fabricLayers = append(fabricLayers, node.Health.Fabric)
+		runtimeLayers = append(runtimeLayers, node.Health.WorkerRuntime)
+	}
+	state.Health = ClusterHealth{
+		PhysicalLink:  aggregateHealthLayer("High-speed cable and interfaces", physicalLayers, false),
+		ManagementIP:  aggregateHealthLayer("Normal network reachability", managementLayers, false),
+		SSH:           aggregateHealthLayer("Secure Cloudless login", sshLayers, false),
+		Fabric:        aggregateHealthLayer("Private Spark fabric", fabricLayers, false),
+		WorkerRuntime: aggregateHealthLayer("Distributed runtime", runtimeLayers, true),
+	}
+	if telemetry, telemetryErr := ClusterGPUs(ctx); telemetryErr == nil {
+		byHost := make(map[string]PeerTelemetry, len(telemetry))
+		for _, peer := range telemetry {
+			byHost[peer.Host] = peer
+		}
+		for i := range state.Nodes {
+			if peer, ok := byHost[state.Nodes[i].Host]; ok {
+				copy := peer
+				state.Nodes[i].Telemetry = &copy
+			}
+		}
+	}
+	if telemetry := localTelemetry(ctx, state.LocalName); telemetry != nil {
+		state.LocalTelemetry = telemetry
+	}
 	state = normalizeState(state)
 	return state, nil
 }
 
+func aggregateHealthLayer(label string, layers []HealthLayer, runtimeLayer bool) HealthLayer {
+	result := HealthLayer{Status: "unknown", Label: label}
+	if len(layers) == 0 {
+		result.Details = "No worker Sparks are enrolled."
+		return result
+	}
+	healthy, idle, unknown, attention := 0, 0, 0, 0
+	for _, layer := range layers {
+		switch layer.Status {
+		case "healthy":
+			healthy++
+		case "idle":
+			idle++
+		case "attention":
+			attention++
+		default:
+			unknown++
+		}
+	}
+	switch {
+	case attention > 0:
+		result.Status = "attention"
+		result.Details = fmt.Sprintf("%d of %d checks need attention.", attention, len(layers))
+	case unknown > 0:
+		result.Status = "unknown"
+		result.Details = fmt.Sprintf("%d of %d checks are still unknown.", unknown, len(layers))
+	case runtimeLayer && healthy > 0 && idle > 0:
+		result.Status = "attention"
+		result.Details = "Distributed workers are only active on part of the cluster."
+	case runtimeLayer && idle == len(layers):
+		result.Status = "idle"
+		result.Details = "Workers are ready and currently idle."
+	default:
+		result.Status = "healthy"
+		result.Details = "All enrolled Sparks passed this layer."
+	}
+	return result
+}
+
 func fabricPingArguments(ip string) []string {
 	return []string{"-c", "3", "-i", "0.25", "-W", "1", ip}
+}
+
+func fabricProbeHealthy(output string, err error) bool {
+	if err != nil {
+		return false
+	}
+	match := packetLossPattern.FindStringSubmatch(strings.ToLower(output))
+	if len(match) != 2 {
+		return false
+	}
+	loss, parseErr := strconv.ParseFloat(match[1], 64)
+	return parseErr == nil && loss == 0
 }
 
 // ClusterGPUs returns live GB10 telemetry from every worker. It uses the
@@ -908,7 +1481,7 @@ func ClusterGPUs(ctx context.Context) ([]PeerTelemetry, error) {
 		go func(i int, node Node) {
 			defer wg.Done()
 			result := PeerTelemetry{Connected: true, Name: node.Name, Host: node.Host}
-			command := `nvidia-smi --query-gpu=index,name,memory.used,memory.total,utilization.gpu,temperature.gpu,power.draw,power.limit,driver_version --format=csv,noheader,nounits; printf '\n__CLOUDLESS_MEM__\n'; awk '/MemTotal:/{t=$2}/MemAvailable:/{a=$2}END{printf "%d %d\n",t/1024,a/1024}' /proc/meminfo`
+			command := `nvidia-smi --query-gpu=index,name,memory.used,memory.total,utilization.gpu,temperature.gpu,power.draw,power.limit,driver_version --format=csv,noheader,nounits; printf '\n__CLOUDLESS_MEM__\n'; awk '/MemTotal:/{t=$2}/MemAvailable:/{a=$2}/^Cached:/{c=$2}/SReclaimable:/{r=$2}END{printf "%d %d %d\n",t/1024,a/1024,(c+r)/1024}' /proc/meminfo; printf '__CLOUDLESS_DISK__\n'; df -B1 --output=size,avail / | tail -n 1`
 			output, remoteErr := remote(ctx, node.Host, node.Username, "", command, nil)
 			if remoteErr != nil {
 				result.Error = remoteErr.Error()
@@ -922,13 +1495,19 @@ func ClusterGPUs(ctx context.Context) ([]PeerTelemetry, error) {
 				results[i] = result
 				return
 			}
+			memText, diskText, _ := strings.Cut(memText, "__CLOUDLESS_DISK__")
 			gpus := hardware.ParseGPUsCSV(strings.TrimSpace(gpuText))
 			memFields := strings.Fields(memText)
 			if len(memFields) >= 2 {
 				totalMB, _ := strconv.Atoi(memFields[0])
 				availableMB, _ := strconv.Atoi(memFields[1])
-				hardware.ApplyUnifiedMemory(gpus, totalMB, availableMB)
+				reclaimableMB := 0
+				if len(memFields) >= 3 {
+					reclaimableMB, _ = strconv.Atoi(memFields[2])
+				}
+				hardware.ApplyUnifiedMemoryBudget(gpus, hardware.NewMemoryBudget(totalMB, availableMB, reclaimableMB))
 			}
+			result.StorageTotalBytes, result.StorageAvailableBytes = parseStorageTelemetry(diskText)
 			for i := range gpus {
 				gpus[i].Node = node.Name
 				gpus[i].Remote = true
@@ -941,6 +1520,32 @@ func ClusterGPUs(ctx context.Context) ([]PeerTelemetry, error) {
 	wg.Wait()
 	telemetryCache, telemetryErr, telemetryAt = results, nil, time.Now()
 	return results, nil
+}
+
+func parseStorageTelemetry(output string) (uint64, uint64) {
+	fields := strings.Fields(output)
+	if len(fields) < 2 {
+		return 0, 0
+	}
+	total, totalErr := strconv.ParseUint(fields[0], 10, 64)
+	available, availableErr := strconv.ParseUint(fields[1], 10, 64)
+	if totalErr != nil || availableErr != nil || available > total {
+		return 0, 0
+	}
+	return total, available
+}
+
+func localTelemetry(ctx context.Context, name string) *PeerTelemetry {
+	gpus, gpuErr := hardware.GPUs(ctx)
+	diskOutput, diskErr := run(ctx, nil, nil, "df", "-B1", "--output=size,avail", "/")
+	total, available := parseStorageTelemetry(diskOutput)
+	if gpuErr != nil && diskErr != nil {
+		return nil
+	}
+	return &PeerTelemetry{
+		Connected: true, Reachable: true, Name: name, Host: "localhost",
+		GPUs: gpus, StorageTotalBytes: total, StorageAvailableBytes: available,
+	}
 }
 
 // PeerGPUs is retained for older API consumers and represents the first
@@ -960,14 +1565,18 @@ func StartWorker(ctx context.Context, image, model string) error {
 	if err != nil {
 		return err
 	}
-	if !state.Configured || !state.Healthy {
-		return errors.New("the Spark cluster connection is not healthy")
+	if !state.Configured || !state.ComputeHealthy {
+		return errors.New("the selected Spark compute subset is not healthy")
 	}
-	if !state.WorkerReady {
-		return errors.New("reconnect any legacy Spark workers once to enable distributed models")
+	if !state.ComputeWorkerReady {
+		return errors.New("reconnect or replace any selected legacy Spark workers before starting distributed models")
 	}
 	if strings.TrimSpace(image) == "" || strings.TrimSpace(model) == "" {
 		return errors.New("worker image and model are required")
+	}
+	nodes := selectedNodesForState(state)
+	if len(nodes) == 0 {
+		return errors.New("select at least one worker Spark for distributed inference")
 	}
 	headIP := "10.100.0.1"
 	if len(state.LocalIPs) > 0 {
@@ -976,9 +1585,9 @@ func StartWorker(ctx context.Context, image, model string) error {
 	image64 := base64.StdEncoding.EncodeToString([]byte(image))
 	upgrade64 := base64.StdEncoding.EncodeToString([]byte(workerScript))
 	enc := func(value string) string { return base64.StdEncoding.EncodeToString([]byte(value)) }
-	errs := make(chan error, len(state.Nodes))
+	errs := make(chan error, len(nodes))
 	var wg sync.WaitGroup
-	for _, node := range state.Nodes {
+	for _, node := range nodes {
 		wg.Add(1)
 		go func(node Node) {
 			defer wg.Done()
@@ -1042,12 +1651,16 @@ func ClusterModelProgress(ctx context.Context, model string) ([]ModelProgress, e
 	if model == "" {
 		return nil, errors.New("model is required")
 	}
+	nodes := selectedNodesForState(state)
+	if len(nodes) == 0 {
+		return nil, errors.New("select at least one worker Spark for distributed inference")
+	}
 	encoded := base64.StdEncoding.EncodeToString([]byte(model))
 	command := fmt.Sprintf("sudo -n %s model-progress %s", workerPath, encoded)
-	results := make([]ModelProgress, len(state.Nodes))
-	errs := make(chan error, len(state.Nodes))
+	results := make([]ModelProgress, len(nodes))
+	errs := make(chan error, len(nodes))
 	var wg sync.WaitGroup
-	for i, node := range state.Nodes {
+	for i, node := range nodes {
 		wg.Add(1)
 		go func(i int, node Node) {
 			defer wg.Done()
@@ -1143,7 +1756,7 @@ func coordinatorSpec(spec engine.RunSpec, state State) engine.RunSpec {
 	spec.Env["RAY_memory_monitor_refresh_ms"] = "0"
 	spec.EntryPoint = "/bin/bash"
 	serve := shellJoin(spec.Args)
-	nodes := max(2, nodeCountForState(state))
+	nodes := max(2, computeNodeCountForState(state))
 	spec.Args = []string{"-lc", `pip install -q --root-user-action=ignore 'ray[default]>=2.9' && ray start --head --port=6379 --node-ip-address="$VLLM_HOST_IP" --num-gpus=1 && touch /tmp/cloudless-ray-head && while [ ! -f /tmp/cloudless-ray-worker ]; do sleep 1; done; exec ` + serve + fmt.Sprintf(" --distributed-executor-backend ray --tensor-parallel-size %d", nodes)}
 	return spec
 }
@@ -1194,7 +1807,41 @@ func ProxySpecTarget(host string, port int) engine.RunSpec {
 // config; credentials are never copied into recipe metadata.
 func SSHIdentityPaths() (string, string) { return keyPath, knownPath }
 
+// ValidateDisconnectAccess proves every peer administrator credential before
+// Cloudless stops distributed inference. Disconnect repeats this check under
+// its mutation lock, but this preflight prevents a typo from needlessly
+// unloading a healthy cluster model.
+func ValidateDisconnectAccess(ctx context.Context, passwords map[string]string) error {
+	state, err := load()
+	if err != nil {
+		return err
+	}
+	if !state.Configured {
+		return nil
+	}
+	for _, node := range state.Nodes {
+		password := strings.TrimSpace(passwords[node.Host])
+		if password == "" {
+			password = strings.TrimSpace(passwords[node.Name])
+		}
+		if password == "" {
+			password = strings.TrimSpace(passwords["*"])
+		}
+		if password == "" {
+			return fmt.Errorf("administrator password is required for %s", node.Name)
+		}
+		if _, err := remote(ctx, node.Host, node.Username, password, "sudo -S -p '' true", []byte(password+"\n")); err != nil {
+			return fmt.Errorf("verify administrator access on %s before disconnecting: %w", node.Name, err)
+		}
+	}
+	return nil
+}
+
 func Disconnect(ctx context.Context, passwords map[string]string) error {
+	return DisconnectWithProgress(ctx, passwords, nil)
+}
+
+func DisconnectWithProgress(ctx context.Context, passwords map[string]string, report ProgressFunc) (resultErr error) {
 	mutationMu.Lock()
 	defer mutationMu.Unlock()
 	state, err := load()
@@ -1230,7 +1877,38 @@ func Disconnect(ctx context.Context, passwords map[string]string) error {
 		}
 		removals = append(removals, remoteRemoval{node: node, password: password})
 	}
-	errs := make(chan error, len(removals))
+	operation := newOperation("disconnect", "")
+	for _, removal := range removals {
+		operation.Nodes = append(operation.Nodes, OperationNode{
+			Name: removal.node.Name, Host: removal.node.Host, Phase: "pending",
+			Message: "Waiting to remove the distributed worker and private fabric.",
+		})
+	}
+	progress := func(phase, message string, percent int) {
+		operation.Phase, operation.Message, operation.Percent = phase, message, percent
+		state.Operation = operation
+		_ = save(state)
+		if report != nil {
+			report(phase, message, percent)
+		}
+	}
+	progress("stopping-workers", "Stopping distributed workers on every enrolled Spark.", 20)
+	defer func() {
+		if resultErr == nil {
+			return
+		}
+		operation.Phase = "error"
+		operation.Message = "Cluster disconnect needs attention."
+		operation.Error = resultErr.Error()
+		operation.RollbackRequired = true
+		state.Operation = operation
+		_ = save(state)
+	}()
+	type cleanupResult struct {
+		host string
+		err  error
+	}
+	results := make(chan cleanupResult, len(removals))
 	var wg sync.WaitGroup
 	for _, removal := range removals {
 		wg.Add(1)
@@ -1239,28 +1917,59 @@ func Disconnect(ctx context.Context, passwords map[string]string) error {
 			node, password := removal.node, removal.password
 			remoteCommand := fmt.Sprintf(`sudo -S -p '' sh -c 'set -eu; if [ -x %s ]; then %s stop; fi; rm -f %s %s %s; home=$(getent passwd "$1" | cut -d: -f6); if [ -n "$home" ] && [ -f "$home/.ssh/authorized_keys" ] && [ -n "$2" ]; then key=$(printf %%s "$2" | base64 -d); tmp=$(mktemp); grep -vxF "$key" "$home/.ssh/authorized_keys" >"$tmp" || true; install -m 600 -o "$1" "$tmp" "$home/.ssh/authorized_keys"; rm -f "$tmp"; fi; netplan generate; netplan apply; %s' sh %s %s`, workerPath, workerPath, configPath, workerPath, sudoersPath, remoteAddressCleanup, node.Username, encodedKey)
 			if _, err := remote(ctx, node.Host, node.Username, password, remoteCommand, []byte(password+"\n")); err != nil {
-				errs <- fmt.Errorf("disconnect %s: %w", node.Name, err)
+				results <- cleanupResult{host: node.Host, err: fmt.Errorf("disconnect %s: %w", node.Name, err)}
+				return
 			}
+			results <- cleanupResult{host: node.Host}
 		}(removal)
 	}
 	wg.Wait()
-	close(errs)
+	close(results)
 	var failures []string
-	for err := range errs {
-		failures = append(failures, err.Error())
+	for result := range results {
+		if recordCleanupResult(&operation, result.host, result.err) && result.err != nil {
+			failures = append(failures, result.err.Error())
+		}
 	}
 	if len(failures) > 0 {
 		return errors.New(strings.Join(failures, "; "))
 	}
-	if err := os.Remove(configPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+	progress("coordinator-network", "Removing the private fabric from this Spark.", 72)
+	if err := localPrivilegeClient().Do(ctx, privileged.ActionClusterNetworkRemove); err != nil {
 		return err
 	}
-	if _, err := run(ctx, nil, nil, "netplan", "generate"); err != nil {
+	operation.Phase = "completed"
+	operation.Message = "Every Spark is back in independent mode."
+	operation.Percent = 100
+	operation.RollbackRequired = false
+	cleared := State{Operation: operation}
+	if err := save(cleared); err != nil {
 		return err
 	}
-	if _, err := run(ctx, nil, nil, "netplan", "apply"); err != nil {
-		return err
+	if report != nil {
+		report(operation.Phase, operation.Message, operation.Percent)
 	}
-	removeLocalClusterAddresses(ctx)
-	return os.Remove(statePath)
+	return nil
+}
+
+func recordCleanupResult(operation *Operation, host string, cleanupErr error) bool {
+	if operation == nil {
+		return false
+	}
+	for index := range operation.Nodes {
+		if operation.Nodes[index].Host != host {
+			continue
+		}
+		if cleanupErr != nil {
+			operation.Nodes[index].Phase = "cleanup-required"
+			operation.Nodes[index].Message = "Remote cleanup could not be verified."
+			operation.Nodes[index].Error = cleanupErr.Error()
+		} else {
+			operation.Nodes[index].Phase = "cleaned"
+			operation.Nodes[index].Message = "Worker, restricted identity, and private addresses were removed."
+			operation.Nodes[index].Cleaned = true
+		}
+		return true
+	}
+	return false
 }

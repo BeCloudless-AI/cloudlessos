@@ -11,18 +11,39 @@ import (
 	"time"
 
 	"github.com/cloudless/orchestrator/internal/diffusion"
+	"github.com/cloudless/orchestrator/internal/engine"
 	"github.com/cloudless/orchestrator/internal/jobs"
 )
 
 const comfyVolume = "cloudless-comfyui"
+
+// diffusionFit classifies explicit checkpoint requirements. Diffusion entries
+// are file-specific rather than parameter-label estimates; language models use
+// the stricter runtime-profile matcher in internal/modelfit.
+func diffusionFit(requiredGB, availableGB int) string {
+	if availableGB <= 0 || requiredGB <= 0 {
+		return "unknown"
+	}
+	switch {
+	case float64(requiredGB) <= float64(availableGB)*0.85:
+		return "fits"
+	case requiredGB <= availableGB:
+		return "tight"
+	default:
+		return "over"
+	}
+}
 
 // downloadedDiffusion lists model filenames already present in the ComfyUI volume.
 // Best-effort (busybox is auto-pulled). Returns the set of base filenames.
 func (s *Server) downloadedDiffusion(ctx context.Context) map[string]bool {
 	c, cancel := context.WithTimeout(ctx, 25*time.Second)
 	defer cancel()
-	out, err := s.eng.Output(c, "run", "--rm", "-v", comfyVolume+":/c", "busybox",
-		"sh", "-c", "find /c/ComfyUI/models -type f \\( -name '*.safetensors' -o -name '*.ckpt' -o -name '*.gguf' \\) 2>/dev/null")
+	out, err := s.eng.RunTransient(c, engine.RunSpec{
+		Image:   "busybox",
+		Volumes: map[string]string{comfyVolume: "/c"},
+		Args:    []string{"sh", "-c", "find /c/ComfyUI/models -type f \\( -name '*.safetensors' -o -name '*.ckpt' -o -name '*.gguf' \\) 2>/dev/null"},
+	})
 	have := map[string]bool{}
 	if err != nil {
 		return have
@@ -77,7 +98,7 @@ func (s *Server) diffusionList(w http.ResponseWriter, r *http.Request) {
 	}
 
 	view := func(m diffusion.Model) diffusionView {
-		return diffusionView{Model: m, Fit: fitFor(m.MinVRAMGB, gpuGB), Downloaded: have[m.File]}
+		return diffusionView{Model: m, Fit: diffusionFit(m.MinVRAMGB, gpuGB), Downloaded: have[m.File]}
 	}
 
 	yours := []diffusionView{}
@@ -174,15 +195,24 @@ func (s *Server) runDiffusionDownload(ctx context.Context, cancel context.Cancel
 	containerName := "cloudless-diffusion-download-" + job.ID
 	// --user 0: the volume is root-owned (ComfyUI runs as root), and curlimages/curl
 	// defaults to a non-root user that can't write there. curl validates TLS.
-	_, err := s.eng.Output(ctx, "run", "--rm", "--name", containerName, "--user", "0", "--entrypoint", "sh",
-		"-v", comfyVolume+":/c", "curlimages/curl:latest", "-c", cmd,
-		"cloudless-download", dir, partial, m.URL, final)
+	_, err := s.eng.RunTransient(ctx, engine.RunSpec{
+		Name:       containerName,
+		Image:      "curlimages/curl:latest",
+		User:       "0",
+		EntryPoint: "sh",
+		Volumes:    map[string]string{comfyVolume: "/c"},
+		Args:       []string{"-c", cmd, "cloudless-download", dir, partial, m.URL, final},
+	})
 	if err != nil {
 		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cleanupCancel()
 		_ = s.eng.Remove(cleanupCtx, containerName)
-		_, _ = s.eng.Output(cleanupCtx, "run", "--rm", "--user", "0", "-v", comfyVolume+":/c", "busybox",
-			"sh", "-c", `rm -f "$1"`, "cloudless-cancel-diffusion", partial)
+		_, _ = s.eng.RunTransient(cleanupCtx, engine.RunSpec{
+			Image:   "busybox",
+			User:    "0",
+			Volumes: map[string]string{comfyVolume: "/c"},
+			Args:    []string{"sh", "-c", `rm -f "$1"`, "cloudless-cancel-diffusion", partial},
+		})
 		if errors.Is(ctx.Err(), context.Canceled) {
 			job.Cancel()
 			return
@@ -215,8 +245,12 @@ func (s *Server) diffusionUninstall(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
-	if _, err := s.eng.Output(ctx, "run", "--rm", "--user", "0", "-v", comfyVolume+":/c", "busybox",
-		"sh", "-c", `find /c/ComfyUI/models -type f -name "$1" -delete`, "cloudless-remove-diffusion", m.File); err != nil {
+	if _, err := s.eng.RunTransient(ctx, engine.RunSpec{
+		Image:   "busybox",
+		User:    "0",
+		Volumes: map[string]string{comfyVolume: "/c"},
+		Args:    []string{"sh", "-c", `find /c/ComfyUI/models -type f -name "$1" -delete`, "cloudless-remove-diffusion", m.File},
+	}); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "could not uninstall model"})
 		return
 	}

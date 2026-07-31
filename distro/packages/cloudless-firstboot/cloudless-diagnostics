@@ -24,8 +24,16 @@ run nvidia-ctk cdi list
 run docker info
 run docker ps --format '{{.Names}}\t{{.Image}}\t{{.Status}}'
 section "Cloudless services"
-run systemctl --no-pager --full status cloudlessd cloudless-hardware cloudless-firstboot lightdm
-run journalctl -b --no-pager -u cloudlessd -u cloudless-hardware -u cloudless-firstboot -n 300
+run systemctl --no-pager --full status cloudlessd cloudless-hardware cloudless-firstboot cloudless-graphical-recovery lightdm docker
+run journalctl -b --no-pager -u cloudlessd -u cloudless-hardware -u cloudless-firstboot -u cloudless-graphical-recovery -u lightdm -n 400
+run sh -c 'cat /var/lib/cloudless/boot-health.json /var/lib/cloudless/boot-health-history.tsv /var/lib/cloudless/validation-report.txt 2>/dev/null || true'
+section "Display and kiosk"
+run systemctl get-default
+run sh -c 'readlink -f /etc/systemd/system/display-manager.service || true'
+run sh -c 'stat -c "%U:%G %a %n" /home/cloudless /home/cloudless/.config /home/cloudless/.cache 2>/dev/null || true'
+run sh -c 'ps -u cloudless -o pid,comm,args 2>/dev/null || true'
+run sh -c 'tail -n 200 /home/cloudless/.cache/cloudless-kiosk.log 2>/dev/null || true'
+run sh -c 'tail -n 160 /var/log/lightdm/lightdm.log /var/log/lightdm/x-0.log 2>/dev/null || true'
 section "Cloudless API"
 run curl --silent --show-error --max-time 10 http://127.0.0.1:8765/api/health
 run curl --silent --show-error --max-time 10 http://127.0.0.1:8765/api/system

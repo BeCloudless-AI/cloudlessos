@@ -1,0 +1,360 @@
+package api
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strconv"
+	"time"
+
+	"github.com/cloudless/orchestrator/internal/catalog"
+	"github.com/cloudless/orchestrator/internal/jobs"
+	"github.com/cloudless/orchestrator/internal/localrecipes"
+	"github.com/cloudless/orchestrator/internal/provision"
+	"github.com/cloudless/orchestrator/internal/recipeops"
+	"github.com/cloudless/orchestrator/internal/sparkcluster"
+)
+
+func managedRecipeCluster() sparkcluster.State {
+	return sparkcluster.State{NodeCount: 1}
+}
+
+func (s *Server) checkManagedContainerRecipe(job *jobs.Job, recipe localrecipes.Recipe, operationID string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+	fail := func(id, summary string, err error) {
+		s.failRecipeCheck(job, operationID, id, summary, err)
+	}
+	job.Progress("checking-sandbox", "Validating the command-free container boundary...", 0, 6)
+	if err := localrecipes.ValidateManagedContainerRecipe(recipe); err != nil {
+		fail("sandbox", "The constrained runtime contract is invalid", err)
+		return
+	}
+	if _, err := managedContainerRecipeSpec(recipe, recipe.Engine.Image, "cloudless-recipe-check", operationID, ""); err != nil {
+		fail("sandbox", "Cloudless could not synthesize a safe runtime", err)
+		return
+	}
+	if err := s.recordRecipeCheck(operationID, "sandbox", recipeops.CheckPass,
+		"Cloudless owns the command, mounts, network, privileges, and lifecycle", "", map[string]string{
+			"adapter": localrecipes.ManagedContainerAdapter, "readOnlyRoot": "true",
+			"capabilities": "none", "hostCommands": "none", "hostMounts": "none",
+		}); err != nil {
+		s.finishRecipeOperation(job, operationID, err)
+		return
+	}
+
+	job.Progress("checking-image", "Verifying the pinned Linux image and architecture...", 1, 6)
+	image, err := inspectRecipeRegistryImage(ctx, s.eng, recipe.Engine.Image)
+	if err != nil {
+		fail("image", "The pinned runtime image could not be verified", err)
+		return
+	}
+	if err := s.recordRecipeCheck(operationID, "image", recipeops.CheckPass,
+		"The runtime image is immutable and supports this architecture", "", map[string]string{
+			"digest": image.Digest, "architecture": image.Architecture,
+			"compressedBytes": strconv.FormatInt(image.CompressedBytes, 10),
+		}); err != nil {
+		s.finishRecipeOperation(job, operationID, err)
+		return
+	}
+
+	job.Progress("checking-capacity", "Measuring model, runtime, and storage requirements...", 2, 6)
+	token, _ := s.state.HuggingFaceToken()
+	modelBytes, err := recipeModelPreflightBytes(ctx, recipe, token)
+	if err != nil {
+		fail("capacity", "The immutable model revision could not be measured", err)
+		return
+	}
+	availableBytes, measuredAt, err := filesystemAvailableBytes(s.modelVolumePath(ctx))
+	if err != nil {
+		fail("capacity", "Available model storage could not be measured", err)
+		return
+	}
+	runtimeBytes := image.CompressedBytes * recipeRegistryExpansionFactor
+	_, localImageErr := inspectLocalRecipeImage(ctx, s.eng, image.Reference)
+	capacity, err := calculateRecipeCapacity(modelBytes, runtimeBytes, 0, availableBytes,
+		recipeCachedModelReady(ctx, s.eng, recipe), localImageErr == nil)
+	if err != nil || capacity.RequiredBytes > capacity.AvailableBytes {
+		if err == nil {
+			err = fmt.Errorf("requires %d bytes including reserve; %d bytes are available", capacity.RequiredBytes, capacity.AvailableBytes)
+		}
+		fail("capacity", "This machine does not have enough verified storage", err)
+		return
+	}
+	capacityValues := capacity.values("local.")
+	capacityValues["local.filesystem"] = measuredAt
+	if err := s.recordRecipeCheck(operationID, "capacity", recipeops.CheckPass,
+		"The model, image, and safety reserve fit on this machine", "", capacityValues); err != nil {
+		s.finishRecipeOperation(job, operationID, err)
+		return
+	}
+
+	job.Progress("checking-accelerator", "Verifying the local NVIDIA runtime and memory...", 3, 6)
+	accelerators, err := s.preflightRecipeAccelerators(ctx, recipe, managedRecipeCluster(), "", nil, modelBytes)
+	if err != nil {
+		fail("accelerators", "The accelerator requirements are not satisfied", err)
+		return
+	}
+	if err := s.recordRecipeCheck(operationID, "accelerators", recipeops.CheckPass,
+		"The local accelerator satisfies the recipe contract", "", accelerators); err != nil {
+		s.finishRecipeOperation(job, operationID, err)
+		return
+	}
+
+	job.Progress("checking-ports", "Checking the private Cloudless inference port...", 4, 6)
+	ports, err := s.preflightRecipePorts(ctx, recipe, managedRecipeCluster(), "", nil)
+	if err != nil {
+		fail("ports", "The managed inference port is unavailable", err)
+		return
+	}
+	if err := s.recordRecipeCheck(operationID, "ports", recipeops.CheckPass,
+		"The private runtime port can be managed safely", "", ports); err != nil {
+		s.finishRecipeOperation(job, operationID, err)
+		return
+	}
+
+	job.Progress("binding-evidence", "Binding the verified image and machine evidence...", 5, 6)
+	platformFingerprint, err := recipePlatformFingerprint(accelerators)
+	if err != nil {
+		s.finishRecipeOperation(job, operationID, err)
+		return
+	}
+	clusterFingerprint, err := recipeClusterFingerprint(managedRecipeCluster())
+	if err != nil {
+		s.finishRecipeOperation(job, operationID, err)
+		return
+	}
+	operation, err := s.recipeOps.BindPreflight(operationID, image.Digest, platformFingerprint, clusterFingerprint)
+	if err != nil {
+		s.finishRecipeOperation(job, operationID, err)
+		return
+	}
+	if err := s.transitionRecipeOperation(operationID, recipeops.PhasePrepared, nil); err != nil {
+		s.finishRecipeOperation(job, operationID, err)
+		return
+	}
+	if operation.Preflight == nil || !operation.Preflight.Launchable {
+		s.finishRecipeOperation(job, operationID, errors.New("constrained runtime evidence was not launchable"))
+		return
+	}
+	job.Progress("validated", "The recipe can run without executing recipe-supplied code.", 6, 6)
+	job.Succeed("validated")
+	s.pruneRecipeOperations()
+}
+
+func (s *Server) revalidateManagedContainerRecipe(ctx context.Context, recipe localrecipes.Recipe, operation recipeops.Operation) error {
+	if operation.Preflight == nil || !operation.Preflight.Runnable {
+		return recipeops.ErrPreflightRequired
+	}
+	image, err := inspectRecipeRegistryImage(ctx, s.eng, recipe.Engine.Image)
+	if err != nil {
+		return err
+	}
+	if image.Digest != operation.Preflight.ImageDigest {
+		return fmt.Errorf("runtime image differs from Check: expected %s, found %s", operation.Preflight.ImageDigest, image.Digest)
+	}
+	modelBytes, err := checkedRecipeModelBytes(*operation.Preflight)
+	if err != nil {
+		return err
+	}
+	accelerators, err := s.preflightRecipeAccelerators(ctx, recipe, managedRecipeCluster(), "", nil, modelBytes)
+	if err != nil {
+		return err
+	}
+	platformFingerprint, err := recipePlatformFingerprint(accelerators)
+	if err != nil {
+		return err
+	}
+	clusterFingerprint, err := recipeClusterFingerprint(managedRecipeCluster())
+	if err != nil {
+		return err
+	}
+	if !operation.Preflight.Matches(operation.RecipeRevision, platformFingerprint, clusterFingerprint) {
+		return errors.New("the checked machine changed; run Check again")
+	}
+	if _, err := s.preflightRecipePorts(ctx, recipe, managedRecipeCluster(), "", nil); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *Server) runManagedContainerRecipe(job *jobs.Job, recipe localrecipes.Recipe, operationID string) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(recipe.Runtime.TimeoutMinutes)*time.Minute)
+	defer cancel()
+	s.registerRecipeJob(recipe.ID, operationID, cancel, job)
+	defer s.unregisterRecipeJob(recipe.ID, operationID)
+	provision.EngineMu.Lock()
+	engineMuHeld := true
+	defer func() {
+		if engineMuHeld {
+			provision.EngineMu.Unlock()
+		}
+	}()
+	operation, ok := s.recipeOps.Get(operationID)
+	if !ok || operation.Preflight == nil {
+		s.finishRecipeOperation(job, operationID, recipeops.ErrPreflightRequired)
+		return
+	}
+	runtimeName, err := recipeops.RuntimeName(operation)
+	if err != nil {
+		s.finishRecipeOperation(job, operationID, err)
+		return
+	}
+	localNode := localRecipeNodeName()
+	for _, resource := range []recipeops.Resource{
+		{Kind: "container-set", ID: operationID, Node: localNode},
+		{Kind: "image", ID: recipe.Engine.Image, Node: localNode},
+		{Kind: "model-cache", ID: recipe.Model.ID + "@" + recipe.Model.Revision, Node: localNode},
+		{Kind: "private-port", ID: strconv.Itoa(recipe.Engine.ContainerPort), Node: localNode},
+	} {
+		if err := s.claimRecipeResource(operationID, resource); err != nil {
+			s.finishRecipeOperation(job, operationID, err)
+			return
+		}
+	}
+	job.Progress("pulling-image", "Pulling the exact runtime image verified by Check...", 0, 6)
+	if err := s.eng.PullStream(ctx, recipe.Engine.Image, func(line string) {
+		job.Progress("pulling-image", line, 0, 6)
+	}); err != nil {
+		s.finishRecipeOperation(job, operationID, err)
+		return
+	}
+	operation, err = s.recipeOps.BindPreparedImage(operationID, recipe.Engine.Image, operation.Preflight.ImageDigest)
+	if err != nil {
+		s.finishRecipeOperation(job, operationID, err)
+		return
+	}
+	job.Progress("revalidating", "Rechecking image, GPU, and ports before switching models...", 1, 6)
+	if err := s.revalidateManagedContainerRecipe(ctx, recipe, operation); err != nil {
+		s.finishRecipeOperation(job, operationID, err)
+		return
+	}
+	if err := s.transitionRecipeOperation(operationID, recipeops.PhasePrepared, nil); err != nil {
+		s.finishRecipeOperation(job, operationID, err)
+		return
+	}
+	if err := s.transitionRecipeOperation(operationID, recipeops.PhaseSwitching, nil); err != nil {
+		s.finishRecipeOperation(job, operationID, err)
+		return
+	}
+	rollback := func(cause error) {
+		_ = s.eng.Remove(context.Background(), runtimeName)
+		_ = s.eng.Remove(context.Background(), "cloudless-cluster-engine-proxy")
+		if engineMuHeld {
+			provision.EngineMu.Unlock()
+			engineMuHeld = false
+		}
+		cause = errors.Join(cause, s.restorePreviousOrMarkUnloaded(job, inferenceRuntimeFromRecipeOperation(operation)))
+		s.finishRecipeOperation(job, operationID, cause)
+	}
+	job.Progress("switching", "The recipe is ready; switching from the current model...", 2, 6)
+	if err := s.stopManagedEngines(ctx); err != nil {
+		rollback(err)
+		return
+	}
+	if err := s.transitionRecipeOperation(operationID, recipeops.PhaseStarting, nil); err != nil {
+		rollback(err)
+		return
+	}
+	token, _ := s.state.HuggingFaceToken()
+	spec, err := managedContainerRecipeSpec(recipe, recipe.Engine.Image, runtimeName, operationID, token)
+	if err != nil {
+		rollback(err)
+		return
+	}
+	_ = s.eng.Remove(ctx, runtimeName)
+	job.Progress("starting", "Starting the sandboxed engine. It may download model weights into the shared cache...", 3, 6)
+	containerID, err := s.eng.Run(ctx, spec)
+	if err != nil {
+		rollback(err)
+		return
+	}
+	if err := s.claimRecipeResource(operationID, recipeops.Resource{Kind: "container", ID: containerID, Node: localNode}); err != nil {
+		rollback(err)
+		return
+	}
+	if err := s.transitionRecipeOperation(operationID, recipeops.PhaseVerifying, nil); err != nil {
+		rollback(err)
+		return
+	}
+	job.Progress("health", "Waiting for the constrained engine and model to become ready...", 4, 6)
+	if err := waitRecipeHealth(ctx, job, recipe); err != nil {
+		rollback(err)
+		return
+	}
+	if err := waitRecipePrivateContract(ctx, job, recipe); err != nil {
+		rollback(err)
+		return
+	}
+	job.Progress("connecting", "Connecting Cloudless apps to the verified runtime...", 5, 6)
+	proxyImage := s.infraImage(ctx, "socat", catalog.SocatImage)
+	if err := s.eng.Pull(ctx, proxyImage); err != nil {
+		rollback(err)
+		return
+	}
+	proxySpec := sparkcluster.ProxySpecTarget(recipe.Engine.ProxyHost, recipe.Engine.ContainerPort)
+	proxySpec.Image = proxyImage
+	proxyID, err := s.eng.Run(ctx, proxySpec)
+	if err != nil {
+		rollback(err)
+		return
+	}
+	if err := s.claimRecipeResource(operationID, recipeops.Resource{Kind: "container", ID: proxyID, Node: localNode}); err != nil {
+		rollback(err)
+		return
+	}
+	if err := s.claimRecipeResource(operationID, recipeops.Resource{Kind: "stable-port", ID: strconv.Itoa(recipeStablePort), Node: localNode}); err != nil {
+		rollback(err)
+		return
+	}
+	if err := waitRecipePromotion(ctx); err != nil {
+		rollback(err)
+		return
+	}
+	active := s.state.Get().InferenceRuntime()
+	active.Engine, active.Model, active.ExecutionMode = recipe.Engine.Type, recipe.Model.ID, "local"
+	active.LocalRecipeID, active.EngineUnloaded = recipe.ID, false
+	if err := s.state.CommitInferenceRuntime(active); err != nil {
+		rollback(err)
+		return
+	}
+	if err := s.transitionRecipeOperation(operationID, recipeops.PhaseActive, nil); err != nil {
+		rollback(err)
+		return
+	}
+	job.Progress("ready", "Recipe is running through the normal Cloudless API.", 6, 6)
+	job.Succeed(localrecipes.CloudlessModelAlias)
+	s.pruneRecipeOperations()
+}
+
+func (s *Server) stopManagedContainerRecipe(job *jobs.Job, recipe localrecipes.Recipe, operationID string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+	provision.EngineMu.Lock()
+	defer provision.EngineMu.Unlock()
+	job.Progress("stopping", "Stopping the Cloudless-managed recipe container...", 0, 1)
+	if active, ok := s.recipeOps.ActiveForRecipe(recipe.ID); ok {
+		if err := s.removeRecoveryContainers(ctx, active); err != nil {
+			s.finishRecipeOperation(job, operationID, err)
+			return
+		}
+	}
+	_ = s.eng.Remove(ctx, "cloudless-cluster-engine-proxy")
+	stopped := s.state.Get().InferenceRuntime()
+	stopped.LocalRecipeID, stopped.EngineUnloaded = "", true
+	if err := s.state.CommitInferenceRuntime(stopped); err != nil {
+		s.finishRecipeOperation(job, operationID, err)
+		return
+	}
+	if err := s.closeActiveRecipeOperation(recipe.ID, nil); err != nil {
+		s.finishRecipeOperation(job, operationID, err)
+		return
+	}
+	if err := s.transitionRecipeOperation(operationID, recipeops.PhaseStopped, nil); err != nil {
+		s.finishRecipeOperation(job, operationID, err)
+		return
+	}
+	job.Progress("stopped", "Recipe stopped. The model cache remains available.", 1, 1)
+	job.Succeed("")
+	s.pruneRecipeOperations()
+}

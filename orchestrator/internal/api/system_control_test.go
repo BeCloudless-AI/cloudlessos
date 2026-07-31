@@ -31,6 +31,25 @@ func TestSystemRebootRequiresConfirmationHeader(t *testing.T) {
 	}
 }
 
+func TestSystemRebootUsesConfiguredBroker(t *testing.T) {
+	called := make(chan struct{}, 1)
+	s := &Server{reboot: func() error { called <- struct{}{}; return nil }}
+	req := httptest.NewRequest(http.MethodPost, "/api/system/reboot", nil)
+	req.Header.Set("X-Cloudless-Action", "reboot")
+	rec := httptest.NewRecorder()
+
+	s.systemReboot(rec, req)
+
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusAccepted)
+	}
+	select {
+	case <-called:
+	case <-time.After(2 * time.Second):
+		t.Fatal("reboot broker was not called")
+	}
+}
+
 func TestSystemShutdownQueuesPowerOff(t *testing.T) {
 	called := make(chan struct{}, 1)
 	s := &Server{

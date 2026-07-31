@@ -130,11 +130,6 @@ func (s *Server) runPackInstall(job *jobs.Job, pack catalog.Pack, order []catalo
 				newContainers = append(newContainers, app.ContainerName())
 			}
 		}
-		if err := s.configurePackApp(ctx, job, app); err != nil {
-			rollback()
-			job.Fail(fmt.Errorf("%s installed but %s could not be configured: %w", pack.Name, app.Name, err))
-			return
-		}
 	}
 	if err := s.state.SetPackInstalled(pack.ID, true); err != nil {
 		rollback()
@@ -145,7 +140,10 @@ func (s *Server) runPackInstall(job *jobs.Job, pack catalog.Pack, order []catalo
 	job.Succeed("")
 }
 
-func (s *Server) configurePackApp(ctx context.Context, job *jobs.Job, app catalog.App) error {
+func (s *Server) configureInstalledApp(ctx context.Context, job *jobs.Job, app catalog.App) error {
+	if s.appConfigure != nil {
+		return s.appConfigure(ctx, job, app)
+	}
 	if app.ID != "perplexica" {
 		return nil
 	}
@@ -293,8 +291,12 @@ func (s *Server) runPackUninstall(job *jobs.Job, pack catalog.Pack) {
 		}
 		done := len(order) - index - 1
 		job.ProgressOperation("removing", "Removing "+app.Name, app.Name, operationPercent(done, len(order), 20), done, len(order))
-		if err := s.eng.Remove(ctx, app.ContainerName()); err != nil {
+		if err := s.removeAppRuntime(ctx, app); err != nil {
 			job.Fail(err)
+			return
+		}
+		if err := s.eng.RemoveImage(ctx, s.imageFor(ctx, app)); err != nil {
+			job.Fail(fmt.Errorf("remove %s image: %w", app.Name, err))
 			return
 		}
 	}

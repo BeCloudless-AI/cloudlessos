@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cloudless/orchestrator/internal/localrecipes"
 	"github.com/cloudless/orchestrator/internal/state"
 )
 
@@ -31,6 +32,14 @@ func TestEngineEndpointContractRequiresOpenAIModelAlias(t *testing.T) {
 	}
 	if err := engineModelsResponseError(strings.NewReader(`{"object":"list","data":[{"id":"cloudless"}]}`)); err != nil {
 		t.Fatalf("engineModelsResponseError rejected stable alias: %v", err)
+	}
+}
+
+func TestRecipeCannotOverridePrivateGatewayContract(t *testing.T) {
+	server := &Server{}
+	path, alias := server.activeRecipeGatewaySettings()
+	if path != "/v1" || alias != localrecipes.CloudlessModelAlias {
+		t.Fatalf("private gateway contract = %q %q", path, alias)
 	}
 }
 

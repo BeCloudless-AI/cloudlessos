@@ -1,0 +1,10 @@
+[Unit]
+Description=Attempt one bounded CloudlessOS graphical recovery
+After=cloudless-firstboot.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/lib/cloudless/cloudless-graphical-recovery
+TimeoutStartSec=70
+NoNewPrivileges=true
+UMask=0077

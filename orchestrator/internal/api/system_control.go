@@ -3,20 +3,8 @@ package api
 import (
 	"log"
 	"net/http"
-	"os/exec"
 	"time"
 )
-
-// systemShutdown asks systemd to power off the host. Cloudless is installed as
-// a privileged local service on CloudlessOS, so this fixed command needs no
-// user input or shell interpolation.
-func systemShutdown() error {
-	return exec.Command("systemctl", "poweroff", "--no-wall").Run()
-}
-
-func systemReboot() error {
-	return exec.Command("systemctl", "reboot", "--no-wall").Run()
-}
 
 func (s *Server) systemShutdown(w http.ResponseWriter, r *http.Request) {
 	// A custom header makes this destructive endpoint unavailable to ordinary
@@ -56,7 +44,11 @@ func (s *Server) systemShutdown(w http.ResponseWriter, r *http.Request) {
 			s.power.Flush()
 		}
 		if shutdown == nil {
-			shutdown = systemShutdown
+			log.Printf("system shutdown failed: privileged broker is not configured")
+			s.shutdownMu.Lock()
+			s.shutdownQueued = false
+			s.shutdownMu.Unlock()
+			return
 		}
 		if err := shutdown(); err != nil {
 			log.Printf("system shutdown failed: %v", err)
@@ -87,7 +79,12 @@ func (s *Server) systemReboot(w http.ResponseWriter, r *http.Request) {
 		if s.power != nil {
 			s.power.Flush()
 		}
-		if err := systemReboot(); err != nil {
+		reboot := s.reboot
+		if reboot == nil {
+			log.Printf("system reboot failed: privileged broker is not configured")
+			return
+		}
+		if err := reboot(); err != nil {
 			log.Printf("system reboot failed: %v", err)
 		}
 	}()

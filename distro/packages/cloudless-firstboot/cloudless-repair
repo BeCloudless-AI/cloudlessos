@@ -1,0 +1,127 @@
+#!/bin/sh
+# Deterministic local repair for the Cloudless service/display ownership chain.
+set -u
+
+mode=check
+case "${1:-}" in
+    ""|--check) ;;
+    --repair) mode=repair ;;
+    --help|-h)
+        echo "Usage: cloudless-repair [--check|--repair]"
+        exit 0
+        ;;
+    *) echo "Usage: cloudless-repair [--check|--repair]" >&2; exit 2 ;;
+esac
+
+is_dgx_side_by_side() {
+    { [ -r /etc/dgx-release ] ||
+      { [ -r /sys/devices/virtual/dmi/id/product_name ] &&
+        grep -Eqi 'DGX[[:space:]_-]*Spark|GB10' /sys/devices/virtual/dmi/id/product_name; }; } &&
+        [ ! -e /etc/cloudless/dgx-appliance ]
+}
+
+repair_chain_ready() {
+    systemctl is-active --quiet docker.service || return 1
+    systemctl is-active --quiet cloudlessd.service || return 1
+    curl --silent --fail --max-time 3 http://127.0.0.1:8765/api/health >/dev/null || return 1
+    if ! is_dgx_side_by_side; then
+        systemctl is-active --quiet lightdm.service || return 1
+        [ -S /tmp/.X11-unix/X0 ] || return 1
+        pgrep -u cloudless -f 'openbox|cloudless-kiosk|CloudlessKiosk' >/dev/null 2>&1 || return 1
+        pgrep -u cloudless -f 'chromium|chrome|firefox' >/dev/null 2>&1 || return 1
+    fi
+}
+
+if [ "$mode" = repair ]; then
+    [ "$(id -u)" -eq 0 ] || { echo "Run: sudo cloudless-repair --repair" >&2; exit 1; }
+    echo "Repairing CloudlessOS service and desktop ownership..."
+    getent group cloudless >/dev/null || addgroup --system cloudless
+    getent passwd cloudless >/dev/null ||
+        adduser --system --home /home/cloudless --shell /bin/bash --ingroup cloudless cloudless
+    install -d -o cloudless -g cloudless -m 0750 \
+        /home/cloudless /home/cloudless/.config /home/cloudless/.config/openbox /home/cloudless/.cache
+    install -o cloudless -g cloudless -m 0644 /usr/share/cloudless/openbox-autostart \
+        /home/cloudless/.config/openbox/autostart
+    for path in /home/cloudless/.config /home/cloudless/.cache /home/cloudless/snap; do
+        [ ! -e "$path" ] || chown -R cloudless:cloudless "$path"
+    done
+    if ! ps -u cloudless -o comm= 2>/dev/null | grep -Eq 'chromium|chrome|firefox'; then
+        find /home/cloudless -maxdepth 5 \( -name SingletonLock -o -name SingletonSocket -o -name SingletonCookie \) \
+            -type l -delete 2>/dev/null || true
+    fi
+    systemd-tmpfiles --create /usr/lib/tmpfiles.d/cloudless-browser.conf >/dev/null 2>&1 || true
+    systemctl daemon-reload
+    systemctl enable docker.service cloudlessd.service cloudless-hardware.service >/dev/null 2>&1 || true
+    systemctl is-active --quiet docker.service || systemctl restart docker.service
+    systemctl restart cloudless-hardware.service >/dev/null 2>&1 || true
+    systemctl restart cloudlessd.service
+    if ! is_dgx_side_by_side; then
+        ln -sfn /lib/systemd/system/graphical.target /etc/systemd/system/default.target
+        systemctl enable lightdm.service >/dev/null 2>&1 || true
+        # Restart the display before evaluating it. The former ordering checked
+        # an already-broken LightDM and only restarted it after checks passed.
+        systemctl restart lightdm.service >/dev/null 2>&1 || true
+    fi
+    deadline=$(( $(date +%s) + 45 ))
+    while ! repair_chain_ready && [ "$(date +%s)" -lt "$deadline" ]; do sleep 2; done
+fi
+
+failures=0
+check_service() {
+    if systemctl is-active --quiet "$1"; then
+        echo "PASS  $1 is active"
+    else
+        echo "FAIL  $1 is not active"
+        failures=$((failures + 1))
+    fi
+}
+
+check_service docker.service
+check_service cloudlessd.service
+if ! is_dgx_side_by_side; then
+    check_service lightdm.service
+    if [ -S /tmp/.X11-unix/X0 ]; then
+        echo "PASS  X display socket is ready"
+    else
+        echo "FAIL  X display socket is missing"
+        failures=$((failures + 1))
+    fi
+    if pgrep -u cloudless -f 'openbox|cloudless-kiosk|CloudlessKiosk' >/dev/null 2>&1; then
+        echo "PASS  Cloudless graphical session is running"
+    else
+        echo "FAIL  Cloudless graphical session is not running"
+        failures=$((failures + 1))
+    fi
+    if pgrep -u cloudless -f 'chromium|chrome|firefox' >/dev/null 2>&1; then
+        echo "PASS  Kiosk browser is running"
+    else
+        echo "FAIL  Kiosk browser is not running"
+        failures=$((failures + 1))
+    fi
+fi
+if [ -r /var/lib/cloudless/boot-health.json ]; then
+    echo "INFO  Last graphical boot audit:"
+    sed 's/^/      /' /var/lib/cloudless/boot-health.json
+fi
+if curl --silent --fail --max-time 5 http://127.0.0.1:8765/api/health >/dev/null; then
+    echo "PASS  Cloudless API is healthy"
+else
+    echo "FAIL  Cloudless API is not healthy"
+    failures=$((failures + 1))
+fi
+owner="$(stat -c '%U:%G' /home/cloudless/.config 2>/dev/null || true)"
+if [ "$owner" = cloudless:cloudless ]; then
+    echo "PASS  Browser profile ownership is correct"
+else
+    echo "FAIL  Browser profile ownership is ${owner:-missing}; expected cloudless:cloudless"
+    failures=$((failures + 1))
+fi
+
+if [ "$mode" = repair ] && [ "$failures" -eq 0 ]; then
+    systemctl restart --no-block cloudless-firstboot.service >/dev/null 2>&1 || true
+fi
+if [ "$failures" -ne 0 ]; then
+    echo "Repair is incomplete. Run cloudless-diagnostics and include its output in a support request." >&2
+    exit 1
+fi
+echo "CloudlessOS service and desktop checks passed."

@@ -11,8 +11,11 @@ KEY="${CLOUDLESS_ARCHIVE_KEY:-$DISTRO/release/keys/cloudless-archive-keyring.pgp
 FINGERPRINT_FILE="${CLOUDLESS_ARCHIVE_FINGERPRINT_FILE:-$DISTRO/release/keys/cloudless-archive-fingerprint.txt}"
 NOTES="${CLOUDLESS_RELEASE_NOTES:-$DISTRO/release/notes/$VERSION.json}"
 APP_MANIFEST="${CLOUDLESS_APP_MANIFEST:-$DISTRO/release/manifests/cloudless-apps-manifest.json}"
+MODEL_MANIFEST="${CLOUDLESS_MODEL_MANIFEST:-$ROOT/docs/cloudless-models.json}"
+DIFFUSION_MANIFEST="${CLOUDLESS_DIFFUSION_MANIFEST:-$ROOT/docs/cloudless-diffusion.json}"
 DGX_INSTALLER="${CLOUDLESS_DGX_INSTALLER:-$DISTRO/scripts/install-dgx-spark.sh}"
 RELEASE_GATES="${CLOUDLESS_RELEASE_GATES:-$DISTRO/out/release-gates.json}"
+SBOM="${CLOUDLESS_SBOM:-$DISTRO/out/security/cloudless-$VERSION.spdx.json}"
 SOURCE_COMMIT="${CLOUDLESS_SOURCE_COMMIT:-$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || true)}"
 PACKAGES=(cloudless-orchestrator cloudless-shell cloudless-branding cloudless-hardware cloudless-firstboot cloudless-updater)
 read -r -a ARCHES <<< "${CLOUDLESS_ARCHES:-amd64 arm64}"
@@ -29,11 +32,13 @@ case "$CHANNEL" in stable|beta) ;; *) echo "Channel must be stable or beta" >&2;
 for arch in "${ARCHES[@]}"; do
     case "$arch" in amd64|arm64) ;; *) echo "Unsupported release architecture: $arch" >&2; exit 2 ;; esac
 done
-for command in curl dpkg dpkg-deb gpg gpgv python3 reprepro sha256sum; do command -v "$command" >/dev/null || { echo "Missing command: $command" >&2; exit 1; }; done
+for command in curl dpkg dpkg-deb go gpg gpgv python3 reprepro sha256sum; do command -v "$command" >/dev/null || { echo "Missing command: $command" >&2; exit 1; }; done
 test -s "$KEY" || { echo "Initialize the archive signing key first." >&2; exit 1; }
 test -s "$FINGERPRINT_FILE" || { echo "Missing archive fingerprint file." >&2; exit 1; }
 test -s "$NOTES" || { echo "Missing release notes: $NOTES" >&2; exit 1; }
 test -s "$APP_MANIFEST" || { echo "Missing application manifest: $APP_MANIFEST" >&2; exit 1; }
+test -s "$MODEL_MANIFEST" || { echo "Missing model manifest: $MODEL_MANIFEST" >&2; exit 1; }
+test -s "$DIFFUSION_MANIFEST" || { echo "Missing diffusion manifest: $DIFFUSION_MANIFEST" >&2; exit 1; }
 test -s "$DGX_INSTALLER" || { echo "Missing DGX Spark installer: $DGX_INSTALLER" >&2; exit 1; }
 test -s "$RELEASE_GATES" || { echo "Missing release-gate attestation. Run distro/scripts/release.sh so every required gate executes before signing." >&2; exit 1; }
 [[ "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]] || {
@@ -75,6 +80,9 @@ fi
 for arch in "${ARCHES[@]}"; do
     CLOUDLESS_VERSION="$VERSION" CLOUDLESS_ARCH="$arch" CLOUDLESS_PACKAGE_OUT="$PACKAGE_OUT" "$DISTRO/scripts/build-packages.sh"
 done
+CLOUDLESS_SBOM_PACKAGE_DIR="$PACKAGE_OUT" CLOUDLESS_SOURCE_COMMIT="$SOURCE_COMMIT" \
+    python3 "$DISTRO/scripts/generate-sbom.py" "$VERSION" "$SBOM"
+test -s "$SBOM" || { echo "Final release SBOM was not generated: $SBOM" >&2; exit 1; }
 
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
@@ -113,10 +121,11 @@ fetch_remote_baseline() {
         target="$work/baseline/$arch/$(basename "$filename")"
         curl -fsS "$BASE_URL/$filename" -o "$target" || return 1
         printf '%s  %s\n' "$checksum" "$target" | sha256sum --check --status || return 1
+        printf '%s\n' "$filename" > "$target.filename"
     done
 }
 
-declare -A REMOTE_BASELINE PREVIOUS_DEB PREVIOUS_VERSION CHANGED
+declare -A REMOTE_BASELINE PREVIOUS_DEB PREVIOUS_FILENAME PREVIOUS_VERSION CHANGED
 for arch in "${ARCHES[@]}"; do
     # The signed public repository is the release baseline. A local repository
     # can contain packages left behind by an interrupted or repeated signing
@@ -148,6 +157,7 @@ for arch in "${ARCHES[@]}"; do
         test -s "$candidate" || { echo "Missing candidate package: $candidate" >&2; exit 1; }
         if [ -n "$previous" ]; then
             PREVIOUS_DEB[$key]="$previous"
+            PREVIOUS_FILENAME[$key]="$(cat "$previous.filename")"
             PREVIOUS_VERSION[$key]="$(dpkg-deb -f "$previous" Version)"
             if bash "$DISTRO/scripts/package-content-equal.sh" "$previous" "$candidate"; then
                 echo "==> Unchanged: $package/$arch (${PREVIOUS_VERSION[$key]})"
@@ -210,23 +220,57 @@ for arch in "${ARCHES[@]}"; do
     done
 done
 
-changes_file="$work/changed-packages.tsv"
+packages_file="$work/packages.tsv"
 for arch in "${ARCHES[@]}"; do
     for package in "${PACKAGES[@]}"; do
         key="$arch/$package"
+        candidate="$PACKAGE_OUT/${package}_${VERSION}_${arch}.deb"
         if ${CHANGED[$key]}; then
-            printf '%s\t%s\t%s\t%s\n' "$package" "$arch" "${PREVIOUS_VERSION[$key]:-}" "$VERSION" >> "$changes_file"
+            current_version="$VERSION"
+            current_deb="$candidate"
+            changed=true
+        else
+            current_version="${PREVIOUS_VERSION[$key]}"
+            current_deb="${PREVIOUS_DEB[$key]}"
+            changed=false
         fi
+        current_pool="$(find "$REPO/pool" -type f -name "$(basename "$current_deb")" -print -quit)"
+        test -s "$current_pool" || { echo "Current package is missing from repository: $package/$arch" >&2; exit 1; }
+        current_filename="${current_pool#"$REPO"/}"
+        rollback_version=""
+        rollback_filename=""
+        rollback_hash=""
+        rollback_size=""
+        if $changed && [ -n "${PREVIOUS_DEB[$key]:-}" ]; then
+            rollback_version="${PREVIOUS_VERSION[$key]}"
+            rollback_filename="${PREVIOUS_FILENAME[$key]}"
+            rollback_hash="$(sha256sum "${PREVIOUS_DEB[$key]}" | awk '{print $1}')"
+            rollback_size="$(wc -c < "${PREVIOUS_DEB[$key]}" | tr -d '[:space:]')"
+        fi
+        printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+            "$package" "$arch" "$current_version" "$changed" "$current_filename" \
+            "$(sha256sum "$current_pool" | awk '{print $1}')" \
+            "$(wc -c < "$current_pool" | tr -d '[:space:]')" \
+            "$rollback_version" "$rollback_filename" "$rollback_hash" "$rollback_size" \
+            >> "$packages_file"
     done
 done
 install -d "$REPO/releases"
 artifacts_dir="$REPO/artifacts/$VERSION"
 rm -rf "$artifacts_dir"
 install -d "$artifacts_dir"
+(
+    cd "$ROOT/orchestrator"
+    go run ./cmd/cloudless-trust-inventory -source-commit "$SOURCE_COMMIT"
+) > "$work/cloudless-trust-inventory.json"
 install -m 0755 "$DGX_INSTALLER" "$artifacts_dir/install-dgx-spark.sh"
 install -m 0644 "$APP_MANIFEST" "$artifacts_dir/cloudless-apps-manifest.json"
+install -m 0644 "$MODEL_MANIFEST" "$artifacts_dir/cloudless-models.json"
+install -m 0644 "$DIFFUSION_MANIFEST" "$artifacts_dir/cloudless-diffusion.json"
+install -m 0644 "$SBOM" "$artifacts_dir/cloudless-$VERSION.spdx.json"
+install -m 0644 "$work/cloudless-trust-inventory.json" "$artifacts_dir/cloudless-trust-inventory.json"
 artifacts_file="$work/artifacts.tsv"
-for artifact in install-dgx-spark.sh cloudless-apps-manifest.json; do
+for artifact in install-dgx-spark.sh cloudless-apps-manifest.json cloudless-models.json cloudless-diffusion.json "cloudless-$VERSION.spdx.json" cloudless-trust-inventory.json; do
     file="$artifacts_dir/$artifact"
     signature="$file.asc"
     gpg --batch --yes --local-user "$fingerprint" --armor --detach-sign \
@@ -241,16 +285,38 @@ for artifact in install-dgx-spark.sh cloudless-apps-manifest.json; do
         >> "$artifacts_file"
 done
 manifest="$REPO/releases/$VERSION.json"
-python3 - "$NOTES" "$changes_file" "$artifacts_file" "$RELEASE_GATES" "$manifest" "$VERSION" "$CHANNEL" "$SOURCE_COMMIT" "$(date -u +%FT%TZ)" <<'PY'
+python3 - "$NOTES" "$packages_file" "$artifacts_file" "$RELEASE_GATES" "$manifest" "$VERSION" "$CHANNEL" "$SOURCE_COMMIT" "$(date -u +%FT%TZ)" <<'PY'
 import json, sys
-notes_path, changes_path, artifacts_path, gates_path, output, version, channel, source_commit, published_at = sys.argv[1:]
+notes_path, packages_path, artifacts_path, gates_path, output, version, channel, source_commit, published_at = sys.argv[1:]
 with open(notes_path, encoding="utf-8") as handle:
     notes = json.load(handle)
 packages = []
-with open(changes_path, encoding="utf-8") as handle:
+rollback_packages = []
+with open(packages_path, encoding="utf-8") as handle:
     for line in handle:
-        name, architecture, previous, current = line.rstrip("\n").split("\t")
-        packages.append({"name": name, "architecture": architecture, "from": previous, "to": current})
+        fields = line.rstrip("\n").split("\t")
+        if len(fields) != 11:
+            raise SystemExit("invalid package inventory record")
+        name, architecture, current, changed, filename, sha256, size, previous, previous_filename, previous_sha256, previous_size = fields
+        rollback = None
+        if previous:
+            rollback = {
+                "version": previous,
+                "filename": previous_filename,
+                "sha256": previous_sha256,
+                "size": int(previous_size),
+            }
+            rollback_packages.append({"name": name, "architecture": architecture, **rollback})
+        packages.append({
+            "name": name,
+            "architecture": architecture,
+            "version": current,
+            "changed": changed == "true",
+            "filename": filename,
+            "sha256": sha256,
+            "size": int(size),
+            "rollback": rollback,
+        })
 artifacts = []
 with open(artifacts_path, encoding="utf-8") as handle:
     for line in handle:
@@ -267,6 +333,7 @@ with open(artifacts_path, encoding="utf-8") as handle:
 with open(gates_path, encoding="utf-8") as handle:
     validation = json.load(handle)
 manifest = {
+    "schema": "cloudless.release.v2",
     "version": version,
     "channel": channel,
     "sourceCommit": source_commit,
@@ -275,6 +342,12 @@ manifest = {
     "summary": str(notes.get("summary", "")).strip(),
     "changes": [item.strip() for item in notes["changes"]],
     "packages": packages,
+    "rollbackPackages": rollback_packages,
+    "compatibility": {
+        "schema": "cloudless.compatibility.v1",
+        "matrixSha256": validation["matrixSha256"],
+        "targets": validation["targets"],
+    },
     "artifacts": artifacts,
     "validation": validation,
 }
@@ -298,6 +371,8 @@ if ! grep -Fqx 'Acquire-By-Hash: yes' "$release"; then
 fi
 manifest_hash="$(sha256sum "$REPO/dists/$CHANNEL/cloudless-release.json" | awk '{print $1}')"
 manifest_size="$(wc -c < "$REPO/dists/$CHANNEL/cloudless-release.json" | tr -d '[:space:]')"
+install -Dm0644 "$REPO/dists/$CHANNEL/cloudless-release.json" \
+    "$REPO/dists/$CHANNEL/by-hash/SHA256/$manifest_hash"
 sed -i '/ cloudless-release\.json$/d' "$release"
 sed -i "/^SHA256:/a\\ $manifest_hash $manifest_size cloudless-release.json" "$release"
 rm -f "$release.gpg" "$REPO/dists/$CHANNEL/InRelease"

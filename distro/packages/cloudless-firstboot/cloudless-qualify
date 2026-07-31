@@ -1,0 +1,704 @@
+#!/usr/bin/python3
+"""Create and validate tamper-evident CloudlessOS physical qualification evidence."""
+
+from __future__ import annotations
+
+import argparse
+import datetime as dt
+import hashlib
+import json
+import os
+import platform
+import re
+import shlex
+import shutil
+import socket
+import subprocess
+import sys
+import tempfile
+import urllib.request
+import zipfile
+from pathlib import Path
+
+SCHEMA = "cloudless.physical-evidence.v1"
+CHECK_SCHEMA = "cloudless.physical-check.v1"
+DEFAULT_MATRIX = Path("/usr/share/cloudless/physical-validation-matrix.json")
+DEFAULT_UPDATE_STATUS = Path("/var/lib/cloudless-updater/status.json")
+MAX_EVIDENCE_BYTES = 64 * 1024 * 1024
+VERSION_RE = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+(?:[-+~][0-9A-Za-z][0-9A-Za-z.+~_-]*)?$")
+COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
+SECRET_PATTERNS = [
+    re.compile(pattern, re.IGNORECASE)
+    for pattern in (
+        r"\bauthorization\s*:",
+        r"\bbearer\s+[A-Za-z0-9._~+/=-]{8,}",
+        r"\b(?:password|passwd|token|secret|private[_ -]?key)\s*[:=]\s*\S+",
+        r"\b(?:github_pat_|gh[pousr]_|cfat_)[A-Za-z0-9_-]{8,}",
+        r"\bAKIA[0-9A-Z]{16}\b",
+    )
+]
+
+
+def utc_now() -> str:
+    return dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def atomic_json(path: Path, payload: object) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2, sort_keys=True)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.chmod(name, 0o600)
+        os.replace(name, path)
+    finally:
+        try:
+            os.unlink(name)
+        except FileNotFoundError:
+            pass
+
+
+def load_json(path: Path) -> dict:
+    with path.open(encoding="utf-8") as handle:
+        value = json.load(handle)
+    if not isinstance(value, dict):
+        raise ValueError(f"{path} does not contain a JSON object")
+    return value
+
+
+def load_matrix(path: Path) -> dict:
+    matrix = load_json(path)
+    if matrix.get("schema") != "cloudless.physical-validation.v1":
+        raise ValueError("unsupported physical qualification matrix")
+    ids = [target.get("id") for target in matrix.get("targets", [])]
+    if not ids or len(ids) != len(set(ids)):
+        raise ValueError("physical qualification target IDs are missing or duplicated")
+    for field in ("requiredChecks", "clusterChecks", "clusterFailureDomains", "inferenceLifecyclePhases"):
+        values = matrix.get(field, [])
+        if not isinstance(values, list) or any(not re.fullmatch(r"[a-z0-9-]+", str(value)) for value in values):
+            raise ValueError(f"physical qualification {field} must contain normalized names")
+        if len(values) != len(set(values)):
+            raise ValueError(f"physical qualification {field} contains duplicates")
+    failure_targets = [target for target in matrix.get("targets", []) if target.get("failureMatrix")]
+    if failure_targets and (
+        not matrix.get("clusterFailureDomains") or not matrix.get("inferenceLifecyclePhases")
+    ):
+        raise ValueError("failure-matrix targets require failure domains and lifecycle phases")
+    return matrix
+
+
+def target_by_id(matrix: dict, target_id: str) -> dict:
+    for target in matrix.get("targets", []):
+        if target.get("id") == target_id:
+            return target
+    raise ValueError(f"unknown qualification target: {target_id}")
+
+
+def expected_machine_arch(architecture: str) -> set[str]:
+    return {"x86_64", "amd64"} if architecture == "amd64" else {"aarch64", "arm64"}
+
+
+def detect_dgx() -> bool:
+    if Path("/etc/dgx-release").is_file():
+        return True
+    product = Path("/sys/devices/virtual/dmi/id/product_name")
+    try:
+        return bool(re.search(r"DGX[\s_-]*Spark|GB10", product.read_text(encoding="utf-8"), re.I))
+    except OSError:
+        return False
+
+
+def detect_virtualbox() -> bool:
+    values = []
+    for name in ("product_name", "sys_vendor", "board_vendor"):
+        try:
+            values.append(Path("/sys/devices/virtual/dmi/id", name).read_text(encoding="utf-8"))
+        except OSError:
+            pass
+    return "virtualbox" in " ".join(values).lower()
+
+
+def detect_nvidia() -> bool:
+    try:
+        return subprocess.run(
+            ["nvidia-smi"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10, check=False
+        ).returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
+def verify_target_machine(target: dict, machine_arch: str | None = None, machine_kind: str | None = None) -> None:
+    actual_arch = (machine_arch or platform.machine()).lower()
+    if actual_arch not in expected_machine_arch(str(target.get("architecture"))):
+        raise ValueError(
+            f"target expects {target.get('architecture')}, but this machine reports {actual_arch}"
+        )
+    expected_platform = target.get("platform")
+    if machine_kind is None:
+        if detect_dgx():
+            machine_kind = "dgx-spark"
+        elif detect_virtualbox():
+            machine_kind = "virtualbox"
+        elif detect_nvidia():
+            machine_kind = "generic-nvidia"
+        else:
+            machine_kind = "unsupported"
+    if machine_kind != expected_platform:
+        raise ValueError(f"target expects {expected_platform}, but this machine is {machine_kind}")
+
+
+def installed_source_commit(version: str, status_path: Path | None = None) -> str:
+    path = status_path or Path(os.environ.get("CLOUDLESS_UPDATE_STATUS", DEFAULT_UPDATE_STATUS))
+    try:
+        status = load_json(path)
+    except FileNotFoundError as exc:
+        raise ValueError(
+            "source commit was not provided and no verified updater identity is available"
+        ) from exc
+    if status.get("currentVersion") != version:
+        raise ValueError(
+            f"updater identity describes {status.get('currentVersion') or 'no installed version'}, "
+            f"not {version}"
+        )
+    commit = str(status.get("currentSourceCommit", "")).strip().lower()
+    if not COMMIT_RE.fullmatch(commit):
+        raise ValueError("updater state does not contain a verified installed source commit")
+    return commit
+
+
+def begin_campaign(
+    matrix_path: Path,
+    target_id: str,
+    version: str,
+    commit: str | None,
+    output: Path,
+    operator: str,
+    *,
+    machine_arch: str | None = None,
+    machine_kind: str | None = None,
+) -> Path:
+    matrix = load_matrix(matrix_path)
+    target = target_by_id(matrix, target_id)
+    version = version.strip()
+    commit = commit.strip().lower() if commit else installed_source_commit(version)
+    operator = operator.strip()
+    if not VERSION_RE.fullmatch(version):
+        raise ValueError("version must be a semantic CloudlessOS version")
+    if not COMMIT_RE.fullmatch(commit):
+        raise ValueError("source commit must be the full 40-character Git commit")
+    if not operator or len(operator) > 128:
+        raise ValueError("operator name is required and must be at most 128 characters")
+    reject_secrets(operator)
+    verify_target_machine(target, machine_arch, machine_kind)
+    if output.is_symlink():
+        raise ValueError("qualification output must not be a symlink")
+    if output.exists() and any(output.iterdir()):
+        raise ValueError(f"qualification directory is not empty: {output}")
+    output.mkdir(parents=True, mode=0o700, exist_ok=True)
+    os.chmod(output, 0o700)
+    payload = {
+        "schema": SCHEMA,
+        "target": target,
+        "version": version,
+        "sourceCommit": commit,
+        "operator": operator,
+        "startedAt": utc_now(),
+        "matrixSha256": sha256_file(matrix_path),
+        "machine": {
+            "architecture": (machine_arch or platform.machine()).lower(),
+            "hostnameHash": hashlib.sha256(socket.gethostname().encode()).hexdigest()[:16],
+        },
+    }
+    atomic_json(output / "campaign.json", payload)
+    (output / "checks").mkdir(mode=0o700)
+    (output / "boots").mkdir(mode=0o700)
+    (output / "evidence").mkdir(mode=0o700)
+    return output
+
+
+def verify_campaign_layout(campaign: Path) -> None:
+    if campaign.is_symlink() or not campaign.is_dir():
+        raise ValueError("qualification campaign must be a real directory")
+    campaign_root = campaign.resolve()
+    for name in ("checks", "boots", "evidence"):
+        path = campaign / name
+        if path.is_symlink() or not path.is_dir():
+            raise ValueError(f"qualification {name} path must be a real directory")
+        try:
+            path.resolve().relative_to(campaign_root)
+        except ValueError as exc:
+            raise ValueError(f"qualification {name} path escapes the campaign") from exc
+
+
+def campaign_target(campaign: Path, matrix: dict) -> dict:
+    verify_campaign_layout(campaign)
+    manifest = load_json(campaign / "campaign.json")
+    if manifest.get("schema") != SCHEMA:
+        raise ValueError("unsupported qualification evidence schema")
+    target = target_by_id(matrix, str(manifest.get("target", {}).get("id", "")))
+    if manifest.get("target") != target:
+        raise ValueError("campaign target no longer matches the qualification matrix")
+    return target
+
+
+def applicable_checks(matrix: dict, target: dict) -> list[str]:
+    checks = list(matrix.get("requiredChecks", []))
+    if int(target.get("nodes", 0)) >= 2:
+        checks.extend(matrix.get("clusterChecks", []))
+    if target.get("failureMatrix"):
+        checks.extend(
+            f"cluster-failure--{failure}--{phase}"
+            for failure in matrix.get("clusterFailureDomains", [])
+            for phase in matrix.get("inferenceLifecyclePhases", [])
+        )
+    return checks
+
+
+CHECK_GUIDANCE = {
+    "clean-install": "Install this exact candidate from clean media and retain the installer result plus the first successful boot screen.",
+    "ten-boot-cycles": "Cold boot or restart the machine, then record each distinct boot. Ten different kernel boot IDs are required.",
+    "graphical-session": "Prove the Cloudless desktop appears without switching to a text console or manually restarting the display manager.",
+    "display-and-scale": "Exercise resolution and UI-scale changes, confirm the new display, and prove automatic rollback for an unconfirmed change.",
+    "locale-and-timezone": "Change locale/region and timezone, then retain the desktop clock and system setting after a reboot.",
+    "power-controls": "Exercise both Restart and Shutdown from the Cloudless confirmation dialog.",
+    "virtual-keyboard": "Use the Cloudless virtual keyboard in native inputs and a same-origin embedded application.",
+    "browser-and-terminal": "Open, minimize, restore and reuse browser and terminal sessions without losing their state.",
+    "app-lifecycle": "Install, open, restart, update and uninstall a representative published app while preserving its declared persistent data.",
+    "model-load-switch-abort": "Load a model, switch engines or models, Abort during preparation, then prove cleanup and a subsequent successful load.",
+    "update-and-rollback": "Upgrade this candidate with a model active, interrupt one durable preparation, and prove signed rollback plus retained model data.",
+    "backup-and-restore": "Create and verify an encrypted backup, change control-plane state, restore it, reboot and retain before/after diagnostics.",
+    "support-bundle": "Generate a redacted support bundle and review it before retaining it as evidence.",
+    "discover-and-enroll": "Discover and enroll the exact selected Spark nodes, retaining their identity and topology without credentials.",
+    "fabric-and-ssh-preflight": "Prove physical link, management reachability, restricted SSH identity and private-fabric health separately.",
+    "selected-topology": "Select this campaign's exact node count and prove standby nodes are excluded from distributed inference.",
+    "distributed-model-load": "Load the reviewed distributed model and retain per-node download, weight-load, optimization and readiness evidence.",
+    "peer-loss": "After a healthy baseline, remove one selected peer and prove Cloudless fails readiness closed and exposes recovery.",
+    "disconnect-and-reconnect": "Stop distributed work, disconnect cleanly, reconnect and prove no stranded worker or repeated model download.",
+    "cluster-credential-rebind": "Change a worker management address and prove fingerprint-bound rebind; verify role reversal is rejected.",
+}
+
+
+def check_guidance(check: str) -> str:
+    if check.startswith("cluster-failure--"):
+        _, failure, phase = check.split("--", 2)
+        return (
+            f"Record a healthy two-Spark baseline, start an inference operation and wait for the "
+            f"{phase!r} phase. Inject only the {failure!r} condition, then retain the operation ID, "
+            "both node states and proof that Cloudless either recovers or reports a truthful "
+            "degraded state with Abort available. Restore health before the next case."
+        )
+    return CHECK_GUIDANCE.get(check, "Exercise this check and retain enough redacted evidence for an independent reviewer to reproduce the conclusion.")
+
+
+def qualification_plan(campaign: Path, matrix_path: Path) -> list[dict]:
+    matrix = load_matrix(matrix_path)
+    target = campaign_target(campaign, matrix)
+    errors = validate_campaign(campaign, matrix_path)
+    plan = []
+    for check in applicable_checks(matrix, target):
+        related = [error for error in errors if error.startswith(f"{check}:")]
+        result_path = campaign / "checks" / f"{check}.json"
+        if not related:
+            status = "pass"
+        elif check == "ten-boot-cycles" or not result_path.exists():
+            status = "pending"
+        else:
+            try:
+                result = load_json(result_path)
+                status = "fail" if result.get("status") == "fail" else "attention"
+            except (OSError, ValueError, json.JSONDecodeError):
+                status = "attention"
+        plan.append({"check": check, "status": status, "guidance": check_guidance(check), "errors": related})
+    return plan
+
+
+def print_plan(campaign: Path, matrix_path: Path, *, only_next: bool = False, as_json: bool = False) -> int:
+    plan = qualification_plan(campaign, matrix_path)
+    visible = plan
+    if only_next:
+        visible = [next((item for item in plan if item["status"] != "pass"), {"status": "complete"})]
+    if as_json:
+        print(json.dumps(visible, indent=2, sort_keys=True))
+        return 0
+    if only_next and visible[0].get("status") == "complete":
+        print("All qualification checks are recorded and valid. Run `cloudless-qualify status` to seal the result.")
+        return 0
+    if only_next:
+        item = visible[0]
+        check = item["check"]
+        print(f"NEXT: {check} [{item['status'].upper()}]")
+        print(item["guidance"])
+        if item["errors"]:
+            for error in item["errors"]:
+                print(f"  - {error}")
+        quoted_campaign = shlex.quote(str(campaign))
+        if check == "ten-boot-cycles":
+            print(f"After this boot: sudo cloudless-qualify boot {quoted_campaign}")
+        else:
+            print("After collecting redacted evidence:")
+            print(
+                f"  sudo cloudless-qualify record {quoted_campaign} {shlex.quote(check)} pass "
+                '--note "What you observed" --evidence /path/to/evidence'
+            )
+        return 0
+    for item in visible:
+        marker = {"pass": "PASS", "pending": "TODO", "fail": "FAIL", "attention": "CHECK"}[item["status"]]
+        print(f"[{marker:5}] {item['check']}")
+    passed = sum(item["status"] == "pass" for item in plan)
+    print(f"\n{passed}/{len(plan)} checks complete. Run `cloudless-qualify next {shlex.quote(str(campaign))}` for instructions.")
+    return 0
+
+
+def reject_secrets(value: str) -> None:
+    if any(pattern.search(value) for pattern in SECRET_PATTERNS):
+        raise ValueError("qualification text appears to contain a credential or private key")
+
+
+def inspect_zip_evidence(path: Path) -> None:
+    try:
+        with zipfile.ZipFile(path) as archive:
+            for member in archive.infolist():
+                member_path = Path(member.filename)
+                if member_path.is_absolute() or ".." in member_path.parts:
+                    raise ValueError(f"ZIP evidence contains an unsafe member: {member.filename}")
+                if member.is_dir() or member.file_size > 2 * 1024 * 1024:
+                    continue
+                payload = archive.read(member)
+                if b"\x00" not in payload:
+                    reject_secrets(payload.decode("utf-8", errors="replace"))
+    except zipfile.BadZipFile as exc:
+        raise ValueError(f"ZIP evidence is malformed: {path}") from exc
+
+
+def copy_evidence(campaign: Path, check: str, source: Path) -> dict:
+    source = source.resolve(strict=True)
+    info = source.stat()
+    if not source.is_file() or source.is_symlink():
+        raise ValueError(f"evidence must be a regular non-symlink file: {source}")
+    if info.st_size <= 0 or info.st_size > MAX_EVIDENCE_BYTES:
+        raise ValueError(f"evidence size is outside the supported range: {source}")
+    if source.suffix.lower() == ".zip":
+        inspect_zip_evidence(source)
+    with source.open("rb") as handle:
+        sample = handle.read(2 * 1024 * 1024)
+    if b"\x00" not in sample:
+        reject_secrets(sample.decode("utf-8", errors="replace"))
+    digest = sha256_file(source)
+    destination_dir = campaign / "evidence" / check
+    destination_dir.mkdir(parents=True, mode=0o700, exist_ok=True)
+    safe_name = re.sub(r"[^A-Za-z0-9._-]", "_", source.name)[:120] or "evidence"
+    destination = destination_dir / f"{digest[:12]}-{safe_name}"
+    if not destination.exists():
+        shutil.copyfile(source, destination)
+        os.chmod(destination, 0o600)
+    return {
+        "path": destination.relative_to(campaign).as_posix(),
+        "sha256": digest,
+        "bytes": info.st_size,
+    }
+
+
+def record_check(
+    campaign: Path,
+    matrix_path: Path,
+    check: str,
+    status: str,
+    note: str,
+    evidence_paths: list[Path],
+) -> None:
+    matrix = load_matrix(matrix_path)
+    target = campaign_target(campaign, matrix)
+    if check not in applicable_checks(matrix, target):
+        raise ValueError(f"check is not applicable to {target.get('id')}: {check}")
+    if check == "ten-boot-cycles":
+        raise ValueError("ten-boot-cycles is computed from unique kernel boot IDs and cannot be attested")
+    if status not in {"pass", "fail"}:
+        raise ValueError("check status must be pass or fail")
+    note = note.strip()
+    if len(note) < 3 or len(note) > 2000:
+        raise ValueError("check note must contain 3 through 2000 characters")
+    reject_secrets(note)
+    if not evidence_paths:
+        raise ValueError("every physical check requires at least one evidence file")
+    evidence = [copy_evidence(campaign, check, path) for path in evidence_paths]
+    atomic_json(
+        campaign / "checks" / f"{check}.json",
+        {
+            "schema": CHECK_SCHEMA,
+            "check": check,
+            "status": status,
+            "note": note,
+            "recordedAt": utc_now(),
+            "evidence": evidence,
+        },
+    )
+
+
+def current_boot_id() -> str:
+    value = Path("/proc/sys/kernel/random/boot_id").read_text(encoding="ascii").strip().lower()
+    if not re.fullmatch(r"[0-9a-f-]{36}", value):
+        raise ValueError("kernel boot ID is unavailable or malformed")
+    return value
+
+
+def record_boot(campaign: Path, boot_id: str | None = None, recorded_at: str | None = None) -> bool:
+    verify_campaign_layout(campaign)
+    boot_id = (boot_id or current_boot_id()).strip().lower()
+    if not re.fullmatch(r"[0-9a-f-]{36}", boot_id):
+        raise ValueError("boot ID is malformed")
+    destination = campaign / "boots" / f"{boot_id}.json"
+    if destination.exists():
+        return False
+    atomic_json(
+        destination,
+        {"schema": "cloudless.physical-boot.v1", "bootId": boot_id, "recordedAt": recorded_at or utc_now()},
+    )
+    return True
+
+
+def run_capture(command: list[str], timeout: int = 20) -> str:
+    try:
+        completed = subprocess.run(command, capture_output=True, text=True, timeout=timeout, check=False)
+        output = f"$ {' '.join(command)}\n{completed.stdout}{completed.stderr}\nexit={completed.returncode}\n"
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        output = f"$ {' '.join(command)}\nerror={type(exc).__name__}: {exc}\n"
+    for pattern in SECRET_PATTERNS:
+        output = pattern.sub("[REDACTED]", output)
+    return output
+
+
+def collect_read_only(campaign: Path) -> Path:
+    commands = [
+        ["uname", "-a"],
+        ["dpkg", "--print-architecture"],
+        ["dpkg-query", "-W", "-f=${Package}\\t${Version}\\n", "cloudless-*"],
+        ["systemctl", "get-default"],
+        ["systemctl", "is-active", "cloudlessd", "cloudless-engine", "cloudless-privileged", "docker"],
+        ["nvidia-smi", "--query-gpu=name,driver_version,memory.total", "--format=csv,noheader"],
+        ["df", "-hT", "/var/lib/cloudless"],
+    ]
+    payload = f"CloudlessOS qualification collection\nGenerated: {utc_now()}\n\n"
+    payload += "\n".join(run_capture(command) for command in commands)
+    destination = campaign / "evidence" / "machine-read-only.txt"
+    destination.write_text(payload, encoding="utf-8")
+    os.chmod(destination, 0o600)
+    return destination
+
+
+def collect_support_bundle(campaign: Path) -> Path:
+    request = urllib.request.Request(
+        "http://127.0.0.1:8765/api/system/doctor/bundle",
+        method="POST",
+        headers={"X-Cloudless-Action": "support-bundle"},
+    )
+    with urllib.request.urlopen(request, timeout=60) as response:
+        payload = response.read(MAX_EVIDENCE_BYTES + 1)
+    if len(payload) > MAX_EVIDENCE_BYTES or not payload.startswith(b"PK"):
+        raise ValueError("support bundle is missing, too large or not a ZIP archive")
+    destination = campaign / "evidence" / "cloudless-support.zip"
+    destination.write_bytes(payload)
+    os.chmod(destination, 0o600)
+    return destination
+
+
+def validate_campaign(campaign: Path, matrix_path: Path) -> list[str]:
+    errors: list[str] = []
+    try:
+        matrix = load_matrix(matrix_path)
+        manifest = load_json(campaign / "campaign.json")
+        target = campaign_target(campaign, matrix)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        return [str(exc)]
+    if manifest.get("matrixSha256") != sha256_file(matrix_path):
+        errors.append("campaign matrix digest does not match the authoritative matrix")
+    if not VERSION_RE.fullmatch(str(manifest.get("version", ""))):
+        errors.append("campaign version is invalid")
+    if not COMMIT_RE.fullmatch(str(manifest.get("sourceCommit", ""))):
+        errors.append("campaign source commit is invalid")
+    boot_files = list((campaign / "boots").glob("*.json"))
+    minimum_boots = int(matrix.get("minimumBootCycles", 10))
+    if len(boot_files) < minimum_boots:
+        errors.append(f"ten-boot-cycles: {len(boot_files)}/{minimum_boots} unique boots recorded")
+    for boot_path in boot_files:
+        try:
+            boot = load_json(boot_path)
+        except (OSError, ValueError, json.JSONDecodeError):
+            errors.append(f"ten-boot-cycles: malformed boot evidence {boot_path.name}")
+            continue
+        if (
+            boot.get("schema") != "cloudless.physical-boot.v1"
+            or boot.get("bootId") != boot_path.stem
+            or not re.fullmatch(r"[0-9a-f-]{36}", str(boot.get("bootId", "")))
+            or not str(boot.get("recordedAt", "")).endswith("Z")
+        ):
+            errors.append(f"ten-boot-cycles: invalid boot evidence {boot_path.name}")
+    for check in applicable_checks(matrix, target):
+        if check == "ten-boot-cycles":
+            continue
+        path = campaign / "checks" / f"{check}.json"
+        try:
+            result = load_json(path)
+        except (OSError, ValueError, json.JSONDecodeError):
+            errors.append(f"{check}: result is missing or malformed")
+            continue
+        if result.get("schema") != CHECK_SCHEMA or result.get("check") != check:
+            errors.append(f"{check}: result identity is invalid")
+        if result.get("status") != "pass":
+            errors.append(f"{check}: status is {result.get('status', 'missing')}")
+        evidence = result.get("evidence")
+        if not isinstance(evidence, list) or not evidence:
+            errors.append(f"{check}: evidence is missing")
+            continue
+        for item in evidence:
+            relative = str(item.get("path", ""))
+            candidate = (campaign / relative).resolve()
+            try:
+                candidate.relative_to(campaign.resolve())
+            except ValueError:
+                errors.append(f"{check}: evidence path escapes the campaign")
+                continue
+            if not candidate.is_file() or candidate.is_symlink():
+                errors.append(f"{check}: evidence file is missing")
+            elif sha256_file(candidate) != item.get("sha256"):
+                errors.append(f"{check}: evidence digest changed")
+    return errors
+
+
+def print_status(campaign: Path, matrix_path: Path) -> int:
+    matrix = load_matrix(matrix_path)
+    target = campaign_target(campaign, matrix)
+    errors = validate_campaign(campaign, matrix_path)
+    print(f"CloudlessOS qualification: {target['id']}")
+    print(f"Unique boots: {len(list((campaign / 'boots').glob('*.json')))}/{matrix['minimumBootCycles']}")
+    result_path = campaign / "qualification-result.json"
+    if errors:
+        result_path.unlink(missing_ok=True)
+        print("INCOMPLETE")
+        for error in errors:
+            print(f"  - {error}")
+        return 1
+    records = {}
+    for directory in ("boots", "checks"):
+        for path in sorted((campaign / directory).glob("*.json")):
+            records[path.relative_to(campaign).as_posix()] = sha256_file(path)
+    record_payload = json.dumps(records, sort_keys=True, separators=(",", ":")).encode()
+    result = {
+        "schema": "cloudless.physical-result.v1",
+        "target": target["id"],
+        "validatedAt": utc_now(),
+        "campaignSha256": sha256_file(campaign / "campaign.json"),
+        "evidenceRootSha256": hashlib.sha256(record_payload).hexdigest(),
+        "records": records,
+    }
+    atomic_json(result_path, result)
+    print("QUALIFIED — all required evidence is present and unchanged")
+    return 0
+
+
+def matrix_argument(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--matrix",
+        type=Path,
+        default=Path(os.environ.get("CLOUDLESS_QUALIFICATION_MATRIX", DEFAULT_MATRIX)),
+        help="authoritative physical validation matrix",
+    )
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    begin = subparsers.add_parser("begin", help="start a qualification campaign on this machine")
+    begin.add_argument("target")
+    begin.add_argument("version")
+    begin.add_argument(
+        "commit",
+        nargs="?",
+        help="full source commit; omitted only when verified updater state matches VERSION",
+    )
+    begin.add_argument("--operator", required=True)
+    begin.add_argument("--output", required=True, type=Path)
+    matrix_argument(begin)
+
+    boot = subparsers.add_parser("boot", help="record this unique kernel boot")
+    boot.add_argument("campaign", type=Path)
+    matrix_argument(boot)
+
+    record = subparsers.add_parser("record", help="record one physical check with evidence")
+    record.add_argument("campaign", type=Path)
+    record.add_argument("check")
+    record.add_argument("status", choices=("pass", "fail"))
+    record.add_argument("--note", required=True)
+    record.add_argument("--evidence", required=True, action="append", type=Path)
+    matrix_argument(record)
+
+    collect = subparsers.add_parser("collect", help="collect read-only machine data and support ZIP")
+    collect.add_argument("campaign", type=Path)
+    matrix_argument(collect)
+
+    status = subparsers.add_parser("status", help="validate and summarize a campaign")
+    status.add_argument("campaign", type=Path)
+    matrix_argument(status)
+
+    plan = subparsers.add_parser("plan", help="show every required check and its current state")
+    plan.add_argument("campaign", type=Path)
+    plan.add_argument("--json", action="store_true", help="emit machine-readable plan JSON")
+    matrix_argument(plan)
+
+    next_check = subparsers.add_parser("next", help="show the next unfinished check and how to record it")
+    next_check.add_argument("campaign", type=Path)
+    next_check.add_argument("--json", action="store_true", help="emit the next check as JSON")
+    matrix_argument(next_check)
+
+    args = parser.parse_args(argv)
+    try:
+        if args.command == "begin":
+            result = begin_campaign(args.matrix, args.target, args.version, args.commit, args.output, args.operator)
+            print(f"Qualification campaign created at {result}")
+            print(f"Record this boot: sudo cloudless-qualify boot {result}")
+            return 0
+        if args.command == "boot":
+            campaign_target(args.campaign, load_matrix(args.matrix))
+            created = record_boot(args.campaign)
+            print("Recorded this boot." if created else "This boot was already recorded.")
+            return 0
+        if args.command == "record":
+            record_check(args.campaign, args.matrix, args.check, args.status, args.note, args.evidence)
+            print(f"Recorded {args.check}: {args.status}")
+            return 0
+        if args.command == "collect":
+            campaign_target(args.campaign, load_matrix(args.matrix))
+            machine = collect_read_only(args.campaign)
+            print(f"Read-only machine evidence: {machine}")
+            try:
+                bundle = collect_support_bundle(args.campaign)
+                print(f"Redacted support bundle: {bundle}")
+            except Exception as exc:  # report locally without hiding the machine collection
+                print(f"Support bundle collection failed: {exc}", file=sys.stderr)
+                return 1
+            return 0
+        if args.command == "status":
+            return print_status(args.campaign, args.matrix)
+        if args.command == "plan":
+            return print_plan(args.campaign, args.matrix, as_json=args.json)
+        if args.command == "next":
+            return print_plan(args.campaign, args.matrix, only_next=True, as_json=args.json)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 1
+    return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

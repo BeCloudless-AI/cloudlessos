@@ -8,6 +8,8 @@ CHANNEL="${2:-stable}"
 MATRIX="$ROOT/distro/release/validation-matrix.json"
 OUT="$ROOT/distro/out/release-gates.json"
 PACKAGES="${CLOUDLESS_PACKAGE_OUT:-$ROOT/distro/out/packages}"
+SECURITY_OUT="${CLOUDLESS_SECURITY_OUT:-$ROOT/distro/out/security}"
+SBOM="${CLOUDLESS_SBOM:-$SECURITY_OUT/cloudless-$VERSION.spdx.json}"
 
 [ -n "$VERSION" ] || { echo "Usage: $0 VERSION [stable|beta]" >&2; exit 2; }
 case "$CHANNEL" in stable|beta) ;; *) echo "Invalid channel: $CHANNEL" >&2; exit 2 ;; esac
@@ -37,7 +39,7 @@ required = {("generic", "amd64"), ("generic", "arm64"), ("dgx-spark", "arm64")}
 if targets != required:
     raise SystemExit(f"matrix targets must be exactly {sorted(required)}")
 gates = set(matrix.get("requiredGates", []))
-expected = {"go-tests", "go-vet", "web-javascript", "app-manifest-v2", "platform-matrix", "package-architecture", "package-contents", "release-isolation", "atomic-repository"}
+expected = {"go-tests", "go-vet", "web-javascript", "app-manifest-v2", "backup-recovery", "installer-preflight", "platform-matrix", "package-architecture", "package-contents", "package-lifecycle", "release-isolation", "release-preflight", "secret-hygiene", "service-hardening", "sbom", "trust-inventory", "vulnerability-scan", "updater-workload-continuity", "atomic-repository"}
 if gates != expected:
     raise SystemExit("matrix gate set is incomplete or contains an unknown gate")
 PY
@@ -78,6 +80,59 @@ for architecture in amd64 arm64; do
         *) echo "Wrong cloudlessd binary in $architecture package: $info" >&2; exit 1 ;;
     esac
 done
+
+echo "==> Validating release security evidence"
+test -s "$SBOM" || { echo "Missing SPDX SBOM: $SBOM" >&2; exit 1; }
+test -s "$SECURITY_OUT/trivy-source.json" || { echo "Missing source vulnerability report" >&2; exit 1; }
+test -s "$SECURITY_OUT/trivy-packages.json" || { echo "Missing package vulnerability report" >&2; exit 1; }
+python3 - "$SBOM" "$SECURITY_OUT/trivy-source.json" "$SECURITY_OUT/trivy-packages.json" "$VERSION" <<'PY'
+import json, sys
+
+sbom_path, source_report_path, package_report_path, version = sys.argv[1:]
+with open(sbom_path, encoding="utf-8") as handle:
+    sbom = json.load(handle)
+if sbom.get("spdxVersion") != "SPDX-2.3":
+    raise SystemExit("release SBOM must use SPDX 2.3")
+described = set(sbom.get("documentDescribes", []))
+packages = sbom.get("packages", [])
+cloudless = [
+    item for item in packages
+    if item.get("name", "").startswith("cloudless-") and item.get("versionInfo") == version
+]
+expected = {
+    (name, architecture)
+    for architecture in ("amd64", "arm64")
+    for name in (
+        "cloudless-orchestrator", "cloudless-shell", "cloudless-branding",
+        "cloudless-hardware", "cloudless-firstboot", "cloudless-updater",
+    )
+}
+actual = {
+    (item.get("name"), next(
+        (ref["referenceLocator"].split("arch=", 1)[1] for ref in item.get("externalRefs", [])
+         if "arch=" in ref.get("referenceLocator", "")),
+        "",
+    ))
+    for item in cloudless
+}
+if actual != expected:
+    raise SystemExit("release SBOM does not describe the exact 12-package architecture matrix")
+if not all(item.get("SPDXID") in described and item.get("checksums") for item in cloudless):
+    raise SystemExit("release SBOM package descriptions are incomplete")
+for report_path in (source_report_path, package_report_path):
+    with open(report_path, encoding="utf-8") as handle:
+        report = json.load(handle)
+    if not isinstance(report.get("Results", []), list):
+        raise SystemExit(f"invalid Trivy report: {report_path}")
+    findings = [
+        vulnerability
+        for result in report.get("Results", [])
+        for vulnerability in (result.get("Vulnerabilities") or [])
+        if vulnerability.get("Severity") in {"HIGH", "CRITICAL"}
+    ]
+    if findings:
+        raise SystemExit(f"security report contains {len(findings)} unresolved high/critical vulnerabilities")
+PY
 
 matrix_sha="$(sha256sum "$MATRIX" | awk '{print $1}')"
 mkdir -p "$(dirname "$OUT")"

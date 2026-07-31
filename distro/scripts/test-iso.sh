@@ -23,15 +23,24 @@ xorriso -osirrox on -indev "$ISO" \
     -extract /autoinstall.yaml "$WORK/autoinstall.yaml" \
     -extract /boot/grub/grub.cfg "$WORK/grub.cfg" \
     -extract /boot/grub/loopback.cfg "$WORK/loopback.cfg" \
-    -extract /cloudless/packages "$WORK/packages" >/dev/null 2>&1
+    -extract /cloudless/packages "$WORK/packages" \
+    -extract /cloudless/preinstall "$WORK/cloudless-preinstall" >/dev/null 2>&1
 
 grep -q '^autoinstall:' "$WORK/autoinstall.yaml"
+grep -q '/cdrom/cloudless/preinstall --installer' "$WORK/autoinstall.yaml"
+grep -q 'CloudlessOS installer preflight' "$WORK/cloudless-preinstall"
 grep -q 'autoinstall ---' "$WORK/grub.cfg"
 grep -q 'CloudlessOS' "$WORK/grub.cfg"
 grep -q 'set theme=/cloudless/theme.txt' "$WORK/grub.cfg"
 test "$(find "$WORK/packages" -name '*.deb' | wc -l)" -eq 6
+if find "$WORK/packages" -name '*_arm64.deb' -print -quit | grep -q .; then
+    echo "AMD64 installer contains ARM64 packages" >&2
+    exit 1
+fi
 for name in orchestrator shell branding hardware firstboot updater; do
-    find "$WORK/packages" -name "cloudless-${name}_*.deb" -print -quit | grep -q .
+    package="$(find "$WORK/packages" -name "cloudless-${name}_*_amd64.deb" -print -quit)"
+    test -n "$package"
+    test "$(dpkg-deb -f "$package" Architecture)" = amd64
 done
 
 echo "ISO validation passed: BIOS + UEFI boot catalog, autoinstall, branding, and six packages"

@@ -40,7 +40,7 @@ func MayNeedModelRouting(text string) bool {
 
 // SemanticModelControl uses the active local inference engine only as an intent
 // classifier. It is never trusted for model facts: a positive result is handed
-// to ForcedModelGuidance, which uses Model Manager data and deterministic math.
+// to ForcedModelGuidance, which uses only Model Manager runtime-fit evidence.
 func SemanticModelControl(ctx context.Context, baseURL, model string, msgs []Msg) (bool, error) {
 	transcript := recentTranscript(msgs, 8)
 	if transcript == "" {

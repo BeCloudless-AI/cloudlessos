@@ -2,15 +2,20 @@
 set -e
 getent group cloudless >/dev/null || addgroup --system cloudless
 getent passwd cloudless >/dev/null || adduser --system --home /home/cloudless --shell /bin/bash --ingroup cloudless cloudless
+if getent passwd cloudlessd >/dev/null; then
+    adduser cloudlessd cloudless >/dev/null 2>&1 || true
+fi
 getent group nopasswdlogin >/dev/null || addgroup --system nopasswdlogin
 adduser cloudless nopasswdlogin >/dev/null 2>&1 || true
 for group in video render audio; do
     if getent group "$group" >/dev/null; then adduser cloudless "$group" >/dev/null 2>&1 || true; fi
 done
 install -d -o cloudless -g cloudless -m 0750 /home/cloudless /home/cloudless/.config /home/cloudless/.config/openbox
-install -d -o cloudless -g cloudless -m 0755 /home/cloudless/Cloudless /home/cloudless/Cloudless/Models /home/cloudless/Cloudless/Outputs /home/cloudless/Cloudless/Workspace /home/cloudless/Downloads
+install -d -o cloudless -g cloudless -m 2775 /home/cloudless/Cloudless /home/cloudless/Cloudless/Models /home/cloudless/Cloudless/Outputs /home/cloudless/Cloudless/Workspace /home/cloudless/Downloads
 install -o cloudless -g cloudless -m 0644 /usr/share/cloudless/openbox-autostart /home/cloudless/.config/openbox/autostart
-systemd-tmpfiles --create /usr/lib/tmpfiles.d/cloudless-browser.conf >/dev/null 2>&1 || true
+systemd-tmpfiles --create \
+    /usr/lib/tmpfiles.d/cloudless-browser.conf \
+    /usr/lib/tmpfiles.d/cloudless-desktop.conf >/dev/null 2>&1 || true
 
 is_dgx_spark() {
     [ -r /etc/dgx-release ] || \

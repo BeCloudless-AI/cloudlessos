@@ -2,11 +2,12 @@ package api
 
 import (
 	"context"
+	"errors"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
+	"github.com/cloudless/orchestrator/internal/engine"
 	"github.com/cloudless/orchestrator/internal/localrecipes"
 )
 
@@ -45,29 +46,126 @@ func recipeRuntimeEstimate(recipe localrecipes.Recipe) int64 {
 	return 0
 }
 
-func recipeCachedModelReady(ctx context.Context, recipe localrecipes.Recipe) bool {
-	volume, err := recipeCacheVolume(recipe)
-	if err != nil {
+func recipeSnapshotComplete(repoRoot, revision string) bool {
+	info, err := os.Stat(filepath.Join(repoRoot, "snapshots", revision))
+	if err != nil || !info.IsDir() {
 		return false
 	}
-	cacheName, ok := modelCacheName(recipe.Model.ID)
-	if !ok || strings.TrimSpace(recipe.Model.Revision) == "" {
-		return false
-	}
-	cmd := exec.CommandContext(ctx, "docker", "volume", "inspect", volume, "--format", "{{.Mountpoint}}")
-	out, err := cmd.Output()
-	if err != nil {
-		return false
-	}
-	mountpoint := strings.TrimSpace(string(out))
-	if mountpoint == "" {
-		return false
-	}
-	info, err := os.Stat(filepath.Join(mountpoint, "hub", cacheName, "snapshots", recipe.Model.Revision))
-	return err == nil && info.IsDir()
+	incomplete := false
+	_ = filepath.WalkDir(repoRoot, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr == nil && !entry.IsDir() && strings.HasSuffix(entry.Name(), ".incomplete") {
+			incomplete = true
+			return filepath.SkipAll
+		}
+		return nil
+	})
+	return !incomplete
 }
 
-func buildRecipeLaunchPlan(ctx context.Context, recipe localrecipes.Recipe) recipeLaunchPlan {
+func recipeCachedModelReady(ctx context.Context, runtime engine.Engine, recipe localrecipes.Recipe) bool {
+	_, err := inspectRecipeModelManifest(ctx, runtime, recipe)
+	return err == nil
+}
+
+// inspectRecipeModelManifest is the inexpensive UI/inventory path. It proves
+// that the internally consistent manifest still maps to files of the expected
+// sizes. Full SHA-256 verification is reserved for preparation and the final
+// pre-switch gate so opening Model Manager never re-hashes hundreds of GB.
+func inspectRecipeModelManifest(ctx context.Context, runtime engine.Engine, recipe localrecipes.Recipe) (recipeArtifactManifest, error) {
+	cacheName, ok := modelCacheName(recipe.Model.ID)
+	if !ok || strings.TrimSpace(recipe.Model.Revision) == "" {
+		return recipeArtifactManifest{}, errors.New("recipe model identity is incomplete")
+	}
+	mountpoint, err := recipeModelVolumeMountpoint(ctx, runtime, recipe)
+	if err != nil {
+		return recipeArtifactManifest{}, err
+	}
+	manifest, err := loadRecipeArtifactManifest(recipeModelCompleteMarker(recipe, mountpoint))
+	if err != nil {
+		return recipeArtifactManifest{}, err
+	}
+	if manifest.ModelID != recipe.Model.ID || manifest.Revision != recipe.Model.Revision {
+		return recipeArtifactManifest{}, errors.New("model artifact manifest identity does not match recipe")
+	}
+	snapshot := filepath.Join(mountpoint, "hub", cacheName, "snapshots", recipe.Model.Revision)
+	for _, file := range manifest.Files {
+		path := filepath.Join(snapshot, filepath.FromSlash(file.Path))
+		if !pathWithin(path, snapshot) {
+			return recipeArtifactManifest{}, errors.New("model artifact manifest contains an unsafe path")
+		}
+		info, err := os.Stat(path)
+		if err != nil || !info.Mode().IsRegular() || info.Size() != file.Size {
+			return recipeArtifactManifest{}, errors.New("model artifact files are missing or incomplete")
+		}
+	}
+	return manifest, nil
+}
+
+func recipeModelVolumeMountpoint(ctx context.Context, runtime engine.Engine, recipe localrecipes.Recipe) (string, error) {
+	_ = ctx
+	_ = runtime
+	cache, err := recipeCacheVolume(recipe)
+	if err != nil {
+		return "", err
+	}
+	info, err := os.Lstat(cache)
+	if err != nil {
+		return "", err
+	}
+	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return "", errors.New("model cache path is not a real directory")
+	}
+	return cache, nil
+}
+
+func verifyRecipeModelCache(ctx context.Context, runtime engine.Engine, recipe localrecipes.Recipe) (recipeArtifactManifest, error) {
+	cacheName, ok := modelCacheName(recipe.Model.ID)
+	if !ok || strings.TrimSpace(recipe.Model.Revision) == "" {
+		return recipeArtifactManifest{}, errors.New("recipe model identity is incomplete")
+	}
+	mountpoint, err := recipeModelVolumeMountpoint(ctx, runtime, recipe)
+	if err != nil {
+		return recipeArtifactManifest{}, err
+	}
+	expected, err := loadRecipeArtifactManifest(recipeModelCompleteMarker(recipe, mountpoint))
+	if err != nil {
+		return recipeArtifactManifest{}, err
+	}
+	if expected.ModelID != recipe.Model.ID || expected.Revision != recipe.Model.Revision {
+		return recipeArtifactManifest{}, errors.New("model artifact manifest identity does not match recipe")
+	}
+	repoRoot := filepath.Join(mountpoint, "hub", cacheName)
+	actual, err := buildRecipeArtifactManifest(repoRoot, filepath.Join(repoRoot, "snapshots", recipe.Model.Revision), recipe.Model.ID, recipe.Model.Revision)
+	if err != nil {
+		return recipeArtifactManifest{}, err
+	}
+	if actual.Digest != expected.Digest || actual.Bytes != expected.Bytes || len(actual.Files) != len(expected.Files) {
+		return recipeArtifactManifest{}, errors.New("model artifact content does not match its verified manifest")
+	}
+	return actual, nil
+}
+
+func certifyRecipeModelCache(ctx context.Context, runtime engine.Engine, recipe localrecipes.Recipe) (recipeArtifactManifest, error) {
+	cacheName, ok := modelCacheName(recipe.Model.ID)
+	if !ok || strings.TrimSpace(recipe.Model.Revision) == "" {
+		return recipeArtifactManifest{}, errors.New("recipe model identity is incomplete")
+	}
+	mountpoint, err := recipeModelVolumeMountpoint(ctx, runtime, recipe)
+	if err != nil {
+		return recipeArtifactManifest{}, err
+	}
+	repoRoot := filepath.Join(mountpoint, "hub", cacheName)
+	manifest, err := buildRecipeArtifactManifest(repoRoot, filepath.Join(repoRoot, "snapshots", recipe.Model.Revision), recipe.Model.ID, recipe.Model.Revision)
+	if err != nil {
+		return recipeArtifactManifest{}, err
+	}
+	if err := saveRecipeArtifactManifest(recipeModelCompleteMarker(recipe, mountpoint), manifest); err != nil {
+		return recipeArtifactManifest{}, err
+	}
+	return manifest, nil
+}
+
+func buildRecipeLaunchPlan(ctx context.Context, runtime engine.Engine, recipe localrecipes.Recipe) recipeLaunchPlan {
 	plan := recipeLaunchPlan{
 		RequiresCustomRuntime: recipe.Runtime.Lifecycle.Build.Program != "",
 		RuntimeImage:          recipe.Engine.Image,
@@ -78,10 +176,10 @@ func buildRecipeLaunchPlan(ctx context.Context, recipe localrecipes.Recipe) reci
 		DownloadOnce:          recipe.Runtime.DownloadOnce,
 		Nodes:                 max(1, recipe.Distributed.Nodes),
 	}
-	if _, size, err := recipeImageMetadata(ctx, "/", nil, recipe.Engine.Image); err == nil {
+	if image, err := runtime.InspectImage(ctx, recipe.Engine.Image); err == nil {
 		plan.RuntimeReady = true
-		plan.RuntimeBytes = size
+		plan.RuntimeBytes = image.Size
 	}
-	plan.ModelReady = recipeCachedModelReady(ctx, recipe)
+	plan.ModelReady = recipeCachedModelReady(ctx, runtime, recipe)
 	return plan
 }

@@ -5,8 +5,9 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 export PATH="/usr/local/go/bin:$PATH"
 export GNUPGHOME="$(mktemp -d)"
 work="$(mktemp -d)"
+http_pid=""
 TEST_VERSION="0.0.0-test-only"
-trap 'rm -rf "$GNUPGHOME" "$work"' EXIT
+trap '[ -z "$http_pid" ] || kill "$http_pid" >/dev/null 2>&1 || true; rm -rf "$GNUPGHOME" "$work"' EXIT
 chmod 0700 "$GNUPGHOME"
 
 gpg --batch --passphrase '' --quick-generate-key \
@@ -31,9 +32,28 @@ cat > "$work/test-release-gates.json" <<EOF
 {"schema":"cloudless.release-gates.v1","version":"$TEST_VERSION","channel":"stable","sourceCommit":"0123456789abcdef0123456789abcdef01234567","completedAt":"2000-01-01T00:00:00Z","matrixSha256":"$matrix_sha","targets":[{"platform":"generic","architecture":"amd64"},{"platform":"generic","architecture":"arm64"},{"platform":"dgx-spark","architecture":"arm64"}],"passedGates":["go-tests","go-vet","web-javascript","app-manifest-v2","backup-recovery","installer-preflight","platform-matrix","package-architecture","package-contents","package-lifecycle","release-isolation","release-preflight","secret-hygiene","service-hardening","sbom","trust-inventory","vulnerability-scan","updater-workload-continuity","atomic-repository"],"physicalQualification":$(cat "$work/test-physical-qualification.json"),"securityReadiness":$(cat "$work/test-security-readiness.json"),"ciQualification":$(cat "$work/test-ci-qualification.json")}
 EOF
 
+# An empty local origin returns a genuine HTTP 404 for InRelease. This proves
+# that a brand-new channel can be bootstrapped without weakening fail-closed
+# handling for DNS, transport, HTTP, signature, or index failures.
+mkdir -p "$work/empty-origin"
+http_port="$(python3 - <<'PY'
+import socket
+with socket.socket() as sock:
+    sock.bind(("127.0.0.1", 0))
+    print(sock.getsockname()[1])
+PY
+)"
+python3 -m http.server "$http_port" --bind 127.0.0.1 --directory "$work/empty-origin" \
+    >"$work/http.log" 2>&1 &
+http_pid=$!
+for _ in $(seq 1 50); do
+    curl -sS "http://127.0.0.1:$http_port/" >/dev/null 2>&1 && break
+    sleep 0.1
+done
+
 CLOUDLESS_APT_REPO_OUT="$work/repository" \
 CLOUDLESS_PACKAGE_OUT="$work/packages" \
-CLOUDLESS_APT_BASE_URL=https://invalid.invalid \
+CLOUDLESS_APT_BASE_URL="http://127.0.0.1:$http_port" \
 CLOUDLESS_ARCHIVE_KEY="$work/test-keyring.pgp" \
 CLOUDLESS_ARCHIVE_FINGERPRINT_FILE="$work/test-fingerprint.txt" \
 CLOUDLESS_RELEASE_NOTES="$work/test-notes.json" \

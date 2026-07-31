@@ -20,6 +20,10 @@ grep -Fq 'CLOUDLESS_SBOM_PACKAGE_DIR="$PACKAGE_OUT"' "$builder"
 grep -Fq 'candidate="$PACKAGE_OUT/${package}_${VERSION}_${arch}.deb"' "$builder"
 grep -Fq 'reprepro --basedir "$REPO" includedeb "$CHANNEL" "$candidate"' "$builder"
 grep -Fq 'candidate="${PROMOTED_DEB[$key]}"' "$builder"
+grep -Fq -- "-w '%{http_code}'" "$builder"
+grep -Fq 'return 3' "$builder"
+grep -Fq 'refusing to publish' "$builder"
+grep -Fq 'python3 -m http.server' "$atomic"
 if grep -F '$DISTRO/out/packages/${package}_${VERSION}_${arch}.deb' "$builder"; then
     echo "Repository builder still bypasses the isolated package output." >&2
     exit 1

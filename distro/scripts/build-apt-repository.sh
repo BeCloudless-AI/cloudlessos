@@ -206,11 +206,26 @@ PY
 fi
 
 fetch_remote_baseline() {
-    local arch="$1" inrelease="$work/InRelease" verified="$work/InRelease.verified" index="$work/Packages-$1" index_hash index_size
+    local arch="$1" inrelease="$work/InRelease" verified="$work/InRelease.verified" index="$work/Packages-$1" index_hash index_size http_status
     echo "==> Recovering current $CHANNEL/$arch package baseline from $BASE_URL"
     if [ ! -s "$verified" ]; then
         rm -f "$inrelease" "$verified"
-        curl -fsS "$BASE_URL/dists/$CHANNEL/InRelease" -o "$inrelease" || return 1
+        http_status="$(curl -sS -L -o "$inrelease" -w '%{http_code}' "$BASE_URL/dists/$CHANNEL/InRelease")" || {
+            rm -f "$inrelease"
+            return 1
+        }
+        case "$http_status" in
+            200) ;;
+            404)
+                rm -f "$inrelease"
+                return 3
+                ;;
+            *)
+                echo "Unexpected HTTP $http_status while reading the public $CHANNEL release." >&2
+                rm -f "$inrelease"
+                return 1
+                ;;
+        esac
         if ! gpgv --keyring "$KEY" "$inrelease" >/dev/null 2>&1; then
             rm -f "$inrelease"
             return 1
@@ -253,11 +268,18 @@ for arch in "${ARCHES[@]}"; do
     else
         status=$?
         REMOTE_BASELINE[$arch]=false
-        if [ "$status" -ne 2 ] && [ -s "$REPO/db/packages.db" ]; then
-            echo "Unable to verify the public $CHANNEL/$arch baseline; refusing to use cached local packages." >&2
-            exit 1
-        fi
-        echo "==> No published $CHANNEL/$arch baseline found; treating it as a first architecture release"
+        case "$status" in
+            2)
+                echo "==> The signed $CHANNEL channel has no $arch packages; treating it as a first architecture release"
+                ;;
+            3)
+                echo "==> No published $CHANNEL channel exists; treating it as a first channel release"
+                ;;
+            *)
+                echo "Unable to verify the public $CHANNEL/$arch baseline; refusing to publish." >&2
+                exit 1
+                ;;
+        esac
         rm -rf "$work/baseline/$arch"
     fi
 done

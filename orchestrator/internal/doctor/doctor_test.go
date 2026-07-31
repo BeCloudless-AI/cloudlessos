@@ -6,12 +6,15 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/cloudless/orchestrator/internal/engine"
 	"github.com/cloudless/orchestrator/internal/securityaudit"
+	"github.com/cloudless/orchestrator/internal/sparkcluster"
 	"github.com/cloudless/orchestrator/internal/state"
 )
 
@@ -82,6 +85,38 @@ func TestDoctorRespectsIntentionalModelUnload(t *testing.T) {
 		if check.ID == "app-vllm" && check.Status == "fail" {
 			t.Fatal("intentionally unloaded engine was reported as failed")
 		}
+	}
+}
+
+func TestSparkClusterChecksReportUnreadableMigratedState(t *testing.T) {
+	checks := sparkClusterChecks(sparkcluster.State{}, os.ErrPermission)
+	if len(checks) != 1 || checks[0].ID != "spark-cluster-state" || checks[0].Status != "fail" {
+		t.Fatalf("sparkClusterChecks() = %#v", checks)
+	}
+	if !strings.Contains(checks[0].Action, "Do not disconnect") {
+		t.Fatalf("cluster recovery guidance is destructive or incomplete: %#v", checks[0])
+	}
+}
+
+func TestSparkClusterChecksRequireNetworkProbeCapability(t *testing.T) {
+	checks := sparkClusterChecks(sparkcluster.State{Configured: true}, nil)
+	if len(checks) != 2 || checks[0].Status != "pass" {
+		t.Fatalf("sparkClusterChecks() = %#v", checks)
+	}
+	// Test the parser separately so the test runner's own capabilities do not
+	// determine the expected Doctor result.
+	if effectiveCapability([]byte("Name:\ttest\nCapEff:\t0000000000000000\n"), capNetRaw) {
+		t.Fatal("zero effective capability set reported CAP_NET_RAW")
+	}
+	if !effectiveCapability([]byte("CapEff:\t0000000000002000\n"), capNetRaw) {
+		t.Fatal("CAP_NET_RAW bit was not detected")
+	}
+}
+
+func TestSparkClusterStateActionDoesNotExposeLocalPaths(t *testing.T) {
+	checks := sparkClusterChecks(sparkcluster.State{}, &os.PathError{Op: "open", Path: filepath.Join("private", "cluster", "state.json"), Err: os.ErrPermission})
+	if len(checks) != 1 || !strings.Contains(checks[0].Summary, "permission denied") {
+		t.Fatalf("sparkClusterChecks() = %#v", checks)
 	}
 }
 

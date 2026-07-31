@@ -15,6 +15,7 @@ import (
 	"regexp"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -59,10 +60,12 @@ func Run(ctx context.Context, eng engine.Engine, st *state.Store) Report {
 		Promotion: st.Get().ModelPromotion,
 	}
 	report.GPUs, _ = hardware.GPUs(ctx)
-	report.Cluster, _ = sparkcluster.Snapshot()
+	cluster, clusterErr := sparkcluster.Snapshot()
+	report.Cluster = cluster
 	for i := range report.GPUs {
 		report.GPUs[i].Node = "local"
 	}
+	report.Checks = append(report.Checks, sparkClusterChecks(cluster, clusterErr)...)
 
 	if err := eng.Available(ctx); err != nil {
 		report.Checks = append(report.Checks, Check{"container-runtime", "Container runtime", "fail", "Docker is not reachable: " + err.Error(), "Restart Docker, then run Cloudless Doctor again."})
@@ -136,6 +139,56 @@ func Run(ctx context.Context, eng engine.Engine, st *state.Store) Report {
 	}
 	report.Overall = overall(report.Checks)
 	return report
+}
+
+const capNetRaw = 13
+
+func sparkClusterChecks(cluster sparkcluster.State, clusterErr error) []Check {
+	if clusterErr != nil {
+		return []Check{{
+			ID: "spark-cluster-state", Name: "Spark cluster state", Status: "fail",
+			Summary: "Cloudless cannot read the saved Spark cluster configuration: " + clusterErr.Error(),
+			Action:  "Install the latest CloudlessOS update, then run Doctor again. Do not disconnect or recreate the cluster.",
+		}}
+	}
+	if !cluster.Configured {
+		return nil
+	}
+	checks := []Check{{
+		ID: "spark-cluster-state", Name: "Spark cluster state", Status: "pass",
+		Summary: "The saved Spark cluster configuration and identity are readable.",
+	}}
+	status, err := os.ReadFile("/proc/self/status")
+	if err != nil {
+		return append(checks, Check{
+			ID: "spark-cluster-probes", Name: "Spark network health probes", Status: "warning",
+			Summary: "Cloudless could not inspect its network-probe permission: " + err.Error(),
+			Action:  "Run the cluster connection check. If working links appear unavailable, install the latest CloudlessOS update.",
+		})
+	}
+	if !effectiveCapability(status, capNetRaw) {
+		return append(checks, Check{
+			ID: "spark-cluster-probes", Name: "Spark network health probes", Status: "fail",
+			Summary: "Cloudless is missing the restricted permission required to test Spark network paths.",
+			Action:  "Install the latest CloudlessOS update, then run Doctor again. The cluster cables do not need to be reconnected.",
+		})
+	}
+	return append(checks, Check{
+		ID: "spark-cluster-probes", Name: "Spark network health probes", Status: "pass",
+		Summary: "Cloudless has the restricted permission required to test Spark network paths.",
+	})
+}
+
+func effectiveCapability(status []byte, capability uint) bool {
+	for _, line := range strings.Split(string(status), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) != 2 || fields[0] != "CapEff:" {
+			continue
+		}
+		value, err := strconv.ParseUint(fields[1], 16, 64)
+		return err == nil && value&(uint64(1)<<capability) != 0
+	}
+	return false
 }
 
 func probeApp(parent context.Context, app catalog.App) error {

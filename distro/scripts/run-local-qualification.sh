@@ -159,6 +159,12 @@ tar -C "$work" -czf "$work/$visual_artifact.tar.gz" visual visual.log
 tar -C "$work" -czf "$work/$soak_artifact.tar.gz" soak soak.log
 completed_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
+if [ "$(git -C "$ROOT" rev-parse HEAD)" != "$COMMIT" ] || \
+   ! git -C "$ROOT" diff --quiet || ! git -C "$ROOT" diff --cached --quiet; then
+    echo "Source changed while qualification was running; incomplete evidence remains at $work" >&2
+    exit 1
+fi
+
 python3 - "$work" "$COMMIT" "$run_id" "$attempt" "$started_at" "$completed_at" <<'PY'
 import hashlib, json, os, sys
 from pathlib import Path

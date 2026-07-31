@@ -20,6 +20,22 @@ required = {
 }
 if targets != required:
     raise SystemExit(f"physical targets differ: missing={required-targets}, extra={targets-required}")
+required_targets = {
+    (item.get("platform"), item.get("architecture"), item.get("nodes"))
+    for item in matrix.get("targets", []) if item.get("required")
+}
+expected_required = {
+    ("virtualbox", "amd64", 1),
+    ("generic-nvidia", "amd64", 1),
+    ("dgx-spark", "arm64", 1),
+    ("dgx-spark", "arm64", 2),
+}
+if required_targets != expected_required:
+    raise SystemExit(f"required physical targets differ: {required_targets ^ expected_required}")
+for item in matrix.get("targets", []):
+    expected_tier = "supported" if item.get("required") else "preview"
+    if item.get("supportTier") != expected_tier:
+        raise SystemExit(f"invalid physical support tier for {item.get('id')}")
 checks = set(matrix.get("requiredChecks", []))
 for check in {
     "clean-install", "ten-boot-cycles", "graphical-session", "display-and-scale",
@@ -55,7 +71,7 @@ if phases != expected_phases:
 failure_targets = {item.get("id") for item in matrix.get("targets", []) if item.get("failureMatrix")}
 if failure_targets != {"dgx-spark-arm64-2"}:
     raise SystemExit(f"representative physical failure matrix targets differ: {failure_targets}")
-print("Physical qualification contract covers VM, NVIDIA and every one-to-eight-Spark topology.")
+print("Physical qualification requires VM, NVIDIA and one/two-Spark targets; three-to-eight Sparks remain preview.")
 PY
 python3 "$ROOT/distro/scripts/test-physical-qualification.py"
 python3 "$ROOT/distro/packages/cloudless-firstboot/cloudless-qualify" --help | grep -Fq '{begin,boot,boot-active,record,collect,soak,update-rollback,backup-restore,cluster-failure,status,plan,next,export,verify-export,verify-set}'
@@ -74,6 +90,7 @@ grep -Fq 'visual-regression-$run_id-$attempt' "$runner"
 grep -Fq 'lifecycle-soak-$run_id-$attempt' "$runner"
 grep -Fq 'prepare-ci-qualification.py' "$runner"
 grep -Fq 'go build -buildvcs=false' "$runner"
+grep -Fq 'Source changed while qualification was running' "$runner"
 if [ -d "$ROOT/.github/workflows" ] && find "$ROOT/.github/workflows" -type f \( -name '*.yml' -o -name '*.yaml' \) -print -quit | grep -q .; then
     echo "Hosted GitHub Actions workflows must remain disabled." >&2
     exit 1

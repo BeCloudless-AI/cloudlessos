@@ -1,6 +1,6 @@
 # CloudlessOS live status
 
-**Last updated:** 2026-07-29
+**Last updated:** 2026-07-31
 
 CloudlessOS is in active pre-release development. The orchestrator, fullscreen interface,
 installer/update pipeline and DGX Spark layer work on development hardware, but public production
@@ -25,7 +25,7 @@ readiness still requires broader hardware, security, recovery and licensing vali
 - First launch, welcome tour, themes, scaling/resolution controls and kiosk recovery.
 - NVIDIA driver checking on generic systems and DGX Dashboard access on Spark.
 - Two-to-eight-Spark discovery, guided connection, validation, telemetry and managed distributed
-  vLLM lifecycle.
+  vLLM lifecycle; one and two Sparks are supported targets, while three through eight are preview.
 - Update UI with progress, changelog, restart state and package rollback support.
 - Authenticated draggable/full-screen host terminal with up to eight persistent tabs, proxied
   inside the Cloudless interface.
@@ -77,6 +77,13 @@ The current implementation changes have passed:
 - inference identity persistence, validation, request/response rewriting and live listener rebind;
 - browser smoke test of an API port change, including closure of the old listener.
 
+The July 31 exact-commit local qualification passed source/security checks, generic AMD64 and
+ARM64 behavior, DGX Spark ARM64 behavior, dual-architecture package construction, package-content
+validation, graphical boot audits and privilege/service hardening. It then stopped in the package
+lifecycle group because the browser-agent test timed out waiting for its test URL. The incomplete,
+never-signed evidence is retained under `distro/out/qualification/local-runs/.incomplete-*` for
+diagnosis. No release should describe that run as green.
+
 An actual SM121 source build and model-serving benchmark is still a hardware qualification task,
 not something inferred from registration tests.
 
@@ -86,11 +93,32 @@ not something inferred from registration tests.
 - Repeat clean-install, interrupted-update, rollback and recovery tests.
 - Qualify every visible app and engine image on its advertised architectures.
 - Validate a pinned SM121 vLLM source build end to end through Model Manager, Hermes and gateway.
-- Complete multi-Spark fault, disconnect, image/version and long-running workload tests.
+- Complete one- and two-Spark fault, disconnect, image/version and long-running workload tests.
+- Keep three-to-eight-Spark support at preview until physical systems are available for each claim.
+- Resolve the browser-agent lifecycle timeout and retain one complete seven-group local run.
 - Replace whole-directory peer cache copying with verified resumable content-addressed transfer.
 - Finish threat modeling for terminal, custom images, public API exposure and agent permissions.
 - Decide and publish the project license.
 - Produce end-user installation, recovery, privacy and support policies.
+
+## Wrap-up and resume point
+
+Development was intentionally paused on July 31, 2026 after consolidating the release path and
+documentation. GitHub Actions are disabled; qualification and publishing run locally. The source
+supports one signed AMD64/ARM64 pipeline, exact-commit evidence, atomic R2 publication, reversible
+updates, VM/generic NVIDIA operation, and the one-/two-Spark product path. Three-to-eight Sparks are
+implemented as preview topology support, not a release-blocking or physically validated claim.
+
+Resume in this order:
+
+1. Fix and repeat the browser-agent package lifecycle test until
+   `distro/scripts/run-local-qualification.sh` produces a complete retained run.
+2. Run and export required campaigns for VirtualBox, generic NVIDIA, one Spark and two Sparks.
+3. Rehearse update/rollback with an active model, interrupted preparation, graphical boot,
+   display/locale/keyboard/power controls, encrypted restore and the two-Spark failure matrix.
+4. Complete the security review, public support/escalation ownership and credential rotation before
+   a 1.0 stable release. Rotation is intentionally deferred, not completed.
+5. Run the required beta soak and only then make a stable-release decision.
 
 ## Active engineering direction
 

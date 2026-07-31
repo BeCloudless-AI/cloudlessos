@@ -2,16 +2,16 @@
   "schema": "cloudless.physical-validation.v1",
   "minimumBootCycles": 10,
   "targets": [
-    {"id": "virtualbox-amd64", "platform": "virtualbox", "architecture": "amd64", "nodes": 1},
-    {"id": "generic-nvidia-amd64", "platform": "generic-nvidia", "architecture": "amd64", "nodes": 1},
-    {"id": "dgx-spark-arm64-1", "platform": "dgx-spark", "architecture": "arm64", "nodes": 1},
-    {"id": "dgx-spark-arm64-2", "platform": "dgx-spark", "architecture": "arm64", "nodes": 2, "failureMatrix": true},
-    {"id": "dgx-spark-arm64-3", "platform": "dgx-spark", "architecture": "arm64", "nodes": 3},
-    {"id": "dgx-spark-arm64-4", "platform": "dgx-spark", "architecture": "arm64", "nodes": 4},
-    {"id": "dgx-spark-arm64-5", "platform": "dgx-spark", "architecture": "arm64", "nodes": 5},
-    {"id": "dgx-spark-arm64-6", "platform": "dgx-spark", "architecture": "arm64", "nodes": 6},
-    {"id": "dgx-spark-arm64-7", "platform": "dgx-spark", "architecture": "arm64", "nodes": 7},
-    {"id": "dgx-spark-arm64-8", "platform": "dgx-spark", "architecture": "arm64", "nodes": 8}
+    {"id": "virtualbox-amd64", "platform": "virtualbox", "architecture": "amd64", "nodes": 1, "required": true, "supportTier": "supported"},
+    {"id": "generic-nvidia-amd64", "platform": "generic-nvidia", "architecture": "amd64", "nodes": 1, "required": true, "supportTier": "supported"},
+    {"id": "dgx-spark-arm64-1", "platform": "dgx-spark", "architecture": "arm64", "nodes": 1, "required": true, "supportTier": "supported"},
+    {"id": "dgx-spark-arm64-2", "platform": "dgx-spark", "architecture": "arm64", "nodes": 2, "required": true, "supportTier": "supported", "failureMatrix": true},
+    {"id": "dgx-spark-arm64-3", "platform": "dgx-spark", "architecture": "arm64", "nodes": 3, "required": false, "supportTier": "preview"},
+    {"id": "dgx-spark-arm64-4", "platform": "dgx-spark", "architecture": "arm64", "nodes": 4, "required": false, "supportTier": "preview"},
+    {"id": "dgx-spark-arm64-5", "platform": "dgx-spark", "architecture": "arm64", "nodes": 5, "required": false, "supportTier": "preview"},
+    {"id": "dgx-spark-arm64-6", "platform": "dgx-spark", "architecture": "arm64", "nodes": 6, "required": false, "supportTier": "preview"},
+    {"id": "dgx-spark-arm64-7", "platform": "dgx-spark", "architecture": "arm64", "nodes": 7, "required": false, "supportTier": "preview"},
+    {"id": "dgx-spark-arm64-8", "platform": "dgx-spark", "architecture": "arm64", "nodes": 8, "required": false, "supportTier": "preview"}
   ],
   "requiredChecks": [
     "clean-install",

@@ -111,6 +111,13 @@ def load_matrix(path: Path) -> dict:
     ids = [target.get("id") for target in matrix.get("targets", [])]
     if not ids or len(ids) != len(set(ids)):
         raise ValueError("physical qualification target IDs are missing or duplicated")
+    for target in matrix.get("targets", []):
+        if not isinstance(target.get("required"), bool):
+            raise ValueError("physical qualification targets must declare required true or false")
+        if target.get("supportTier") not in {"supported", "preview"}:
+            raise ValueError("physical qualification targets must declare a supported or preview tier")
+        if target["required"] != (target["supportTier"] == "supported"):
+            raise ValueError("supported physical targets must be required and preview targets optional")
     for field in ("requiredChecks", "clusterChecks", "clusterFailureDomains", "inferenceLifecyclePhases"):
         values = matrix.get(field, [])
         if not isinstance(values, list) or any(not re.fullmatch(r"[a-z0-9-]+", str(value)) for value in values):
@@ -2241,7 +2248,10 @@ def verify_export(path: Path) -> dict:
 
 def verify_export_set(archives: list[Path], matrix_path: Path) -> dict:
     matrix = load_matrix(matrix_path)
-    required_targets = [str(target["id"]) for target in matrix.get("targets", [])]
+    all_targets = [str(target["id"]) for target in matrix.get("targets", [])]
+    required_targets = [
+        str(target["id"]) for target in matrix.get("targets", []) if target.get("required")
+    ]
     if not archives:
         raise ValueError("at least one qualification export is required")
     by_target: dict[str, dict] = {}
@@ -2250,7 +2260,7 @@ def verify_export_set(archives: list[Path], matrix_path: Path) -> dict:
     for archive in archives:
         manifest = verify_export(archive)
         target = str(manifest.get("target", ""))
-        if target not in required_targets:
+        if target not in all_targets:
             raise ValueError(f"qualification export has an unknown target: {target or 'missing'}")
         if target in by_target:
             raise ValueError(f"qualification set contains duplicate target evidence: {target}")
@@ -2270,7 +2280,7 @@ def verify_export_set(archives: list[Path], matrix_path: Path) -> dict:
     if missing:
         raise ValueError("qualification set is incomplete; missing targets: " + ", ".join(missing))
     version, source_commit = next(iter(identities))
-    records.sort(key=lambda item: required_targets.index(item["target"]))
+    records.sort(key=lambda item: all_targets.index(item["target"]))
     return {
         "schema": SET_SCHEMA,
         "version": version,

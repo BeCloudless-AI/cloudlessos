@@ -20,6 +20,33 @@ truth for recipe Check, preparation, launch, abort, rollback and cluster recover
 - Keep one source tree and one release generation for AMD64 and ARM64. Platform behavior belongs
   behind capability flags, not in divergent frontends.
 
+## Wrap-up snapshot — 2026-07-31
+
+Implementation is paused at a deliberate handoff point. The recipe reliability roadmap is complete
+at the code/test level, the AMD64/ARM64 packaging and updater pipeline is unified, hosted GitHub
+Actions are disabled, and local qualification binds retained package, visual and lifecycle evidence
+to one clean source commit. The latest attempted exact-commit run passed source/security, generic
+AMD64, generic ARM64, DGX Spark ARM64, dual-architecture packaging, boot audits and service
+hardening, then failed when the browser-agent lifecycle test timed out waiting for its test URL.
+That run is incomplete and is not release evidence.
+
+The supported physical release contract now requires VirtualBox, generic NVIDIA AMD64, one DGX
+Spark and two DGX Sparks. Three-to-eight-Spark orchestration remains implemented and automatically
+tested, but is explicitly preview because additional hardware is unavailable. It must not be
+presented as physically qualified until matching retained campaigns exist.
+
+What remains before a dependable 1.0 release:
+
+- fix the browser-agent lifecycle timeout and retain a complete seven-group local qualification;
+- retain clean-install, ten-boot, graphical/display/locale/keyboard/power, update/rollback,
+  encrypted restore and long-running evidence on every required physical target;
+- complete the one-/two-Spark lifecycle and representative two-Spark failure matrix;
+- complete external security review, public incident/support ownership and credential rotation;
+- retain the required beta soak and rehearse stable promotion/rollback.
+
+The exact resume checklist is maintained in the final section of this document and in
+[`STATUS.md`](./STATUS.md). Do not reopen 3–8 Spark physical qualification until hardware exists.
+
 ## P0 — Make inference operations trustworthy
 
 This milestone addresses the repeated recipe failures, port conflicts, indefinite startup state,
@@ -689,8 +716,8 @@ Done gate:
 
 - [ ] Retain a complete local qualification matrix for AMD64/ARM64, unit/integration/API concurrency, frontend syntax and visual
   regression, package installation, upgrade and rollback.
-- [x] Maintain a physical test matrix for VirtualBox, generic NVIDIA PCs, one Spark and two-to-eight
-  Spark subsets.
+- [x] Maintain a tiered physical test matrix: VirtualBox, generic NVIDIA, one Spark and two Sparks
+  are required; three-to-eight-Spark subsets are preview.
 - [ ] Add soak tests for repeated model switches, app lifecycle, updates, browser/terminal use and
   cluster churn.
 - [x] Publish installation, recovery, update, cluster, terminal, privacy and support-bundle guides.
@@ -775,8 +802,9 @@ Implementation status (July 31, 2026):
   admission bug and prevents interrupted copies from becoming trusted campaign evidence. Campaign
   revalidation, sealing and export also reject substituted evidence, boot records and check results
   instead of resolving symlinks and accidentally trusting their targets.
-- `physical-validation-matrix.json` defines the exact VirtualBox, generic NVIDIA, single-Spark and
-  every two-to-eight-Spark target, with common and cluster-specific required checks.
+- `physical-validation-matrix.json` defines the exact VirtualBox, generic NVIDIA and one-/two-Spark
+  required targets plus three-to-eight-Spark preview targets, with common and cluster-specific
+  checks.
   [`RELEASE_QUALIFICATION.md`](./RELEASE_QUALIFICATION.md) defines the evidence directory, redaction
   rules and artifacts that must be retained; CI rejects an incomplete matrix contract. The
   packaged `cloudless-qualify` runner now validates that the selected target matches the current
@@ -803,8 +831,8 @@ Implementation status (July 31, 2026):
 - Release generation now consumes that set rather than leaving it beside the build as informal
   operator context. Every signed release publishes a detached-signed physical-qualification
   descriptor bound into its gate attestation. Pre-1.0 builds disclose `not-qualified`; a stable
-  1.0+ generation fails before building unless all physical targets match its exact version and
-  full source commit.
+  1.0+ generation fails before building unless all required supported physical targets match its
+  exact version and full source commit. Preview-target evidence is accepted but not required.
 - Retained release manifests and standalone signed artifacts are now isolated by both version and
   channel. A stable promotion can no longer overwrite beta qualification evidence, signatures or
   immutable artifact paths for the same semantic version.
@@ -850,7 +878,7 @@ Done gate:
 2. Complete P1 release-pipeline safety and rotate exposed credentials.
 3. Qualify P2 installation/boot while P3 visual-regression infrastructure proceeds in parallel.
 4. Complete P3 and P4 before expanding the catalog.
-5. Qualify P5 on physical multi-Spark hardware.
+5. Qualify P5 on physical one- and two-Spark hardware; keep 3–8 Spark as preview until hardware exists.
 6. Complete P6 and P8 before enabling any public Hermes gateway.
 7. Expand P7 only through lifecycle-qualified catalog entries.
 8. Run P9 continuously, then use its full gate for a 1.0 release decision.
@@ -866,9 +894,9 @@ Engineering track:
    the package lifecycle now exercises the daemon, desktop agent, browser and terminal together.
 2. Retain the AMD64 and QEMU/ARM64 local evidence for active-model upgrade/rollback continuity; the
    deterministic package rehearsal now covers the migrated host cache and real readiness contract.
-3. Retain the first green local `lifecycle-soak` artifact from the browser restart, concurrent
-   terminal and two-to-eight-Spark churn runner, then retain a 25-repeat artifact for the release
-   candidate.
+3. Fix the browser-agent test URL timeout, then retain the first green local `lifecycle-soak`
+   artifact from the browser restart and concurrent terminal/cluster churn runner; retain a
+   25-repeat artifact for the release candidate.
 4. Retain a physical VM/Spark restore rehearsal using the encrypted control-plane backup.
 
 Operator/physical qualification track:
@@ -882,8 +910,12 @@ Operator/physical qualification track:
    preparation on a VM and physical targets; retain the before/after support bundles.
 4. Run ten clean install/boot/restart cycles on VirtualBox and representative NVIDIA hardware,
    validating locale, timezone, display scaling, resolution, power controls and virtual keyboard.
-5. Run the recipe lifecycle and node-loss matrices on one Spark and a physical multi-Spark cluster,
+5. Run the recipe lifecycle and node-loss matrices on one Spark and a physical two-Spark cluster,
    exporting a secret-free diagnostic bundle for every failure and recovery case.
+
+Three-to-eight-Spark campaigns are deferred without blocking the supported one-/two-Spark release
+contract. When hardware becomes available, collect them as preview evidence first and promote a
+topology to supported only in the same change that makes its physical campaign required.
 
 Do not start P3 visual redesign work ahead of a P2 failure that can still produce a black screen.
 Visual-regression infrastructure may proceed in parallel, but release qualification remains blocked

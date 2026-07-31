@@ -30,9 +30,12 @@ toolkit ownership with NVIDIA.
 
 On Spark, Cloudless treats GB10 unified memory as the usable accelerator budget, exposes storage
 instead of a redundant CPU summary, links to DGX Dashboard, and can guide connection of two to
-eight Sparks. A connected cluster has aggregate capacity, but every model still needs an engine and
-recipe that explicitly support the topology. Replicated weights, KV caches and runtime buffers mean
-reported memory use is not expected to equal model size divided by node count.
+eight Sparks. One- and two-Spark configurations are the current supported qualification targets.
+Three-to-eight-Spark operation is preview until each topology can be exercised on physical hardware;
+automated simulations are retained but are not physical evidence. A connected cluster has aggregate
+capacity, but every model still needs an engine and recipe that explicitly support the topology.
+Replicated weights, KV caches and runtime buffers mean reported memory use is not expected to equal
+model size divided by node count.
 
 See [the DGX Spark guide](../distro/DGX-SPARK.md) for installation and cluster operation.
 

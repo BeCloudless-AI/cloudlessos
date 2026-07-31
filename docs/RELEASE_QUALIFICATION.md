@@ -1,9 +1,10 @@
 # CloudlessOS release qualification
 
-The authoritative physical target list is
+The authoritative physical target list and support tier are in
 `distro/release/physical-validation-matrix.json`. A release candidate is not physically qualified
-because it booted once or worked on one Spark. The retained evidence must cover VirtualBox, one
-generic NVIDIA PC, one Spark, and every cluster size from two through eight Sparks.
+because it booted once. Required evidence covers VirtualBox, one generic NVIDIA PC, one Spark and
+a two-Spark cluster. Three-to-eight-Spark targets remain preview because that hardware is not
+currently available for physical qualification; automated topology tests are not a support claim.
 
 Create an evidence directory named with the candidate version and source commit:
 
@@ -12,8 +13,10 @@ qualification/<version>-<commit>/
   virtualbox-amd64/
   generic-nvidia-amd64/
   dgx-spark-arm64-1/
+  dgx-spark-arm64-2/
+  dgx-spark-arm64-3/       # optional preview evidence
   ...
-  dgx-spark-arm64-8/
+  dgx-spark-arm64-8/       # optional preview evidence
 ```
 
 For every target, retain:
@@ -212,8 +215,9 @@ writes through a private temporary file, verifies every member against the expor
 sealed campaign evidence root, and only then atomically publishes the final mode-0600 ZIP. Retain
 that ZIP beside the local qualification artifacts for the exact release commit.
 
-After every matrix target has produced an export, verify them together. This rejects a missing or
-duplicate target and, critically, rejects evidence mixed across versions or source commits:
+After every required target has produced an export, verify them together. Preview exports may be
+included when hardware becomes available. The verifier rejects a missing required or duplicate
+target and, critically, rejects evidence mixed across versions or source commits:
 
 ```bash
 sudo cloudless-qualify verify-set \
@@ -222,9 +226,10 @@ sudo cloudless-qualify verify-set \
 ```
 
 The resulting mode-0600 `cloudless.physical-set.v1` manifest binds the authoritative matrix digest,
-exact version, full source commit and SHA-256/size of every target archive. Retain it with the
-archives and local qualification artifacts. A partial collection is useful while testing, but it is not release
-qualification and cannot produce this manifest.
+exact version, full source commit and SHA-256/size of every supplied target archive. Its `targets`
+field lists the release-blocking supported targets. Retain it with the archives and local
+qualification artifacts. A collection missing a required target is useful while testing, but it is
+not release qualification and cannot produce this manifest.
 
 The production release command runs the complete exact-commit qualification locally; CloudlessOS
 does not use or require GitHub Actions. `distro/scripts/run-local-qualification.sh` executes the

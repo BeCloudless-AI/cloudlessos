@@ -225,18 +225,28 @@ class PhysicalQualificationTest(unittest.TestCase):
         archives, manifests = self.qualification_set_fixtures()
         with mock.patch.object(qualify, "verify_export", side_effect=lambda path: manifests[path]):
             result = qualify.verify_export_set(archives, self.matrix)
-        expected = [target["id"] for target in qualify.load_matrix(self.matrix)["targets"]]
+        matrix = qualify.load_matrix(self.matrix)
+        expected = [target["id"] for target in matrix["targets"] if target["required"]]
+        all_targets = [target["id"] for target in matrix["targets"]]
         self.assertEqual(result["schema"], qualify.SET_SCHEMA)
         self.assertEqual(result["targets"], expected)
-        self.assertEqual([record["target"] for record in result["archives"]], expected)
+        self.assertEqual([record["target"] for record in result["archives"]], all_targets)
         self.assertEqual(result["version"], "1.2.3-rc1")
         self.assertEqual(result["sourceCommit"], "0123456789abcdef0123456789abcdef01234567")
 
     def test_export_set_rejects_missing_duplicate_and_mixed_candidate_evidence(self):
         archives, manifests = self.qualification_set_fixtures()
+        matrix = qualify.load_matrix(self.matrix)
+        required_ids = {target["id"] for target in matrix["targets"] if target["required"]}
+        required_archive = next(path for path in archives if manifests[path]["target"] in required_ids)
         with mock.patch.object(qualify, "verify_export", side_effect=lambda path: manifests[path]):
             with self.assertRaisesRegex(ValueError, "missing targets"):
-                qualify.verify_export_set(archives[:-1], self.matrix)
+                qualify.verify_export_set([path for path in archives if path != required_archive], self.matrix)
+
+            required_archives = [path for path in archives if manifests[path]["target"] in required_ids]
+            result = qualify.verify_export_set(required_archives, self.matrix)
+            self.assertEqual(set(result["targets"]), required_ids)
+            self.assertEqual({record["target"] for record in result["archives"]}, required_ids)
 
             duplicate = self.root / "duplicate.zip"
             duplicate.write_bytes(b"duplicate target\n")

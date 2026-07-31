@@ -168,7 +168,11 @@ Implementation status (July 31, 2026):
   profile reuse, terminal continuity, unconfirmed display rollback after daemon restart, confirmed
   resolution persistence, UAE-to-`Asia/Dubai` timezone dispatch, and both restart and shutdown broker
   actions without powering off the test container. AMD64 and QEMU/ARM64 package lifecycle jobs run
-  this same contract; clean-install physical evidence is still required before checking the item.
+  this same contract. The frontend qualification also executes the responsive-scale controller
+  against 720p, 1080p and 4K displays, proves that accessibility scales through 300% persist in the
+  kiosk profile, rejects invalid saved values and keeps a manual choice stable across resize. These
+  automated checks do not substitute for the remaining repeated clean-install qualification on
+  VirtualBox and physical NVIDIA hardware.
 
 ## P3 — Stabilize the Cloudless desktop experience
 

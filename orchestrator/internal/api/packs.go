@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/cloudless/orchestrator/internal/apps"
 	"github.com/cloudless/orchestrator/internal/catalog"
 	"github.com/cloudless/orchestrator/internal/hardware"
 	"github.com/cloudless/orchestrator/internal/jobs"
@@ -148,8 +149,14 @@ func (s *Server) configureInstalledApp(ctx context.Context, job *jobs.Job, app c
 		return nil
 	}
 	job.ProgressOperation("configuring", "Connecting Cloudless Research to your Cloudless model", app.Name, 96, 0, 1)
+	apiKey, err := apps.ManagedSecret(
+		s.appConfigDir(app.ID), app.ID, "perplexica-model-client",
+	)
+	if err != nil {
+		return fmt.Errorf("create the private Cloudless Research model identity: %w", err)
+	}
 	for port := range app.Ports {
-		return configureCloudlessResearch(ctx, fmt.Sprintf("http://127.0.0.1:%d", port))
+		return configureCloudlessResearch(ctx, fmt.Sprintf("http://127.0.0.1:%d", port), apiKey)
 	}
 	return fmt.Errorf("research endpoint is unavailable")
 }
@@ -164,7 +171,10 @@ type researchProvider struct {
 
 // configureCloudlessResearch is idempotent, so retrying an interrupted install
 // never duplicates the Cloudless provider or model.
-func configureCloudlessResearch(ctx context.Context, baseURL string) error {
+func configureCloudlessResearch(ctx context.Context, baseURL, apiKey string) error {
+	if apiKey == "" {
+		return fmt.Errorf("Cloudless Research model identity is empty")
+	}
 	client := &http.Client{Timeout: 15 * time.Second}
 	requestJSON := func(method, path string, payload any, result any) error {
 		var raw []byte
@@ -215,7 +225,7 @@ func configureCloudlessResearch(ctx context.Context, baseURL string) error {
 		}
 		payload := map[string]any{
 			"type": "openai", "name": "Cloudless",
-			"config": map[string]string{"apiKey": "cloudless", "baseURL": "http://cloudless-ai:8000/v1"},
+			"config": map[string]string{"apiKey": apiKey, "baseURL": "http://cloudless-ai:8000/v1"},
 		}
 		if err := requestJSON(http.MethodPost, "/api/providers", payload, &created); err != nil {
 			return err

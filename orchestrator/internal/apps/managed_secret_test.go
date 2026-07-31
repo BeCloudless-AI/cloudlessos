@@ -56,6 +56,30 @@ func TestCatalogManagedPasswordMarkersBecomePrivateStableSecrets(t *testing.T) {
 	}
 }
 
+func TestPerplexicaProviderBootstrapReusesPrivateModelClientIdentity(t *testing.T) {
+	app, ok := catalog.Get("perplexica")
+	if !ok {
+		t.Fatal("Perplexica is missing from the catalog")
+	}
+	root := t.TempDir()
+	configDir := filepath.Join(root, "apps", app.ID)
+	fromEnvironment := EnvOverrides(configDir, app)["OPENAI_API_KEY"]
+	fromBootstrap, err := ManagedSecret(configDir, app.ID, "perplexica-model-client")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fromBootstrap == "" || fromBootstrap != fromEnvironment || fromBootstrap == "cloudless" {
+		t.Fatalf("Perplexica identities differ or use a fixed default: %q / %q", fromEnvironment, fromBootstrap)
+	}
+	info, err := os.Stat(filepath.Join(root, "secrets", "perplexica-model-client"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("Perplexica model identity mode = %o, want 600", info.Mode().Perm())
+	}
+}
+
 func TestConfigVolumesResolveManagedMarkersAndMigrateLegacyHermesKey(t *testing.T) {
 	app, ok := catalog.Get("hermes")
 	if !ok {

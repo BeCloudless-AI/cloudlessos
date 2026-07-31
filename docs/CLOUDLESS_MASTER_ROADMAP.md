@@ -502,6 +502,10 @@ Implementation status (July 31, 2026):
   Hermes configuration resolves its managed value before being written, and an exact legacy
   placeholder is migrated without overwriting a user-supplied provider credential. Stale catalog
   text advertising well-known AI Toolkit and Unsloth passwords has been removed.
+- Cloudless Research's post-install provider bootstrap now consumes the same mode-0600 Perplexica
+  model-client identity as its container environment. It no longer writes a second fixed
+  `cloudless` API-key placeholder into the application's database, and empty identities fail before
+  any provider mutation.
 - Passwordless Jupyter workbenches are admitted only when the signed catalog classifies them as
   local-only, non-shareable `code-execution-ui` surfaces. Changing LAN/public exposure, removing
   local-only confinement or relabeling the risk now invalidates the manifest before provisioning.

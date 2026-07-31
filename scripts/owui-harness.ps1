@@ -21,11 +21,10 @@ $body = @'
         <div class="cfg-actions"><button class="btn primary">Save &amp; apply</button></div>
       </div>
       <div class="set-block"><h3>administration</h3>
-        <div class="fld-help" style="margin:0 0 12px">Everything else about Open WebUI — users, model access, permissions, document/RAG settings and more — is managed inside Open WebUI's own Admin Panel (open the app, then top-right menu &rarr; Admin Panel). When account login is on, the first account you create becomes the administrator; use the default credentials below, then change them in the Admin Panel.</div>
+        <div class="fld-help" style="margin:0 0 12px">Everything else about Open WebUI — users, model access, permissions, document/RAG settings and more — is managed inside Open WebUI's own Admin Panel (open the app, then top-right menu &rarr; Admin Panel). When account login is on, the first account you create becomes the administrator.</div>
         <div class="adm-creds">
-          <div class="adm-row"><span class="adm-k">Default admin</span><code class="adm-v">admin@cloudless.local</code></div>
-          <div class="adm-row"><span class="adm-k">Password</span><code class="adm-v">cloudless</code></div>
-          <div class="fld-help" style="margin:8px 0 0">&#x26A0; Change these in the app's Admin Panel after your first sign-in.</div>
+          <div class="adm-row"><span class="adm-k">Administrator</span><code class="adm-v">No default account</code></div>
+          <div class="fld-help" style="margin:8px 0 0">The first account you create becomes the administrator. CloudlessOS does not ship a shared password.</div>
         </div>
       </div>
       <div class="set-block"><h3>share online</h3>

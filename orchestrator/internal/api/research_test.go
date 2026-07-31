@@ -44,6 +44,8 @@ func TestConfigureCloudlessResearchCreatesModelOnce(t *testing.T) {
 	providerCreates := 0
 	modelCreates := 0
 	setupCalls := 0
+	configuredKey := ""
+	var decodeError error
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		defer mu.Unlock()
@@ -59,6 +61,15 @@ func TestConfigureCloudlessResearchCreatesModelOnce(t *testing.T) {
 			}
 			_ = json.NewEncoder(w).Encode(map[string]any{"providers": providers})
 		case r.Method == http.MethodPost && r.URL.Path == "/api/providers":
+			var body struct {
+				Config map[string]string `json:"config"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				decodeError = err
+				http.Error(w, "invalid provider payload", http.StatusBadRequest)
+				return
+			}
+			configuredKey = body.Config["apiKey"]
 			providerCreates++
 			_ = json.NewEncoder(w).Encode(map[string]any{"provider": map[string]any{"id": "provider-1", "name": "Cloudless", "chatModels": []any{}}})
 		case r.Method == http.MethodPost && r.URL.Path == "/api/providers/provider-1/models":
@@ -73,13 +84,26 @@ func TestConfigureCloudlessResearchCreatesModelOnce(t *testing.T) {
 	}))
 	defer server.Close()
 
-	if err := configureCloudlessResearch(context.Background(), server.URL); err != nil {
+	const apiKey = "cloudless-perplexica-generated-test-identity"
+	if err := configureCloudlessResearch(context.Background(), server.URL, apiKey); err != nil {
 		t.Fatal(err)
 	}
-	if err := configureCloudlessResearch(context.Background(), server.URL); err != nil {
+	if err := configureCloudlessResearch(context.Background(), server.URL, apiKey); err != nil {
 		t.Fatal(err)
 	}
 	if providerCreates != 1 || modelCreates != 1 || setupCalls != 2 {
 		t.Fatalf("provider creates=%d model creates=%d setup=%d", providerCreates, modelCreates, setupCalls)
+	}
+	if decodeError != nil {
+		t.Fatalf("provider payload could not be decoded: %v", decodeError)
+	}
+	if configuredKey != apiKey || configuredKey == "cloudless" {
+		t.Fatalf("provider API key = %q, want generated per-install identity", configuredKey)
+	}
+}
+
+func TestConfigureCloudlessResearchRejectsEmptyModelIdentity(t *testing.T) {
+	if err := configureCloudlessResearch(context.Background(), "http://127.0.0.1:1", ""); err == nil {
+		t.Fatal("empty model identity was accepted")
 	}
 }

@@ -19,6 +19,14 @@ rules = {
     "literal R2 secret-access key": re.compile(rb"AWS_SECRET_ACCESS_KEY\s*=\s*['\"]?[0-9A-Fa-f]{64}(?:['\"]|\s|$)"),
     "private signing key": re.compile(rb"-----BEGIN (?:(?:PGP|OPENSSH|RSA|EC) )?PRIVATE KEY(?: BLOCK)?-----"),
 }
+fixed_model_client = re.compile(
+    rb"(?i)(?:\"(?:apiKey|OPENAI_API_KEY|CUSTOM_API_KEY)\"\s*:\s*|api_key\s*:\s*)[\"']cloudless[\"']"
+)
+model_client_sources = {
+    pathlib.Path("orchestrator/internal/api/packs.go"),
+    pathlib.Path("orchestrator/internal/catalog/cloudless-apps-v2.json"),
+    pathlib.Path("orchestrator/internal/apps/hermes/config.yaml"),
+}
 
 listed = subprocess.run(
     ["git", "ls-files", "-co", "--exclude-standard", "-z"],
@@ -37,6 +45,8 @@ for raw_path in listed:
     if b"\0" in data[:8192]:
         continue
     for line_number, line in enumerate(data.splitlines(), 1):
+        if path in model_client_sources and fixed_model_client.search(line):
+            failures.append((str(path), line_number, "fixed internal model-client credential"))
         for label, pattern in rules.items():
             if pattern.search(line):
                 failures.append((str(path), line_number, label))

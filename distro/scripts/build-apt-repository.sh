@@ -17,6 +17,7 @@ DGX_INSTALLER="${CLOUDLESS_DGX_INSTALLER:-$DISTRO/scripts/install-dgx-spark.sh}"
 RELEASE_GATES="${CLOUDLESS_RELEASE_GATES:-$DISTRO/out/release-gates.json}"
 SBOM="${CLOUDLESS_SBOM:-$DISTRO/out/security/cloudless-$VERSION.spdx.json}"
 PHYSICAL_QUALIFICATION="${CLOUDLESS_PHYSICAL_QUALIFICATION:-$DISTRO/out/qualification/cloudless-physical-qualification.json}"
+PROMOTION="${CLOUDLESS_BETA_PROMOTION:-}"
 SOURCE_COMMIT="${CLOUDLESS_SOURCE_COMMIT:-$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || true)}"
 PACKAGES=(cloudless-orchestrator cloudless-shell cloudless-branding cloudless-hardware cloudless-firstboot cloudless-updater)
 read -r -a ARCHES <<< "${CLOUDLESS_ARCHES:-amd64 arm64}"
@@ -43,6 +44,16 @@ test -s "$DIFFUSION_MANIFEST" || { echo "Missing diffusion manifest: $DIFFUSION_
 test -s "$DGX_INSTALLER" || { echo "Missing DGX Spark installer: $DGX_INSTALLER" >&2; exit 1; }
 test -s "$RELEASE_GATES" || { echo "Missing release-gate attestation. Run distro/scripts/release.sh so every required gate executes before signing." >&2; exit 1; }
 test -s "$PHYSICAL_QUALIFICATION" || { echo "Missing physical qualification descriptor: $PHYSICAL_QUALIFICATION" >&2; exit 1; }
+if [ -n "$PROMOTION" ]; then
+    [ "$CHANNEL" = stable ] || { echo "Beta promotion input is valid only for stable releases." >&2; exit 1; }
+    test -s "$PROMOTION/cloudless-release.json" -a -d "$PROMOTION/packages" -a -d "$PROMOTION/artifacts" || {
+        echo "Incomplete beta promotion snapshot: $PROMOTION" >&2
+        exit 1
+    }
+    python3 "$DISTRO/scripts/verify-beta-promotion.py" \
+        "$PROMOTION/cloudless-release.json" "$PROMOTION/packages" "$PROMOTION/artifacts" \
+        "$VERSION" "$SOURCE_COMMIT" --output "$PROMOTION/cloudless-beta-promotion.json"
+fi
 [[ "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]] || {
     echo "A full Git source commit is required for a production release." >&2
     exit 1
@@ -107,6 +118,34 @@ test -s "$SBOM" || { echo "Final release SBOM was not generated: $SBOM" >&2; exi
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 mkdir -p "$work/baseline"
+
+declare -A PROMOTED_DEB
+if [ -n "$PROMOTION" ]; then
+    python3 - "$PROMOTION/cloudless-release.json" <<'PY' > "$work/promoted-packages.tsv"
+import json, pathlib, sys
+release = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+for item in release["packages"]:
+    print(item["architecture"], item["name"], item["version"], pathlib.PurePosixPath(item["filename"]).name, sep="\t")
+PY
+    while IFS=$'\t' read -r arch package package_version filename; do
+        key="$arch/$package"
+        candidate="$PROMOTION/packages/$filename"
+        test -s "$candidate" || { echo "Missing promoted beta package: $filename" >&2; exit 1; }
+        [ "$(dpkg-deb -f "$candidate" Package)" = "$package" ] && \
+            [ "$(dpkg-deb -f "$candidate" Architecture)" = "$arch" ] && \
+            [ "$(dpkg-deb -f "$candidate" Version)" = "$package_version" ] || {
+            echo "Promoted package metadata mismatch: $filename" >&2
+            exit 1
+        }
+        local_candidate="$PACKAGE_OUT/${package}_${VERSION}_${arch}.deb"
+        test -s "$local_candidate" || { echo "Missing locally validated candidate: $local_candidate" >&2; exit 1; }
+        bash "$DISTRO/scripts/package-content-equal.sh" "$candidate" "$local_candidate" || {
+            echo "Published beta package payload does not match the current source candidate: $package/$arch" >&2
+            exit 1
+        }
+        PROMOTED_DEB[$key]="$candidate"
+    done < "$work/promoted-packages.tsv"
+fi
 
 fetch_remote_baseline() {
     local arch="$1" inrelease="$work/InRelease" verified="$work/InRelease.verified" index="$work/Packages-$1" index_hash index_size
@@ -173,23 +212,33 @@ for arch in "${ARCHES[@]}"; do
         if ${REMOTE_BASELINE[$arch]}; then
             previous="$(find "$work/baseline/$arch" -type f -name "${package}_*_${arch}.deb" -print -quit 2>/dev/null || true)"
         fi
-        candidate="$PACKAGE_OUT/${package}_${VERSION}_${arch}.deb"
+        if [ -n "$PROMOTION" ]; then
+            candidate="${PROMOTED_DEB[$key]:-}"
+        else
+            candidate="$PACKAGE_OUT/${package}_${VERSION}_${arch}.deb"
+        fi
         test -s "$candidate" || { echo "Missing candidate package: $candidate" >&2; exit 1; }
         if [ -n "$previous" ]; then
             PREVIOUS_DEB[$key]="$previous"
             PREVIOUS_FILENAME[$key]="$(cat "$previous.filename")"
             PREVIOUS_VERSION[$key]="$(dpkg-deb -f "$previous" Version)"
-            if bash "$DISTRO/scripts/package-content-equal.sh" "$previous" "$candidate"; then
+            if [ -n "$PROMOTION" ] && cmp -s "$previous" "$candidate"; then
                 echo "==> Unchanged: $package/$arch (${PREVIOUS_VERSION[$key]})"
                 CHANGED[$key]=false
                 continue
             fi
-            dpkg --compare-versions "$VERSION" gt "${PREVIOUS_VERSION[$key]}" || {
-                echo "$VERSION must be newer than ${PREVIOUS_VERSION[$key]} for $package/$arch" >&2
+            if [ -z "$PROMOTION" ] && bash "$DISTRO/scripts/package-content-equal.sh" "$previous" "$candidate"; then
+                echo "==> Unchanged: $package/$arch (${PREVIOUS_VERSION[$key]})"
+                CHANGED[$key]=false
+                continue
+            fi
+            candidate_version="$(dpkg-deb -f "$candidate" Version)"
+            dpkg --compare-versions "$candidate_version" gt "${PREVIOUS_VERSION[$key]}" || {
+                echo "$candidate_version must be newer than ${PREVIOUS_VERSION[$key]} for $package/$arch" >&2
                 exit 1
             }
         fi
-        echo "==> Changed: $package/$arch -> $VERSION"
+        echo "==> Changed: $package/$arch -> $(dpkg-deb -f "$candidate" Version)"
         CHANGED[$key]=true
         changed_count=$((changed_count + 1))
     done
@@ -235,7 +284,12 @@ for arch in "${ARCHES[@]}"; do
     for package in "${PACKAGES[@]}"; do
         key="$arch/$package"
         if ${CHANGED[$key]}; then
-            reprepro --basedir "$REPO" includedeb "$CHANNEL" "$PACKAGE_OUT/${package}_${VERSION}_${arch}.deb"
+            if [ -n "$PROMOTION" ]; then
+                candidate="${PROMOTED_DEB[$key]}"
+            else
+                candidate="$PACKAGE_OUT/${package}_${VERSION}_${arch}.deb"
+            fi
+            reprepro --basedir "$REPO" includedeb "$CHANNEL" "$candidate"
         fi
     done
 done
@@ -244,9 +298,13 @@ packages_file="$work/packages.tsv"
 for arch in "${ARCHES[@]}"; do
     for package in "${PACKAGES[@]}"; do
         key="$arch/$package"
-        candidate="$PACKAGE_OUT/${package}_${VERSION}_${arch}.deb"
+        if [ -n "$PROMOTION" ]; then
+            candidate="${PROMOTED_DEB[$key]}"
+        else
+            candidate="$PACKAGE_OUT/${package}_${VERSION}_${arch}.deb"
+        fi
         if ${CHANGED[$key]}; then
-            current_version="$VERSION"
+            current_version="$(dpkg-deb -f "$candidate" Version)"
             current_deb="$candidate"
             changed=true
         else
@@ -283,12 +341,36 @@ install -d "$artifacts_dir"
     cd "$ROOT/orchestrator"
     go run ./cmd/cloudless-trust-inventory -source-commit "$SOURCE_COMMIT"
 ) > "$work/cloudless-trust-inventory.json"
-install -m 0755 "$DGX_INSTALLER" "$artifacts_dir/install-dgx-spark.sh"
-install -m 0644 "$APP_MANIFEST" "$artifacts_dir/cloudless-apps-manifest.json"
-install -m 0644 "$MODEL_MANIFEST" "$artifacts_dir/cloudless-models.json"
-install -m 0644 "$DIFFUSION_MANIFEST" "$artifacts_dir/cloudless-diffusion.json"
-install -m 0644 "$SBOM" "$artifacts_dir/cloudless-$VERSION.spdx.json"
-install -m 0644 "$work/cloudless-trust-inventory.json" "$artifacts_dir/cloudless-trust-inventory.json"
+if [ -n "$PROMOTION" ]; then
+    for source_and_name in \
+        "$DGX_INSTALLER|install-dgx-spark.sh" \
+        "$APP_MANIFEST|cloudless-apps-manifest.json" \
+        "$MODEL_MANIFEST|cloudless-models.json" \
+        "$DIFFUSION_MANIFEST|cloudless-diffusion.json" \
+        "$work/cloudless-trust-inventory.json|cloudless-trust-inventory.json"; do
+        source="${source_and_name%%|*}"
+        name="${source_and_name#*|}"
+        cmp -s "$source" "$PROMOTION/artifacts/$name" || {
+            echo "Published beta artifact does not match the stable candidate: $name" >&2
+            exit 1
+        }
+        install -m 0644 "$PROMOTION/artifacts/$name" "$artifacts_dir/$name"
+    done
+    # The beta SBOM inventories the exact beta Debian archives. Rebuilding the
+    # same package payload can legitimately change ar/tar timestamps, so the
+    # stable generation retains the signed beta SBOM rather than substituting a
+    # newly generated look-alike document.
+    install -m 0644 "$PROMOTION/artifacts/cloudless-$VERSION.spdx.json" \
+        "$artifacts_dir/cloudless-$VERSION.spdx.json"
+    chmod 0755 "$artifacts_dir/install-dgx-spark.sh"
+else
+    install -m 0755 "$DGX_INSTALLER" "$artifacts_dir/install-dgx-spark.sh"
+    install -m 0644 "$APP_MANIFEST" "$artifacts_dir/cloudless-apps-manifest.json"
+    install -m 0644 "$MODEL_MANIFEST" "$artifacts_dir/cloudless-models.json"
+    install -m 0644 "$DIFFUSION_MANIFEST" "$artifacts_dir/cloudless-diffusion.json"
+    install -m 0644 "$SBOM" "$artifacts_dir/cloudless-$VERSION.spdx.json"
+    install -m 0644 "$work/cloudless-trust-inventory.json" "$artifacts_dir/cloudless-trust-inventory.json"
+fi
 install -m 0644 "$PHYSICAL_QUALIFICATION" "$artifacts_dir/cloudless-physical-qualification.json"
 artifacts_file="$work/artifacts.tsv"
 for artifact in install-dgx-spark.sh cloudless-apps-manifest.json cloudless-models.json cloudless-diffusion.json "cloudless-$VERSION.spdx.json" cloudless-trust-inventory.json cloudless-physical-qualification.json; do
@@ -307,9 +389,11 @@ for artifact in install-dgx-spark.sh cloudless-apps-manifest.json cloudless-mode
 done
 install -d "$REPO/releases/$VERSION"
 manifest="$REPO/releases/$VERSION/$CHANNEL.json"
-python3 - "$NOTES" "$packages_file" "$artifacts_file" "$RELEASE_GATES" "$manifest" "$VERSION" "$CHANNEL" "$SOURCE_COMMIT" "$(date -u +%FT%TZ)" <<'PY'
+promotion_attestation=""
+[ -z "$PROMOTION" ] || promotion_attestation="$PROMOTION/cloudless-beta-promotion.json"
+python3 - "$NOTES" "$packages_file" "$artifacts_file" "$RELEASE_GATES" "$manifest" "$VERSION" "$CHANNEL" "$SOURCE_COMMIT" "$(date -u +%FT%TZ)" "$promotion_attestation" <<'PY'
 import json, sys
-notes_path, packages_path, artifacts_path, gates_path, output, version, channel, source_commit, published_at = sys.argv[1:]
+notes_path, packages_path, artifacts_path, gates_path, output, version, channel, source_commit, published_at, promotion_path = sys.argv[1:]
 with open(notes_path, encoding="utf-8") as handle:
     notes = json.load(handle)
 packages = []
@@ -374,6 +458,24 @@ manifest = {
     "validation": validation,
     "physicalQualification": validation["physicalQualification"],
 }
+if promotion_path:
+    with open(promotion_path, encoding="utf-8") as handle:
+        promotion = json.load(handle)
+    if promotion.get("schema") != "cloudless.beta-promotion.v1" or promotion.get("version") != version or promotion.get("sourceCommit") != source_commit:
+        raise SystemExit("beta promotion attestation does not match the stable release")
+    promoted_packages = {(item["name"], item["architecture"]): item for item in promotion["packages"]}
+    for item in packages:
+        promoted = promoted_packages.get((item["name"], item["architecture"]))
+        if not promoted or any(item[field] != promoted[field] for field in ("version", "sha256", "size")):
+            raise SystemExit(f"stable package is not byte-identical to beta: {item['name']}/{item['architecture']}")
+    promoted_artifacts = {item["name"]: item for item in promotion["artifacts"]}
+    for item in artifacts:
+        if item["name"] == "cloudless-physical-qualification.json":
+            continue
+        promoted = promoted_artifacts.get(item["name"])
+        if not promoted or item["sha256"] != promoted["sha256"] or item["size"] != promoted["size"]:
+            raise SystemExit(f"stable artifact is not byte-identical to beta: {item['name']}")
+    manifest["promotion"] = promotion
 with open(output, "w", encoding="utf-8") as handle:
     json.dump(manifest, handle, ensure_ascii=False, separators=(",", ":"))
     handle.write("\n")

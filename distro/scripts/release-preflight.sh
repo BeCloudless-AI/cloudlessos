@@ -29,6 +29,8 @@ git_root="$(realpath -e "$(git -C "$ROOT" rev-parse --show-toplevel)")"
 [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([+~][0-9A-Za-z][0-9A-Za-z.+~_-]*)?$ ]] || \
     fail "version must be a production semantic/Debian version"
 case "$CHANNEL" in stable|beta) ;; *) fail "channel must be stable or beta" ;; esac
+[ "${CLOUDLESS_PROMOTION_MIN_AGE_SECONDS:-604800}" = 604800 ] || \
+    fail "production beta-to-stable promotion requires the full seven-day soak"
 [ "${CLOUDLESS_ARCHES:-amd64 arm64}" = "amd64 arm64" ] || \
     fail "production releases must contain exactly amd64 and arm64"
 

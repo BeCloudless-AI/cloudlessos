@@ -10,6 +10,11 @@ if [ -z "$VERSION" ]; then
     echo "Usage: $0 VERSION [stable|beta]" >&2
     exit 2
 fi
+case "$CHANNEL" in stable|beta) ;; *) echo "Channel must be stable or beta" >&2; exit 2 ;; esac
+if [ "$CHANNEL" = stable ] && [ -z "${CLOUDLESS_BETA_PROMOTION:-}" ]; then
+    echo "Stable releases must be promoted through distro/scripts/release.sh after the beta soak." >&2
+    exit 1
+fi
 test -s "$SECRET_KEY" || { echo "Signing-key backup not found: $SECRET_KEY" >&2; exit 1; }
 command -v docker >/dev/null || { echo "Docker is required." >&2; exit 1; }
 command -v git >/dev/null || { echo "Git is required." >&2; exit 1; }
@@ -25,6 +30,7 @@ docker image inspect cloudless-release-builder >/dev/null 2>&1 || \
 docker run --rm -it \
     -e CLOUDLESS_SECRET_NAME="$secret_name" \
     -e CLOUDLESS_SOURCE_COMMIT="$source_commit" \
+    -e CLOUDLESS_BETA_PROMOTION \
     -v "$ROOT:/src" \
     -v "$secret_dir:/secrets:ro" \
     -w /src \

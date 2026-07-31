@@ -27,11 +27,12 @@ release cannot be built unless `cloudless-qualify verify-set` proves every autho
 belongs to that exact version and full source commit; the resulting descriptor is detached-signed
 and published with the release artifacts.
 
-Until the release tooling can promote byte-identical beta package objects into stable, the stable
-build is a separately signed build from the exact qualified commit. Its package hashes must be
-retained beside the candidate evidence and the stable smoke/rollback checks must be repeated. Exact
-artifact promotion is a known pre-1.0 release-engineering gap, not something the operator should
-silently assume.
+Stable signing consumes the exact package and common standalone-artifact bytes from the publicly
+verified beta generation. It refuses a beta younger than seven days or one whose signed version,
+full source commit, platform matrix, gate set, qualification binding, payload hashes or detached
+signatures do not match. Stable channel metadata, its physical-qualification identity and detached
+signatures are regenerated; package payloads, SBOM, catalogs, trust inventory and installer bytes
+remain identical to beta.
 
 ## Rollback retention and response
 

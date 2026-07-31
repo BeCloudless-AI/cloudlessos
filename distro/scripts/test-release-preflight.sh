@@ -43,6 +43,10 @@ expect_rejection 'a dirty repository' bash "$PREFLIGHT" "$repo" 1.2.3 stable "$w
 rm "$repo/untracked-source"
 expect_rejection 'a test version' bash "$PREFLIGHT" "$repo" 0.0.0-test-only stable "$work/archive-secret.asc"
 
+export CLOUDLESS_PROMOTION_MIN_AGE_SECONDS=0
+expect_rejection 'a shortened beta soak' bash "$PREFLIGHT" "$repo" 1.2.3 stable "$work/archive-secret.asc"
+unset CLOUDLESS_PROMOTION_MIN_AGE_SECONDS
+
 saved_endpoint="$CLOUDLESS_R2_ENDPOINT"
 export CLOUDLESS_R2_ENDPOINT=https://fake.invalid
 expect_rejection 'a fake endpoint' bash "$PREFLIGHT" "$repo" 1.2.3 stable "$work/archive-secret.asc"

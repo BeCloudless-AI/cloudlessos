@@ -725,6 +725,12 @@ Implementation status (July 31, 2026):
 - Retained release manifests and standalone signed artifacts are now isolated by both version and
   channel. A stable promotion can no longer overwrite beta qualification evidence, signatures or
   immutable artifact paths for the same semantic version.
+- Stable publication now starts from the public, archive-signed beta generation for the exact full
+  source commit. The promotion gate verifies the complete six-package/two-architecture matrix,
+  every standalone payload and detached signature, the validation/compatibility/qualification
+  bindings and a seven-day soak. Stable repository construction reuses those exact package, SBOM,
+  catalog, trust-inventory and installer bytes while regenerating only channel-bound metadata and
+  signatures.
 - [`OPERATIONS.md`](./OPERATIONS.md) indexes the install, DGX, update, recovery, cluster, terminal,
   privacy, diagnostics/support and qualification guides. Privacy documentation distinguishes local
   inference from explicit update, registry, Hugging Face, Tailscale, Cloudflare and browser traffic,
@@ -739,8 +745,7 @@ Implementation status (July 31, 2026):
   seven-day soak, complete retained evidence and repeated stable verification; retains two stable
   rollback generations for at least 90 days; defines pre-1.0 triage targets for each support tier;
   and prohibits new telemetry without explicit opt-in, disclosure and retention controls. It also
-  records byte-identical beta-to-stable artifact promotion and an operationally monitored security
-  contact as pre-1.0 gaps instead of implying they already exist.
+  records an operationally monitored security contact as a remaining pre-1.0 gap.
 
 Done gate:
 

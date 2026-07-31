@@ -150,6 +150,15 @@ The DGX installation guide verifies the installer signature before execution.
 diagnostics, but production releases should use `release.sh` so neither half of
 the pipeline can be accidentally skipped.
 
+A production `stable` release is now a promotion of the already-published `beta`
+generation for the same version and full source commit. `release.sh` verifies the
+beta `InRelease`, fetches the changelog through its signed by-hash path, verifies
+all 12 package payloads and every detached-signed standalone artifact, and enforces
+the seven-day beta soak. The stable repository is built from those exact package
+and common artifact bytes; only stable channel metadata, physical-qualification
+identity and detached signatures are regenerated. A missing, young, incomplete,
+tampered or source-mismatched beta candidate fails before the signing environment.
+
 `publish-signed-release.sh` is a recovery-only resume path. It now runs the same production
 preflight as `release.sh` and refuses to publish unless the signed manifest describes the exact
 current clean commit, production signing identity, channel, version and destination.

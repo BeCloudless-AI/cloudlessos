@@ -131,6 +131,9 @@ echo "==> Encrypted backup and incident-response rehearsal"
 bash "$ROOT/distro/scripts/test-incident-response.sh"
 echo "==> Release test isolation"
 bash "$ROOT/distro/scripts/test-release-isolation.sh"
+echo "==> Beta-to-stable promotion verification"
+python3 "$ROOT/distro/scripts/test-beta-promotion.py"
+bash "$ROOT/distro/scripts/test-prepare-beta-promotion.sh"
 echo "==> Browser JavaScript syntax"
 docker run --rm -v "$ROOT:/src" -w /src \
     node:22-bookworm node distro/scripts/test-web-js.js
@@ -170,13 +173,16 @@ signed_manifest="$ROOT/distro/out/apt-repository/dists/$CHANNEL/cloudless-releas
 assert_source_unchanged
 reuse_signed=false
 if [ -s "$signed_manifest" ] && \
-   python3 - "$signed_manifest" "$VERSION" "$commit" <<'PY'
+   python3 - "$signed_manifest" "$VERSION" "$commit" "$CHANNEL" <<'PY'
 import json, sys
-path, version, commit_prefix = sys.argv[1:]
+path, version, commit_prefix, channel = sys.argv[1:]
 with open(path, encoding="utf-8") as handle:
     release = json.load(handle)
-raise SystemExit(0 if release.get("version") == version and
-                 str(release.get("sourceCommit", "")).startswith(commit_prefix) else 1)
+valid = release.get("version") == version and str(release.get("sourceCommit", "")).startswith(commit_prefix)
+if channel == "stable":
+    promotion = release.get("promotion")
+    valid = valid and isinstance(promotion, dict) and promotion.get("schema") == "cloudless.beta-promotion.v1"
+raise SystemExit(0 if valid else 1)
 PY
 then
     if CLOUDLESS_PUBLISH_VERIFY_ONLY=1 run_publisher; then
@@ -185,8 +191,26 @@ then
     fi
 fi
 if ! $reuse_signed; then
+    if [ "$CHANNEL" = stable ]; then
+        echo "==> Verifying the published beta generation selected for byte-identical promotion"
+        rm -rf "$ROOT/distro/out/beta-promotion"
+        docker run --rm \
+            -e CLOUDLESS_APT_PUBLIC_URL \
+            -e CLOUDLESS_PUBLIC_ROOT_URL \
+            -v "$ROOT:/src" -w /src \
+            cloudless-release-builder \
+            bash distro/scripts/prepare-beta-promotion.sh \
+                "$VERSION" "$full_commit" /src/distro/out/beta-promotion
+        export CLOUDLESS_BETA_PROMOTION=/src/distro/out/beta-promotion
+    else
+        unset CLOUDLESS_BETA_PROMOTION || true
+    fi
     echo "==> PRODUCTION: clean rebuild and signing of CloudlessOS $VERSION"
-    echo "    The release is rebuilt once inside the protected signing environment."
+    if [ "$CHANNEL" = stable ]; then
+        echo "    Stable metadata is signed around the exact verified beta package and artifact bytes."
+    else
+        echo "    The beta candidate is rebuilt once inside the protected signing environment."
+    fi
     bash "$ROOT/distro/scripts/sign-release-interactive.sh" "$VERSION" "$CHANNEL"
 fi
 assert_source_unchanged

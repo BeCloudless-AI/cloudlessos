@@ -159,6 +159,24 @@ physical_artifact = next(item for item in artifacts if item.get("name") == "clou
 with open(base / physical_artifact["path"], encoding="utf-8") as handle:
     if json.load(handle) != physical:
         raise SystemExit("Physical qualification artifact does not match the signed release")
+promotion = release.get("promotion")
+if promotion is not None:
+    if release.get("channel") != "stable" or promotion.get("schema") != "cloudless.beta-promotion.v1":
+        raise SystemExit("Signed release has an invalid beta promotion attestation")
+    if promotion.get("version") != release.get("version") or promotion.get("sourceCommit") != release.get("sourceCommit"):
+        raise SystemExit("Signed beta promotion identity does not match the stable release")
+    promoted_packages = {(item["name"], item["architecture"]): item for item in promotion.get("packages", [])}
+    for item in packages:
+        promoted = promoted_packages.get((item["name"], item["architecture"]))
+        if not promoted or any(item[field] != promoted.get(field) for field in ("version", "sha256", "size")):
+            raise SystemExit(f"Stable package is not byte-identical to beta: {item['name']}/{item['architecture']}")
+    promoted_artifacts = {item["name"]: item for item in promotion.get("artifacts", [])}
+    for item in artifacts:
+        if item["name"] == "cloudless-physical-qualification.json":
+            continue
+        promoted = promoted_artifacts.get(item["name"])
+        if not promoted or item["sha256"] != promoted.get("sha256") or item["size"] != promoted.get("size"):
+            raise SystemExit(f"Stable artifact is not byte-identical to beta: {item['name']}")
 PY
     local version artifact
     version="$(release_version)"

@@ -86,9 +86,10 @@ sudo cloudless-qualify soak \
 ```
 
 The recorder samples only bounded, non-secret summaries from the loopback Cloudless API and checks
-the authenticated terminal listener. It records engine/app/cluster/browser/terminal transitions,
-probe failures and boot identities without retaining URLs, prompts, logs, IP addresses, usernames,
-container images or credentials. `Ctrl+C` safely pauses the run; repeating the same command resumes
+the authenticated terminal listener. It records display/resolution, locale/timezone, physical-input,
+engine/app/cluster/browser/terminal transitions, probe failures and boot identities without retaining
+device names, URLs, prompts, logs, IP addresses, usernames, container images or credentials.
+`Ctrl+C` safely pauses the run; repeating the same command resumes
 from its mode-0600 checkpoint. A different candidate, duration, interval or endpoint fails closed
 unless `--discard-progress` is explicitly supplied. An interrupted run prevents the campaign from
 being sealed. The finished `physical-soak-*.json` can be attached to the applicable physical checks;

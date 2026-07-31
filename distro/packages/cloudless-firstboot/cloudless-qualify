@@ -719,11 +719,22 @@ def soak_http_json(api_base: str, path: str, timeout: int = 5) -> object:
     return json.loads(payload)
 
 
+def bounded_soak_int(value: object, maximum: int = 100000) -> int:
+    try:
+        number = int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+    return number if 0 <= number <= maximum else 0
+
+
 def collect_soak_sample(api_base: str, include_cluster: bool = True) -> dict:
     sample: dict[str, object] = {"capturedAt": utc_now(), "bootId": current_boot_id(), "errors": []}
     endpoints: dict[str, object] = {}
     probes = [
         ("health", "/api/health", 5),
+        ("system", "/api/system", 8),
+        ("input", "/api/system/input", 5),
+        ("display", "/api/system/display", 6),
         ("engine", "/api/engine", 15),
         ("apps", "/api/apps", 12),
         ("browser", "/api/system/browser", 5),
@@ -740,6 +751,33 @@ def collect_soak_sample(api_base: str, include_cluster: bool = True) -> dict:
     sample["health"] = {
         "status": str(health.get("status", ""))[:32],
         "dockerOK": bool(health.get("dockerOK", False)),
+    }
+
+    system = endpoints.get("system") if isinstance(endpoints.get("system"), dict) else {}
+    locale = system.get("locale") if isinstance(system.get("locale"), dict) else {}
+    sample["locale"] = {
+        "timezone": str(locale.get("timezone", ""))[:64],
+        "utcOffset": str(locale.get("utcOffset", ""))[:8],
+        "locale": str(locale.get("locale", ""))[:64],
+        "country": str(locale.get("country", ""))[:3],
+    }
+
+    input_state = endpoints.get("input") if isinstance(endpoints.get("input"), dict) else {}
+    sample["input"] = {
+        "physicalKeyboard": bool(input_state.get("keyboard", False)),
+        "physicalMouse": bool(input_state.get("mouse", False)),
+        "physicalPointer": bool(input_state.get("pointer", False)),
+    }
+
+    display = endpoints.get("display") if isinstance(endpoints.get("display"), dict) else {}
+    configured = display.get("configured") if isinstance(display.get("configured"), dict) else {}
+    sample["display"] = {
+        "available": bool(display.get("available", False)),
+        "width": bounded_soak_int(display.get("width")),
+        "height": bounded_soak_int(display.get("height")),
+        "configuredWidth": bounded_soak_int(configured.get("width")),
+        "configuredHeight": bounded_soak_int(configured.get("height")),
+        "queryFailed": bool(display.get("error")),
     }
 
     engine = endpoints.get("engine") if isinstance(endpoints.get("engine"), dict) else {}
@@ -771,7 +809,7 @@ def collect_soak_sample(api_base: str, include_cluster: bool = True) -> dict:
         "configured": bool(cluster.get("configured", False)),
         "healthy": bool(cluster.get("healthy", False)),
         "computeHealthy": bool(cluster.get("computeHealthy", False)),
-        "nodeCount": int(cluster.get("nodeCount", 0) or 0),
+        "nodeCount": bounded_soak_int(cluster.get("nodeCount"), 8),
         "selectedNodes": len(cluster.get("selectedHosts", [])) if isinstance(cluster.get("selectedHosts"), list) else 0,
         "operation": str(cluster_operation.get("action", ""))[:32],
         "phase": str(cluster_operation.get("phase", ""))[:64],
@@ -796,9 +834,12 @@ def collect_soak_sample(api_base: str, include_cluster: bool = True) -> dict:
 
 
 def soak_transition_counts(samples: list[dict]) -> dict[str, int]:
-    counts = {name: 0 for name in ("engine", "apps", "cluster", "browser", "terminal", "boot")}
+    counts = {
+        name: 0
+        for name in ("locale", "input", "display", "engine", "apps", "cluster", "browser", "terminal", "boot")
+    }
     for previous, current in zip(samples, samples[1:]):
-        for name in ("engine", "apps", "cluster", "browser", "terminal"):
+        for name in ("locale", "input", "display", "engine", "apps", "cluster", "browser", "terminal"):
             if previous.get(name) != current.get(name):
                 counts[name] += 1
         if previous.get("bootId") != current.get("bootId"):

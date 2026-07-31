@@ -746,7 +746,8 @@ Implementation status (July 31, 2026):
   matrices remain open; therefore the broader soak checklist is not marked complete yet.
 - The packaged qualification runner now includes a resumable `soak` command for that physical
   work. It samples bounded loopback summaries while an operator exercises browser, terminal, app,
-  model and cluster flows, persists an interruption-safe mode-0600 checkpoint, records transition
+  model and cluster flows, plus display, locale/timezone and physical-input state. It persists an
+  interruption-safe mode-0600 checkpoint, records transition
   and failure counts, excludes sensitive response fields and prevents sealing while a run is
   incomplete. It produces evidence for human review; it does not self-attest a passing check.
 - `physical-validation-matrix.json` defines the exact VirtualBox, generic NVIDIA, single-Spark and

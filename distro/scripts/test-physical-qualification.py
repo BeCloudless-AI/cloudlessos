@@ -493,6 +493,9 @@ class PhysicalQualificationTest(unittest.TestCase):
             "bootId": "00000000-0000-0000-0000-000000000001",
             "errors": ([{"probe": "engine", "kind": "TimeoutError"}] if failed else []),
             "health": {"status": "ok", "dockerOK": True},
+            "locale": {"timezone": "Asia/Dubai", "utcOffset": "+04:00", "locale": "en_US.UTF-8", "country": "AE"},
+            "input": {"physicalKeyboard": False, "physicalMouse": False, "physicalPointer": False},
+            "display": {"available": True, "width": 3840 if index else 1920, "height": 2160 if index else 1080},
             "engine": {"active": "vllm", "ready": index > 0, "phase": "loading" if index == 0 else ""},
             "apps": [{"name": "cloudless-hermes", "state": "running"}],
             "cluster": {"configured": False, "healthy": False, "nodeCount": 0},
@@ -539,6 +542,7 @@ class PhysicalQualificationTest(unittest.TestCase):
         self.assertEqual(payload["summary"]["failedSamples"], 1)
         self.assertEqual(payload["summary"]["transitions"]["engine"], 1)
         self.assertEqual(payload["summary"]["transitions"]["browser"], 2)
+        self.assertEqual(payload["summary"]["transitions"]["display"], 1)
 
     def test_physical_soak_rejects_remote_api_and_secret_bearing_samples(self):
         campaign = self.begin()
@@ -580,6 +584,32 @@ class PhysicalQualificationTest(unittest.TestCase):
                 sample_provider=lambda _: self.soak_sample(0),
                 sleeper=lambda _: None,
             )
+
+    def test_physical_soak_sample_omits_sensitive_and_unbounded_api_fields(self):
+        responses = {
+            "/api/health": {"status": "ok", "dockerOK": True, "diagnostic": "private-log"},
+            "/api/system": {"system": {"hostname": "private-host"}, "locale": {"timezone": "Asia/Dubai", "country": "AE"}},
+            "/api/system/input": {"keyboard": False, "mouse": True, "keyboardNames": ["Private Keyboard"]},
+            "/api/system/display": {"available": True, "output": "private-output-name", "width": 3840, "height": 2160, "error": "private-display-error"},
+            "/api/engine": {"active": "vllm", "ready": True, "startup": {"update": {"phase": "ready", "message": "private-model-path"}}},
+            "/api/apps": [{"name": "cloudless-hermes", "state": "running", "image": "private-registry/image"}],
+            "/api/system/browser": {"available": True, "running": True, "downloadsPath": "/home/private/Downloads"},
+            "/api/system/spark-cluster": {"configured": True, "healthy": True, "nodeCount": 2, "peerHost": "private-ip", "username": "private-user"},
+        }
+        with mock.patch.object(qualify, "current_boot_id", return_value="boot-1"), mock.patch.object(
+            qualify, "soak_http_json", side_effect=lambda _base, path, _timeout: responses[path]
+        ), mock.patch.object(qualify.socket, "create_connection", return_value=mock.MagicMock()):
+            sample = qualify.collect_soak_sample("http://127.0.0.1:8765")
+        rendered = json.dumps(sample, sort_keys=True)
+        for private in (
+            "private-log", "private-host", "Private Keyboard", "private-output-name",
+            "private-display-error", "private-model-path", "private-registry", "private/Downloads",
+            "private-ip", "private-user",
+        ):
+            self.assertNotIn(private, rendered)
+        self.assertEqual(sample["display"]["width"], 3840)
+        self.assertEqual(sample["locale"]["timezone"], "Asia/Dubai")
+        self.assertTrue(sample["input"]["physicalMouse"])
 
 
 if __name__ == "__main__":

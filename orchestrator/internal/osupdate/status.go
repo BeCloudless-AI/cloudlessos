@@ -65,11 +65,18 @@ func DefaultStatus() Status {
 }
 
 func Channel() string {
-	b, err := os.ReadFile(channelPath)
+	b, err := os.ReadFile(ChannelPath())
 	if err != nil || strings.TrimSpace(string(b)) == "" {
 		return "stable"
 	}
 	return strings.TrimSpace(string(b))
+}
+
+func ChannelPath() string {
+	if path := os.Getenv("CLOUDLESS_UPDATE_CHANNEL_PATH"); path != "" {
+		return path
+	}
+	return channelPath
 }
 
 func Configured() bool {
@@ -96,9 +103,10 @@ func Read() (Status, error) {
 		return Status{}, err
 	}
 	status.Configured = Configured()
-	if status.Channel == "" {
-		status.Channel = Channel()
-	}
+	// The channel file is the administrator-controlled source of truth. A
+	// persisted status document may describe an earlier channel and must never
+	// redirect release-note verification after the configured channel changes.
+	status.Channel = Channel()
 	reconcileReboot(&status, currentBootID(), systemBootTime())
 	return status, nil
 }
@@ -109,9 +117,7 @@ func Write(status Status) error {
 		return err
 	}
 	status.Configured = Configured()
-	if status.Channel == "" {
-		status.Channel = Channel()
-	}
+	status.Channel = Channel()
 	if status.RebootRequired && status.RebootBootID == "" {
 		status.RebootBootID = currentBootID()
 	}

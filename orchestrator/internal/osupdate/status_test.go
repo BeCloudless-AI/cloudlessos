@@ -1,6 +1,7 @@
 package osupdate
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -70,5 +71,31 @@ func TestMissingStatusReturnsIdle(t *testing.T) {
 	}
 	if got.State != "idle" || got.Channel != "stable" {
 		t.Fatalf("Read() = %#v", got)
+	}
+}
+
+func TestReadReconcilesPersistedChannelWithConfiguration(t *testing.T) {
+	dir := t.TempDir()
+	statusPath := filepath.Join(dir, "status.json")
+	channelPath := filepath.Join(dir, "update-channel")
+	t.Setenv("CLOUDLESS_UPDATE_STATUS", statusPath)
+	t.Setenv("CLOUDLESS_UPDATE_CHANNEL_PATH", channelPath)
+
+	if err := os.WriteFile(channelPath, []byte("stable\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := Write(Status{State: "idle"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(channelPath, []byte("beta\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := Read()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Channel != "beta" {
+		t.Fatalf("Read().Channel = %q, want beta", got.Channel)
 	}
 }

@@ -116,8 +116,14 @@ find_browser() {
 while :; do
     for request in "$REQUESTS"/*.json; do
         [ -f "$request" ] || continue
-        url="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8")).get("url", ""))' "$request" 2>/dev/null || true)"
-        action="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8")).get("action", "open"))' "$request" 2>/dev/null || true)"
+        if ! url="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8")).get("url", ""))' "$request" 2>&1)"; then
+            echo "Cloudless Browser could not read queued request $(basename "$request"): $url" >&2
+            continue
+        fi
+        if ! action="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8")).get("action", "open"))' "$request" 2>&1)"; then
+            echo "Cloudless Browser could not read queued action $(basename "$request"): $action" >&2
+            continue
+        fi
         case "$url" in
             http://*|https://*) ;;
             *) rm -f "$request"; continue ;;

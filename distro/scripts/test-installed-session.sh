@@ -43,7 +43,7 @@ trap cleanup EXIT
 
 install -d -o cloudlessd -g cloudless-control -m 0750 "$work/state"
 install -d -o cloudless -g cloudless -m 0750 "$work/home" "$work/home/.config"
-install -d -o root -g cloudless -m 0770 \
+install -d -o root -g cloudless -m 2770 \
   /run/cloudless-desktop /run/cloudless-browser /run/cloudless-browser/requests
 install -o cloudless -g cloudless -m 0660 /dev/null /run/cloudless-browser/status.json
 printf '{"running":false,"minimized":false}\n' >/run/cloudless-browser/status.json
@@ -201,6 +201,12 @@ wait_file_contains() {
     sleep 0.05
   done
   echo "Timed out waiting for '$expected' in $file" >&2
+  echo "--- browser agent log ---" >&2
+  cat /tmp/cloudless-session-browser.log >&2 2>/dev/null || true
+  echo "--- browser request queue ---" >&2
+  ls -la /run/cloudless-browser /run/cloudless-browser/requests >&2 2>/dev/null || true
+  echo "--- browser process ---" >&2
+  ps -o pid,ppid,user,group,stat,args -p "${browser_pid:-}" >&2 2>/dev/null || true
   return 1
 }
 

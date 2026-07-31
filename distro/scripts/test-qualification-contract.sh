@@ -91,6 +91,7 @@ grep -Fq 'lifecycle-soak-$run_id-$attempt' "$runner"
 grep -Fq 'prepare-ci-qualification.py' "$runner"
 grep -Fq 'go build -buildvcs=false' "$runner"
 grep -Fq 'Source changed while qualification was running' "$runner"
+grep -Fq 'CLOUDLESS_VERSION="$VERSION" CLOUDLESS_TEST_ARCH="$architecture"' "$runner"
 if [ -d "$ROOT/.github/workflows" ] && find "$ROOT/.github/workflows" -type f \( -name '*.yml' -o -name '*.yaml' \) -print -quit | grep -q .; then
     echo "Hosted GitHub Actions workflows must remain disabled." >&2
     exit 1

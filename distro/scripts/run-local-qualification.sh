@@ -99,7 +99,8 @@ package_job() {
     docker run --rm -e CLOUDLESS_VERSION="$VERSION" -e CLOUDLESS_SKIP_PACKAGE_BUILD=1 \
         -v "$ROOT:/src" -w /src cloudless-package-builder bash distro/scripts/test-packages.sh
     for architecture in amd64 arm64; do
-        CLOUDLESS_TEST_ARCH="$architecture" bash "$ROOT/distro/scripts/test-package-lifecycle.sh"
+        CLOUDLESS_VERSION="$VERSION" CLOUDLESS_TEST_ARCH="$architecture" \
+            bash "$ROOT/distro/scripts/test-package-lifecycle.sh"
     done
     mapfile -t candidates < <(find "$ROOT/distro/out/packages" -maxdepth 1 -type f \
         -name "*_${VERSION}_*.deb" -print | sort)

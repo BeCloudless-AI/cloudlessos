@@ -31,9 +31,13 @@ if [[ "${1:-}" == "--inside" ]]; then
 
   install_generation "$baseline" "$expected_old"
   install -d -m 0750 /var/lib/cloudless
-  printf '%s\n' \
-    '{"engine":"vllm","model":"qualification/model","engineUnloaded":false,"executionMode":"local"}' \
-    >/var/lib/cloudless/state.json
+  qualification_engine=vllm
+  if [ "$(dpkg --print-architecture)" = arm64 ]; then
+    qualification_engine=llamacpp
+  fi
+  export CLOUDLESS_QUALIFICATION_ENGINE="$qualification_engine"
+  printf '{"engine":"%s","model":"qualification/model","engineUnloaded":false,"executionMode":"local"}\n' \
+    "$qualification_engine" >/var/lib/cloudless/state.json
   chown cloudlessd:cloudless-control /var/lib/cloudless/state.json
   chmod 0640 /var/lib/cloudless/state.json
   printf '{"qualification":"preserve-me"}\n' >/var/lib/cloudless/qualification-preserve.json
@@ -90,14 +94,24 @@ def handle(connection):
                 time.sleep(0.05)
         response = {"done": True}
         if request.get("action") == "container.list":
-            response["containers"] = [{
-                "id": "qualification-vllm",
-                "name": "cloudless-vllm",
-                "image": "qualification/vllm@sha256:" + "1" * 64,
-                "state": "running",
-                "status": "Up for package qualification",
-                "ports": "127.0.0.1:8000->8000/tcp",
-            }]
+            response["containers"] = [
+                {
+                    "id": "qualification-vllm",
+                    "name": "cloudless-vllm",
+                    "image": "qualification/vllm@sha256:" + "1" * 64,
+                    "state": "running",
+                    "status": "Up for package qualification",
+                    "ports": "127.0.0.1:8000->8000/tcp",
+                },
+                {
+                    "id": "qualification-llamacpp",
+                    "name": "cloudless-llamacpp",
+                    "image": "qualification/llamacpp@sha256:" + "1" * 64,
+                    "state": "running",
+                    "status": "Up for package qualification",
+                    "ports": "127.0.0.1:8000->8000/tcp",
+                },
+            ]
         elif request.get("action") in {"volume.list", "container.by-label", "container.by-ancestor"}:
             response["strings"] = []
         connection.sendall((json.dumps(response) + "\n").encode())
@@ -168,13 +182,13 @@ PY
   assert_active_model() {
     local expected_digest
     expected_digest="$(sha256sum "$migrated" | awk '{print $1}')"
-    python3 - "$expected_digest" <<'PY'
+    python3 - "$expected_digest" "$qualification_engine" <<'PY'
 import json
 import sys
 import time
 import urllib.request
 
-expected = sys.argv[1]
+expected, expected_engine = sys.argv[1:]
 deadline = time.time() + 10
 last = ""
 while time.time() < deadline:
@@ -184,7 +198,7 @@ while time.time() < deadline:
         with urllib.request.urlopen("http://127.0.0.1:8000/v1/models", timeout=2) as response:
             model = json.load(response)
         if (
-            engine.get("active") == "vllm"
+            engine.get("active") == expected_engine
             and engine.get("ready") is True
             and engine.get("unloaded") is False
             and model.get("data") == [{"id": "cloudless"}]
@@ -207,13 +221,14 @@ import urllib.request
 
 digest = "2" * 64
 revision = "3" * 40
+engine_type = "vllm"
 draft = {
     "name": "Package continuity recipe",
     "description": "A constrained recipe used to qualify durable preparation across package transitions.",
     "platform": "generic",
     "source": {"url": "", "revision": "", "files": {}},
     "engine": {
-        "type": "vllm", "image": f"qualification/vllm@sha256:{digest}",
+        "type": engine_type, "image": f"qualification/{engine_type}@sha256:{digest}",
         "servedModelName": "cloudless", "containerPort": 8890, "apiPath": "/v1",
         "proxyHost": "host.docker.internal", "restartPolicy": "no", "arguments": [],
     },

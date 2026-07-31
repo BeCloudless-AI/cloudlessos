@@ -63,7 +63,8 @@ sudo cloudless-qualify boot /var/lib/cloudless/qualification/0.2.7-01234567/dgx-
 
 For the representative two-Spark failure matrix, start the observer before beginning the requested
 model transition. The command waits for the exact durable lifecycle phase, tells the operator when
-to inject the single named physical condition, verifies readiness fails closed with Abort still
+to inject the single named physical condition, holds that boundary until the operator confirms the
+fault is in place, verifies readiness fails closed with Abort still
 available, then waits for a healthy recovery or a verified safe unload:
 
 ```bash
@@ -76,6 +77,11 @@ Repeat it for the failure/phase pair shown by `cloudless-qualify next`. `Ctrl+C`
 restart, or a lost shell leaves a root-private checkpoint; repeat the identical command to resume.
 Use `--discard-progress` only to abandon that case. Role-reversal attempts are expected to leave the
 cluster healthy and require `--rejection-evidence /path/to/redacted-proof` from the rejected action.
+The phase hold is admitted only from a root-owned, non-writable record under `/run`, expires after
+ten minutes and never grants the daemon write access to the qualification controller.
+For the `rollback` phase, that same trusted record deliberately fails the candidate only after its
+private endpoint becomes ready, so the normal compensating rollback path is entered and held; no
+test image, hidden API or production failure injector is used.
 The generated evidence contains only bounded booleans/counts, boot identity and a hash of the durable
 operation ID. Peer names, addresses, usernames, messages, logs and model identifiers are omitted.
 Any interrupted cluster rehearsal blocks campaign sealing.

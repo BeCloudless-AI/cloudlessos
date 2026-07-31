@@ -20,7 +20,7 @@ func TestEngineBannerUsesRealPeerByteProgress(t *testing.T) {
 		t.Fatal(err)
 	}
 	page := string(content)
-	for _, want := range []string{"peer-downloading", "engineStartup.bytesDone", "Worker Sparks are downloading the model", "progress = Math.round(bytesDone / bytesTotal * 100)", "Finalizing",
+	for _, want := range []string{"peer-downloading", "starting-workers", "engineStartup.bytesDone", "Worker Sparks are downloading the model", "Preparing the model and inference engine", "progress = Math.round(bytesDone / bytesTotal * 100)", "Finalizing", "Verifying", "Restoring",
 		`id="eb-nodes"`, `Array.isArray(engineStartup?.nodes)`, `node.etaSeconds`, `modelDownloadSize(node.bytesDone)`} {
 		if !strings.Contains(page, want) {
 			t.Fatalf("engine progress UI missing %q", want)

@@ -59,6 +59,11 @@ print("Physical qualification contract covers VM, NVIDIA and every one-to-eight-
 PY
 python3 "$ROOT/distro/scripts/test-physical-qualification.py"
 python3 "$ROOT/distro/packages/cloudless-firstboot/cloudless-qualify" --help | grep -Fq '{begin,boot,boot-active,record,collect,soak,update-rollback,backup-restore,cluster-failure,status,plan,next,export,verify-export,verify-set}'
+for phase in pending preparing downloading starting-workers loading optimizing verifying stopping rollback; do
+    grep -Fq "waitQualificationPhaseGate(ctx, \"$phase\")" "$ROOT/orchestrator/internal/api/server.go"
+done
+grep -Fq 'qualificationPhaseGateOwnerUID uint32 = 0' "$ROOT/orchestrator/internal/api/qualification_gate.go"
+grep -Fq 'qualificationRollbackRequested()' "$ROOT/orchestrator/internal/api/server.go"
 python3 "$ROOT/distro/scripts/test-physical-release.py"
 
 workflow="$ROOT/.github/workflows/multiarch.yml"

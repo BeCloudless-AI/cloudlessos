@@ -405,7 +405,10 @@ Implementation status (July 31, 2026):
   has recorded physical multi-Spark evidence.
 - The packaged `cloudless-qualify cluster-failure` runner now turns that same authoritative 7x9
   matrix into resumable physical rehearsals. It observes the durable phase and hashed operation
-  identity, checkpoints before fault injection, requires fail-closed readiness plus Abort, and only
+  identity, checkpoints before fault injection, and installs a root-owned, ten-minute phase hold so
+  even millisecond-scale pending/verifying boundaries can be exercised deterministically. The
+  daemon only reads a non-writable, expiring gate and normal operation ignores malformed, stale,
+  symlinked or non-root records. The runner requires fail-closed readiness plus Abort, and only
   passes after healthy recovery or a safe unload. Rejected role reversal instead requires retained
   rejection evidence while proving the healthy workload was not disturbed. Interrupted cases block
   campaign sealing; no peer identities, addresses, messages or logs enter the generated evidence.

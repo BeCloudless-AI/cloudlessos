@@ -5185,8 +5185,12 @@ function applyEngineUI() {
       ? 'Cloudless AI needs attention'
       : startupPhase === 'error'
       ? 'Cloudless AI needs attention'
-      : startupPhase === 'peer-downloading'
+      : startupPhase === 'downloading' && engineExecutionMode !== 'cluster'
+      ? 'Preparing the model and inference engine…'
+      : startupPhase === 'downloading' || startupPhase === 'peer-downloading'
       ? 'Worker Sparks are downloading the model…'
+      : startupPhase === 'starting-workers'
+      ? 'Starting the distributed inference workers…'
       : startupPhase === 'peer-loading'
       ? 'Worker Sparks are loading model weights…'
       : startupPhase === 'optimizing'
@@ -5230,17 +5234,20 @@ function applyEngineUI() {
       } else if (promotionActive && enginePromotion.phase === 'verifying') progressLabel = 'Verifying';
       else if (promotionActive && enginePromotion.phase === 'switching') progressLabel = 'Switching';
       else if (promotionActive && enginePromotion.phase === 'rollback') progressLabel = 'Restoring';
-      else if (phase === 'peer-downloading' && bytesTotal > 0) {
+      else if ((phase === 'downloading' || phase === 'peer-downloading') && bytesTotal > 0) {
         progress = Math.round(bytesDone / bytesTotal * 100);
         progressLabel = `${progress}%`;
       } else if (phase === 'loading' && total > 0) {
         progress = Math.round(done / total * 100);
         progressLabel = `${progress}%`;
-      } else if (phase === 'peer-downloading') progressLabel = 'Downloading';
+      } else if (phase === 'downloading' || phase === 'peer-downloading') progressLabel = 'Downloading';
       else if (phase === 'peer-loading' || phase === 'loading') progressLabel = 'Loading';
       else if (phase === 'optimizing') progressLabel = 'Finalizing';
+      else if (phase === 'verifying') progressLabel = 'Verifying';
+      else if (phase === 'stopping') progressLabel = 'Stopping';
+      else if (phase === 'rollback') progressLabel = 'Restoring';
       else if (phase === 'error') progressLabel = 'Failed';
-      else if (phase === 'cluster') progressLabel = msg.includes('joined') ? 'Connected' : 'Preparing';
+      else if (phase === 'cluster' || phase === 'starting-workers') progressLabel = msg.includes('joined') ? 'Connected' : 'Preparing workers';
       if (progress != null) progress = Math.max(0, Math.min(100, progress));
       const percent = document.getElementById('eb-percent');
       if (percent) percent.textContent = progressLabel;

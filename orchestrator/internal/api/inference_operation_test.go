@@ -3,7 +3,10 @@ package api
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/cloudless/orchestrator/internal/engine"
 	"github.com/cloudless/orchestrator/internal/jobs"
@@ -86,5 +89,50 @@ func TestFailedLocalLaunchRestoresPreviousRuntime(t *testing.T) {
 	}
 	if len(runtime.runs) != 1 || runtime.runs[0].Name != "cloudless-vllm" {
 		t.Fatalf("previous engine was not relaunched: %#v", runtime.runs)
+	}
+}
+
+func TestFailedLaunchExposesRollbackQualificationBoundaryThenReturnsTerminal(t *testing.T) {
+	store, err := state.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	previous := state.InferenceRuntime{Engine: "vllm", Model: "stable/model", ExecutionMode: "local"}
+	operation := state.InferenceOperation{
+		ID: "job-rollback-gate", Action: "switch", TargetEngine: "sglang",
+		Previous: previous, Phase: "error", Error: "candidate health failed",
+	}
+	if err := store.BeginInferenceOperation(operation); err != nil {
+		t.Fatal(err)
+	}
+	runtime := &inferenceRollbackEngine{}
+	server := &Server{state: store, eng: runtime}
+	gatePath := filepath.Join(t.TempDir(), "phase-gate.json")
+	if err := os.WriteFile(gatePath, []byte(gateJSON("rollback", time.Now().Add(time.Minute))), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	withQualificationGateTestPath(t, gatePath)
+	done := make(chan struct{})
+	go func() {
+		server.rollbackInferenceRuntime(context.Background(), operation.ID)
+		close(done)
+	}()
+	deadline := time.Now().Add(time.Second)
+	for store.Get().InferenceOperation.Phase != "rollback" && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if got := store.Get().InferenceOperation; got.Phase != "rollback" {
+		t.Fatalf("durable operation never exposed rollback boundary: %#v", got)
+	}
+	if err := os.Remove(gatePath); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("rollback did not resume after qualification gate release")
+	}
+	if got := store.Get().InferenceOperation; got.Phase != "error" || got.Error != operation.Error {
+		t.Fatalf("rollback did not return to its terminal result: %#v", got)
 	}
 }

@@ -847,6 +847,22 @@ func (s *Server) rollbackInferenceRuntime(ctx context.Context, operationID strin
 		_ = s.state.SetEngineUnloaded(true)
 		return
 	}
+	terminal := operation
+	terminal.Phase = "error"
+	if terminal.Error == "" {
+		terminal.Error = "the candidate inference runtime failed and Cloudless restored a safe state"
+	}
+	if _, err := s.state.UpdateInferenceOperation(state.InferenceOperation{
+		ID: operationID, Phase: "rollback", Message: "Restoring the previous inference runtime",
+	}); err != nil {
+		log.Printf("engine: persist rollback phase: %v", err)
+	}
+	waitQualificationPhaseGate(ctx, "rollback")
+	defer func() {
+		if _, err := s.state.UpdateInferenceOperation(terminal); err != nil {
+			log.Printf("engine: persist terminal rollback result: %v", err)
+		}
+	}()
 	previous := operation.Previous
 	safePrevious := previous
 	safePrevious.EngineUnloaded = true
@@ -887,6 +903,7 @@ func (s *Server) runEngineUnload(job *jobs.Job) {
 	s.stopActiveLocalRecipeRuntime(context.Background(), job)
 
 	job.Progress("stopping", "Stopping inference and releasing accelerator memory …", -1, -1)
+	waitQualificationPhaseGate(ctx, "stopping")
 	if s.state.Get().ExecutionMode == "cluster" {
 		job.Progress("stopping", "Stopping distributed inference on the other Spark …", -1, -1)
 		if err := sparkcluster.StopWorker(ctx); err != nil {
@@ -1000,6 +1017,9 @@ func (s *Server) applyEngineVerified(job *jobs.Job, target catalog.App, exactIma
 	defer cancel()
 	s.registerEngineJob(job.ID, cancel)
 	defer s.unregisterEngineJob(job.ID)
+	waitQualificationPhaseGate(ctx, "pending")
+	job.Progress("preparing", "Validating the selected inference runtime and cluster contract …", -1, -1)
+	waitQualificationPhaseGate(ctx, "preparing")
 	var distributedProfile distributedprofiles.Profile
 	distributedImage := ""
 	if distributed {
@@ -1101,7 +1121,9 @@ func (s *Server) applyEngineVerified(job *jobs.Job, target catalog.App, exactIma
 			return
 		}
 		spec := sparkcluster.CoordinatorSpec(managedSpec)
-		job.Progress("cluster", "Starting the coordinator on this Spark …", -1, -1)
+		job.Progress("downloading", "Preparing the reviewed model and engine artifacts on every Spark …", -1, -1)
+		waitQualificationPhaseGate(ctx, "downloading")
+		job.Progress("starting-workers", "Starting the coordinator on this Spark …", -1, -1)
 		_, runErr = s.eng.Run(ctx, spec)
 		if runErr != nil {
 			provision.EngineMu.Unlock()
@@ -1109,7 +1131,8 @@ func (s *Server) applyEngineVerified(job *jobs.Job, target catalog.App, exactIma
 			return
 		}
 		started := time.Now()
-		job.Progress("cluster", fmt.Sprintf("Preparing %d worker Sparks. First launch downloads may take several minutes …", clusterNodes-1), -1, -1)
+		job.Progress("starting-workers", fmt.Sprintf("Preparing %d worker Sparks. First launch downloads may take several minutes …", clusterNodes-1), -1, -1)
+		waitQualificationPhaseGate(ctx, "starting-workers")
 		workerDone := make(chan error, 1)
 		go func() { workerDone <- sparkcluster.StartWorker(ctx, spec.Image, modelID) }()
 		ticker := time.NewTicker(10 * time.Second)
@@ -1121,7 +1144,7 @@ func (s *Server) applyEngineVerified(job *jobs.Job, target catalog.App, exactIma
 				break workerWait
 			case <-ticker.C:
 				elapsed := time.Since(started).Round(time.Second)
-				job.Progress("cluster", fmt.Sprintf("Preparing %d worker Sparks for distributed inference (%s elapsed) …", clusterNodes-1, elapsed), -1, -1)
+				job.Progress("starting-workers", fmt.Sprintf("Preparing %d worker Sparks for distributed inference (%s elapsed) …", clusterNodes-1, elapsed), -1, -1)
 			case <-ctx.Done():
 				workerErr = ctx.Err()
 				break workerWait
@@ -1133,17 +1156,17 @@ func (s *Server) applyEngineVerified(job *jobs.Job, target catalog.App, exactIma
 			job.Fail(workerErr)
 			return
 		}
-		job.Progress("cluster", fmt.Sprintf("Waiting for all %d Sparks to join the inference cluster …", clusterNodes), -1, -1)
+		job.Progress("starting-workers", fmt.Sprintf("Waiting for all %d Sparks to join the inference cluster …", clusterNodes), -1, -1)
 		waitCommand := fmt.Sprintf("until ray status 2>/dev/null | grep -q '/%d.0 GPU'; do sleep 2; done", clusterNodes)
 		if err := s.eng.Exec(ctx, target.ContainerName(), "/bin/bash", "-lc", waitCommand); err != nil {
 			runErr = err
 		}
-		job.Progress("cluster", fmt.Sprintf("All %d Sparks joined. Starting the distributed model …", clusterNodes), -1, -1)
+		job.Progress("starting-workers", fmt.Sprintf("All %d Sparks joined. Starting the distributed model …", clusterNodes), -1, -1)
 		if err := s.eng.Exec(ctx, target.ContainerName(), "touch", "/tmp/cloudless-ray-worker"); err != nil {
 			runErr = err
 		}
 		if runErr == nil {
-			job.Progress("cluster", fmt.Sprintf("Connecting Cloudless apps to the %d-Spark engine …", clusterNodes), -1, -1)
+			job.Progress("starting-workers", fmt.Sprintf("Connecting Cloudless apps to the %d-Spark engine …", clusterNodes), -1, -1)
 			_ = s.eng.Pull(ctx, "alpine/socat:latest")
 			_, runErr = s.eng.Run(ctx, sparkcluster.ProxySpec())
 		}
@@ -1156,6 +1179,8 @@ func (s *Server) applyEngineVerified(job *jobs.Job, target catalog.App, exactIma
 		if exactImage != "" {
 			spec.Image = exactImage
 		}
+		job.Progress("downloading", "Preparing the reviewed model and engine artifacts …", -1, -1)
+		waitQualificationPhaseGate(ctx, "downloading")
 		_, runErr = s.eng.Run(ctx, spec)
 	}
 	provision.EngineMu.Unlock()
@@ -1169,6 +1194,7 @@ func (s *Server) applyEngineVerified(job *jobs.Job, target catalog.App, exactIma
 		loadingMessage = "Loading " + resolveModel(model) + " locally on this Spark …"
 	}
 	job.Progress("loading", loadingMessage, -1, -1)
+	waitQualificationPhaseGate(ctx, "loading")
 	var peerTotal int64
 	var nextPeerProbe time.Time
 	peerLastBytes := map[string]int64{}
@@ -1191,6 +1217,16 @@ func (s *Server) applyEngineVerified(job *jobs.Job, target catalog.App, exactIma
 		ready := engineReady(pctx)
 		pcancel()
 		if ready {
+			if qualificationPhaseRequested("optimizing") {
+				job.Progress("optimizing", "Finalizing the distributed inference runtime …", -1, -1)
+				waitQualificationPhaseGate(ctx, "optimizing")
+			}
+			if qualificationRollbackRequested() {
+				job.Fail(errors.New("qualification requested the real rollback boundary"))
+				return
+			}
+			job.Progress("verifying", "Verifying the stable Cloudless model and API contract …", -1, -1)
+			waitQualificationPhaseGate(ctx, "verifying")
 			if verify != nil {
 				verifyCtx, verifyCancel := context.WithTimeout(context.Background(), 15*time.Second)
 				verifyErr := verify(verifyCtx)
@@ -1327,6 +1363,7 @@ func (s *Server) applyEngineVerified(job *jobs.Job, target catalog.App, exactIma
 					continue
 				}
 				job.ProgressNodes("optimizing", fmt.Sprintf("All %d Sparks loaded the model. Optimizing distributed inference …", clusterNodes), nodeProgress, clusterDone, clusterTotal)
+				waitQualificationPhaseGate(ctx, "optimizing")
 				time.Sleep(2 * time.Second)
 				continue
 			}
@@ -1337,6 +1374,7 @@ func (s *Server) applyEngineVerified(job *jobs.Job, target catalog.App, exactIma
 				job.Progress("loading", fmt.Sprintf("Loading model weights — %d of %d checkpoint shards", done, total), done, total)
 			} else if total > 0 {
 				job.Progress("optimizing", fmt.Sprintf("All %d Sparks loaded the model. Optimizing distributed inference …", clusterNodes), done, total)
+				waitQualificationPhaseGate(ctx, "optimizing")
 			}
 		}
 		time.Sleep(2 * time.Second)

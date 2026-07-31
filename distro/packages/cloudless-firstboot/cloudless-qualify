@@ -7,6 +7,7 @@ import argparse
 import contextlib
 import datetime as dt
 import fcntl
+import grp
 import hashlib
 import json
 import os
@@ -38,6 +39,7 @@ DEFAULT_MATRIX = Path("/usr/share/cloudless/physical-validation-matrix.json")
 DEFAULT_UPDATE_STATUS = Path("/var/lib/cloudless-updater/status.json")
 DEFAULT_BOOT_HEALTH = Path("/var/lib/cloudless/boot-health.json")
 DEFAULT_QUALIFICATION_ROOT = Path("/var/lib/cloudless/qualification")
+DEFAULT_QUALIFICATION_GATE_ROOT = Path("/run/cloudless-qualification")
 ACTIVE_SCHEMA = "cloudless.physical-active-campaign.v1"
 MAX_EVIDENCE_BYTES = 64 * 1024 * 1024
 MAX_EXPORT_BYTES = 2 * 1024 * 1024 * 1024
@@ -1602,6 +1604,82 @@ def cluster_failure_snapshot(api_base: str) -> dict:
     }
 
 
+def qualification_phase_gate_path() -> Path:
+    return Path(
+        os.environ.get("CLOUDLESS_QUALIFICATION_GATE_ROOT", DEFAULT_QUALIFICATION_GATE_ROOT)
+    ) / "phase-gate.json"
+
+
+def create_qualification_phase_gate(campaign_digest: str, phase: str, lifetime_seconds: int = 10 * 60) -> Path:
+    if not re.fullmatch(r"[0-9a-f]{64}", campaign_digest):
+        raise ValueError("qualification phase gate campaign identity is malformed")
+    if phase not in {
+        "pending", "preparing", "downloading", "starting-workers", "loading",
+        "optimizing", "verifying", "stopping", "rollback",
+    }:
+        raise ValueError("qualification phase gate has an unsupported lifecycle phase")
+    if not 60 <= lifetime_seconds <= 10 * 60:
+        raise ValueError("qualification phase gate lifetime must be between one and ten minutes")
+    root = qualification_phase_gate_path().parent
+    root.mkdir(parents=True, mode=0o750, exist_ok=True)
+    if root.is_symlink() or not root.is_dir():
+        raise ValueError("qualification phase gate root must be a real directory")
+    production_root = "CLOUDLESS_QUALIFICATION_GATE_ROOT" not in os.environ
+    if production_root:
+        if os.geteuid() != 0:
+            raise ValueError("cluster failure qualification must run as root")
+        try:
+            group_id = grp.getgrnam("cloudless-control").gr_gid
+        except KeyError as exc:
+            raise ValueError("cloudless-control group is unavailable") from exc
+        os.chown(root, 0, group_id)
+        os.chmod(root, 0o750)
+    path = qualification_phase_gate_path()
+    if path.is_symlink() or (path.exists() and not path.is_file()):
+        raise ValueError("qualification phase gate must be a regular non-symlink file")
+    atomic_json(
+        path,
+        {
+            "schema": "cloudless.qualification-phase-gate.v1",
+            "phase": phase,
+            "campaignSha256": campaign_digest,
+            "expiresAtUnix": int(time.time()) + lifetime_seconds,
+        },
+    )
+    if production_root:
+        os.chown(path, 0, group_id)
+        os.chmod(path, 0o640)
+    return path
+
+
+def release_qualification_phase_gate(campaign_digest: str, phase: str) -> None:
+    path = qualification_phase_gate_path()
+    try:
+        gate = load_json(path)
+    except FileNotFoundError:
+        return
+    if (
+        gate.get("schema") != "cloudless.qualification-phase-gate.v1"
+        or gate.get("campaignSha256") != campaign_digest
+        or gate.get("phase") != phase
+    ):
+        raise ValueError("refusing to release a different qualification phase gate")
+    path.unlink()
+
+
+def qualification_phase_gate_active(campaign_digest: str, phase: str) -> bool:
+    try:
+        gate = load_json(qualification_phase_gate_path())
+    except FileNotFoundError:
+        return False
+    return bool(
+        gate.get("schema") == "cloudless.qualification-phase-gate.v1"
+        and gate.get("campaignSha256") == campaign_digest
+        and gate.get("phase") == phase
+        and bounded_soak_int(gate.get("expiresAtUnix"), 4_000_000_000) > int(time.time())
+    )
+
+
 def wait_for_cluster_failure_state(predicate, snapshot_provider, attempts, sleeper, reporter, label) -> dict:
     last: dict | None = None
     for attempt in range(1, attempts + 1):
@@ -1648,6 +1726,7 @@ def run_cluster_failure_rehearsal(
     snapshot_provider=None,
     sleeper=time.sleep,
     reporter=print,
+    confirmer=input,
     wait_attempts: int = 1800,
     qualification_root_path: Path | None = None,
 ) -> Path:
@@ -1690,6 +1769,8 @@ def run_cluster_failure_rehearsal(
             "apiBase": api_base,
             "check": check,
         }
+        if discard_progress:
+            release_qualification_phase_gate(identity["campaignSha256"], phase)
         provider = snapshot_provider or (lambda: cluster_failure_snapshot(api_base))
         if state_path.exists():
             state = load_json(state_path)
@@ -1712,7 +1793,11 @@ def run_cluster_failure_rehearsal(
             atomic_json(state_path, state)
 
         if state.get("stage") == "waiting-phase":
-            reporter(f"Start or switch a distributed model; waiting for its {phase!r} durable phase.")
+            create_qualification_phase_gate(identity["campaignSha256"], phase)
+            action = "Unload or Abort the distributed model" if phase == "stopping" else "Restart or switch the distributed model"
+            if phase == "rollback":
+                action += "; the root-owned qualification gate will deliberately enter the real rollback path"
+            reporter(f"{action}; waiting for its {phase!r} durable phase.")
             observed = wait_for_cluster_failure_state(
                 lambda sample: sample.get("engine", {}).get("durableOperation", {}).get("phase") == phase
                 and bool(sample.get("engine", {}).get("durableOperation", {}).get("idHash")),
@@ -1720,15 +1805,66 @@ def run_cluster_failure_rehearsal(
             )
             state["phaseObserved"] = observed
             state["operationIdHash"] = observed["engine"]["durableOperation"]["idHash"]
-            state["stage"] = "waiting-rejection" if failure == "role-reversal-rejected" else "waiting-degradation"
+            state["stage"] = "phase-held"
             atomic_json(state_path, state)
 
         operation_hash = str(state.get("operationIdHash", ""))
         if not re.fullmatch(r"[0-9a-f]{24}", operation_hash):
             raise ValueError("saved cluster failure operation identity is malformed")
 
+        if state.get("stage") == "phase-held":
+            if not qualification_phase_gate_active(identity["campaignSha256"], phase):
+                raise ValueError(
+                    "the ten-minute qualification phase hold expired; use --discard-progress and restart this case"
+                )
+            if failure == "role-reversal-rejected":
+                prompt = (
+                    "Attempt the role reversal now. After Cloudless rejects it, press Enter to release "
+                    "the held inference phase."
+                )
+                next_stage = "waiting-rejection"
+            else:
+                prompt = (
+                    check_guidance(check)
+                    + "\nInject only that condition now, then press Enter to release the held inference phase."
+                )
+                next_stage = "waiting-degradation"
+            reporter(prompt)
+            confirmer("Press Enter after the requested physical action is in place: ")
+            if not qualification_phase_gate_active(identity["campaignSha256"], phase):
+                raise ValueError(
+                    "the qualification phase hold expired before confirmation; restore health, then use --discard-progress"
+                )
+            if failure == "role-reversal-rejected":
+                state["rejected"] = wait_for_cluster_failure_state(
+                    lambda sample: cluster_baseline_ready(sample, int(target["nodes"]))
+                    and sample.get("engine", {}).get("durableOperation", {}).get("idHash") == operation_hash,
+                    provider, wait_attempts, sleeper, reporter,
+                    "Verifying the rejected role reversal left the held workload healthy",
+                )
+                next_stage = "complete"
+            else:
+                try:
+                    held_sample = provider()
+                except (OSError, ValueError, json.JSONDecodeError):
+                    held_sample = {}
+                held_degraded = bool(
+                    held_sample.get("engine", {}).get("durableOperation", {}).get("idHash") == operation_hash
+                    and not held_sample.get("engine", {}).get("ready")
+                    and (
+                        held_sample.get("engine", {}).get("degraded")
+                        or not held_sample.get("cluster", {}).get("computeHealthy")
+                    )
+                    and held_sample.get("engine", {}).get("canAbort")
+                )
+                if held_degraded:
+                    state["degraded"] = held_sample
+                    next_stage = "waiting-recovery"
+            release_qualification_phase_gate(identity["campaignSha256"], phase)
+            state["stage"] = next_stage
+            atomic_json(state_path, state)
+
         if state.get("stage") == "waiting-rejection":
-            reporter("Attempt the role reversal now. Cloudless must reject it without disturbing the healthy workload.")
             rejected = wait_for_cluster_failure_state(
                 lambda sample: cluster_baseline_ready(sample, int(target["nodes"]))
                 and sample.get("engine", {}).get("durableOperation", {}).get("idHash") == operation_hash,
@@ -1737,7 +1873,6 @@ def run_cluster_failure_rehearsal(
             state["rejected"] = rejected
             state["stage"] = "complete"
         elif state.get("stage") == "waiting-degradation":
-            reporter(check_guidance(check))
             degraded = wait_for_cluster_failure_state(
                 lambda sample: sample.get("engine", {}).get("durableOperation", {}).get("idHash") == operation_hash
                 and not sample.get("engine", {}).get("ready")
@@ -1781,6 +1916,7 @@ def run_cluster_failure_rehearsal(
             evidence,
         )
         state_path.unlink(missing_ok=True)
+        release_qualification_phase_gate(identity["campaignSha256"], phase)
         return output
 
 

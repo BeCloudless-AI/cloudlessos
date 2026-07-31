@@ -25,7 +25,11 @@ class PhysicalQualificationTest(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
         self.environment = mock.patch.dict(
-            os.environ, {"CLOUDLESS_QUALIFICATION_LOCK_ROOT": str(self.root / "locks")}
+            os.environ,
+            {
+                "CLOUDLESS_QUALIFICATION_LOCK_ROOT": str(self.root / "locks"),
+                "CLOUDLESS_QUALIFICATION_GATE_ROOT": str(self.root / "gates"),
+            },
         )
         self.environment.start()
         self.matrix = self.root / "matrix.json"
@@ -939,6 +943,7 @@ class PhysicalQualificationTest(unittest.TestCase):
                     snapshot_provider=lambda responses=responses: next(responses),
                     sleeper=lambda _: None,
                     reporter=lambda _: None,
+                    confirmer=lambda _: "",
                     wait_attempts=4,
                     qualification_root_path=self.root,
                 )
@@ -947,6 +952,7 @@ class PhysicalQualificationTest(unittest.TestCase):
                 self.assertEqual(qualify.load_json(campaign / "checks" / f"{check}.json")["status"], "pass")
         results = list((campaign / "checks").glob("cluster-failure--*.json"))
         self.assertEqual(len(results), 63)
+        self.assertFalse(qualify.qualification_phase_gate_path().exists())
         retained = "\n".join(path.read_text(encoding="utf-8") for path in results)
         self.assertNotIn("peerHost", retained)
         self.assertNotIn("selectedHosts", retained)
@@ -974,8 +980,50 @@ class PhysicalQualificationTest(unittest.TestCase):
                 "loading",
                 snapshot_provider=lambda: self.cluster_sample(),
                 sleeper=lambda _: None,
+                confirmer=lambda _: "",
                 qualification_root_path=self.root,
             )
+
+    def test_cluster_failure_phase_gate_survives_interrupt_and_resumes(self):
+        campaign = self.begin("dgx-spark-arm64-2", "aarch64", "dgx-spark")
+        qualify.activate_campaign(campaign, self.root)
+        first = iter([self.cluster_sample(), self.cluster_sample("loading")])
+        with self.assertRaises(KeyboardInterrupt):
+            qualify.run_cluster_failure_rehearsal(
+                campaign,
+                self.matrix,
+                "packet-loss",
+                "loading",
+                snapshot_provider=lambda: next(first),
+                sleeper=lambda _: None,
+                reporter=lambda _: None,
+                confirmer=lambda _: (_ for _ in ()).throw(KeyboardInterrupt()),
+                wait_attempts=3,
+                qualification_root_path=self.root,
+            )
+        gate = qualify.qualification_phase_gate_path()
+        self.assertTrue(gate.is_file())
+        self.assertEqual(gate.stat().st_mode & 0o077, 0)
+        checkpoint = qualify.load_json(campaign / "evidence" / ".cluster-failure-state.json")
+        self.assertEqual(checkpoint["stage"], "phase-held")
+
+        resumed = iter([
+            self.cluster_sample("loading", ready=False, degraded=True, can_abort=True),
+            self.cluster_sample("loading", ready=False, unloaded=True),
+        ])
+        qualify.run_cluster_failure_rehearsal(
+            campaign,
+            self.matrix,
+            "packet-loss",
+            "loading",
+            snapshot_provider=lambda: next(resumed),
+            sleeper=lambda _: None,
+            reporter=lambda _: None,
+            confirmer=lambda _: "",
+            wait_attempts=3,
+            qualification_root_path=self.root,
+        )
+        self.assertFalse(gate.exists())
 
 
 if __name__ == "__main__":

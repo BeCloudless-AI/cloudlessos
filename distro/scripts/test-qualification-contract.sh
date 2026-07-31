@@ -73,6 +73,7 @@ grep -Fq 'Expected exactly 12 AMD64/ARM64 release candidates' "$runner"
 grep -Fq 'visual-regression-$run_id-$attempt' "$runner"
 grep -Fq 'lifecycle-soak-$run_id-$attempt' "$runner"
 grep -Fq 'prepare-ci-qualification.py' "$runner"
+grep -Fq 'go build -buildvcs=false' "$runner"
 if [ -d "$ROOT/.github/workflows" ] && find "$ROOT/.github/workflows" -type f \( -name '*.yml' -o -name '*.yaml' \) -print -quit | grep -q .; then
     echo "Hosted GitHub Actions workflows must remain disabled." >&2
     exit 1

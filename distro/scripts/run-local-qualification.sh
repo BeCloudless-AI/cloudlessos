@@ -56,7 +56,7 @@ source_job() {
     for architecture in amd64 arm64; do
         docker run --rm -e GOOS=linux -e GOARCH="$architecture" -e CGO_ENABLED=0 \
             -v "$ROOT:/src" -w /src/orchestrator cloudless-release-builder \
-            go build ./cmd/cloudlessd ./cmd/cloudless-updater
+            go build -buildvcs=false ./cmd/cloudlessd ./cmd/cloudless-updater
     done
     docker run --rm -v "$ROOT:/src" -w /src \
         node:22-bookworm node distro/scripts/test-web-js.js

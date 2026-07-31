@@ -218,6 +218,42 @@ func TestSecurityReadinessPolicy(t *testing.T) {
 	}
 }
 
+func TestCIQualificationPolicy(t *testing.T) {
+	commit := "0123456789abcdef0123456789abcdef01234567"
+	if err := validateCIQualification(releaseManifest{Version: "0.9.9", Channel: "stable"}); err != nil {
+		t.Fatalf("legacy pre-1.0 release was rejected: %v", err)
+	}
+	if err := validateCIQualification(releaseManifest{Version: "1.0.0", Channel: "stable"}); err == nil {
+		t.Fatal("stable 1.0 release without CI qualification was accepted")
+	}
+	runID, attempt := int64(1234), int64(2)
+	release := releaseManifest{
+		Version: "1.0.0", Channel: "stable", SourceCommit: commit,
+		CIQualification: releaseCIQualification{
+			Schema: "cloudless.ci-qualification.v1", Status: "qualified", Required: true,
+			Version: "1.0.0", Channel: "stable", SourceCommit: commit,
+			Workflow: ".github/workflows/multiarch.yml", RunID: runID, RunAttempt: attempt,
+			Jobs: []string{
+				"Source, concurrency and security policies", "generic / amd64", "generic / arm64",
+				"dgx-spark / arm64", "AMD64 and ARM64 package payloads",
+				"Interface capture smoke test", "Durable lifecycle soak",
+			},
+			Artifacts: []string{
+				fmt.Sprintf("package-qualification-%d-%d", runID, attempt),
+				fmt.Sprintf("visual-regression-%d-%d", runID, attempt),
+				fmt.Sprintf("lifecycle-soak-%d-%d", runID, attempt),
+			},
+		},
+	}
+	if err := validateCIQualification(release); err != nil {
+		t.Fatalf("complete exact-commit CI qualification was rejected: %v", err)
+	}
+	release.CIQualification.Artifacts = release.CIQualification.Artifacts[:2]
+	if err := validateCIQualification(release); err == nil {
+		t.Fatal("incomplete CI artifact evidence was accepted")
+	}
+}
+
 func TestValidateReleaseManifestEnforcesOneZeroReadiness(t *testing.T) {
 	commit := "0123456789abcdef0123456789abcdef01234567"
 	manifest := releaseManifest{
@@ -234,6 +270,13 @@ func TestValidateReleaseManifestEnforcesOneZeroReadiness(t *testing.T) {
 			Version: "1.0.0", Channel: "stable", SourceCommit: commit, Monitored: true,
 			SecurityContact: "https://www.becloudless.ai/security", EscalationOwner: "CloudlessOS release owner",
 			VerifiedAt: "2026-07-30T12:00:00Z", AcknowledgementBusinessDays: 3,
+		},
+		CIQualification: releaseCIQualification{
+			Schema: "cloudless.ci-qualification.v1", Status: "qualified", Required: true,
+			Version: "1.0.0", Channel: "stable", SourceCommit: commit,
+			Workflow: ".github/workflows/multiarch.yml", RunID: 42, RunAttempt: 1,
+			Jobs:      []string{"Source, concurrency and security policies", "generic / amd64", "generic / arm64", "dgx-spark / arm64", "AMD64 and ARM64 package payloads", "Interface capture smoke test", "Durable lifecycle soak"},
+			Artifacts: []string{"package-qualification-42-1", "visual-regression-42-1", "lifecycle-soak-42-1"},
 		},
 	}
 	payload, err := json.Marshal(manifest)

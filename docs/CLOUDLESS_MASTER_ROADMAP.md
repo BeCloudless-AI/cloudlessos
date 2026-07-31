@@ -672,6 +672,13 @@ Implementation status (July 31, 2026):
   upgrade and rollback logs for 30 days even when the job fails. Visual captures and lifecycle-soak
   JSONL/process logs use run-specific artifact names and the same 30-day review window. The source
   policy gate rejects removal of any of these three evidence classes.
+- Release signing now verifies GitHub's exact-commit `CloudlessOS qualification` run instead of
+  trusting a local statement that CI passed. For stable 1.0+, all seven required jobs must succeed
+  and the run-specific package, visual-regression and lifecycle-soak artifacts must still exist.
+  The generated `cloudless.ci-qualification.v1` descriptor is embedded in the release gates,
+  detached-signed, published, checked again before R2 promotion and independently enforced by the
+  installed updater. Pre-1.0 releases remain explicit `not-qualified`. A current retained green run
+  is still required before the 1.0 gate can be closed.
 - The lifecycle soak now includes a process-level burst of browser requests interrupted by an
   agent restart, proving no request is discarded and the same persistent profile is reused. It
   also drives 64 simultaneous local terminal-proxy sessions alongside 64 rejected remote attempts,

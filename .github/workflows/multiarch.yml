@@ -49,6 +49,7 @@ jobs:
           bash distro/scripts/test-release-preflight.sh
           bash distro/scripts/test-release-isolation.sh
           python3 distro/scripts/test-security-readiness.py
+          python3 distro/scripts/test-ci-qualification.py
           python3 distro/scripts/test-beta-promotion.py
           bash distro/scripts/test-prepare-beta-promotion.sh
           bash distro/scripts/test-secret-hygiene.sh

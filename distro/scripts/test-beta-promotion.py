@@ -88,6 +88,14 @@ class BetaPromotionTests(unittest.TestCase):
                 "channel": "beta",
                 "sourceCommit": self.commit,
             },
+            "ciQualification": {
+                "schema": "cloudless.ci-qualification.v1",
+                "status": "not-qualified",
+                "required": False,
+                "version": self.version,
+                "channel": "beta",
+                "sourceCommit": self.commit,
+            },
         }
         release = {
             "schema": "cloudless.release.v2",
@@ -99,6 +107,7 @@ class BetaPromotionTests(unittest.TestCase):
             "compatibility": {"matrixSha256": "b" * 64, "targets": validation["targets"]},
             "physicalQualification": physical,
             "securityReadiness": validation["securityReadiness"],
+            "ciQualification": validation["ciQualification"],
             "packages": package_records,
             "artifacts": artifact_records,
         }
@@ -129,7 +138,7 @@ class BetaPromotionTests(unittest.TestCase):
         result = MODULE.verify(self.args(manifest, packages, artifacts))
         self.assertEqual(result["schema"], "cloudless.beta-promotion.v1")
         self.assertEqual(len(result["packages"]), 12)
-        self.assertEqual(len(result["artifacts"]), 8)
+        self.assertEqual(len(result["artifacts"]), 9)
 
     def test_rejects_incomplete_soak(self) -> None:
         manifest, packages, artifacts, _ = self.fixture()

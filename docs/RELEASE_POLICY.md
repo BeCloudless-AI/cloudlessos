@@ -27,6 +27,14 @@ release cannot be built unless `cloudless-qualify verify-set` proves every autho
 belongs to that exact version and full source commit; the resulting descriptor is detached-signed
 and published with the release artifacts.
 
+The release manifest also carries a signed `cloudless.ci-qualification.v1` descriptor. For a stable
+1.0+ release, the release tool queries GitHub for a successful `CloudlessOS qualification` run on
+the exact full source commit. It requires all seven production jobs and retained package, visual
+regression and lifecycle-soak artifacts from that same run attempt. The evidence is embedded in the
+release gates, detached-signed as a standalone artifact and independently checked by the publisher
+and installed updater. Missing, failed, expired or cross-commit CI evidence blocks the release.
+Pre-1.0 and beta generations may explicitly state `not-qualified` without claiming CI coverage.
+
 Stable signing consumes the exact package and common standalone-artifact bytes from the publicly
 verified beta generation. It measures the seven days from the public by-hash object's server
 timestamp—not merely the signed manifest creation time—and refuses a younger beta or one whose signed version,
@@ -86,6 +94,7 @@ must not add telemetry, crash upload or remote diagnostics without:
 
 ## 1.0 decision
 
-CloudlessOS may be called 1.0 only when the full automated and physical matrices are green, a
+CloudlessOS may be called 1.0 only when the exact-commit signed CI evidence, full automated and
+physical matrices are green, a
 rollback rehearsal succeeds, the beta soak completes, remaining limitations are visible in-product,
 the security contact is monitored and the response ownership above is operational.

@@ -134,6 +134,14 @@ exact version, full source commit and SHA-256/size of every target archive. Reta
 archives and CI artifacts. A partial collection is useful while testing, but it is not release
 qualification and cannot produce this manifest.
 
+The production release command collects CI evidence directly from GitHub; operators do not create
+or edit its descriptor. For stable 1.0+, the exact commit must have a successful
+`.github/workflows/multiarch.yml` run whose seven required jobs completed successfully and whose
+run-specific package, visual-regression and lifecycle-soak artifacts have not expired. The resulting
+mode-0600 `cloudless.ci-qualification.v1` document is bound into the release gates and signed artifact
+set. Local fixture input exists only in the unit-test command and is not accepted by the production
+release entry point.
+
 Run the tooling contract validator before and after a qualification campaign:
 
 ```bash

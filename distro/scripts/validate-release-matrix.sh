@@ -12,6 +12,7 @@ SECURITY_OUT="${CLOUDLESS_SECURITY_OUT:-$ROOT/distro/out/security}"
 SBOM="${CLOUDLESS_SBOM:-$SECURITY_OUT/cloudless-$VERSION.spdx.json}"
 PHYSICAL_QUALIFICATION="${CLOUDLESS_PHYSICAL_QUALIFICATION:-$ROOT/distro/out/qualification/cloudless-physical-qualification.json}"
 SECURITY_READINESS="${CLOUDLESS_SECURITY_READINESS:-$ROOT/distro/out/qualification/cloudless-security-readiness.json}"
+CI_QUALIFICATION="${CLOUDLESS_CI_QUALIFICATION:-$ROOT/distro/out/qualification/cloudless-ci-qualification.json}"
 
 [ -n "$VERSION" ] || { echo "Usage: $0 VERSION [stable|beta]" >&2; exit 2; }
 case "$CHANNEL" in stable|beta) ;; *) echo "Invalid channel: $CHANNEL" >&2; exit 2 ;; esac
@@ -214,17 +215,52 @@ if readiness.get("status") == "operational":
         raise SystemExit("security acknowledgement target exceeds release policy")
 PY
 
+echo "==> Validating exact-commit CI qualification"
+test -s "$CI_QUALIFICATION" || { echo "Missing CI qualification descriptor" >&2; exit 1; }
+python3 - "$CI_QUALIFICATION" "$VERSION" "$CHANNEL" "$commit" <<'PY'
+import json, sys
+path, version, channel, commit = sys.argv[1:]
+with open(path, encoding="utf-8") as handle:
+    qualification = json.load(handle)
+required = channel == "stable" and int(version.split(".", 1)[0]) >= 1
+if qualification.get("schema") != "cloudless.ci-qualification.v1":
+    raise SystemExit("invalid CI qualification descriptor schema")
+for field, expected in (
+    ("version", version), ("channel", channel), ("sourceCommit", commit), ("required", required),
+):
+    if qualification.get(field) != expected:
+        raise SystemExit(f"CI qualification {field} mismatch")
+if qualification.get("status") not in {"qualified", "not-qualified"}:
+    raise SystemExit("CI qualification status is invalid")
+if required and qualification.get("status") != "qualified":
+    raise SystemExit("CloudlessOS 1.0+ stable releases require exact-commit CI qualification")
+if qualification.get("status") == "qualified":
+    if qualification.get("workflow") != ".github/workflows/multiarch.yml":
+        raise SystemExit("CI qualification workflow is invalid")
+    if not isinstance(qualification.get("runId"), int) or qualification["runId"] <= 0 or not isinstance(qualification.get("runAttempt"), int) or qualification["runAttempt"] <= 0:
+        raise SystemExit("CI qualification run identity is invalid")
+    jobs = {"Source, concurrency and security policies", "generic / amd64", "generic / arm64", "dgx-spark / arm64", "AMD64 and ARM64 package payloads", "Interface capture smoke test", "Durable lifecycle soak"}
+    if set(qualification.get("jobs", [])) != jobs:
+        raise SystemExit("CI qualification job inventory is incomplete")
+    run_id, attempt = qualification["runId"], qualification["runAttempt"]
+    artifacts = {f"{prefix}-{run_id}-{attempt}" for prefix in ("package-qualification", "visual-regression", "lifecycle-soak")}
+    if set(qualification.get("artifacts", [])) != artifacts:
+        raise SystemExit("CI qualification evidence inventory is incomplete")
+PY
+
 matrix_sha="$(sha256sum "$MATRIX" | awk '{print $1}')"
 mkdir -p "$(dirname "$OUT")"
-python3 - "$OUT.tmp" "$VERSION" "$CHANNEL" "$commit" "$matrix_sha" "$MATRIX" "$PHYSICAL_QUALIFICATION" "$SECURITY_READINESS" <<'PY'
+python3 - "$OUT.tmp" "$VERSION" "$CHANNEL" "$commit" "$matrix_sha" "$MATRIX" "$PHYSICAL_QUALIFICATION" "$SECURITY_READINESS" "$CI_QUALIFICATION" <<'PY'
 import datetime, json, os, sys
-output, version, channel, commit, matrix_sha, matrix_path, physical_path, security_path = sys.argv[1:]
+output, version, channel, commit, matrix_sha, matrix_path, physical_path, security_path, ci_path = sys.argv[1:]
 with open(matrix_path, encoding="utf-8") as handle:
     matrix = json.load(handle)
 with open(physical_path, encoding="utf-8") as handle:
     physical = json.load(handle)
 with open(security_path, encoding="utf-8") as handle:
     security = json.load(handle)
+with open(ci_path, encoding="utf-8") as handle:
+    ci = json.load(handle)
 document = {
     "schema": "cloudless.release-gates.v1",
     "version": version,
@@ -236,6 +272,7 @@ document = {
     "passedGates": matrix["requiredGates"],
     "physicalQualification": physical,
     "securityReadiness": security,
+    "ciQualification": ci,
 }
 with open(output, "w", encoding="utf-8") as handle:
     json.dump(document, handle, ensure_ascii=False, separators=(",", ":"))

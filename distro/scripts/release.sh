@@ -86,6 +86,18 @@ if [ -n "${CLOUDLESS_SECURITY_CONTACT_ATTESTATION:-}" ]; then
 fi
 python3 "$ROOT/distro/scripts/prepare-security-readiness.py" \
     "$VERSION" "$CHANNEL" "$full_commit" --output "$security_output" "${security_arguments[@]}"
+ci_output="$ROOT/distro/out/qualification/cloudless-ci-qualification.json"
+ci_arguments=()
+if [ "$CHANNEL" = stable ] && [ "${VERSION%%.*}" -ge 1 ]; then
+    command -v gh >/dev/null || {
+        echo "GitHub CLI is required to verify the exact-commit CI qualification for a 1.0+ stable release." >&2
+        exit 1
+    }
+    github_repository="$(gh repo view --json nameWithOwner --jq .nameWithOwner)"
+    ci_arguments+=(--repository "$github_repository")
+fi
+python3 "$ROOT/distro/scripts/prepare-ci-qualification.py" \
+    "$VERSION" "$CHANNEL" "$full_commit" --output "$ci_output" "${ci_arguments[@]}"
 
 echo "CloudlessOS production release"
 echo "  version: $VERSION"
@@ -133,6 +145,8 @@ echo "==> Production release preflight"
 bash "$ROOT/distro/scripts/test-release-preflight.sh"
 echo "==> Security response readiness contract"
 python3 "$ROOT/distro/scripts/test-security-readiness.py"
+echo "==> Exact-commit CI qualification contract"
+python3 "$ROOT/distro/scripts/test-ci-qualification.py"
 echo "==> Source secret hygiene"
 bash "$ROOT/distro/scripts/test-secret-hygiene.sh"
 echo "==> Host service and repository trust hardening"

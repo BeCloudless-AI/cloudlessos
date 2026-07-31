@@ -87,6 +87,7 @@ type releaseManifest struct {
 	Compatibility         releaseCompatibility         `json:"compatibility"`
 	PhysicalQualification releasePhysicalQualification `json:"physicalQualification"`
 	SecurityReadiness     releaseSecurityReadiness     `json:"securityReadiness"`
+	CIQualification       releaseCIQualification       `json:"ciQualification"`
 }
 
 type releasePhysicalQualification struct {
@@ -111,6 +112,20 @@ type releaseSecurityReadiness struct {
 	EscalationOwner             string `json:"escalationOwner"`
 	VerifiedAt                  string `json:"verifiedAt"`
 	AcknowledgementBusinessDays int    `json:"acknowledgementBusinessDays"`
+}
+
+type releaseCIQualification struct {
+	Schema       string   `json:"schema"`
+	Status       string   `json:"status"`
+	Required     bool     `json:"required"`
+	Version      string   `json:"version"`
+	Channel      string   `json:"channel"`
+	SourceCommit string   `json:"sourceCommit"`
+	Workflow     string   `json:"workflow"`
+	RunID        int64    `json:"runId"`
+	RunAttempt   int64    `json:"runAttempt"`
+	Jobs         []string `json:"jobs"`
+	Artifacts    []string `json:"artifacts"`
 }
 
 type releaseCompatibility struct {
@@ -841,6 +856,9 @@ func validateReleaseManifest(release, manifest []byte, version, channel string) 
 	if err := validateSecurityReadiness(parsed); err != nil {
 		return releaseManifest{}, err
 	}
+	if err := validateCIQualification(parsed); err != nil {
+		return releaseManifest{}, err
+	}
 	if strings.TrimSpace(parsed.Title) == "" || len(parsed.Changes) == 0 {
 		return releaseManifest{}, errors.New("release notes are incomplete")
 	}
@@ -934,6 +952,71 @@ func validateSecurityReadiness(release releaseManifest) error {
 	}
 	if verified.After(published.Add(5*time.Minute)) || published.Sub(verified) > 30*24*time.Hour {
 		return errors.New("release security verification is outside the allowed 30-day publication window")
+	}
+	return nil
+}
+
+func validateCIQualification(release releaseManifest) error {
+	major := 0
+	if fields := strings.SplitN(release.Version, ".", 2); len(fields) > 0 {
+		major, _ = strconv.Atoi(fields[0])
+	}
+	required := release.Channel == "stable" && major >= 1
+	qualification := release.CIQualification
+	if qualification.Schema == "" {
+		if required {
+			return errors.New("stable CloudlessOS 1.0+ release is missing exact-commit CI qualification")
+		}
+		return nil // Legacy pre-1.0 signed releases did not carry this descriptor.
+	}
+	if qualification.Schema != "cloudless.ci-qualification.v1" ||
+		qualification.Version != release.Version || qualification.Channel != release.Channel ||
+		qualification.SourceCommit != release.SourceCommit || qualification.Required != required {
+		return errors.New("release CI qualification identity is invalid")
+	}
+	if qualification.Status != "qualified" && qualification.Status != "not-qualified" {
+		return errors.New("release CI qualification status is invalid")
+	}
+	if required && qualification.Status != "qualified" {
+		return errors.New("stable CloudlessOS 1.0+ release lacks exact-commit CI qualification")
+	}
+	if qualification.Status != "qualified" {
+		return nil
+	}
+	if qualification.Workflow != ".github/workflows/multiarch.yml" || qualification.RunID <= 0 || qualification.RunAttempt <= 0 {
+		return errors.New("release CI workflow evidence is invalid")
+	}
+	requiredJobs := map[string]bool{
+		"Source, concurrency and security policies": false,
+		"generic / amd64":                  false,
+		"generic / arm64":                  false,
+		"dgx-spark / arm64":                false,
+		"AMD64 and ARM64 package payloads": false,
+		"Interface capture smoke test":     false,
+		"Durable lifecycle soak":           false,
+	}
+	for _, job := range qualification.Jobs {
+		if _, ok := requiredJobs[job]; !ok || requiredJobs[job] {
+			return errors.New("release CI job evidence is invalid")
+		}
+		requiredJobs[job] = true
+	}
+	if len(qualification.Jobs) != len(requiredJobs) {
+		return errors.New("release CI job evidence is incomplete")
+	}
+	requiredArtifacts := map[string]bool{
+		fmt.Sprintf("package-qualification-%d-%d", qualification.RunID, qualification.RunAttempt): false,
+		fmt.Sprintf("visual-regression-%d-%d", qualification.RunID, qualification.RunAttempt):     false,
+		fmt.Sprintf("lifecycle-soak-%d-%d", qualification.RunID, qualification.RunAttempt):        false,
+	}
+	for _, artifact := range qualification.Artifacts {
+		if _, ok := requiredArtifacts[artifact]; !ok || requiredArtifacts[artifact] {
+			return errors.New("release CI artifact evidence is invalid")
+		}
+		requiredArtifacts[artifact] = true
+	}
+	if len(qualification.Artifacts) != len(requiredArtifacts) {
+		return errors.New("release CI artifact evidence is incomplete")
 	}
 	return nil
 }

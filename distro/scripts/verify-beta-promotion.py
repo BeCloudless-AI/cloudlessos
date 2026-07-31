@@ -28,6 +28,7 @@ ARTIFACTS = {
     "cloudless-trust-inventory.json",
     "cloudless-physical-qualification.json",
     "cloudless-security-readiness.json",
+    "cloudless-ci-qualification.json",
 }
 REQUIRED_GATES = {
     "go-tests", "go-vet", "web-javascript", "app-manifest-v2", "backup-recovery",
@@ -108,6 +109,13 @@ def verify(args: argparse.Namespace) -> dict:
         raise ValueError("beta security readiness identity mismatch")
     if security.get("required") is not False or security.get("status") not in {"operational", "not-operational"}:
         raise ValueError("beta security readiness policy is invalid")
+    ci = release.get("ciQualification")
+    if not isinstance(ci, dict) or ci != validation.get("ciQualification"):
+        raise ValueError("beta CI qualification is not bound to its gate attestation")
+    if ci.get("version") != args.version or ci.get("channel") != "beta" or ci.get("sourceCommit") != args.source_commit:
+        raise ValueError("beta CI qualification identity mismatch")
+    if ci.get("required") is not False or ci.get("status") not in {"qualified", "not-qualified"}:
+        raise ValueError("beta CI qualification policy is invalid")
     published = parse_time(release.get("publishedAt"))
     available = parse_time(args.publicly_available_at) if args.publicly_available_at else published
     if available < published - dt.timedelta(minutes=5):

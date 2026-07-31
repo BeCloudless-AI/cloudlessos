@@ -24,8 +24,11 @@ EOF
 cat > "$work/test-security-readiness.json" <<EOF
 {"schema":"cloudless.security-readiness.v1","status":"not-operational","required":false,"version":"$TEST_VERSION","channel":"stable","sourceCommit":"0123456789abcdef0123456789abcdef01234567","preparedAt":"2000-01-01T00:00:00Z","reason":"Test release has no operational security attestation."}
 EOF
+cat > "$work/test-ci-qualification.json" <<EOF
+{"schema":"cloudless.ci-qualification.v1","status":"not-qualified","required":false,"version":"$TEST_VERSION","channel":"stable","sourceCommit":"0123456789abcdef0123456789abcdef01234567","preparedAt":"2000-01-01T00:00:00Z","reason":"Test release has no CI qualification evidence."}
+EOF
 cat > "$work/test-release-gates.json" <<EOF
-{"schema":"cloudless.release-gates.v1","version":"$TEST_VERSION","channel":"stable","sourceCommit":"0123456789abcdef0123456789abcdef01234567","completedAt":"2000-01-01T00:00:00Z","matrixSha256":"$matrix_sha","targets":[{"platform":"generic","architecture":"amd64"},{"platform":"generic","architecture":"arm64"},{"platform":"dgx-spark","architecture":"arm64"}],"passedGates":["go-tests","go-vet","web-javascript","app-manifest-v2","backup-recovery","installer-preflight","platform-matrix","package-architecture","package-contents","package-lifecycle","release-isolation","release-preflight","secret-hygiene","service-hardening","sbom","trust-inventory","vulnerability-scan","updater-workload-continuity","atomic-repository"],"physicalQualification":$(cat "$work/test-physical-qualification.json"),"securityReadiness":$(cat "$work/test-security-readiness.json")}
+{"schema":"cloudless.release-gates.v1","version":"$TEST_VERSION","channel":"stable","sourceCommit":"0123456789abcdef0123456789abcdef01234567","completedAt":"2000-01-01T00:00:00Z","matrixSha256":"$matrix_sha","targets":[{"platform":"generic","architecture":"amd64"},{"platform":"generic","architecture":"arm64"},{"platform":"dgx-spark","architecture":"arm64"}],"passedGates":["go-tests","go-vet","web-javascript","app-manifest-v2","backup-recovery","installer-preflight","platform-matrix","package-architecture","package-contents","package-lifecycle","release-isolation","release-preflight","secret-hygiene","service-hardening","sbom","trust-inventory","vulnerability-scan","updater-workload-continuity","atomic-repository"],"physicalQualification":$(cat "$work/test-physical-qualification.json"),"securityReadiness":$(cat "$work/test-security-readiness.json"),"ciQualification":$(cat "$work/test-ci-qualification.json")}
 EOF
 
 CLOUDLESS_APT_REPO_OUT="$work/repository" \
@@ -37,6 +40,7 @@ CLOUDLESS_RELEASE_NOTES="$work/test-notes.json" \
 CLOUDLESS_RELEASE_GATES="$work/test-release-gates.json" \
 CLOUDLESS_PHYSICAL_QUALIFICATION="$work/test-physical-qualification.json" \
 CLOUDLESS_SECURITY_READINESS="$work/test-security-readiness.json" \
+CLOUDLESS_CI_QUALIFICATION="$work/test-ci-qualification.json" \
 CLOUDLESS_SBOM="$work/cloudless-$TEST_VERSION.spdx.json" \
 CLOUDLESS_SOURCE_COMMIT=0123456789abcdef0123456789abcdef01234567 \
     bash "$ROOT/distro/scripts/build-apt-repository.sh" "$TEST_VERSION" stable
@@ -55,6 +59,7 @@ test -s "$artifacts/cloudless-trust-inventory.json"
 test -s "$artifacts/cloudless-trust-inventory.json.asc"
 test -s "$artifacts/cloudless-physical-qualification.json.asc"
 test -s "$artifacts/cloudless-security-readiness.json.asc"
+test -s "$artifacts/cloudless-ci-qualification.json.asc"
 grep -Fq '"schema":"cloudless.trust-inventory.v1"' "$artifacts/cloudless-trust-inventory.json"
 grep -Fq '"sourceCommit":"0123456789abcdef0123456789abcdef01234567"' "$release_manifest"
 grep -Fq '"install-dgx-spark.sh"' "$release_manifest"
@@ -74,6 +79,8 @@ if release["physicalQualification"] != release["validation"]["physicalQualificat
     raise SystemExit("physical qualification is not bound to validation")
 if release["securityReadiness"] != release["validation"]["securityReadiness"]:
     raise SystemExit("security readiness is not bound to validation")
+if release["ciQualification"] != release["validation"]["ciQualification"]:
+    raise SystemExit("CI qualification is not bound to validation")
 root = pathlib.Path(sys.argv[2])
 for artifact in release["artifacts"]:
     prefix = f"artifacts/{release['version']}/{release['channel']}/"
@@ -84,7 +91,7 @@ for package in release["packages"]:
     if len(data) != package["size"] or hashlib.sha256(data).hexdigest() != package["sha256"]:
         raise SystemExit(f"package inventory mismatch: {package['filename']}")
 PY
-for artifact in install-dgx-spark.sh cloudless-apps-manifest.json cloudless-models.json cloudless-diffusion.json cloudless-trust-inventory.json cloudless-physical-qualification.json cloudless-security-readiness.json "cloudless-$TEST_VERSION.spdx.json"; do
+for artifact in install-dgx-spark.sh cloudless-apps-manifest.json cloudless-models.json cloudless-diffusion.json cloudless-trust-inventory.json cloudless-physical-qualification.json cloudless-security-readiness.json cloudless-ci-qualification.json "cloudless-$TEST_VERSION.spdx.json"; do
     gpgv --keyring "$work/test-keyring.pgp" \
         "$artifacts/$artifact.asc" \
         "$artifacts/$artifact"

@@ -18,6 +18,7 @@ RELEASE_GATES="${CLOUDLESS_RELEASE_GATES:-$DISTRO/out/release-gates.json}"
 SBOM="${CLOUDLESS_SBOM:-$DISTRO/out/security/cloudless-$VERSION.spdx.json}"
 PHYSICAL_QUALIFICATION="${CLOUDLESS_PHYSICAL_QUALIFICATION:-$DISTRO/out/qualification/cloudless-physical-qualification.json}"
 SECURITY_READINESS="${CLOUDLESS_SECURITY_READINESS:-$DISTRO/out/qualification/cloudless-security-readiness.json}"
+CI_QUALIFICATION="${CLOUDLESS_CI_QUALIFICATION:-$DISTRO/out/qualification/cloudless-ci-qualification.json}"
 PROMOTION="${CLOUDLESS_BETA_PROMOTION:-}"
 SOURCE_COMMIT="${CLOUDLESS_SOURCE_COMMIT:-$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || true)}"
 PACKAGES=(cloudless-orchestrator cloudless-shell cloudless-branding cloudless-hardware cloudless-firstboot cloudless-updater)
@@ -46,6 +47,7 @@ test -s "$DGX_INSTALLER" || { echo "Missing DGX Spark installer: $DGX_INSTALLER"
 test -s "$RELEASE_GATES" || { echo "Missing release-gate attestation. Run distro/scripts/release.sh so every required gate executes before signing." >&2; exit 1; }
 test -s "$PHYSICAL_QUALIFICATION" || { echo "Missing physical qualification descriptor: $PHYSICAL_QUALIFICATION" >&2; exit 1; }
 test -s "$SECURITY_READINESS" || { echo "Missing security readiness descriptor: $SECURITY_READINESS" >&2; exit 1; }
+test -s "$CI_QUALIFICATION" || { echo "Missing CI qualification descriptor: $CI_QUALIFICATION" >&2; exit 1; }
 if [ -n "$PROMOTION" ]; then
     [ "$CHANNEL" = stable ] || { echo "Beta promotion input is valid only for stable releases." >&2; exit 1; }
     test -s "$PROMOTION/cloudless-release.json" -a -s "$PROMOTION/cloudless-beta-promotion.json" \
@@ -80,9 +82,9 @@ if not isinstance(notes.get("title"), str) or not notes["title"].strip():
 if not isinstance(notes.get("changes"), list) or not notes["changes"] or not all(isinstance(item, str) and item.strip() for item in notes["changes"]):
     raise SystemExit("Release notes require at least one non-empty change")
 PY
-python3 - "$RELEASE_GATES" "$VERSION" "$CHANNEL" "$SOURCE_COMMIT" "$DISTRO/release/validation-matrix.json" "$PHYSICAL_QUALIFICATION" "$SECURITY_READINESS" <<'PY'
+python3 - "$RELEASE_GATES" "$VERSION" "$CHANNEL" "$SOURCE_COMMIT" "$DISTRO/release/validation-matrix.json" "$PHYSICAL_QUALIFICATION" "$SECURITY_READINESS" "$CI_QUALIFICATION" <<'PY'
 import hashlib, json, sys
-path, version, channel, commit, matrix_path, physical_path, security_path = sys.argv[1:]
+path, version, channel, commit, matrix_path, physical_path, security_path, ci_path = sys.argv[1:]
 with open(path, encoding="utf-8") as handle:
     gates = json.load(handle)
 with open(matrix_path, "rb") as handle:
@@ -126,6 +128,29 @@ if required_security and security.get("status") != "operational":
 with open(security_path, encoding="utf-8") as handle:
     if json.load(handle) != security:
         raise SystemExit("security readiness descriptor changed after release gates were created")
+ci = gates.get("ciQualification")
+if not isinstance(ci, dict) or ci.get("schema") != "cloudless.ci-qualification.v1":
+    raise SystemExit("release-gate attestation is missing CI qualification identity")
+required_ci = channel == "stable" and int(version.split(".", 1)[0]) >= 1
+if ci.get("required") != required_ci or ci.get("status") not in {"qualified", "not-qualified"}:
+    raise SystemExit("CI qualification policy is invalid")
+for field, expected in (("version", version), ("channel", channel), ("sourceCommit", commit)):
+    if ci.get(field) != expected:
+        raise SystemExit(f"CI qualification {field} mismatch")
+if required_ci and ci.get("status") != "qualified":
+    raise SystemExit("CloudlessOS 1.0+ stable releases require exact-commit CI qualification")
+if ci.get("status") == "qualified":
+    if ci.get("workflow") != ".github/workflows/multiarch.yml" or not isinstance(ci.get("runId"), int) or ci["runId"] <= 0 or not isinstance(ci.get("runAttempt"), int) or ci["runAttempt"] <= 0:
+        raise SystemExit("CI qualification workflow evidence is invalid")
+    jobs = {"Source, concurrency and security policies", "generic / amd64", "generic / arm64", "dgx-spark / arm64", "AMD64 and ARM64 package payloads", "Interface capture smoke test", "Durable lifecycle soak"}
+    if set(ci.get("jobs", [])) != jobs:
+        raise SystemExit("CI qualification job evidence is incomplete")
+    artifacts = {f"{prefix}-{ci['runId']}-{ci['runAttempt']}" for prefix in ("package-qualification", "visual-regression", "lifecycle-soak")}
+    if set(ci.get("artifacts", [])) != artifacts:
+        raise SystemExit("CI qualification evidence is incomplete")
+with open(ci_path, encoding="utf-8") as handle:
+    if json.load(handle) != ci:
+        raise SystemExit("CI qualification descriptor changed after release gates were created")
 PY
 fingerprint="$(tr -d '[:space:]' < "$FINGERPRINT_FILE")"
 if [ "${CLOUDLESS_RELEASE_DRY_RUN:-0}" != "1" ]; then
@@ -400,8 +425,9 @@ else
 fi
 install -m 0644 "$PHYSICAL_QUALIFICATION" "$artifacts_dir/cloudless-physical-qualification.json"
 install -m 0644 "$SECURITY_READINESS" "$artifacts_dir/cloudless-security-readiness.json"
+install -m 0644 "$CI_QUALIFICATION" "$artifacts_dir/cloudless-ci-qualification.json"
 artifacts_file="$work/artifacts.tsv"
-for artifact in install-dgx-spark.sh cloudless-apps-manifest.json cloudless-models.json cloudless-diffusion.json "cloudless-$VERSION.spdx.json" cloudless-trust-inventory.json cloudless-physical-qualification.json cloudless-security-readiness.json; do
+for artifact in install-dgx-spark.sh cloudless-apps-manifest.json cloudless-models.json cloudless-diffusion.json "cloudless-$VERSION.spdx.json" cloudless-trust-inventory.json cloudless-physical-qualification.json cloudless-security-readiness.json cloudless-ci-qualification.json; do
     file="$artifacts_dir/$artifact"
     signature="$file.asc"
     gpg --batch --yes --local-user "$fingerprint" --armor --detach-sign \
@@ -486,6 +512,7 @@ manifest = {
     "validation": validation,
     "physicalQualification": validation["physicalQualification"],
     "securityReadiness": validation["securityReadiness"],
+    "ciQualification": validation["ciQualification"],
 }
 if promotion_path:
     with open(promotion_path, encoding="utf-8") as handle:
@@ -499,7 +526,7 @@ if promotion_path:
             raise SystemExit(f"stable package is not byte-identical to beta: {item['name']}/{item['architecture']}")
     promoted_artifacts = {item["name"]: item for item in promotion["artifacts"]}
     for item in artifacts:
-        if item["name"] in {"cloudless-physical-qualification.json", "cloudless-security-readiness.json"}:
+        if item["name"] in {"cloudless-physical-qualification.json", "cloudless-security-readiness.json", "cloudless-ci-qualification.json"}:
             continue
         promoted = promoted_artifacts.get(item["name"])
         if not promoted or item["sha256"] != promoted["sha256"] or item["size"] != promoted["size"]:

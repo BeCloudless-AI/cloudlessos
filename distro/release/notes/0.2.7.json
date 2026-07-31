@@ -1,0 +1,14 @@
+{
+  "title": "Safer inference, recovery, and release qualification",
+  "summary": "CloudlessOS 0.2.7 hardens model and recipe operations, separates privileged host actions, improves Spark recovery, and adds exact-commit local qualification for AMD64 and ARM64 releases.",
+  "changes": [
+    "Make model and recipe preparation durable, abortable, restart-safe, and truthful when activation or rollback fails.",
+    "Keep the stable Cloudless API identity while validating managed engines, custom engines, local recipes, and distributed Spark launches before promotion.",
+    "Separate container, engine, desktop, power, network, and other privileged operations into narrowly scoped services instead of running the Cloudless daemon as root.",
+    "Protect Spark enrollment, Hugging Face, Research, and reviewed recipe credentials from frontend state, logs, support bundles, and release evidence.",
+    "Add guided physical qualification for boot, display, locale, keyboard, browser, terminal, update, rollback, encrypted restore, and one-/two-Spark failure recovery.",
+    "Replace paid hosted GitHub Actions with a local exact-commit qualification runner that retains hashed package, visual, and lifecycle evidence for both architectures.",
+    "Harden signed release publication with security readiness, trust inventory, SBOM, atomic R2 verification, beta soak, byte-identical stable promotion, and channel-isolated rollback artifacts.",
+    "Classify one- and two-Spark configurations as supported qualification targets while keeping three-to-eight-Spark orchestration explicitly preview until physical hardware is available."
+  ]
+}

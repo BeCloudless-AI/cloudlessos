@@ -15,6 +15,7 @@ import re
 import shlex
 import shutil
 import socket
+import stat
 import subprocess
 import sys
 import tempfile
@@ -495,9 +496,10 @@ def reject_secrets(value: str) -> None:
         raise ValueError("qualification text appears to contain a credential or private key")
 
 
-def inspect_zip_evidence(path: Path) -> None:
+def inspect_zip_evidence(handle, label: Path) -> None:
     try:
-        with zipfile.ZipFile(path) as archive:
+        handle.seek(0)
+        with zipfile.ZipFile(handle) as archive:
             for member in archive.infolist():
                 member_path = Path(member.filename)
                 if member_path.is_absolute() or ".." in member_path.parts:
@@ -508,30 +510,59 @@ def inspect_zip_evidence(path: Path) -> None:
                 if b"\x00" not in payload:
                     reject_secrets(payload.decode("utf-8", errors="replace"))
     except zipfile.BadZipFile as exc:
-        raise ValueError(f"ZIP evidence is malformed: {path}") from exc
+        raise ValueError(f"ZIP evidence is malformed: {label}") from exc
+    finally:
+        handle.seek(0)
 
 
 def copy_evidence(campaign: Path, check: str, source: Path) -> dict:
-    source = source.resolve(strict=True)
-    info = source.stat()
-    if not source.is_file() or source.is_symlink():
+    if source.is_symlink():
         raise ValueError(f"evidence must be a regular non-symlink file: {source}")
-    if info.st_size <= 0 or info.st_size > MAX_EVIDENCE_BYTES:
-        raise ValueError(f"evidence size is outside the supported range: {source}")
-    if source.suffix.lower() == ".zip":
-        inspect_zip_evidence(source)
-    with source.open("rb") as handle:
+    submitted = source
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(source, flags)
+    except OSError as exc:
+        raise ValueError(f"evidence must be a regular non-symlink file: {source}") from exc
+    with os.fdopen(descriptor, "rb") as handle:
+        info = os.fstat(handle.fileno())
+        if not stat.S_ISREG(info.st_mode):
+            raise ValueError(f"evidence must be a regular non-symlink file: {source}")
+        if info.st_size <= 0 or info.st_size > MAX_EVIDENCE_BYTES:
+            raise ValueError(f"evidence size is outside the supported range: {source}")
+        if submitted.suffix.lower() == ".zip":
+            inspect_zip_evidence(handle, submitted)
         sample = handle.read(2 * 1024 * 1024)
-    if b"\x00" not in sample:
-        reject_secrets(sample.decode("utf-8", errors="replace"))
-    digest = sha256_file(source)
-    destination_dir = campaign / "evidence" / check
-    destination_dir.mkdir(parents=True, mode=0o700, exist_ok=True)
-    safe_name = re.sub(r"[^A-Za-z0-9._-]", "_", source.name)[:120] or "evidence"
-    destination = destination_dir / f"{digest[:12]}-{safe_name}"
-    if not destination.exists():
-        shutil.copyfile(source, destination)
-        os.chmod(destination, 0o600)
+        if b"\x00" not in sample:
+            reject_secrets(sample.decode("utf-8", errors="replace"))
+        handle.seek(0)
+        digest_builder = hashlib.sha256()
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest_builder.update(block)
+        digest = digest_builder.hexdigest()
+        destination_dir = campaign / "evidence" / check
+        destination_dir.mkdir(parents=True, mode=0o700, exist_ok=True)
+        safe_name = re.sub(r"[^A-Za-z0-9._-]", "_", submitted.name)[:120] or "evidence"
+        destination = destination_dir / f"{digest[:12]}-{safe_name}"
+        if destination.is_symlink() or (destination.exists() and not destination.is_file()):
+            raise ValueError("qualification evidence destination is not a regular file")
+        if not destination.exists():
+            temp_fd, temp_name = tempfile.mkstemp(prefix=f".{destination.name}.", dir=destination_dir)
+            try:
+                handle.seek(0)
+                with os.fdopen(temp_fd, "wb") as output:
+                    shutil.copyfileobj(handle, output, 1024 * 1024)
+                    output.flush()
+                    os.fsync(output.fileno())
+                    os.fchmod(output.fileno(), 0o600)
+                os.replace(temp_name, destination)
+            finally:
+                try:
+                    os.unlink(temp_name)
+                except FileNotFoundError:
+                    pass
+        if destination.stat().st_size != info.st_size or sha256_file(destination) != digest:
+            raise ValueError("qualification evidence destination failed integrity verification")
     return {
         "path": destination.relative_to(campaign).as_posix(),
         "sha256": digest,

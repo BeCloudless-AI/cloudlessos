@@ -486,6 +486,47 @@ class PhysicalQualificationTest(unittest.TestCase):
                 campaign, self.matrix, "clean-install", "pass", "Install observed", [self.evidence]
             )
 
+    def test_evidence_symlink_cannot_bypass_regular_file_boundary(self):
+        campaign = self.begin()
+        linked = self.root / "linked-evidence.txt"
+        linked.symlink_to(self.evidence)
+        with self.assertRaisesRegex(ValueError, "non-symlink"):
+            qualify.record_check(
+                campaign, self.matrix, "clean-install", "pass", "Install observed", [linked]
+            )
+
+    def test_interrupted_evidence_copy_is_not_published(self):
+        campaign = self.begin()
+        with mock.patch.object(qualify.shutil, "copyfileobj", side_effect=OSError("copy interrupted")):
+            with self.assertRaisesRegex(OSError, "copy interrupted"):
+                qualify.record_check(
+                    campaign,
+                    self.matrix,
+                    "clean-install",
+                    "pass",
+                    "Install observed",
+                    [self.evidence],
+                )
+        evidence_dir = campaign / "evidence" / "clean-install"
+        self.assertEqual([], list(evidence_dir.iterdir()))
+
+    def test_evidence_destination_symlink_is_rejected(self):
+        campaign = self.begin()
+        digest = qualify.sha256_file(self.evidence)
+        evidence_dir = campaign / "evidence" / "clean-install"
+        evidence_dir.mkdir(parents=True)
+        destination = evidence_dir / f"{digest[:12]}-{self.evidence.name}"
+        destination.symlink_to(self.root / "outside.txt")
+        with self.assertRaisesRegex(ValueError, "destination is not a regular file"):
+            qualify.record_check(
+                campaign,
+                self.matrix,
+                "clean-install",
+                "pass",
+                "Install observed",
+                [self.evidence],
+            )
+
     @staticmethod
     def soak_sample(index, *, failed=False):
         return {

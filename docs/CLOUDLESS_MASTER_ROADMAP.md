@@ -750,6 +750,9 @@ Implementation status (July 31, 2026):
   interruption-safe mode-0600 checkpoint, records transition
   and failure counts, excludes sensitive response fields and prevents sealing while a run is
   incomplete. It produces evidence for human review; it does not self-attest a passing check.
+- Qualification evidence now opens submitted files with no-follow semantics, validates and hashes
+  the same file descriptor, and publishes owner-only copies atomically. This closes a symlink
+  admission bug and prevents interrupted copies from becoming trusted campaign evidence.
 - `physical-validation-matrix.json` defines the exact VirtualBox, generic NVIDIA, single-Spark and
   every two-to-eight-Spark target, with common and cluster-specific required checks.
   [`RELEASE_QUALIFICATION.md`](./RELEASE_QUALIFICATION.md) defines the evidence directory, redaction

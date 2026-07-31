@@ -734,7 +734,8 @@ Implementation status (July 31, 2026):
 - Stable publication now starts from the public, archive-signed beta generation for the exact full
   source commit. The promotion gate verifies the complete six-package/two-architecture matrix,
   every standalone payload and detached signature, the validation/compatibility/qualification
-  bindings and a seven-day soak. Stable repository construction reuses those exact package, SBOM,
+  bindings and a seven-day soak measured from the public by-hash object's server timestamp rather
+  than signing time. Stable repository construction reuses those exact package, SBOM,
   catalog, trust-inventory and installer bytes while regenerating only channel-bound metadata and
   signatures.
 - [`OPERATIONS.md`](./OPERATIONS.md) indexes the install, DGX, update, recovery, cluster, terminal,

@@ -154,7 +154,8 @@ A production `stable` release is now a promotion of the already-published `beta`
 generation for the same version and full source commit. `release.sh` verifies the
 beta `InRelease`, fetches the changelog through its signed by-hash path, verifies
 all 12 package payloads and every detached-signed standalone artifact, and enforces
-the seven-day beta soak. The stable repository is built from those exact package
+the seven-day beta soak from the by-hash object's public `Last-Modified` time rather
+than its earlier signing time. The stable repository is built from those exact package
 and common artifact bytes; only stable channel metadata, physical-qualification
 identity and detached signatures are regenerated. A missing, young, incomplete,
 tampered or source-mismatched beta candidate fails before the signing environment.

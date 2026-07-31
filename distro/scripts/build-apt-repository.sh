@@ -46,13 +46,24 @@ test -s "$RELEASE_GATES" || { echo "Missing release-gate attestation. Run distro
 test -s "$PHYSICAL_QUALIFICATION" || { echo "Missing physical qualification descriptor: $PHYSICAL_QUALIFICATION" >&2; exit 1; }
 if [ -n "$PROMOTION" ]; then
     [ "$CHANNEL" = stable ] || { echo "Beta promotion input is valid only for stable releases." >&2; exit 1; }
-    test -s "$PROMOTION/cloudless-release.json" -a -d "$PROMOTION/packages" -a -d "$PROMOTION/artifacts" || {
+    test -s "$PROMOTION/cloudless-release.json" -a -s "$PROMOTION/cloudless-beta-promotion.json" \
+        -a -d "$PROMOTION/packages" -a -d "$PROMOTION/artifacts" || {
         echo "Incomplete beta promotion snapshot: $PROMOTION" >&2
         exit 1
     }
+    promotion_available_at="$(python3 - "$PROMOTION/cloudless-beta-promotion.json" <<'PY'
+import json, sys
+with open(sys.argv[1], encoding="utf-8") as handle:
+    promotion = json.load(handle)
+if promotion.get("schema") != "cloudless.beta-promotion.v1" or not promotion.get("betaAvailableAt"):
+    raise SystemExit("invalid beta promotion availability evidence")
+print(promotion["betaAvailableAt"])
+PY
+)"
     python3 "$DISTRO/scripts/verify-beta-promotion.py" \
         "$PROMOTION/cloudless-release.json" "$PROMOTION/packages" "$PROMOTION/artifacts" \
-        "$VERSION" "$SOURCE_COMMIT" --output "$PROMOTION/cloudless-beta-promotion.json"
+        "$VERSION" "$SOURCE_COMMIT" --publicly-available-at "$promotion_available_at" \
+        --output "$PROMOTION/cloudless-beta-promotion.json"
 fi
 [[ "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]] || {
     echo "A full Git source commit is required for a production release." >&2

@@ -34,9 +34,24 @@ read -r manifest_hash manifest_size < <(
     echo "Signed beta metadata does not reference cloudless-release.json." >&2
     exit 1
 }
-curl -fsS "$PUBLIC_BASE/dists/beta/by-hash/SHA256/$manifest_hash" -o "$work/cloudless-release.json"
+curl -fsS -D "$work/manifest.headers" \
+    "$PUBLIC_BASE/dists/beta/by-hash/SHA256/$manifest_hash" -o "$work/cloudless-release.json"
 test "$(wc -c < "$work/cloudless-release.json" | tr -d '[:space:]')" = "$manifest_size"
 printf '%s  %s\n' "$manifest_hash" "$work/cloudless-release.json" | sha256sum --check --status
+available_at="$(python3 - "$work/manifest.headers" <<'PY'
+import email.utils, pathlib, sys
+values = []
+for line in pathlib.Path(sys.argv[1]).read_text(encoding="iso-8859-1").splitlines():
+    if line.lower().startswith("last-modified:"):
+        values.append(line.split(":", 1)[1].strip())
+if not values:
+    raise SystemExit("Public beta object has no Last-Modified timestamp")
+parsed = email.utils.parsedate_to_datetime(values[-1])
+if parsed.tzinfo is None:
+    raise SystemExit("Public beta Last-Modified timestamp has no timezone")
+print(parsed.isoformat().replace("+00:00", "Z"))
+PY
+)"
 
 rm -rf -- "$OUT"
 install -d "$OUT/packages" "$OUT/artifacts"
@@ -73,5 +88,6 @@ rm -f "$OUT/downloads.tsv"
 python3 "$ROOT/distro/scripts/verify-beta-promotion.py" \
     "$OUT/cloudless-release.json" "$OUT/packages" "$OUT/artifacts" \
     "$VERSION" "$SOURCE_COMMIT" --minimum-age-seconds "$MINIMUM_AGE" \
+    --publicly-available-at "$available_at" \
     --output "$OUT/cloudless-beta-promotion.json"
 echo "Verified beta promotion snapshot: $OUT"

@@ -101,8 +101,11 @@ def verify(args: argparse.Namespace) -> dict:
     if physical.get("required") is not False or physical.get("status") not in {"qualified", "not-qualified"}:
         raise ValueError("beta physical qualification policy is invalid")
     published = parse_time(release.get("publishedAt"))
+    available = parse_time(args.publicly_available_at) if args.publicly_available_at else published
+    if available < published - dt.timedelta(minutes=5):
+        raise ValueError("public beta object predates its signed publication time")
     now = parse_time(args.now) if args.now else dt.datetime.now(dt.timezone.utc)
-    age = int((now - published).total_seconds())
+    age = int((now - available).total_seconds())
     if age < args.minimum_age_seconds:
         remaining = args.minimum_age_seconds - age
         raise ValueError(f"beta soak is incomplete: {remaining} seconds remain")
@@ -162,6 +165,7 @@ def verify(args: argparse.Namespace) -> dict:
         "sourceCommit": args.source_commit,
         "betaManifestSha256": digest(manifest_path),
         "betaPublishedAt": release["publishedAt"],
+        "betaAvailableAt": available.isoformat().replace("+00:00", "Z"),
         "soakAgeSeconds": age,
         "packages": sorted(verified_packages, key=lambda item: (item["architecture"], item["name"])),
         "artifacts": sorted(verified_artifacts, key=lambda item: item["name"]),
@@ -176,6 +180,7 @@ def main() -> int:
     parser.add_argument("version")
     parser.add_argument("source_commit")
     parser.add_argument("--minimum-age-seconds", type=int, default=7 * 24 * 60 * 60)
+    parser.add_argument("--publicly-available-at", default="")
     parser.add_argument("--now", default="")
     parser.add_argument("--output", required=True)
     args = parser.parse_args()

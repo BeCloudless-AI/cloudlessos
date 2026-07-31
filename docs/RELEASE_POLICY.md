@@ -28,7 +28,8 @@ belongs to that exact version and full source commit; the resulting descriptor i
 and published with the release artifacts.
 
 Stable signing consumes the exact package and common standalone-artifact bytes from the publicly
-verified beta generation. It refuses a beta younger than seven days or one whose signed version,
+verified beta generation. It measures the seven days from the public by-hash object's server
+timestamp—not merely the signed manifest creation time—and refuses a younger beta or one whose signed version,
 full source commit, platform matrix, gate set, qualification binding, payload hashes or detached
 signatures do not match. Stable channel metadata, its physical-qualification identity and detached
 signatures are regenerated; package payloads, SBOM, catalogs, trust inventory and installer bytes

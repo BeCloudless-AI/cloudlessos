@@ -111,6 +111,7 @@ class BetaPromotionTests(unittest.TestCase):
             version=self.version,
             source_commit=self.commit,
             minimum_age_seconds=604800,
+            publicly_available_at="",
             now="2026-01-08T00:00:00Z",
         )
 
@@ -125,6 +126,14 @@ class BetaPromotionTests(unittest.TestCase):
         manifest, packages, artifacts, _ = self.fixture()
         args = self.args(manifest, packages, artifacts)
         args.now = "2026-01-07T23:59:59Z"
+        with self.assertRaisesRegex(ValueError, "soak is incomplete"):
+            MODULE.verify(args)
+
+    def test_soak_starts_when_beta_becomes_public(self) -> None:
+        manifest, packages, artifacts, _ = self.fixture()
+        args = self.args(manifest, packages, artifacts)
+        args.publicly_available_at = "2026-01-07T12:00:00Z"
+        args.now = "2026-01-08T00:00:00Z"
         with self.assertRaisesRegex(ValueError, "soak is incomplete"):
             MODULE.verify(args)
 

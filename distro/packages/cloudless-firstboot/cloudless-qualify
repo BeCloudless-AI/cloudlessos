@@ -26,6 +26,7 @@ EXPORT_SCHEMA = "cloudless.physical-export.v1"
 SET_SCHEMA = "cloudless.physical-set.v1"
 DEFAULT_MATRIX = Path("/usr/share/cloudless/physical-validation-matrix.json")
 DEFAULT_UPDATE_STATUS = Path("/var/lib/cloudless-updater/status.json")
+DEFAULT_BOOT_HEALTH = Path("/var/lib/cloudless/boot-health.json")
 MAX_EVIDENCE_BYTES = 64 * 1024 * 1024
 MAX_EXPORT_BYTES = 2 * 1024 * 1024 * 1024
 VERSION_RE = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+(?:[-+~][0-9A-Za-z][0-9A-Za-z.+~_-]*)?$")
@@ -270,7 +271,7 @@ def applicable_checks(matrix: dict, target: dict) -> list[str]:
 
 CHECK_GUIDANCE = {
     "clean-install": "Install this exact candidate from clean media and retain the installer result plus the first successful boot screen.",
-    "ten-boot-cycles": "Cold boot or restart the machine, then record each distinct boot. Ten different kernel boot IDs are required.",
+    "ten-boot-cycles": "Cold boot or restart the machine, wait for the Cloudless desktop, then record the boot. Ten different kernel boot IDs with same-boot healthy graphical audits are required.",
     "graphical-session": "Prove the Cloudless desktop appears without switching to a text console or manually restarting the display manager.",
     "display-and-scale": "Exercise resolution and UI-scale changes, confirm the new display, and prove automatic rollback for an unconfirmed change.",
     "locale-and-timezone": "Change locale/region and timezone, then retain the desktop clock and system setting after a reboot.",
@@ -455,17 +456,62 @@ def current_boot_id() -> str:
     return value
 
 
-def record_boot(campaign: Path, boot_id: str | None = None, recorded_at: str | None = None) -> bool:
+def validated_boot_health(path: Path, boot_id: str) -> dict:
+    if path.is_symlink() or not path.is_file():
+        raise ValueError("the Cloudless graphical boot audit has not completed for this boot")
+    health = load_json(path)
+    if health.get("schema") != "cloudless.boot-health.v1":
+        raise ValueError("the Cloudless graphical boot audit has an unsupported schema")
+    if health.get("bootId") != boot_id:
+        raise ValueError("the Cloudless graphical boot audit belongs to a different kernel boot")
+    if health.get("healthy") is not True or health.get("reason") != "ready":
+        raise ValueError(
+            "the current boot is not graphically healthy; run cloudless-repair and reboot before recording it"
+        )
+    if health.get("displayExpected") is not True:
+        raise ValueError("the graphical boot audit did not require a display session on this machine")
+    probes = health.get("probes")
+    required = {
+        "defaultTarget",
+        "lightdm",
+        "xDisplay",
+        "graphicalSession",
+        "kioskBrowser",
+        "browserProfile",
+        "orchestrator",
+    }
+    if not isinstance(probes, dict) or any(probes.get(probe) != "ready" for probe in required):
+        raise ValueError("the graphical boot audit does not prove the complete desktop ownership chain")
+    if not isinstance(health.get("consecutiveHealthyBoots"), int) or health["consecutiveHealthyBoots"] < 1:
+        raise ValueError("the graphical boot audit has an invalid healthy-boot counter")
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", str(health.get("checkedAt", ""))):
+        raise ValueError("the graphical boot audit has an invalid completion time")
+    return health
+
+
+def record_boot(
+    campaign: Path,
+    boot_id: str | None = None,
+    recorded_at: str | None = None,
+    boot_health_path: Path | None = None,
+) -> bool:
     verify_campaign_layout(campaign)
     boot_id = (boot_id or current_boot_id()).strip().lower()
     if not re.fullmatch(r"[0-9a-f-]{36}", boot_id):
         raise ValueError("boot ID is malformed")
+    health_path = boot_health_path or Path(os.environ.get("CLOUDLESS_BOOT_HEALTH", DEFAULT_BOOT_HEALTH))
+    health = validated_boot_health(health_path, boot_id)
     destination = campaign / "boots" / f"{boot_id}.json"
     if destination.exists():
         return False
     atomic_json(
         destination,
-        {"schema": "cloudless.physical-boot.v1", "bootId": boot_id, "recordedAt": recorded_at or utc_now()},
+        {
+            "schema": "cloudless.physical-boot.v2",
+            "bootId": boot_id,
+            "recordedAt": recorded_at or utc_now(),
+            "graphicalBootAudit": health,
+        },
     )
     return True
 
@@ -540,12 +586,26 @@ def validate_campaign(campaign: Path, matrix_path: Path) -> list[str]:
             errors.append(f"ten-boot-cycles: malformed boot evidence {boot_path.name}")
             continue
         if (
-            boot.get("schema") != "cloudless.physical-boot.v1"
+            boot.get("schema") != "cloudless.physical-boot.v2"
             or boot.get("bootId") != boot_path.stem
             or not re.fullmatch(r"[0-9a-f-]{36}", str(boot.get("bootId", "")))
             or not str(boot.get("recordedAt", "")).endswith("Z")
         ):
             errors.append(f"ten-boot-cycles: invalid boot evidence {boot_path.name}")
+            continue
+        try:
+            health = boot.get("graphicalBootAudit")
+            if not isinstance(health, dict):
+                raise ValueError("missing graphical boot audit")
+            # Reuse the same strict contract without trusting a mutable live
+            # status file: validate a private, temporary copy of the embedded
+            # audit payload.
+            with tempfile.TemporaryDirectory() as temporary:
+                audit_path = Path(temporary) / "boot-health.json"
+                audit_path.write_text(json.dumps(health), encoding="utf-8")
+                validated_boot_health(audit_path, boot_path.stem)
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            errors.append(f"ten-boot-cycles: invalid graphical audit {boot_path.name}: {exc}")
     for check in applicable_checks(matrix, target):
         if check == "ten-boot-cycles":
             continue

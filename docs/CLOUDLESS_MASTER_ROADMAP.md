@@ -156,6 +156,10 @@ Implementation status (July 31, 2026):
   kiosk-browser, profile-owner and API chain. It atomically records the exact failed probe plus a
   bounded 20-boot history and consecutive-healthy count. Repair restarts LightDM before checking
   the recovered display and waits for the same ownership chain instead of relying on a fixed sleep.
+- Physical qualification no longer counts a bare kernel boot ID. Every accepted boot must have a
+  healthy boot-audit result for that exact ID with the full graphical ownership chain ready, and the
+  audit snapshot is embedded into the tamper-evident campaign. Recording from a recovery TTY after
+  a black-screen boot cannot advance the required ten-cycle gate.
 - The embedded launch animation is keyed to the kernel boot ID, so browser reloads cannot replay it
   while every new OS boot does. The desktop is initialized underneath it first; DGX Spark disables
   the costly animation by default and exposes the existing per-display override with a warning.

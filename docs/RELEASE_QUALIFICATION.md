@@ -52,11 +52,18 @@ The updater retains the exact source commit only after verifying it against the 
 metadata. `begin` uses that identity only when its installed version exactly matches the requested
 version. For a fresh ISO that has not yet established updater identity, append the full
 40-character release commit after the version; abbreviated commits are never accepted.
-After every distinct cold boot or restart, record the kernel-generated boot identity:
+After every distinct cold boot or restart, wait for the Cloudless desktop to appear normally and
+then record the kernel-generated boot identity:
 
 ```bash
 sudo cloudless-qualify boot /var/lib/cloudless/qualification/0.2.7-01234567/dgx-spark-arm64-2
 ```
+
+The command does not trust the boot ID alone. It reads the packaged boot auditor's result for that
+exact boot and refuses to count it unless `graphical.target`, LightDM, X, the Cloudless session,
+the kiosk browser, browser-profile ownership and the local API are all ready. Running the command
+from a recovery TTY after a black-screen boot therefore cannot advance the ten-cycle gate. Each
+accepted boot record embeds the immutable audit snapshot that proved the graphical ownership chain.
 
 Collect read-only machine details and the locally generated, redacted support ZIP:
 
@@ -75,8 +82,9 @@ sudo cloudless-qualify record \
   --evidence /home/cloudless/Downloads/graphical-session.png
 ```
 
-`ten-boot-cycles` cannot be manually attested: it is calculated from ten different kernel boot IDs.
-Every other applicable check requires at least one evidence file. Multi-Spark campaigns
+`ten-boot-cycles` cannot be manually attested: it is calculated from ten different kernel boot IDs,
+each paired with its same-boot healthy graphical audit. Every other applicable check requires at
+least one evidence file. Multi-Spark campaigns
 automatically require the complete cluster check set. Credential-shaped notes and text/ZIP evidence
 fail closed instead of being retained.
 

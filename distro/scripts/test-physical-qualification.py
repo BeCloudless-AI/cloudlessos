@@ -59,10 +59,50 @@ class PhysicalQualificationTest(unittest.TestCase):
                 [self.evidence],
             )
 
+    def boot_health(self, boot_id, *, healthy=True, display_expected=True, probes=None):
+        path = self.root / f"boot-health-{boot_id}.json"
+        ready_probes = {
+            "defaultTarget": "ready",
+            "lightdm": "ready",
+            "xDisplay": "ready",
+            "graphicalSession": "ready",
+            "kioskBrowser": "ready",
+            "browserProfile": "ready",
+            "orchestrator": "ready",
+        }
+        if probes:
+            ready_probes.update(probes)
+        path.write_text(
+            json.dumps(
+                {
+                    "schema": "cloudless.boot-health.v1",
+                    "healthy": healthy,
+                    "consecutiveHealthyBoots": 1,
+                    "bootId": boot_id,
+                    "checkedAt": "2026-07-31T00:00:00Z",
+                    "elapsedSeconds": 2,
+                    "attempts": 2,
+                    "platform": "generic",
+                    "displayExpected": display_expected,
+                    "reason": "ready" if healthy else "lightdm-not-active",
+                    "probes": ready_probes,
+                }
+            ),
+            encoding="utf-8",
+        )
+        return path
+
+    def record_healthy_boot(self, campaign, boot_id):
+        return qualify.record_boot(
+            campaign,
+            boot_id,
+            boot_health_path=self.boot_health(boot_id),
+        )
+
     def test_complete_campaign_and_tamper_detection(self):
         campaign = self.begin()
         for number in range(10):
-            qualify.record_boot(campaign, str(uuid.UUID(int=number + 1)))
+            self.record_healthy_boot(campaign, str(uuid.UUID(int=number + 1)))
         self.record_all(campaign, "virtualbox-amd64")
         self.assertEqual(qualify.validate_campaign(campaign, self.matrix), [])
         self.assertEqual(qualify.print_status(campaign, self.matrix), 0)
@@ -77,7 +117,7 @@ class PhysicalQualificationTest(unittest.TestCase):
     def test_completed_campaign_exports_as_self_verifying_archive(self):
         campaign = self.begin()
         for number in range(10):
-            qualify.record_boot(campaign, str(uuid.UUID(int=number + 1)))
+            self.record_healthy_boot(campaign, str(uuid.UUID(int=number + 1)))
         self.record_all(campaign, "virtualbox-amd64")
         archive = self.root / "qualified.zip"
         self.assertEqual(qualify.export_campaign(campaign, self.matrix, archive), archive)
@@ -94,7 +134,7 @@ class PhysicalQualificationTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "incomplete"):
             qualify.export_campaign(campaign, self.matrix, self.root / "incomplete.zip")
         for number in range(10):
-            qualify.record_boot(campaign, str(uuid.UUID(int=number + 1)))
+            self.record_healthy_boot(campaign, str(uuid.UUID(int=number + 1)))
         self.record_all(campaign, "virtualbox-amd64")
         with self.assertRaisesRegex(ValueError, "outside"):
             qualify.export_campaign(campaign, self.matrix, campaign / "unsafe.zip")
@@ -102,7 +142,7 @@ class PhysicalQualificationTest(unittest.TestCase):
     def test_export_verification_detects_member_tampering(self):
         campaign = self.begin()
         for number in range(10):
-            qualify.record_boot(campaign, str(uuid.UUID(int=number + 1)))
+            self.record_healthy_boot(campaign, str(uuid.UUID(int=number + 1)))
         self.record_all(campaign, "virtualbox-amd64")
         archive = qualify.export_campaign(campaign, self.matrix, self.root / "qualified.zip")
         tampered = self.root / "tampered.zip"
@@ -168,8 +208,9 @@ class PhysicalQualificationTest(unittest.TestCase):
     def test_unique_boots_and_cluster_checks_cannot_be_bypassed(self):
         campaign = self.begin("dgx-spark-arm64-2", "aarch64", "dgx-spark")
         boot = str(uuid.UUID(int=1))
-        self.assertTrue(qualify.record_boot(campaign, boot))
-        self.assertFalse(qualify.record_boot(campaign, boot))
+        health = self.boot_health(boot)
+        self.assertTrue(qualify.record_boot(campaign, boot, boot_health_path=health))
+        self.assertFalse(qualify.record_boot(campaign, boot, boot_health_path=health))
         matrix = qualify.load_matrix(self.matrix)
         for check in matrix["requiredChecks"]:
             if check != "ten-boot-cycles":
@@ -180,6 +221,47 @@ class PhysicalQualificationTest(unittest.TestCase):
         self.assertTrue(any("discover-and-enroll" in error for error in errors))
         self.assertTrue(any("cluster-failure--packet-loss--loading" in error for error in errors))
         self.assertTrue(any("1/10 unique boots" in error for error in errors))
+
+    def test_boot_count_requires_same_boot_complete_graphical_audit(self):
+        campaign = self.begin()
+        boot = str(uuid.UUID(int=17))
+        with self.assertRaisesRegex(ValueError, "has not completed"):
+            qualify.record_boot(campaign, boot, boot_health_path=self.root / "missing.json")
+
+        different = str(uuid.UUID(int=18))
+        with self.assertRaisesRegex(ValueError, "different kernel boot"):
+            qualify.record_boot(campaign, boot, boot_health_path=self.boot_health(different))
+
+        with self.assertRaisesRegex(ValueError, "not graphically healthy"):
+            qualify.record_boot(campaign, boot, boot_health_path=self.boot_health(boot, healthy=False))
+
+        with self.assertRaisesRegex(ValueError, "did not require a display"):
+            qualify.record_boot(
+                campaign,
+                boot,
+                boot_health_path=self.boot_health(boot, display_expected=False),
+            )
+
+        with self.assertRaisesRegex(ValueError, "complete desktop ownership chain"):
+            qualify.record_boot(
+                campaign,
+                boot,
+                boot_health_path=self.boot_health(boot, probes={"kioskBrowser": "waiting"}),
+            )
+        self.assertEqual(list((campaign / "boots").iterdir()), [])
+
+    def test_embedded_graphical_boot_audit_is_revalidated(self):
+        campaign = self.begin()
+        boot = str(uuid.UUID(int=19))
+        self.record_healthy_boot(campaign, boot)
+        record_path = campaign / "boots" / f"{boot}.json"
+        record = json.loads(record_path.read_text(encoding="utf-8"))
+        self.assertEqual(record["schema"], "cloudless.physical-boot.v2")
+        self.assertEqual(record["graphicalBootAudit"]["probes"]["lightdm"], "ready")
+        record["graphicalBootAudit"]["probes"]["lightdm"] = "waiting"
+        record_path.write_text(json.dumps(record), encoding="utf-8")
+        errors = qualify.validate_campaign(campaign, self.matrix)
+        self.assertTrue(any("invalid graphical audit" in error for error in errors))
 
     def test_representative_two_spark_target_expands_failure_phase_matrix(self):
         matrix = qualify.load_matrix(self.matrix)
@@ -209,7 +291,7 @@ class PhysicalQualificationTest(unittest.TestCase):
         self.assertEqual(plan[0]["status"], "pass")
         self.assertEqual(plan[1]["check"], "ten-boot-cycles")
         for number in range(10):
-            qualify.record_boot(campaign, str(uuid.UUID(int=number + 1)))
+            self.record_healthy_boot(campaign, str(uuid.UUID(int=number + 1)))
         self.assertEqual(qualify.qualification_plan(campaign, self.matrix)[1]["status"], "pass")
         copied = next((campaign / "evidence" / "clean-install").iterdir())
         copied.write_text("tampered\n", encoding="utf-8")

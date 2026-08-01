@@ -42,8 +42,15 @@ if [[ "${1:-}" == "--inside" ]]; then
   chmod 0640 /var/lib/cloudless/state.json
   printf '{"qualification":"preserve-me"}\n' >/var/lib/cloudless/qualification-preserve.json
   legacy_cache=/var/lib/docker/volumes/cloudless-hf/_data
-  install -d -m 0755 "$legacy_cache/hub/models--qualification--model/blobs"
+  qualification_revision="$(printf '3%.0s' $(seq 1 40))"
+  qualification_repo="$legacy_cache/hub/models--qualification--model"
+  install -d -m 0755 \
+    "$qualification_repo/blobs" \
+    "$qualification_repo/refs" \
+    "$qualification_repo/snapshots/$qualification_revision"
   printf 'preserve-model-weights\n' >"$legacy_cache/hub/models--qualification--model/blobs/weights"
+  ln -s ../../blobs/weights "$qualification_repo/snapshots/$qualification_revision/weights"
+  printf '%s\n' "$qualification_revision" >"$qualification_repo/refs/main"
   getent passwd cloudlessd >/dev/null
   getent group cloudless-control >/dev/null
   getent group cloudless >/dev/null

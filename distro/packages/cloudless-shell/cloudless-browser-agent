@@ -113,6 +113,21 @@ find_browser() {
     return 1
 }
 
+# A browser request is durable until the launch command has either exited
+# successfully (for an existing browser instance) or remained alive through a
+# short startup grace period (for a new browser process). If this agent is
+# stopped during that grace period, the request stays on disk and is retried by
+# the replacement agent. Duplicate delivery is safe; silent request loss is not.
+dispatch_browser() {
+    "$@" 9>&- >/dev/null 2>&1 &
+    dispatch_pid=$!
+    sleep "${CLOUDLESS_BROWSER_DISPATCH_GRACE_SECONDS:-0.05}" 9>&-
+    if kill -0 "$dispatch_pid" >/dev/null 2>&1; then
+        return 0
+    fi
+    wait "$dispatch_pid"
+}
+
 while :; do
     for request in "$REQUESTS"/*.json; do
         [ -f "$request" ] || continue
@@ -145,9 +160,9 @@ while :; do
                 esac
                 mkdir -p "$profile"
                 if [ -e "$profile/lock" ] || [ -L "$profile/lock" ] || [ -e "$profile/.parentlock" ]; then
-                    "$browser" --profile "$profile" --new-tab "$url" 9>&- >/dev/null 2>&1 &
+                    dispatch_browser "$browser" --profile "$profile" --new-tab "$url" || continue
                 else
-                    "$browser" --class CloudlessBrowser --new-instance --profile "$profile" --new-window "$url" 9>&- >/dev/null 2>&1 &
+                    dispatch_browser "$browser" --class CloudlessBrowser --new-instance --profile "$profile" --new-window "$url" || continue
                 fi
                 ;;
             *)
@@ -156,9 +171,9 @@ while :; do
                     *) profile="$XDG_CONFIG_HOME/cloudless-web-browser" ;;
                 esac
                 mkdir -p "$profile"
-                "$browser" --class=CloudlessBrowser --user-data-dir="$profile" "$url" \
+                dispatch_browser "$browser" --class=CloudlessBrowser --user-data-dir="$profile" "$url" \
                     --no-first-run --disable-session-crashed-bubble \
-                    --class=CloudlessBrowser 9>&- >/dev/null 2>&1 &
+                    --class=CloudlessBrowser || continue
                 ;;
         esac
         rm -f "$request"

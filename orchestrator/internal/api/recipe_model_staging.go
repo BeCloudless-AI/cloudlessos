@@ -29,6 +29,70 @@ func recipeWithCacheVolume(recipe localrecipes.Recipe, volume string) localrecip
 	return copy
 }
 
+// seedRecipeDownloadStaging reuses every existing blob from the exact model
+// repository through hard links. Hugging Face can then resume partial blobs
+// and fetch only absent data; no second local copy and no full redownload are
+// needed when a snapshot merely lacks a file or its Cloudless certificate.
+func seedRecipeDownloadStaging(recipe localrecipes.Recipe, stagingRoot string) error {
+	cacheName, ok := modelCacheName(recipe.Model.ID)
+	if !ok {
+		return errors.New("recipe model ID cannot be mapped to a Hugging Face cache")
+	}
+	finalRoot, err := recipeCacheVolume(recipe)
+	if err != nil {
+		return err
+	}
+	source := filepath.Join(finalRoot, "hub", cacheName)
+	if info, err := os.Stat(source); errors.Is(err, os.ErrNotExist) {
+		return nil
+	} else if err != nil {
+		return err
+	} else if !info.IsDir() {
+		return errors.New("existing model cache repository is not a directory")
+	}
+	destination := filepath.Join(stagingRoot, "hub", cacheName)
+	return filepath.WalkDir(source, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		relative, err := filepath.Rel(source, path)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(destination, relative)
+		if entry.IsDir() {
+			return os.MkdirAll(target, 0o750)
+		}
+		if _, err := os.Lstat(target); err == nil {
+			return nil
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		if entry.Type()&os.ModeSymlink != 0 {
+			resolved, err := filepath.EvalSymlinks(path)
+			if err != nil || !pathWithin(resolved, source) {
+				return fmt.Errorf("existing model cache contains an unsafe link: %s", relative)
+			}
+			link, err := os.Readlink(path)
+			if err != nil {
+				return err
+			}
+			return os.Symlink(link, target)
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("existing model cache contains an unsupported file: %s", relative)
+		}
+		if err := os.Link(path, target); err != nil {
+			return fmt.Errorf("hard-link existing model data %s: %w", relative, err)
+		}
+		return nil
+	})
+}
+
 // promoteStagedRecipeModel copies a verified, resumable download into a
 // staging tree on the final Docker volume. Only after a second verification is
 // the repository atomically exchanged. The previous cache remains available

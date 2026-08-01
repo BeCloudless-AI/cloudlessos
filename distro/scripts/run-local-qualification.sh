@@ -3,6 +3,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "$ROOT/distro/scripts/release-version.sh"
 VERSION="${1:-}"
 CHANNEL="${2:-}"
 COMMIT="${3:-}"
@@ -11,7 +12,7 @@ OUTPUT="${4:-$ROOT/distro/out/qualification/cloudless-ci-qualification.json}"
 usage() {
     echo "Usage: $0 VERSION stable|beta FULL_COMMIT [OUTPUT]" >&2
 }
-[[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]] || { usage; exit 2; }
+cloudless_is_release_version "$VERSION" || { usage; exit 2; }
 case "$CHANNEL" in stable|beta) ;; *) usage; exit 2 ;; esac
 [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]] || { usage; exit 2; }
 

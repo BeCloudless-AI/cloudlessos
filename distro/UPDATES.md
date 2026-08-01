@@ -41,8 +41,11 @@ inside the protected release environment when signing.
 
 ## One-command production release
 
-Package versions must increase according to Debian version ordering. Development
-versions containing `dev` are intentionally rejected.
+CloudlessOS uses Debian-native release revisions. The first package revision of an
+upstream version is `0.2.7-1`, followed by `0.2.7-2`, `0.2.7-3`, and so on. The
+next upstream feature version starts at `0.2.8-1`. Development trees use `~dev`
+(for example `0.2.7-1~dev`), which Debian correctly sorts before `0.2.7-1`.
+Development versions are intentionally rejected by production publishing.
 
 Every release also requires curated notes at
 `distro/release/notes/VERSION.json`. The file must contain a non-empty `title` and
@@ -55,7 +58,7 @@ and push the current branch. Then run exactly one production command:
 
 ```bash
 bash distro/scripts/configure-release-env.sh # one time per release workstation
-bash distro/scripts/release.sh 0.2.1 stable
+bash distro/scripts/release.sh 0.2.7-1 beta
 ```
 
 The one-time setup stores these values in `~/.config/cloudless/release.env` with

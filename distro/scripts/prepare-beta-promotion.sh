@@ -3,6 +3,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "$ROOT/distro/scripts/release-version.sh"
 VERSION="${1:?version is required}"
 SOURCE_COMMIT="${2:?full source commit is required}"
 OUT="${3:-$ROOT/distro/out/beta-promotion}"
@@ -11,7 +12,7 @@ PUBLIC_ROOT="${CLOUDLESS_PUBLIC_ROOT_URL:-${PUBLIC_BASE%/apt}}"
 KEY="${CLOUDLESS_ARCHIVE_KEY:-$ROOT/distro/release/keys/cloudless-archive-keyring.pgp}"
 MINIMUM_AGE="${CLOUDLESS_PROMOTION_MIN_AGE_SECONDS:-604800}"
 
-[[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([+~][0-9A-Za-z][0-9A-Za-z.+~_-]*)?$ ]] || {
+cloudless_is_release_version "$VERSION" || {
     echo "Invalid promotion version: $VERSION" >&2
     exit 2
 }

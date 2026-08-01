@@ -211,7 +211,7 @@ func runDestructiveRecipeFailureCase(t *testing.T, boundary recipeBoundary) {
 	server := &Server{
 		eng: matrixEngine, state: stateStore, recipeOps: operations,
 		recipeFailures: newRecipeFailurePlan(map[recipeBoundary]int{boundary: 1}),
-		recipeRevalidate: func(context.Context, localrecipes.Recipe, recipeops.Operation, string, map[string]string) error {
+		recipeRevalidate: func(context.Context, localrecipes.Recipe, recipeops.Operation, string, map[string]string, recipeModelEvidence) error {
 			return nil
 		},
 	}

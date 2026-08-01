@@ -27,7 +27,7 @@ export CLOUDLESS_R2_BUCKET=cloudless-updates
 export AWS_ACCESS_KEY_ID="$(printf '0123456789abcdef%.0s' {1..2})"
 export AWS_SECRET_ACCESS_KEY="$(printf '0123456789abcdef%.0s' {1..4})"
 
-bash "$PREFLIGHT" "$repo" 1.2.3 stable "$work/archive-secret.asc" >/dev/null
+bash "$PREFLIGHT" "$repo" 1.2.3-1 stable "$work/archive-secret.asc" >/dev/null
 
 expect_rejection() {
     local label="$1"
@@ -42,6 +42,9 @@ printf 'dirty\n' > "$repo/untracked-source"
 expect_rejection 'a dirty repository' bash "$PREFLIGHT" "$repo" 1.2.3 stable "$work/archive-secret.asc"
 rm "$repo/untracked-source"
 expect_rejection 'a test version' bash "$PREFLIGHT" "$repo" 0.0.0-test-only stable "$work/archive-secret.asc"
+expect_rejection 'a zero Debian revision' bash "$PREFLIGHT" "$repo" 1.2.3-0 stable "$work/archive-secret.asc"
+expect_rejection 'a named Debian revision' bash "$PREFLIGHT" "$repo" 1.2.3-hotfix stable "$work/archive-secret.asc"
+expect_rejection 'a development version' bash "$PREFLIGHT" "$repo" 1.2.3-1~dev stable "$work/archive-secret.asc"
 
 export CLOUDLESS_PROMOTION_MIN_AGE_SECONDS=0
 expect_rejection 'a shortened beta soak' bash "$PREFLIGHT" "$repo" 1.2.3 stable "$work/archive-secret.asc"

@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,11 +21,27 @@ type recipeLaunchPlan struct {
 	RuntimeBytes          int64  `json:"runtimeBytes,omitempty"`
 	RuntimeEstimateBytes  int64  `json:"runtimeEstimateBytes,omitempty"`
 	RuntimeReason         string `json:"runtimeReason"`
+	ModelInstalled        bool   `json:"modelInstalled"`
 	ModelReady            bool   `json:"modelReady"`
 	ModelID               string `json:"modelId"`
 	BuildOnce             bool   `json:"buildOnce"`
 	DownloadOnce          bool   `json:"downloadOnce"`
 	Nodes                 int    `json:"nodes"`
+}
+
+// recipeModelInstalled is the cheap lifecycle gate used by the API and UI. A
+// complete snapshot means the exact immutable model revision already exists;
+// recipe launch may certify it in place without downloading the weights again.
+func recipeModelInstalled(recipe localrecipes.Recipe) bool {
+	cacheName, ok := modelCacheName(recipe.Model.ID)
+	if !ok || strings.TrimSpace(recipe.Model.Revision) == "" {
+		return false
+	}
+	root, err := recipeCacheVolume(recipe)
+	if err != nil {
+		return false
+	}
+	return recipeSnapshotComplete(filepath.Join(root, "hub", cacheName), recipe.Model.Revision)
 }
 
 func recipeRuntimeExplanation(recipe localrecipes.Recipe) string {
@@ -59,10 +76,33 @@ func recipeSnapshotComplete(repoRoot, revision string) bool {
 		}
 		return nil
 	})
-	return !incomplete
+	if incomplete {
+		return false
+	}
+	hasFile, invalid := false, false
+	_ = filepath.WalkDir(filepath.Join(repoRoot, "snapshots", revision), func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			invalid = true
+			return filepath.SkipAll
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		info, err := os.Stat(path)
+		if err != nil || !info.Mode().IsRegular() {
+			invalid = true
+			return filepath.SkipAll
+		}
+		hasFile = true
+		return nil
+	})
+	return hasFile && !invalid
 }
 
 func recipeCachedModelReady(ctx context.Context, runtime engine.Engine, recipe localrecipes.Recipe) bool {
+	if recipeModelInstalled(recipe) {
+		return true
+	}
 	_, err := inspectRecipeModelManifest(ctx, runtime, recipe)
 	return err == nil
 }
@@ -119,6 +159,10 @@ func recipeModelVolumeMountpoint(ctx context.Context, runtime engine.Engine, rec
 }
 
 func verifyRecipeModelCache(ctx context.Context, runtime engine.Engine, recipe localrecipes.Recipe) (recipeArtifactManifest, error) {
+	return verifyRecipeModelCacheWithProgress(ctx, runtime, recipe, nil)
+}
+
+func verifyRecipeModelCacheWithProgress(ctx context.Context, runtime engine.Engine, recipe localrecipes.Recipe, progress func(int64)) (recipeArtifactManifest, error) {
 	cacheName, ok := modelCacheName(recipe.Model.ID)
 	if !ok || strings.TrimSpace(recipe.Model.Revision) == "" {
 		return recipeArtifactManifest{}, errors.New("recipe model identity is incomplete")
@@ -135,7 +179,7 @@ func verifyRecipeModelCache(ctx context.Context, runtime engine.Engine, recipe l
 		return recipeArtifactManifest{}, errors.New("model artifact manifest identity does not match recipe")
 	}
 	repoRoot := filepath.Join(mountpoint, "hub", cacheName)
-	actual, err := buildRecipeArtifactManifest(repoRoot, filepath.Join(repoRoot, "snapshots", recipe.Model.Revision), recipe.Model.ID, recipe.Model.Revision)
+	actual, err := buildRecipeArtifactManifestWithProgress(ctx, repoRoot, filepath.Join(repoRoot, "snapshots", recipe.Model.Revision), recipe.Model.ID, recipe.Model.Revision, progress)
 	if err != nil {
 		return recipeArtifactManifest{}, err
 	}
@@ -165,6 +209,45 @@ func certifyRecipeModelCache(ctx context.Context, runtime engine.Engine, recipe 
 	return manifest, nil
 }
 
+var errRecipeModelCacheIncomplete = errors.New("existing recipe model cache is incomplete")
+
+// certifyExistingRecipeModelCache adopts an exact revision downloaded through
+// Model Manager (or another Cloudless workflow). The immutable Hub inventory
+// proves that no file is absent or truncated before the local SHA-256 manifest
+// is recorded. This turns certification into verification, never a download.
+func certifyExistingRecipeModelCache(ctx context.Context, runtime engine.Engine, recipe localrecipes.Recipe, inventory map[string]int64, progress func(int64)) (recipeArtifactManifest, error) {
+	cacheName, ok := modelCacheName(recipe.Model.ID)
+	if !ok || strings.TrimSpace(recipe.Model.Revision) == "" {
+		return recipeArtifactManifest{}, errors.New("recipe model identity is incomplete")
+	}
+	mountpoint, err := recipeModelVolumeMountpoint(ctx, runtime, recipe)
+	if err != nil {
+		return recipeArtifactManifest{}, err
+	}
+	repoRoot := filepath.Join(mountpoint, "hub", cacheName)
+	manifest, err := buildRecipeArtifactManifestWithProgress(ctx, repoRoot,
+		filepath.Join(repoRoot, "snapshots", recipe.Model.Revision), recipe.Model.ID, recipe.Model.Revision, progress)
+	if err != nil {
+		return recipeArtifactManifest{}, fmt.Errorf("inspect existing model snapshot: %w", err)
+	}
+	local := make(map[string]int64, len(manifest.Files))
+	for _, file := range manifest.Files {
+		local[file.Path] = file.Size
+	}
+	if len(local) != len(inventory) {
+		return recipeArtifactManifest{}, fmt.Errorf("%w: expected %d files, found %d", errRecipeModelCacheIncomplete, len(inventory), len(local))
+	}
+	for path, expectedSize := range inventory {
+		if actualSize, exists := local[path]; !exists || actualSize != expectedSize {
+			return recipeArtifactManifest{}, fmt.Errorf("%w: %s", errRecipeModelCacheIncomplete, path)
+		}
+	}
+	if err := saveRecipeArtifactManifest(recipeModelCompleteMarker(recipe, mountpoint), manifest); err != nil {
+		return recipeArtifactManifest{}, fmt.Errorf("record existing model manifest: %w", err)
+	}
+	return manifest, nil
+}
+
 func buildRecipeLaunchPlan(ctx context.Context, runtime engine.Engine, recipe localrecipes.Recipe) recipeLaunchPlan {
 	plan := recipeLaunchPlan{
 		RequiresCustomRuntime: recipe.Runtime.Lifecycle.Build.Program != "",
@@ -180,6 +263,7 @@ func buildRecipeLaunchPlan(ctx context.Context, runtime engine.Engine, recipe lo
 		plan.RuntimeReady = true
 		plan.RuntimeBytes = image.Size
 	}
+	plan.ModelInstalled = recipeModelInstalled(recipe)
 	plan.ModelReady = recipeCachedModelReady(ctx, runtime, recipe)
 	return plan
 }

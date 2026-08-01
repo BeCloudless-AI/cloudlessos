@@ -151,7 +151,11 @@ func verifyReviewedCheckout(recipe localrecipes.Recipe, checkout string) error {
 }
 
 func reviewedGitOutput(checkout string, args ...string) ([]byte, error) {
-	commandArgs := append([]string{"-c", "core.pager=cat", "-C", checkout}, args...)
+	// cloudless-docker is a root broker while validation checkouts are owned by
+	// the restricted orchestrator account. Trust only the exact checkout path
+	// already derived from the authenticated operation; do not weaken Git's
+	// ownership protection globally.
+	commandArgs := append([]string{"-c", "core.pager=cat", "-c", "safe.directory=" + checkout, "-C", checkout}, args...)
 	command := exec.Command("/usr/bin/git", commandArgs...)
 	command.Env = []string{
 		"PATH=/usr/sbin:/usr/bin:/sbin:/bin",
@@ -187,8 +191,6 @@ func authorizeReviewedDockerArgs(operation recipeops.Operation, checkout, stateD
 			strings.HasPrefix(lower, "--cap-add="),
 			lower == "--security-opt",
 			strings.HasPrefix(lower, "--security-opt="),
-			lower == "--device",
-			strings.HasPrefix(lower, "--device="),
 			lower == "--mount",
 			strings.HasPrefix(lower, "--mount="),
 			strings.Contains(lower, "/var/run/docker.sock"),
@@ -361,6 +363,8 @@ func authorizeReviewedRun(operation recipeops.Operation, stateDir string, args [
 	image := ""
 	name := ""
 	network := ""
+	contractRuntimeOptions := false
+	infinibandDevice := false
 	for i := 1; i < len(args); i++ {
 		arg := args[i]
 		switch arg {
@@ -397,6 +401,28 @@ func authorizeReviewedRun(operation recipeops.Operation, stateDir string, args [
 			if network != "host" {
 				return errors.New("reviewed recipe run network is not admitted")
 			}
+		case "--ipc", "--gpus", "--ulimit":
+			if i+1 >= len(args) {
+				return fmt.Errorf("reviewed run option %s is missing a value", arg)
+			}
+			i++
+			value := args[i]
+			if (arg == "--ipc" && value != "host") ||
+				(arg == "--gpus" && value != "all") ||
+				(arg == "--ulimit" && value != "memlock=-1") {
+				return fmt.Errorf("reviewed run option %s=%s is not admitted", arg, value)
+			}
+			contractRuntimeOptions = true
+		case "--device":
+			if i+1 >= len(args) {
+				return errors.New("reviewed run device is missing")
+			}
+			i++
+			if args[i] != "/dev/infiniband:/dev/infiniband" {
+				return errors.New("reviewed recipe run device is not admitted")
+			}
+			infinibandDevice = true
+			contractRuntimeOptions = true
 		default:
 			if strings.HasPrefix(arg, "-") {
 				switch {
@@ -427,8 +453,12 @@ func authorizeReviewedRun(operation recipeops.Operation, stateDir string, args [
 	if _, ok := allowed[image]; !ok {
 		return errors.New("reviewed recipe run image differs from the authenticated operation")
 	}
-	if network == "host" && !strings.HasPrefix(name, "cloudless-contract-probe-") {
-		return errors.New("host networking is reserved for the bounded Cloudless contract probe")
+	boundedProbe := strings.HasPrefix(name, "cloudless-contract-probe-") || strings.HasPrefix(name, "cloudless-nccl-probe-")
+	if (network == "host" || contractRuntimeOptions) && !boundedProbe {
+		return errors.New("host networking is reserved for a bounded Cloudless runtime probe")
+	}
+	if infinibandDevice && !strings.HasPrefix(name, "cloudless-nccl-probe-") {
+		return errors.New("InfiniBand device access is reserved for the bounded Cloudless NCCL probe")
 	}
 	return nil
 }

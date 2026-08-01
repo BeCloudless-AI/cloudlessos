@@ -1,5 +1,6 @@
 # CloudlessOS operator guide index
 
+- End-user interface and workflows: [`USER_GUIDE.md`](./USER_GUIDE.md)
 - Generic ISO build/install and first boot: [`distro/README.md`](../distro/README.md)
 - DGX Spark installation and recovery: [`distro/DGX-SPARK.md`](../distro/DGX-SPARK.md)
 - Signed updates and rollback: [`distro/UPDATES.md`](../distro/UPDATES.md)

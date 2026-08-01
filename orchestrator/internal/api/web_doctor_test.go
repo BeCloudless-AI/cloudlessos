@@ -12,7 +12,7 @@ func TestCloudlessDoctorIsAvailableInSettings(t *testing.T) {
 	}
 	page := string(data)
 	for _, required := range []string{
-		"Cloudless Doctor", "/api/system/doctor", "/api/system/doctor/bundle",
+		"Cloudless Doctor", "/api/system/doctor", "/api/system/doctor/bundle", "data-doctor-stop-recipe", "Stop orphaned runtime",
 		"Tokens, passwords, API-key hashes, hostnames, and home paths are removed",
 	} {
 		if !strings.Contains(page, required) {
@@ -98,6 +98,24 @@ func TestInstalledCapabilityAppsCanBePinned(t *testing.T) {
 	} {
 		if !strings.Contains(page, required) {
 			t.Fatalf("capability pinning is missing %q", required)
+		}
+	}
+}
+
+func TestModelDownloadPollingPatchesProgressWithoutRepaintingManager(t *testing.T) {
+	data, err := webFS.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(data)
+	for _, required := range []string{
+		"function patchManagerDownloadProgress(type, downloads)",
+		"patchManagerDownloadProgress('lm', next)",
+		"patchManagerDownloadProgress('diff', next)",
+		"track.style.setProperty('--progress'",
+	} {
+		if !strings.Contains(page, required) {
+			t.Fatalf("stable Model Manager polling is missing %q", required)
 		}
 	}
 }

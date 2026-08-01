@@ -262,7 +262,15 @@ func (o Operation) NeedsRecovery() bool {
 // Import/update timestamps and compatibility-only top-level fields are excluded
 // by hashing the canonical Draft representation.
 func RecipeRevision(recipe localrecipes.Recipe) (string, error) {
-	payload, err := json.Marshal(localrecipes.DraftFromRecipe(recipe))
+	return recipeRevisionForDraft(localrecipes.DraftFromRecipe(recipe))
+}
+
+func snapshotRecipeRevision(recipe localrecipes.Recipe) (string, error) {
+	return recipeRevisionForDraft(localrecipes.DraftFromSnapshot(recipe))
+}
+
+func recipeRevisionForDraft(draft localrecipes.Draft) (string, error) {
+	payload, err := json.Marshal(draft)
 	if err != nil {
 		return "", err
 	}
@@ -968,7 +976,14 @@ func validOperation(operation Operation) bool {
 		}
 		revision, err := RecipeRevision(operation.RecipeSnapshot)
 		if err != nil || revision != operation.RecipeRevision {
-			return false
+			// Normalizers intentionally migrate exact known legacy recipe fields.
+			// Historical journals must remain readable, so also accept the hash of
+			// the exact immutable snapshot stored in that journal. This does not
+			// trust or execute the snapshot; it proves the revision was not altered.
+			storedRevision, storedErr := snapshotRecipeRevision(operation.RecipeSnapshot)
+			if storedErr != nil || storedRevision != operation.RecipeRevision {
+				return false
+			}
 		}
 	}
 	if operation.Preflight != nil {

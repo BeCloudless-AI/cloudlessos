@@ -22,6 +22,7 @@ import (
 	"github.com/cloudless/orchestrator/internal/catalog"
 	"github.com/cloudless/orchestrator/internal/engine"
 	"github.com/cloudless/orchestrator/internal/hardware"
+	"github.com/cloudless/orchestrator/internal/localrecipes"
 	"github.com/cloudless/orchestrator/internal/securityaudit"
 	"github.com/cloudless/orchestrator/internal/sparkcluster"
 	"github.com/cloudless/orchestrator/internal/state"
@@ -35,6 +36,11 @@ type Check struct {
 	Action  string `json:"action,omitempty"`
 }
 
+type Repair struct {
+	Action string `json:"action"`
+	Target string `json:"target"`
+}
+
 type Report struct {
 	Generated string               `json:"generated"`
 	Overall   string               `json:"overall"`
@@ -46,6 +52,7 @@ type Report struct {
 	DiskFree  uint64               `json:"diskFreeBytes"`
 	GPUs      []hardware.GPU       `json:"gpus"`
 	Checks    []Check              `json:"checks"`
+	Repairs   map[string]Repair    `json:"repairs,omitempty"`
 	Promotion state.ModelPromotion `json:"modelPromotion,omitempty"`
 	Cluster   sparkcluster.State   `json:"sparkCluster,omitempty"`
 }
@@ -233,6 +240,52 @@ func overall(checks []Check) string {
 		}
 	}
 	return result
+}
+
+// AddOrphanedRecipeChecks compares Cloudless's declared inference state with
+// the local container runtime. Legacy Compose profiles may survive a service
+// restart because Docker was configured with an unless-stopped policy.
+func AddOrphanedRecipeChecks(report Report, current state.State, containers []engine.Container, recipes []localrecipes.Recipe) Report {
+	if !current.EngineUnloaded {
+		return report
+	}
+	matched := make(map[string]bool)
+	for _, container := range containers {
+		if container.State != "running" {
+			continue
+		}
+		for _, recipe := range recipes {
+			if matched[recipe.ID] || !containerBelongsToRecipe(container, recipe) {
+				continue
+			}
+			matched[recipe.ID] = true
+			checkID := "orphaned-recipe-runtime-" + recipe.ID
+			report.Checks = append(report.Checks, Check{
+				ID:      checkID,
+				Name:    "Orphaned inference runtime",
+				Status:  "fail",
+				Summary: fmt.Sprintf("%s is still running even though Cloudless AI is marked as unloaded.", recipe.Name),
+				Action:  "Stop the leftover runtime on every Spark to release accelerator memory. Downloaded model files will remain cached.",
+			})
+			if report.Repairs == nil {
+				report.Repairs = make(map[string]Repair)
+			}
+			report.Repairs[checkID] = Repair{Action: "stop-orphaned-recipe", Target: recipe.ID}
+		}
+	}
+	if len(matched) > 0 {
+		report.Overall = overall(report.Checks)
+	}
+	return report
+}
+
+func containerBelongsToRecipe(container engine.Container, recipe localrecipes.Recipe) bool {
+	name := strings.TrimPrefix(strings.TrimSpace(container.Name), "/")
+	if name == recipe.ID || strings.HasPrefix(name, recipe.ID+"-") {
+		return true
+	}
+	image := strings.TrimSpace(container.Image)
+	return image != "" && image == strings.TrimSpace(recipe.Engine.Image)
 }
 
 var secretPatterns = []struct {

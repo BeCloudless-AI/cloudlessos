@@ -26,9 +26,11 @@ import (
 
 	"github.com/cloudless/orchestrator/internal/catalog"
 	"github.com/cloudless/orchestrator/internal/customengine"
+	"github.com/cloudless/orchestrator/internal/engine"
 	"github.com/cloudless/orchestrator/internal/jobs"
 	"github.com/cloudless/orchestrator/internal/localrecipes"
 	"github.com/cloudless/orchestrator/internal/modelcache"
+	"github.com/cloudless/orchestrator/internal/privileged"
 	"github.com/cloudless/orchestrator/internal/provision"
 	"github.com/cloudless/orchestrator/internal/recipeops"
 	"github.com/cloudless/orchestrator/internal/sparkcluster"
@@ -469,6 +471,12 @@ func (s *Server) localRecipeRun(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	if !recipeModelInstalled(recipe) {
+		writeJSON(w, http.StatusConflict, map[string]string{
+			"error": "install " + recipe.Model.ID + " in Model Manager before running this recipe", "action": "install-model", "modelId": recipe.Model.ID,
+		})
+		return
+	}
 	if st := s.state.Get(); st.LocalRecipeID != "" && !st.EngineUnloaded {
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "stop the active local recipe before starting another one"})
 		return
@@ -514,6 +522,12 @@ func (s *Server) localRecipeCheck(w http.ResponseWriter, r *http.Request) {
 	if decision := recipeExecutionPolicyEvaluator(recipe); !decision.Allowed {
 		writeJSON(w, http.StatusForbidden, map[string]string{
 			"error": decision.Reason, "action": "review-permissions",
+		})
+		return
+	}
+	if !recipeModelInstalled(recipe) {
+		writeJSON(w, http.StatusConflict, map[string]string{
+			"error": "install " + recipe.Model.ID + " in Model Manager before checking this recipe", "action": "install-model", "modelId": recipe.Model.ID,
 		})
 		return
 	}
@@ -1281,10 +1295,19 @@ func (s *Server) stopManagedEngines(ctx context.Context) error {
 }
 
 func runConfiguredRecipeCommand(ctx context.Context, job *jobs.Job, phase, label, dir string, env map[string]string, recipe localrecipes.Recipe, command localrecipes.Command) error {
+	return runConfiguredRecipeCommandForPolicy(ctx, job, phase, label, dir, env, recipe, command)
+}
+
+// runConfiguredRecipeCommandForPolicy separates the signed recipe identity
+// used for authorization from the execution copy that Cloudless may safely
+// rewrite with an immutable local image ID during preparation. The command is
+// still the command from the authenticated operation snapshot; only the image
+// locator in the execution copy is allowed to change.
+func runConfiguredRecipeCommandForPolicy(ctx context.Context, job *jobs.Job, phase, label, dir string, env map[string]string, policyRecipe localrecipes.Recipe, command localrecipes.Command) error {
 	if command.Program == "" {
 		return nil
 	}
-	if decision := recipeExecutionPolicyEvaluator(recipe); !decision.Allowed {
+	if decision := recipeExecutionPolicyEvaluator(policyRecipe); !decision.Allowed {
 		return errors.New(decision.Reason)
 	}
 	return runRecipeCommand(ctx, job, phase, label, dir, env, command.Program, command.Args...)
@@ -1392,19 +1415,80 @@ func recipeModelArtifactKey(recipe localrecipes.Recipe) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func (s *Server) runRecipeModelDownload(ctx context.Context, job *jobs.Job, operationID string, recipe localrecipes.Recipe, dir string, env map[string]string, token string) error {
+var recipeModelRevisionInventory = huggingFaceModelRevisionFiles
+
+func (s *Server) runRecipeModelDownload(ctx context.Context, job *jobs.Job, operationID string, recipe, policyRecipe localrecipes.Recipe, dir string, env map[string]string, token string) (recipeArtifactManifest, error) {
 	localNode := localRecipeNodeName()
-	if manifest, err := verifyRecipeModelCache(ctx, s.eng, recipe); err == nil {
-		job.ProgressBytes("model-ready", "Reusing the verified model cache on "+localNode+".", manifest.Bytes, manifest.Bytes)
-		return nil
+	if expected, inspectErr := inspectRecipeModelManifest(ctx, s.eng, recipe); inspectErr == nil {
+		started, lastUpdate := time.Now(), time.Time{}
+		var done int64
+		job.ProgressBytes("verifying-existing-model", "Verifying existing weights on "+localNode+" without downloading.", 0, expected.Bytes)
+		manifest, verifyErr := verifyRecipeModelCacheWithProgress(ctx, s.eng, recipe, func(delta int64) {
+			done += delta
+			if time.Since(lastUpdate) < time.Second && done < expected.Bytes {
+				return
+			}
+			message := "Verifying existing weights on " + localNode + " — " + formatDownloadProgress(done, expected.Bytes)
+			if elapsed := time.Since(started).Seconds(); expected.Bytes > done && elapsed > 1 && done > 0 {
+				if eta := recipeProgressETA(expected.Bytes-done, float64(done)/elapsed); eta != "" {
+					message += " · " + eta
+				}
+			}
+			job.ProgressBytes("verifying-existing-model", message, done, expected.Bytes)
+			lastUpdate = time.Now()
+		})
+		if verifyErr == nil {
+			job.ProgressBytes("model-ready", "Reusing the verified model cache on "+localNode+".", manifest.Bytes, manifest.Bytes)
+			return manifest, nil
+		}
+	}
+	if recipeModelInstalled(recipe) {
+		metadataCtx, metadataCancel := context.WithTimeout(ctx, 30*time.Second)
+		inventory, inventoryErr := recipeModelRevisionInventory(metadataCtx, recipe.Model.ID, recipe.Model.Revision, token)
+		metadataCancel()
+		if inventoryErr != nil {
+			return recipeArtifactManifest{}, fmt.Errorf("the exact model revision is already cached, but its immutable Hub inventory could not be verified: %w", inventoryErr)
+		}
+		var total int64
+		for _, size := range inventory {
+			total += size
+		}
+		job.ProgressBytes("verifying-existing-model", "Existing weights found on "+localNode+" — verifying them in place without downloading.", 0, total)
+		started, lastUpdate := time.Now(), time.Time{}
+		var done int64
+		manifest, certifyErr := certifyExistingRecipeModelCache(ctx, s.eng, recipe, inventory, func(delta int64) {
+			done += delta
+			if time.Since(lastUpdate) < time.Second && done < total {
+				return
+			}
+			message := "Verifying existing weights on " + localNode + " — " + formatDownloadProgress(done, total)
+			if elapsed := time.Since(started).Seconds(); total > done && elapsed > 1 && done > 0 {
+				if eta := recipeProgressETA(total-done, float64(done)/elapsed); eta != "" {
+					message += " · " + eta
+				}
+			}
+			job.ProgressBytes("verifying-existing-model", message, done, total)
+			lastUpdate = time.Now()
+		})
+		if certifyErr == nil {
+			job.ProgressBytes("model-ready", "Existing model revision verified and ready on "+localNode+".", manifest.Bytes, manifest.Bytes)
+			return manifest, nil
+		}
+		if !errors.Is(certifyErr, errRecipeModelCacheIncomplete) {
+			return recipeArtifactManifest{}, certifyErr
+		}
+		job.ProgressBytes("repairing-model", "Existing weights are incomplete; downloading only the missing data.", done, total)
 	}
 	stagingVolume := recipeStagingCacheVolume(recipe)
 	stagingResource := recipeops.Resource{Kind: "model-staging", ID: stagingVolume, Node: localNode}
 	if err := s.claimRecipeResource(operationID, stagingResource); err != nil {
-		return fmt.Errorf("record model download staging ownership: %w", err)
+		return recipeArtifactManifest{}, fmt.Errorf("record model download staging ownership: %w", err)
 	}
 	if err := os.MkdirAll(stagingVolume, 0o770); err != nil {
-		return fmt.Errorf("create model download staging: %w", err)
+		return recipeArtifactManifest{}, fmt.Errorf("create model download staging: %w", err)
+	}
+	if err := seedRecipeDownloadStaging(recipe, stagingVolume); err != nil {
+		return recipeArtifactManifest{}, fmt.Errorf("reuse existing model data in download staging: %w", err)
 	}
 	stagedRecipe := recipeWithCacheVolume(recipe, stagingVolume)
 	stagedEnv := make(map[string]string, len(env)+1)
@@ -1418,12 +1502,12 @@ func (s *Server) runRecipeModelDownload(ctx context.Context, job *jobs.Job, oper
 	if manifest, err := verifyRecipeModelCache(ctx, s.eng, stagedRecipe); err == nil {
 		job.ProgressBytes("resuming-model", "A previously verified download is ready to promote.", manifest.Bytes, manifest.Bytes)
 		if err := promoteStagedRecipeModel(ctx, s.eng, job, recipe, stagedRecipe, manifest); err != nil {
-			return err
+			return recipeArtifactManifest{}, err
 		}
 		if err := os.RemoveAll(stagingVolume); err == nil {
 			_ = s.releaseRecipeResource(operationID, stagingResource)
 		}
-		return nil
+		return manifest, nil
 	}
 	type modelDownloadResult struct {
 		manifest recipeArtifactManifest
@@ -1431,7 +1515,7 @@ func (s *Server) runRecipeModelDownload(ctx context.Context, job *jobs.Job, oper
 	}
 	result := make(chan modelDownloadResult, 1)
 	go func() {
-		if err := runConfiguredRecipeCommand(ctx, job, "downloading", "Internet download on "+localNode, dir, stagedEnv, recipe, recipe.Runtime.Lifecycle.Download); err != nil {
+		if err := runConfiguredRecipeCommandForPolicy(ctx, job, "downloading", "Internet download on "+localNode, dir, stagedEnv, policyRecipe, recipe.Runtime.Lifecycle.Download); err != nil {
 			result <- modelDownloadResult{err: err}
 			return
 		}
@@ -1453,19 +1537,19 @@ func (s *Server) runRecipeModelDownload(ctx context.Context, job *jobs.Job, oper
 		case outcome := <-result:
 			if outcome.err != nil {
 				if ctxErr := ctx.Err(); ctxErr != nil {
-					return ctxErr
+					return recipeArtifactManifest{}, ctxErr
 				}
-				return classifyRecipeDependencyError(outcome.err)
+				return recipeArtifactManifest{}, classifyRecipeDependencyError(outcome.err)
 			}
 			if err := promoteStagedRecipeModel(ctx, s.eng, job, recipe, stagedRecipe, outcome.manifest); err != nil {
-				return err
+				return recipeArtifactManifest{}, err
 			}
 			if err := os.RemoveAll(stagingVolume); err == nil {
 				_ = s.releaseRecipeResource(operationID, stagingResource)
 			}
-			return nil
+			return outcome.manifest, nil
 		case <-ctx.Done():
-			return ctx.Err()
+			return recipeArtifactManifest{}, ctx.Err()
 		case <-ticker.C:
 			if root == "" {
 				root, _ = recipeModelVolumeMountpoint(ctx, s.eng, stagedRecipe)
@@ -1794,7 +1878,7 @@ func (s *Server) runLocalRecipe(job *jobs.Job, recipe localrecipes.Recipe, opera
 			s.finishRecipeOperation(job, operationID, err)
 			return
 		}
-		if err := runConfiguredRecipeCommand(ctx, job, "building", "Build", workdir, env, recipe, recipe.Runtime.Lifecycle.Build); err != nil {
+		if err := runConfiguredRecipeCommandForPolicy(ctx, job, "building", "Build", workdir, env, operation.RecipeSnapshot, recipe.Runtime.Lifecycle.Build); err != nil {
 			s.finishRecipeOperation(job, operationID, err)
 			return
 		}
@@ -1855,28 +1939,41 @@ func (s *Server) runLocalRecipe(job *jobs.Job, recipe localrecipes.Recipe, opera
 		}
 		step++
 	}
-	job.ProgressBytes("downloading", "Connecting "+localNode+" to Hugging Face over the internet...", 0, 0)
-	job.Progress("downloading", "Downloading model weights from Hugging Face to "+localNode+". The direct Spark cable is not used during this stage.", step, totalSteps)
+	// Do not claim a download before the cache has been inspected. A verified
+	// snapshot can take a while to hash, and presenting that disk-only work as
+	// internet traffic makes users reasonably believe their weights were lost.
+	// runRecipeModelDownload moves to "downloading" only if it actually starts
+	// the configured Hugging Face download command.
+	job.Progress("checking-model-cache", "Checking the existing model weights on "+localNode+" before launch...", step, totalSteps)
 	if err := s.recipeBoundary(operationID, recipeBoundaryModelDownload); err != nil {
 		s.finishRecipeOperation(job, operationID, err)
 		return
 	}
-	if err := s.runRecipeModelDownload(ctx, job, operationID, recipe, workdir, env, hfToken); err != nil {
+	modelManifest, err := s.runRecipeModelDownload(ctx, job, operationID, recipe, operation.RecipeSnapshot, workdir, env, hfToken)
+	if err != nil {
 		s.finishRecipeOperation(job, operationID, err)
 		return
 	}
 	step++
+	peerModelDigests := make(map[string]string)
 	if recipe.Distributed.Nodes > 1 && recipe.Runtime.DownloadOnce {
 		job.Progress("syncing-model", "Preparing to send the model over the Spark fabric...", step, totalSteps)
 		if err := s.recipeBoundary(operationID, recipeBoundaryModelTransfer); err != nil {
 			s.finishRecipeOperation(job, operationID, err)
 			return
 		}
-		if err := distributeRecipeModel(ctx, s.eng, job, recipe, workdir, env, peers); err != nil {
+		peerModelDigests, err = distributeRecipeModel(ctx, s.eng, job, recipe, workdir, env, peers, modelManifest)
+		if err != nil {
 			s.finishRecipeOperation(job, operationID, err)
 			return
 		}
 		step++
+	} else if recipe.Distributed.Nodes > 1 {
+		peerModelDigests, err = verifyRecipePeerModelSnapshots(ctx, job, recipe, workdir, env, peers, modelManifest)
+		if err != nil {
+			s.finishRecipeOperation(job, operationID, err)
+			return
+		}
 	}
 	job.Progress("revalidating", "Rechecking the image, GPUs, cluster fabric, and ports before switching models...", step, totalSteps)
 	operation, ok = s.recipeOps.Get(operationID)
@@ -1884,7 +1981,7 @@ func (s *Server) runLocalRecipe(job *jobs.Job, recipe localrecipes.Recipe, opera
 		s.finishRecipeOperation(job, operationID, errors.New("recipe operation ownership disappeared before switch"))
 		return
 	}
-	if err := s.revalidateRecipeBeforeSwitch(ctx, recipe, operation, checkout, env); err != nil {
+	if err := s.revalidateRecipeBeforeSwitch(ctx, recipe, operation, checkout, env, recipeModelEvidence{Manifest: modelManifest, PeerDigests: peerModelDigests}); err != nil {
 		s.finishRecipeOperation(job, operationID, fmt.Errorf("pre-switch validation failed: %w", err))
 		return
 	}
@@ -1925,7 +2022,7 @@ func (s *Server) runLocalRecipe(job *jobs.Job, recipe localrecipes.Recipe, opera
 		rollbackFailure(err)
 		return
 	}
-	startErr := runConfiguredRecipeCommand(ctx, job, "starting", "Start inference", workdir, env, recipe, recipe.Runtime.Lifecycle.Start)
+	startErr := runConfiguredRecipeCommandForPolicy(ctx, job, "starting", "Start inference", workdir, env, operation.RecipeSnapshot, recipe.Runtime.Lifecycle.Start)
 	if startErr != nil {
 		rollbackFailure(startErr)
 		return
@@ -2237,6 +2334,11 @@ func (s *Server) checkLocalRecipe(job *jobs.Job, recipe localrecipes.Recipe, ope
 		s.failRecipeCheck(job, operationID, "image", "Verified runtime image could not be prepared on every node", err)
 		return
 	}
+	preparedImageResult, err := inspectLocalRecipeImage(ctx, s.eng, preparedCheckImage)
+	if err != nil {
+		s.failRecipeCheck(job, operationID, "image", "Prepared runtime image could not be measured", err)
+		return
+	}
 	if err := s.recordRecipeCheck(operationID, "runtime", recipeops.CheckPass, "Runtime environment and lifecycle commands render successfully", "", map[string]string{
 		"workingDirectory": workdir, "enginePort": strconv.Itoa(recipe.Engine.ContainerPort),
 	}); err != nil {
@@ -2256,6 +2358,12 @@ func (s *Server) checkLocalRecipe(job *jobs.Job, recipe localrecipes.Recipe, ope
 		return
 	}
 	runtimeBytes := imageResult.CompressedBytes
+	if runtimeBytes <= 0 {
+		// Locally built runtimes do not have registry layer metadata, but the
+		// prepared immutable image has an exact on-disk size. Use that measured
+		// value instead of incorrectly requiring a hand-written estimate.
+		runtimeBytes = preparedImageResult.CompressedBytes
+	}
 	if recipe.Runtime.Lifecycle.Build.Program == "" {
 		if runtimeBytes > math.MaxInt64/recipeRegistryExpansionFactor {
 			s.unknownRecipeCheck(job, operationID, "capacity", "Runtime image storage requirement is invalid", errors.New("runtime image size overflowed"))
@@ -2432,12 +2540,31 @@ func (s *Server) stopLocalRecipe(job *jobs.Job, recipe localrecipes.Recipe, oper
 				ownership = &active
 			}
 		}
-		if env, workdir, envErr := writeRecipeRuntime(recipe, checkout, cluster, false, ownership); envErr != nil {
+		env, workdir, envErr := writeRecipeRuntime(recipe, checkout, cluster, false, ownership)
+		if errors.Is(envErr, os.ErrPermission) {
+			job.Progress("repairing-permissions", "Repairing legacy recipe runtime permissions…", 0, 1)
+			if repairErr := s.runPrivileged(ctx, privileged.ActionRecipeRuntimeRepair); repairErr != nil {
+				s.finishRecipeOperation(job, operationID, fmt.Errorf("repair recipe runtime permissions: %w", repairErr))
+				return
+			}
+			env, workdir, envErr = writeRecipeRuntime(recipe, checkout, cluster, false, ownership)
+		}
+		if envErr != nil {
 			s.finishRecipeOperation(job, operationID, fmt.Errorf("prepare recipe stop: %w", envErr))
 			return
-		} else if stopErr := runConfiguredRecipeCommand(ctx, job, "stopping", "Stop inference", workdir, env, recipe, recipe.Runtime.Lifecycle.Stop); stopErr != nil {
-			s.finishRecipeOperation(job, operationID, fmt.Errorf("stop recipe runtime: %w", stopErr))
-			return
+		}
+		if stopErr := runConfiguredRecipeCommand(ctx, job, "stopping", "Stop inference", workdir, env, recipe, recipe.Runtime.Lifecycle.Stop); stopErr != nil {
+			job.Progress("constrained-cleanup", "The legacy stop command is unavailable. Removing only the detected orphaned containers instead\u2026", 0, 1)
+			cleaned, cleanupErr := s.removeOrphanedRecipeRuntime(ctx, recipe)
+			if cleanupErr != nil {
+				s.finishRecipeOperation(job, operationID, fmt.Errorf("stop recipe runtime: %v; constrained orphan cleanup: %w", stopErr, cleanupErr))
+				return
+			}
+			if !cleaned {
+				s.finishRecipeOperation(job, operationID, fmt.Errorf("stop recipe runtime: %w", stopErr))
+				return
+			}
+			job.Progress("constrained-cleanup", "Removed the orphaned inference containers without executing the legacy recipe.", 1, 1)
 		}
 	} else {
 		s.finishRecipeOperation(job, operationID, fmt.Errorf("read cluster before stopping recipe: %w", err))
@@ -2467,4 +2594,55 @@ func (s *Server) stopLocalRecipe(job *jobs.Job, recipe localrecipes.Recipe, oper
 	job.Progress("stopped", "Recipe stopped. The downloaded model remains cached.", 1, 1)
 	job.Succeed("")
 	s.pruneRecipeOperations()
+}
+
+// removeOrphanedRecipeRuntime is the deliberately narrow Doctor fallback for
+// legacy recipes whose editable lifecycle commands are no longer trusted. It
+// only operates while Cloudless declares inference unloaded, and it only
+// removes exact running container names independently observed by the engine.
+// It never executes recipe content or deletes downloaded model data.
+func (s *Server) removeOrphanedRecipeRuntime(ctx context.Context, recipe localrecipes.Recipe) (bool, error) {
+	if !s.state.Get().EngineUnloaded {
+		return false, nil
+	}
+	containers, err := s.eng.List(ctx)
+	if err != nil {
+		return false, fmt.Errorf("list local containers: %w", err)
+	}
+	names := orphanedRecipeContainerNames(containers, recipe)
+	if len(names) == 0 {
+		return false, nil
+	}
+	var cleanupErrs []error
+	if recipe.Distributed.Nodes > 1 {
+		if err := sparkcluster.RemoveContainers(ctx, names); err != nil {
+			cleanupErrs = append(cleanupErrs, err)
+		}
+	}
+	for _, name := range names {
+		if err := s.runPrivilegedValue(ctx, privileged.ActionRecipeContainerRemove, name); err != nil {
+			cleanupErrs = append(cleanupErrs, fmt.Errorf("remove local container %s: %w", name, err))
+		}
+	}
+	return true, errors.Join(cleanupErrs...)
+}
+
+func orphanedRecipeContainerNames(containers []engine.Container, recipe localrecipes.Recipe) []string {
+	seen := make(map[string]bool)
+	var names []string
+	for _, container := range containers {
+		if container.State != "running" {
+			continue
+		}
+		name := strings.TrimPrefix(strings.TrimSpace(container.Name), "/")
+		matchesName := name == recipe.ID || strings.HasPrefix(name, recipe.ID+"-")
+		matchesImage := strings.TrimSpace(recipe.Engine.Image) != "" && strings.TrimSpace(container.Image) == strings.TrimSpace(recipe.Engine.Image)
+		if name == "" || seen[name] || (!matchesName && !matchesImage) {
+			continue
+		}
+		seen[name] = true
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }

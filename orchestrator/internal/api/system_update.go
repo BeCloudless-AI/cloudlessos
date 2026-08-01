@@ -2,7 +2,9 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 
 	"github.com/cloudless/orchestrator/internal/capabilities"
@@ -10,6 +12,10 @@ import (
 	"github.com/cloudless/orchestrator/internal/osupdate"
 	"github.com/cloudless/orchestrator/internal/privileged"
 )
+
+type updateChannelRequest struct {
+	Channel string `json:"channel"`
+}
 
 func (s *Server) systemUpdateGet(w http.ResponseWriter, _ *http.Request) {
 	status, err := osupdate.Read()
@@ -42,6 +48,31 @@ func (s *Server) systemUpdateApply(w http.ResponseWriter, r *http.Request) {
 	}
 	s.auditSecurity(gatewayAuditEvent{Category: "update", Event: "system-apply", Outcome: "started", Actor: "local-ui", Target: "cloudless-update-apply.service"})
 	writeJSON(w, http.StatusAccepted, map[string]any{"started": true, "operation": "apply"})
+}
+
+func (s *Server) systemUpdateChannel(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("X-Cloudless-Action") != "update-channel" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "channel change confirmation required"})
+		return
+	}
+	var request updateChannelRequest
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 256))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&request); err != nil || !osupdate.ValidChannel(request.Channel) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "channel must be stable or beta"})
+		return
+	}
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "channel must be stable or beta"})
+		return
+	}
+	if err := s.runPrivilegedValue(r.Context(), privileged.ActionSystemUpdateChannel, request.Channel); err != nil {
+		s.auditSecurity(gatewayAuditEvent{Category: "update", Event: "channel-change", Outcome: "failed", Actor: "local-ui", Target: request.Channel, Detail: err.Error()})
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
+		return
+	}
+	s.auditSecurity(gatewayAuditEvent{Category: "update", Event: "channel-change", Outcome: "started", Actor: "local-ui", Target: request.Channel})
+	writeJSON(w, http.StatusAccepted, map[string]any{"changed": true, "channel": request.Channel, "checking": true})
 }
 
 func (s *Server) runPrivileged(ctx context.Context, action privileged.Action) error {

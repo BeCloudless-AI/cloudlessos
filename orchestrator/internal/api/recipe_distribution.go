@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/base64"
@@ -24,7 +25,11 @@ import (
 )
 
 var recipePeerUsernamePattern = regexp.MustCompile(`^[a-z_][a-z0-9_-]{0,31}$`)
-var recipeImageTransferRoot = "/run/cloudless/transfers"
+
+// Runtime images can be several gigabytes. Keep transfer archives on the
+// persistent Cloudless data filesystem instead of /run, which is commonly a
+// small tmpfs and can fill even when the machine has ample disk space.
+var recipeImageTransferRoot = "/var/lib/cloudless/image-transfers"
 
 type recipePeer struct {
 	Alias    string
@@ -422,6 +427,10 @@ func recipeCacheBytes(ctx context.Context, dir string, env map[string]string, pe
 // the path, size and SHA-256 digest of every file visible through its snapshot
 // symlinks. A path-and-size-only signature accepted same-size corruption.
 func recipeSnapshotSignature(ctx context.Context, dir string, env map[string]string, peer *recipePeer, image, volume, relative, revision string) (string, error) {
+	return recipeSnapshotSignatureWithProgress(ctx, dir, env, peer, image, volume, relative, revision, nil)
+}
+
+func recipeSnapshotSignatureWithProgress(ctx context.Context, dir string, env map[string]string, peer *recipePeer, image, volume, relative, revision string, progress func(int64)) (string, error) {
 	const verifier = `import hashlib, os, pathlib, sys
 root = pathlib.Path(sys.argv[1]).resolve()
 repository = pathlib.Path(sys.argv[2]).resolve()
@@ -431,6 +440,8 @@ files = sorted((path for path in root.rglob("*") if path.is_file()), key=lambda 
 if not files:
     raise SystemExit("empty snapshot")
 manifest = hashlib.sha256()
+done = 0
+reported = 0
 for path in files:
     resolved = path.resolve(strict=True)
     if repository not in (resolved, *resolved.parents) or not resolved.is_file():
@@ -439,9 +450,14 @@ for path in files:
     with resolved.open("rb") as stream:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(chunk)
+            done += len(chunk)
+            if done - reported >= 256 * 1024 * 1024:
+                print("PROGRESS " + str(done), flush=True)
+                reported = done
     relative = path.relative_to(root).as_posix()
     manifest.update(relative.encode() + b"\0" + str(resolved.stat().st_size).encode() + b"\0" + digest.hexdigest().encode() + b"\n")
-print(manifest.hexdigest())`
+print("PROGRESS " + str(done), flush=True)
+print("DIGEST " + manifest.hexdigest(), flush=True)`
 	repository := "/cache/" + relative
 	args := []string{"docker", "run", "--rm", "-v", volume + ":/cache:ro", "--entrypoint", "python3", image,
 		"-c", verifier, repository + "/snapshots/" + revision, repository}
@@ -451,48 +467,139 @@ print(manifest.hexdigest())`
 	} else {
 		cmd = recipeSSHCommand(ctx, dir, env, *peer, args...)
 	}
-	out, err := recipeCommandOutput(cmd)
+	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return "", err
 	}
-	signature := strings.TrimSpace(out)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Start(); err != nil {
+		return "", err
+	}
+	var signature string
+	scanner := bufio.NewScanner(stdout)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if value, ok := strings.CutPrefix(line, "PROGRESS "); ok {
+			if done, parseErr := strconv.ParseInt(strings.TrimSpace(value), 10, 64); parseErr == nil && done >= 0 && progress != nil {
+				progress(done)
+			}
+			continue
+		}
+		if value, ok := strings.CutPrefix(line, "DIGEST "); ok {
+			signature = strings.TrimSpace(value)
+		}
+	}
+	scanErr := scanner.Err()
+	waitErr := cmd.Wait()
+	if scanErr != nil {
+		return "", scanErr
+	}
+	if waitErr != nil {
+		if detail := strings.TrimSpace(stderr.String()); detail != "" {
+			return "", fmt.Errorf("%w: %s", waitErr, detail)
+		}
+		return "", waitErr
+	}
 	if !regexp.MustCompile(`^[a-f0-9]{64}$`).MatchString(signature) {
 		return "", errors.New("model snapshot signature is unavailable")
 	}
 	return signature, nil
 }
 
-func distributeRecipeModel(ctx context.Context, runtime engine.Engine, job *jobs.Job, recipe localrecipes.Recipe, dir string, env map[string]string, peers []recipePeer) error {
+func verifyRecipePeerModelSnapshots(ctx context.Context, job *jobs.Job, recipe localrecipes.Recipe, dir string, env map[string]string, peers []recipePeer, verified recipeArtifactManifest) (map[string]string, error) {
 	cacheName, ok := modelCacheName(recipe.Model.ID)
 	if !ok {
-		return errors.New("recipe model ID cannot be mapped to a Hugging Face cache")
+		return nil, errors.New("recipe model ID cannot be mapped to a Hugging Face cache")
 	}
 	volume, err := recipeCacheVolume(recipe)
 	if err != nil {
-		return err
+		return nil, err
+	}
+	if verified.ModelID != recipe.Model.ID || verified.Revision != recipe.Model.Revision || verified.Bytes <= 0 || !regexpSHA256.MatchString(verified.Digest) {
+		return nil, errors.New("verified local model evidence is invalid")
 	}
 	relative := filepath.ToSlash(filepath.Join("hub", cacheName))
-	localMount, err := recipeModelVolumeMountpoint(ctx, runtime, recipe)
-	if err != nil {
-		return fmt.Errorf("inspect prepared model cache volume: %w", err)
-	}
-	localTransferManifest, err := buildRecipeTransferManifest(filepath.Join(localMount, filepath.FromSlash(relative)))
-	if err != nil || localTransferManifest.Bytes <= 0 {
-		return fmt.Errorf("inspect prepared model cache: %w", err)
-	}
-	localSize := localTransferManifest.Bytes
-	localSignature, err := recipeSnapshotSignature(ctx, dir, env, nil, recipe.Engine.Image, volume, relative, recipe.Model.Revision)
-	if err != nil {
-		return fmt.Errorf("inspect prepared model snapshot: %w", err)
-	}
-	grandTotal := localSize * int64(len(peers))
+	total := verified.Bytes * int64(len(peers))
+	digests := make(map[string]string, len(peers))
 	for index, peer := range peers {
-		base := localSize * int64(index)
-		remoteSignature, signatureErr := recipeSnapshotSignature(ctx, dir, env, &peer, recipe.Engine.Image, volume, relative, recipe.Model.Revision)
+		base := verified.Bytes * int64(index)
+		started, lastUpdate := time.Now(), time.Time{}
+		job.ProgressBytes("verifying-peer-model", "Checking existing weights on "+peer.Name+" without downloading.", base, total)
+		digest, digestErr := recipeSnapshotSignatureWithProgress(ctx, dir, env, &peer, recipe.Engine.Image, volume, relative, recipe.Model.Revision, func(done int64) {
+			if time.Since(lastUpdate) < time.Second && done < verified.Bytes {
+				return
+			}
+			message := "Verifying existing weights on " + peer.Name + " — " + formatDownloadProgress(done, verified.Bytes)
+			if elapsed := time.Since(started).Seconds(); verified.Bytes > done && elapsed > 1 && done > 0 {
+				if eta := recipeProgressETA(verified.Bytes-done, float64(done)/elapsed); eta != "" {
+					message += " · " + eta
+				}
+			}
+			job.ProgressBytes("verifying-peer-model", message, base+done, total)
+			lastUpdate = time.Now()
+		})
+		if digestErr != nil || digest != verified.Digest {
+			return nil, fmt.Errorf("prepared model integrity on %s does not match the verified coordinator snapshot", peer.Name)
+		}
+		digests[peer.Name] = digest
+		job.ProgressBytes("model-ready", peer.Name+" has the exact verified model snapshot.", base+verified.Bytes, total)
+	}
+	return digests, nil
+}
+
+func distributeRecipeModel(ctx context.Context, runtime engine.Engine, job *jobs.Job, recipe localrecipes.Recipe, dir string, env map[string]string, peers []recipePeer, verified recipeArtifactManifest) (map[string]string, error) {
+	peerDigests := make(map[string]string, len(peers))
+	cacheName, ok := modelCacheName(recipe.Model.ID)
+	if !ok {
+		return nil, errors.New("recipe model ID cannot be mapped to a Hugging Face cache")
+	}
+	volume, err := recipeCacheVolume(recipe)
+	if err != nil {
+		return nil, err
+	}
+	if verified.ModelID != recipe.Model.ID || verified.Revision != recipe.Model.Revision || verified.Bytes <= 0 || !regexpSHA256.MatchString(verified.Digest) {
+		return nil, errors.New("verified local model evidence is invalid")
+	}
+	relative := filepath.ToSlash(filepath.Join("hub", cacheName))
+	localSignature := verified.Digest
+	verificationTotal := verified.Bytes * int64(len(peers))
+	var localMount string
+	var localTransferManifest recipeTransferManifest
+	for index, peer := range peers {
+		verificationBase := verified.Bytes * int64(index)
+		started, lastUpdate := time.Now(), time.Time{}
+		job.ProgressBytes("verifying-peer-model", "Checking existing weights on "+peer.Name+" without downloading.", verificationBase, verificationTotal)
+		remoteSignature, signatureErr := recipeSnapshotSignatureWithProgress(ctx, dir, env, &peer, recipe.Engine.Image, volume, relative, recipe.Model.Revision, func(done int64) {
+			if time.Since(lastUpdate) < time.Second && done < verified.Bytes {
+				return
+			}
+			message := "Verifying existing weights on " + peer.Name + " — " + formatDownloadProgress(done, verified.Bytes)
+			if elapsed := time.Since(started).Seconds(); verified.Bytes > done && elapsed > 1 && done > 0 {
+				if eta := recipeProgressETA(verified.Bytes-done, float64(done)/elapsed); eta != "" {
+					message += " · " + eta
+				}
+			}
+			job.ProgressBytes("verifying-peer-model", message, verificationBase+done, verificationTotal)
+			lastUpdate = time.Now()
+		})
 		if signatureErr == nil && remoteSignature == localSignature {
-			job.ProgressBytes("syncing-model", peer.Name+" already has the exact model snapshot.", base+localSize, grandTotal)
+			peerDigests[peer.Name] = remoteSignature
+			job.ProgressBytes("model-ready", peer.Name+" already has the exact verified model snapshot.", verificationBase+verified.Bytes, verificationTotal)
 			continue
 		}
+		if localTransferManifest.Bytes == 0 {
+			localMount, err = recipeModelVolumeMountpoint(ctx, runtime, recipe)
+			if err != nil {
+				return nil, fmt.Errorf("inspect prepared model cache volume: %w", err)
+			}
+			localTransferManifest, err = buildRecipeTransferManifest(filepath.Join(localMount, filepath.FromSlash(relative)))
+			if err != nil || localTransferManifest.Bytes <= 0 {
+				return nil, fmt.Errorf("inspect prepared model cache: %w", err)
+			}
+		}
+		transferTotal := localTransferManifest.Bytes * int64(len(peers))
+		transferBase := localTransferManifest.Bytes * int64(index)
 		artifactKey := recipeModelArtifactKey(recipe)
 		stagingRelative := filepath.ToSlash(filepath.Join(".cloudless-staging", artifactKey, relative))
 		_, _ = recipeCommandOutput(recipeSSHCommand(ctx, dir, env, peer,
@@ -501,14 +608,16 @@ func distributeRecipeModel(ctx context.Context, runtime engine.Engine, job *jobs
 		label := fmt.Sprintf("Copying model files from %s to %s over the direct Spark fabric (%d/%d)", localRecipeNodeName(), peer.Name, index+1, len(peers))
 		if err := retryRecipePeerTransfer(ctx, job, peer.Name, func() error {
 			return incrementalRecipePeerTransfer(ctx, job, localMount, relative, stagingRelative, localTransferManifest,
-				dir, env, peer, recipe.Engine.Image, volume, label, base, grandTotal)
+				dir, env, peer, recipe.Engine.Image, volume, label, transferBase, transferTotal)
 		}); err != nil {
-			return err
+			return nil, err
 		}
-		job.ProgressBytes("verifying-peer-model", "Verifying every model file on "+peer.Name+" before activation...", base+localSize, grandTotal)
-		remoteSignature, err = recipeSnapshotSignature(ctx, dir, env, &peer, recipe.Engine.Image, volume, stagingRelative, recipe.Model.Revision)
+		job.ProgressBytes("verifying-peer-model", "Verifying copied model files on "+peer.Name+" before activation...", verificationBase, verificationTotal)
+		remoteSignature, err = recipeSnapshotSignatureWithProgress(ctx, dir, env, &peer, recipe.Engine.Image, volume, stagingRelative, recipe.Model.Revision, func(done int64) {
+			job.ProgressBytes("verifying-peer-model", "Verifying copied weights on "+peer.Name+" — "+formatDownloadProgress(done, verified.Bytes), verificationBase+done, verificationTotal)
+		})
 		if err != nil || remoteSignature != localSignature {
-			return fmt.Errorf("%s did not receive an exact, content-verified model snapshot", peer.Name)
+			return nil, fmt.Errorf("%s did not receive an exact, content-verified model snapshot", peer.Name)
 		}
 		promotion := `set -eu
 final="$1"
@@ -531,17 +640,14 @@ fi`
 			"docker", "run", "--rm", "-v", volume+":/cache", "--entrypoint", "/bin/sh", recipe.Engine.Image,
 			"-c", promotion, "cloudless-cache-promote", "/cache/"+relative, "/cache/"+stagingRelative, "/cache/"+backupRelative))
 		if err != nil {
-			return fmt.Errorf("activate verified model cache on %s: %w", peer.Name, err)
-		}
-		remoteSignature, err = recipeSnapshotSignature(ctx, dir, env, &peer, recipe.Engine.Image, volume, relative, recipe.Model.Revision)
-		if err != nil || remoteSignature != localSignature {
-			return fmt.Errorf("%s model snapshot changed while it was activated", peer.Name)
+			return nil, fmt.Errorf("activate verified model cache on %s: %w", peer.Name, err)
 		}
 		if err := copyRecipeManifestToPeer(ctx, runtime, dir, env, peer, recipe, volume); err != nil {
-			return fmt.Errorf("record verified model manifest on %s: %w", peer.Name, err)
+			return nil, fmt.Errorf("record verified model manifest on %s: %w", peer.Name, err)
 		}
+		peerDigests[peer.Name] = remoteSignature
 	}
-	return nil
+	return peerDigests, nil
 }
 
 func copyRecipeManifestToPeer(ctx context.Context, runtime engine.Engine, dir string, env map[string]string, peer recipePeer, recipe localrecipes.Recipe, volume string) error {

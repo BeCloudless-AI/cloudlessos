@@ -2,6 +2,7 @@ package api
 
 import (
 	"bufio"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -37,6 +38,10 @@ type recipeArtifactManifest struct {
 // inside the containing repository; device files, sockets and named pipes are
 // rejected. The sorted manifest makes verification identical on every node.
 func buildRecipeArtifactManifest(repoRoot, snapshotRoot, modelID, revision string) (recipeArtifactManifest, error) {
+	return buildRecipeArtifactManifestWithProgress(context.Background(), repoRoot, snapshotRoot, modelID, revision, nil)
+}
+
+func buildRecipeArtifactManifestWithProgress(ctx context.Context, repoRoot, snapshotRoot, modelID, revision string, progress func(int64)) (recipeArtifactManifest, error) {
 	repoRoot, err := filepath.Abs(repoRoot)
 	if err != nil {
 		return recipeArtifactManifest{}, err
@@ -83,7 +88,7 @@ func buildRecipeArtifactManifest(repoRoot, snapshotRoot, modelID, revision strin
 		if !fileInfo.Mode().IsRegular() {
 			return fmt.Errorf("model snapshot contains a non-regular file: %s", filepath.ToSlash(relative))
 		}
-		digest, err := hashRecipeArtifactFile(resolved)
+		digest, err := hashRecipeArtifactFileWithProgress(ctx, resolved, progress)
 		if err != nil {
 			return err
 		}
@@ -108,14 +113,37 @@ func pathWithin(path, root string) bool {
 }
 
 func hashRecipeArtifactFile(path string) (string, error) {
+	return hashRecipeArtifactFileWithProgress(context.Background(), path, nil)
+}
+
+func hashRecipeArtifactFileWithProgress(ctx context.Context, path string, progress func(int64)) (string, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return "", err
 	}
 	defer file.Close()
 	hash := sha256.New()
-	if _, err := io.Copy(hash, bufio.NewReaderSize(file, 1024*1024)); err != nil {
-		return "", err
+	reader := bufio.NewReaderSize(file, 4*1024*1024)
+	buffer := make([]byte, 4*1024*1024)
+	for {
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
+		count, readErr := reader.Read(buffer)
+		if count > 0 {
+			if _, err := hash.Write(buffer[:count]); err != nil {
+				return "", err
+			}
+			if progress != nil {
+				progress(int64(count))
+			}
+		}
+		if errors.Is(readErr, io.EOF) {
+			break
+		}
+		if readErr != nil {
+			return "", readErr
+		}
 	}
 	return hex.EncodeToString(hash.Sum(nil)), nil
 }

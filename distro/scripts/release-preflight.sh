@@ -3,6 +3,9 @@
 # not import the archive secret key and never prints credential values.
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/release-version.sh"
+
 ROOT="$(realpath -e "${1:?repository root is required}")"
 VERSION="${2:?release version is required}"
 CHANNEL="${3:?release channel is required}"
@@ -26,8 +29,8 @@ git_root="$(realpath -e "$(git -C "$ROOT" rev-parse --show-toplevel)")"
 [ -z "$(git -C "$ROOT" status --porcelain --untracked-files=normal)" ] || \
     fail "repository contains tracked or untracked source changes"
 
-[[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([+~][0-9A-Za-z][0-9A-Za-z.+~_-]*)?$ ]] || \
-    fail "version must be a production semantic/Debian version"
+cloudless_is_release_version "$VERSION" || \
+    fail "version must be X.Y.Z or Debian revision X.Y.Z-N (for example 0.2.7-1)"
 case "$CHANNEL" in stable|beta) ;; *) fail "channel must be stable or beta" ;; esac
 [ "${CLOUDLESS_PROMOTION_MIN_AGE_SECONDS:-604800}" = 604800 ] || \
     fail "production beta-to-stable promotion requires the full seven-day soak"

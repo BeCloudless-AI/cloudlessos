@@ -8,47 +8,42 @@ import (
 	"github.com/cloudless/orchestrator/internal/localrecipes"
 )
 
-func TestRecipeStagingVolumeIsStableAndModelSpecific(t *testing.T) {
-	first := localrecipes.Recipe{Model: localrecipes.Model{ID: "owner/model", Revision: "one"}}
-	second := first
-	second.Model.Revision = "two"
-	if recipeStagingCacheVolume(first) != recipeStagingCacheVolume(first) {
-		t.Fatal("staging volume is not stable across retries")
-	}
-	if recipeStagingCacheVolume(first) == recipeStagingCacheVolume(second) {
-		t.Fatal("different revisions share a staging volume")
-	}
-}
-
-func TestAtomicRecipePromotionReplacesOnlyAfterStagingExists(t *testing.T) {
+func TestSeedRecipeDownloadStagingReusesExistingBlobs(t *testing.T) {
 	root := t.TempDir()
-	final := filepath.Join(root, "hub", "model")
-	stage := filepath.Join(root, "stage", "model")
-	backup := filepath.Join(root, "backup", "model")
-	if err := os.MkdirAll(final, 0o700); err != nil {
+	t.Setenv("CLOUDLESS_MODEL_CACHE", root)
+	recipe := localrecipes.Recipe{Model: localrecipes.Model{ID: "owner/model", Revision: "abc123"}}
+	repo := filepath.Join(root, "hub", "models--owner--model")
+	blob := filepath.Join(repo, "blobs", "weight")
+	if err := os.MkdirAll(filepath.Dir(blob), 0o750); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(final, "weights"), []byte("known-good"), 0o600); err != nil {
+	if err := os.WriteFile(blob, []byte("existing weights"), 0o640); err != nil {
 		t.Fatal(err)
 	}
-	if err := atomicallyPromoteRecipeRepository(final, stage, backup); err == nil {
-		t.Fatal("missing staging tree was promoted")
-	}
-	content, err := os.ReadFile(filepath.Join(final, "weights"))
-	if err != nil || string(content) != "known-good" {
-		t.Fatalf("failed promotion damaged the good cache: %q %v", content, err)
-	}
-	if err := os.MkdirAll(stage, 0o700); err != nil {
+	snapshot := filepath.Join(repo, "snapshots", recipe.Model.Revision)
+	if err := os.MkdirAll(snapshot, 0o750); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(stage, "weights"), []byte("verified-new"), 0o600); err != nil {
+	if err := os.Symlink(filepath.Join("..", "..", "blobs", "weight"), filepath.Join(snapshot, "model.bin")); err != nil {
 		t.Fatal(err)
 	}
-	if err := atomicallyPromoteRecipeRepository(final, stage, backup); err != nil {
+	staging := filepath.Join(root, ".download-staging", "test")
+	if err := seedRecipeDownloadStaging(recipe, staging); err != nil {
 		t.Fatal(err)
 	}
-	content, err = os.ReadFile(filepath.Join(final, "weights"))
-	if err != nil || string(content) != "verified-new" {
-		t.Fatalf("new cache was not activated: %q %v", content, err)
+	seededBlob := filepath.Join(staging, "hub", "models--owner--model", "blobs", "weight")
+	sourceInfo, err := os.Stat(blob)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seededInfo, err := os.Stat(seededBlob)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !os.SameFile(sourceInfo, seededInfo) {
+		t.Fatal("existing blob was copied instead of reused with a hard link")
+	}
+	if target, err := os.Readlink(filepath.Join(staging, "hub", "models--owner--model", "snapshots", recipe.Model.Revision, "model.bin")); err != nil || target != filepath.Join("..", "..", "blobs", "weight") {
+		t.Fatalf("snapshot link was not preserved: target=%q err=%v", target, err)
 	}
 }

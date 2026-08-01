@@ -380,6 +380,12 @@
   .sys-update-error { margin-top: 8px; font-size: 11.5px; color: var(--err); overflow-wrap: anywhere; }
   .sys-update-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 13px; }
   .sys-update-spin .ui-icon { animation: spin .9s linear infinite; transform-origin: center; }
+  .release-channel { margin-top: 12px; padding: 13px; border: 1px solid var(--hair); border-radius: 12px; background: var(--control); display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  .release-channel-copy { min-width: 0; }
+  .release-channel-label { display: flex; align-items: center; gap: 8px; color: var(--ink); font-size: 12.5px; font-weight: 700; }
+  .release-channel-badge { padding: 3px 7px; border-radius: 999px; background: var(--blue-soft); color: var(--blue); font: 600 9.5px/1.2 var(--mono); letter-spacing: .06em; text-transform: uppercase; }
+  .release-channel-help { margin-top: 5px; color: var(--muted); font-size: 11.5px; line-height: 1.45; }
+  .release-channel .btn { flex: none; }
   .dock-badge { position: absolute; right: -4px; top: -5px; z-index: 2; min-width: 18px; height: 18px; padding: 0 5px; display: grid; place-items: center; border: 2px solid var(--card-solid); border-radius: 999px; color: #fff; background: var(--err); font: 700 9px/1 'Roboto Mono', monospace; box-shadow: 0 5px 12px -6px rgba(0,0,0,.65); }
   .dock-badge.hidden { display: none; }
   .uc { width: min(1180px, var(--ui-vw-96, 96vw)); height: min(var(--ui-vh-92, 92vh), 940px); display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--card-edge); border-radius: 23px; color: var(--ink); background: var(--card-solid); box-shadow: var(--shadow); }
@@ -1032,6 +1038,7 @@
   .doctor-check-dot{width:28px;height:28px;border-radius:10px;display:grid;place-items:center;font-size:13px;font-weight:900;background:var(--panel)}
   .doctor-check.pass .doctor-check-dot{color:#2fc477}.doctor-check.warning .doctor-check-dot{color:#e7a83d}.doctor-check.fail .doctor-check-dot{color:#ef6c67}
   .doctor-check-copy b{display:block;color:var(--text);font-size:14px;margin:2px 0 4px}.doctor-check-copy span,.doctor-check-copy small{display:block;color:var(--muted);font-size:13px;line-height:1.45}.doctor-check-copy small{margin-top:6px;color:var(--text-2)}
+  .doctor-check-repair{display:inline-flex;align-items:center;justify-content:center;gap:8px;margin-top:12px;white-space:nowrap}.doctor-check-repair .ui-icon{width:16px;height:16px;flex:0 0 auto}
   .doctor-actions{display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap}
   .doctor-actions .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;white-space:nowrap}
   .doctor-actions .btn .ui-icon{flex:0 0 auto}
@@ -2892,6 +2899,9 @@
   .recipe-intro h3 { margin: 0; font-size: 15px; }
   .recipe-heading-row > span { min-width: 22px; padding: 3px 7px; border-radius: 999px; color: var(--blue); background: var(--blue-soft); font: 9px/1.4 'Roboto Mono',ui-monospace,monospace; text-align: center; }
   .recipe-intro p { margin: 4px 0 0; color: var(--muted); font-size: 10.5px; line-height: 1.45; }
+  .recipe-library-tabs { display: flex; align-items: center; gap: 6px; margin-top: 10px; }
+  .recipe-library-tabs .btn { min-height: 30px; padding: 0 10px; gap: 6px; border-radius: 9px; font-size: 10px; }
+  .recipe-library-tabs .btn b { font: 9px/1 'Roboto Mono',ui-monospace,monospace; opacity: .76; }
   .recipe-toolbar { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
   .recipe-toolbar .btn { min-width: 116px; min-height: 40px; padding: 0 13px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; white-space: nowrap; line-height: 1; }
   .recipe-toolbar .btn .ui-icon { width: 15px; height: 15px; flex: none; }
@@ -3008,11 +3018,11 @@
   .recipe-specs span { color: var(--faint); font: 7.5px/1.2 'Roboto Mono',ui-monospace,monospace; letter-spacing: .35px; text-transform: uppercase; }
   .recipe-specs b { margin-top: 4px; color: var(--ink-2); font-size: 9.5px; font-weight: 700; }
   .recipe-source { max-width: 100%; margin-top: 9px; color: var(--faint); font: 8.5px/1.4 'Roboto Mono',ui-monospace,SFMono-Regular,Menlo,monospace; overflow-wrap: anywhere; text-align: left; }
-  .recipe-side { min-width: 0; align-self: center; }
-  .recipe-actions { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 7px; }
+  .recipe-side { min-width: 0; align-self: stretch; display: flex; align-items: center; }
+  .recipe-actions { width: 100%; display: grid; gap: 8px; }
+  .recipe-secondary-actions { display: grid; grid-template-columns: repeat(auto-fit,minmax(76px,1fr)); gap: 7px; }
   .recipe-actions .btn { width: 100%; min-width: 0; min-height: 38px; padding: 0 10px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; white-space: nowrap; line-height: 1; }
   .recipe-actions .recipe-primary-action { grid-column: 1 / -1; min-height: 42px; }
-  .recipe-actions .recipe-remove { grid-column: 2; }
   .recipe-actions .btn .ui-icon { width: 14px; height: 14px; flex: none; }
   .recipe-actions .btn span { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .recipe-actions .recipe-remove:not(:disabled):hover { color: var(--err); border-color: color-mix(in srgb,var(--err) 32%,var(--line)); background: color-mix(in srgb,var(--err) 7%,transparent); }
@@ -6792,38 +6802,64 @@ function renderHomeModelDownloads() {
     button.onclick = () => cancelModelDownload(button.dataset.cancelModelDownload, button.dataset.modelId, button, button.dataset.modelType);
   });
 }
+function patchManagerDownloadProgress(type, downloads) {
+  if (!modelsOpen()) return true;
+  const detailMatches = mmDetail && mmDetail.type === type;
+  for (const download of downloads.values()) {
+    let scope = null;
+    if (detailMatches && mmDetail.id === download.modelId) scope = document.getElementById('mm-body');
+    else if (!mmDetail && ((type === 'lm' && mmTab === 'language') || (type === 'diff' && mmTab === 'image'))) {
+      const attr = type === 'lm' ? 'data-mid' : 'data-did';
+      scope = document.querySelector(`[${attr}="${CSS.escape(download.modelId)}"]`);
+    }
+    if (!scope) continue;
+    const state = scope.querySelector('.mdl-download-state');
+    if (!state) return false;
+    const pct = modelDownloadPercent(download);
+    const line = state.querySelectorAll('.mdl-download-line span');
+    if (line.length >= 2) line[1].textContent = pct == null ? modelDownloadSize(download.bytesDone) : pct + '%';
+    const track = state.querySelector('.mdl-download-track');
+    if (track) {
+      track.classList.toggle('indeterminate', pct == null);
+      track.style.setProperty('--progress', `${pct == null ? 0 : pct}%`);
+    }
+    const meta = state.querySelector('.mdl-meta');
+    if (meta) meta.textContent = modelDownloadMeta(download);
+  }
+  return true;
+}
 function applyModelDownloads(downloads, repaintManager = true) {
   const next = new Map((downloads || []).filter(d => !d.done).map(d => [d.modelId, { ...d, modelType: 'lm' }]));
   const completed = [...modelDownloads.keys()].some(id => !next.has(id));
+  const membershipChanged = [...modelDownloads.keys()].join('\n') !== [...next.keys()].join('\n');
   const before = JSON.stringify([...modelDownloads.entries()]);
   const after = JSON.stringify([...next.entries()]);
   modelDownloads.clear(); next.forEach((v, k) => modelDownloads.set(k, v));
   renderHomeModelDownloads();
   if (repaintManager && before !== after && modelsOpen()) {
-    if (completed) {
+    if (completed || membershipChanged) {
       mmLM = null;
       renderModelManager();
       return;
     }
-    if (mmDetail) renderModelDetail(document.getElementById('mm-body'));
-    else if (mmTab === 'language' && mmLM) paintLanguageModels(document.getElementById('mm-tab-body'), mmLM);
+    if (!patchManagerDownloadProgress('lm', next)) renderModelManager();
   }
 }
 function applyDiffusionDownloads(downloads, repaintManager = true) {
   const next = new Map((downloads || []).filter(d => !d.done).map(d => [d.modelId, { ...d, modelType: 'diff' }]));
   const completed = [...diffusionDownloads.keys()].some(id => !next.has(id));
+  const membershipChanged = [...diffusionDownloads.keys()].join('\n') !== [...next.keys()].join('\n');
   const before = JSON.stringify([...diffusionDownloads.entries()]);
   const after = JSON.stringify([...next.entries()]);
   diffusionDownloads.clear(); next.forEach((v, k) => diffusionDownloads.set(k, v));
   renderHomeModelDownloads();
   if (repaintManager && before !== after && modelsOpen()) {
-    if (completed) {
+    if (completed || membershipChanged) {
       mmDiff = null;
       renderModelManager();
       return;
     }
-    if (mmDetail) renderModelDetail(document.getElementById('mm-body'));
-    else if (mmTab === 'image' && mmDiff) paintImageModels(document.getElementById('mm-tab-body'), mmDiff);
+    if (!patchManagerDownloadProgress('diff', next)) renderModelManager();
   }
 }
 async function refreshModelDownloads() {
@@ -7232,7 +7268,7 @@ function openModelUninstallDialog(m, modelType = 'lm') {
 /* ---- Model Manager (standalone, opened from the dashboard) ---- */
 let mmTab = 'language', mmDetail = null, mmLM = null, mmDiff = null, mmRecipes = null, mmCustomPrefill = '', mmSort = 'recommended', mmHF = false, mmHFQuery = '', mmHFAccount = null;
 let mmFilter = { q: '', fits: false, cluster: false, vision: false, tools: false, downloaded: false };
-let mmRecipeView = { q: '', source: 'all', sparks: 'all', status: 'all', sort: 'updated', page: 1, perPage: 6 };
+let mmRecipeView = { library: 'supported', q: '', source: 'all', sparks: 'all', status: 'all', sort: 'updated', page: 1, perPage: 6 };
 let activeRecipeCheck = null;
 const mmCache = {};
 function modelsOpen() { return !document.getElementById('models').classList.contains('hidden'); }
@@ -7490,7 +7526,10 @@ function recipeSourceKind(recipe) {
 }
 function recipeMatchesView(recipe, data) {
   const view = mmRecipeView, nodes = Number(recipe.distributed && recipe.distributed.nodes || 1);
-  const active = data.active === recipe.id, job = recipeJob(data, recipe.id), ready = recipeReady(recipe, data);
+  const active = data.active === recipe.id, job = recipeJob(data, recipe.id), ready = recipeRunnable(recipe, data);
+  const executable = !!(data.trust && data.trust[recipe.id] && data.trust[recipe.id].executionAllowed === true);
+  if (view.library === 'supported' && !executable) return false;
+  if (view.library === 'drafts' && executable) return false;
   if (view.source !== 'all' && recipeSourceKind(recipe) !== view.source) return false;
   if (view.sparks !== 'all' && nodes !== Number(view.sparks)) return false;
   if (view.status === 'active' && !active && !job) return false;
@@ -7600,7 +7639,7 @@ function openRecipeLaunchDialog(recipe, plan, trigger) {
   const runtimeStatus = runtimeReady ? 'Already prepared' : custom ? 'One-time preparation required' : 'Will be checked';
   const runtimeDetail = runtimeReady ? modelDownloadSize(plan.runtimeBytes) + ' cached locally' : runtimeSize ? 'Up to approximately ' + modelDownloadSize(runtimeSize) + ' to download' : 'Size will appear as soon as Docker reports it';
   const modelStatus = modelReady ? 'Weights already cached' : 'Weights need to be downloaded';
-  const confirmLabel = runtimeReady && modelReady ? 'Launch recipe' : custom && !runtimeReady ? 'Prepare and launch' : 'Download and launch';
+  const confirmLabel = runtimeReady && modelReady ? 'Launch recipe' : !modelReady ? 'Download and launch' : 'Prepare and launch';
   keyDialogBusy=false;keyDialogReturnFocus=trigger||document.activeElement;keyDialogReturnFocusID=keyDialogReturnFocus?.id||'';
   const dialog=document.getElementById('key-dialog'),layer=document.getElementById('key-dialog-layer'),content=document.getElementById('key-dialog-content');
   dialog.classList.add('recipe-launch-dialog');
@@ -7843,6 +7882,16 @@ function recipeCurrentPreflight(recipe, data) {
   const revision=data.revisions&&data.revisions[recipe.id];
   return (data.operations||[]).filter(operation=>operation.kind==='check'&&operation.phase==='prepared'&&operation.recipeId===recipe.id&&operation.preflight&&operation.recipeRevision===revision).sort((a,b)=>Date.parse(b.preflight.createdAt||b.updatedAt||0)-Date.parse(a.preflight.createdAt||a.updatedAt||0))[0]?.preflight||null;
 }
+function recipeModelInstalled(recipe, data) {
+  return !!(data.plans && data.plans[recipe.id] && data.plans[recipe.id].modelInstalled);
+}
+function recipeValidated(recipe, data) {
+  return recipeCurrentPreflight(recipe, data)?.launchable === true;
+}
+function recipeRunnable(recipe, data) {
+  const trust = data.trust && data.trust[recipe.id] || {};
+  return trust.executionAllowed === true && recipeModelInstalled(recipe, data) && recipeValidated(recipe, data) && recipeReady(recipe, data);
+}
 function recipeCleanupResources(operation) {
   const kinds = new Set(['container','container-set','compose-project','private-port','stable-port','rendezvous-port','process-set','staging-checkout']);
   return (operation && operation.resources || []).filter(resource => kinds.has(resource.kind));
@@ -7876,10 +7925,11 @@ function recipeFailureHTML(recipe, data) {
 function recipeTrustHTML(recipe, data) {
   const trust = data.trust && data.trust[recipe.id];
   if (!trust) return '';
+  const installed = recipeModelInstalled(recipe, data);
   const short = value => value ? (value.length > 24 ? value.slice(0,12) + '…' + value.slice(-8) : value) : 'Not available';
   const commands = (trust.commands || []).map(command => '<span>' + escapeHtml(command) + '</span>').join('');
   const permissions = (trust.hostPermissions || []).map(permission => '<span>' + escapeHtml(permission) + '</span>').join('');
-  return '<details class="recipe-trust-panel ' + escapeAttr(trust.level || '') + '"><summary>' + uiIcon(trust.reviewed ? 'check' : 'alert') + '<b>' + escapeHtml(trust.label || 'Unreviewed recipe') + '</b><span>' + (!trust.executionAllowed ? 'Execution blocked' : trust.imagePinned ? 'Runtime pinned' : 'Run Check to pin runtime') + '</span></summary><div class="recipe-trust-body"><p class="recipe-trust-summary">' + escapeHtml(trust.summary || '') + '</p>' + (trust.blockedReason ? '<div class="recipe-warning">' + escapeHtml(trust.blockedReason) + '</div>' : '') + '<div class="recipe-trust-grid">' +
+  return '<details class="recipe-trust-panel ' + escapeAttr(trust.level || '') + '"><summary>' + uiIcon(trust.reviewed ? 'check' : 'alert') + '<b>' + escapeHtml(trust.label || 'Unreviewed recipe') + '</b><span>' + (!trust.executionAllowed ? 'Execution blocked' : !installed ? 'Model required' : trust.imagePinned ? 'Runtime pinned' : 'Ready for Check') + '</span></summary><div class="recipe-trust-body"><p class="recipe-trust-summary">' + escapeHtml(trust.summary || '') + '</p>' + (trust.blockedReason ? '<div class="recipe-warning">' + escapeHtml(trust.blockedReason) + '</div>' : '') + '<div class="recipe-trust-grid">' +
     '<div class="recipe-trust-fact"><span>Source revision</span><b>' + escapeHtml(trust.sourcePinned ? short(trust.sourceRevision) : 'Mutable or local') + '</b></div>' +
     '<div class="recipe-trust-fact"><span>Runtime image</span><b>' + escapeHtml(trust.imagePinned ? short(trust.imageDigest) : trust.imageReference || 'Not pinned') + '</b></div>' +
     '<div class="recipe-trust-fact"><span>Compatibility metadata</span><b>' + escapeHtml(trust.signedMetadata ? short(trust.metadataDigest) : 'Not Cloudless-signed') + '</b></div>' +
@@ -7890,7 +7940,12 @@ function recipeTrustHTML(recipe, data) {
 }
 function recipePreflightHTML(recipe, data) {
   const artifact=recipeCurrentPreflight(recipe,data);
-  if(!artifact)return '<details class="recipe-preflight empty"><summary>'+uiIcon('search')+'<b>Not checked for this recipe revision</b><small>RUN CHECK</small></summary></details>';
+  if(!artifact){
+    const trust=data.trust&&data.trust[recipe.id]||{},installed=recipeModelInstalled(recipe,data);
+    const label=!trust.executionAllowed?'Execution locked for this draft':!installed?'Install the model before validation':'Not validated on this Spark';
+    const hint=!trust.executionAllowed?'DRAFT ONLY':!installed?'MODEL REQUIRED':'VALIDATE';
+    return '<details class="recipe-preflight empty"><summary>'+uiIcon(!trust.executionAllowed||!installed?'alert':'search')+'<b>'+label+'</b><small>'+hint+'</small></summary></details>';
+  }
   const checks=(artifact.checks||[]).map(check=>'<div class="recipe-preflight-item '+escapeAttr(check.status||'unknown')+'"><i></i><b>'+escapeHtml(check.summary||check.id||'Preflight check')+'</b>'+(check.detail?'<span>'+escapeHtml(check.detail)+'</span>':'')+'</div>').join('');
   const status=artifact.launchable?'pass':'warning',label=artifact.launchable?'Launch evidence verified':'Requirements checked with warnings';
   const date=new Date(artifact.createdAt||'');const when=Number.isNaN(date.getTime())?'SAVED':new Intl.DateTimeFormat(undefined,{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}).format(date);
@@ -7902,7 +7957,9 @@ function recipeCard(recipe, data) {
   const plan = data.plans && data.plans[recipe.id] || {};
   const cleanup = recipeCleanupIssue(recipe,data), cleaning = cleanup && cleanup.phase === 'recovering', failure = data.failures && data.failures[recipe.id];
   const trust = data.trust && data.trust[recipe.id] || {}, executionAllowed = trust.executionAllowed === true;
-  const ready = !tombstoned && executionAllowed && recipeReady(recipe, data) && !cleanup, connected = recipeConnectedSparks(data), needsMoreSparks = recipeNeedsMoreSparks(recipe, data);
+  const modelInstalled = recipeModelInstalled(recipe,data), validated = recipeValidated(recipe,data), topologyReady = recipeReady(recipe,data);
+  const ready = !tombstoned && executionAllowed && modelInstalled && validated && topologyReady && !cleanup, connected = recipeConnectedSparks(data), needsMoreSparks = recipeNeedsMoreSparks(recipe, data);
+  const canCheck = !tombstoned && executionAllowed && modelInstalled && topologyReady && !cleanup && !active && !job;
   const action = cleanup
     ? '<button class="btn ' + (cleaning ? '' : 'primary') + ' recipe-primary-action" type="button" data-cleanup-operation="' + escapeAttr(cleanup.id) + '"' + (cleaning ? ' disabled' : ' data-recipe-cleanup="' + escapeAttr(recipe.id) + '"') + '>' + (cleaning ? '<span class="key-dialog-spinner" aria-hidden="true"></span><span>Cleaning up</span>' : uiIcon('reload') + '<span>Retry cleanup</span>') + '</button>'
     : tombstoned
@@ -7910,9 +7967,15 @@ function recipeCard(recipe, data) {
     : active
     ? '<button class="btn danger recipe-primary-action" type="button" data-recipe-stop="' + escapeAttr(recipe.id) + '"' + (job ? ' disabled' : '') + '>' + uiIcon('stop') + '<span>Stop recipe</span></button>'
     : job ? '<button class="btn danger recipe-primary-action" type="button" data-recipe-abort="' + escapeAttr(recipe.id) + '">' + uiIcon('stop') + '<span>Abort</span></button>'
-    : '<button class="btn primary recipe-primary-action" type="button" data-recipe-run="' + escapeAttr(recipe.id) + '"' + (!ready ? ' disabled' : '') + '>' + uiIcon('rocket') + '<span>Run recipe</span></button>';
+    : !executionAllowed ? '<button class="btn recipe-primary-action" type="button" disabled>' + uiIcon('alert') + '<span>Review required</span></button>'
+    : !modelInstalled ? '<button class="btn primary recipe-primary-action" type="button" data-recipe-install-model="' + escapeAttr(recipe.id) + '">' + uiIcon('download') + '<span>Install model</span></button>'
+    : !topologyReady ? '<button class="btn recipe-primary-action" type="button" disabled>' + uiIcon('network') + '<span>Connect ' + nodes + ' Sparks</span></button>'
+    : !validated ? '<button class="btn primary recipe-primary-action" type="button" data-recipe-check="' + escapeAttr(recipe.id) + '">' + uiIcon('search') + '<span>Validate</span></button>'
+    : '<button class="btn primary recipe-primary-action" type="button" data-recipe-run="' + escapeAttr(recipe.id) + '">' + uiIcon('rocket') + '<span>Run recipe</span></button>';
   const engine = recipe.engine || {}, model = recipe.model || {}, source = recipe.source || {};
-  const state = cleaning ? 'Cleaning' : cleanup ? 'Cleanup required' : tombstoned ? 'Removal pending' : active ? 'Running' : job ? 'Working' : !executionAllowed ? 'Review required' : failure ? 'Last run failed' : ready ? 'Ready' : needsMoreSparks ? 'Needs ' + nodes + ' Sparks' : 'Needs attention';
+  const state = cleaning ? 'Cleaning' : cleanup ? 'Cleanup required' : tombstoned ? 'Removal pending' : active ? 'Running' : job ? 'Working' : !executionAllowed ? 'Draft only' : !modelInstalled ? 'Model not installed' : !topologyReady ? 'Needs ' + nodes + ' Sparks' : !validated ? 'Not validated' : failure ? 'Last run failed' : ready ? 'Ready' : 'Needs attention';
+  const checkAction = canCheck && validated ? '<button class="btn" type="button" data-recipe-check="' + escapeAttr(recipe.id) + '">' + uiIcon('search') + '<span>Validate again</span></button>' : '';
+  const secondaryActions = checkAction + '<button class="btn" type="button" data-recipe-edit="' + escapeAttr(recipe.id) + '"' + (tombstoned || active || job || cleanup ? ' disabled' : '') + '>' + uiIcon('settings') + '<span>Edit</span></button><button class="btn recipe-remove" type="button" data-recipe-delete="' + escapeAttr(recipe.id) + '"' + (tombstoned || active || job || cleanup ? ' disabled' : '') + '>' + uiIcon('trash') + '<span>Remove</span></button>';
   const sourceLabel = recipe.origin === 'catalog' ? 'Imported recipe' : recipe.origin === 'github' ? 'GitHub import' : 'Local recipe';
   return '<article class="recipe-card' + (active || job ? ' is-active' : !ready ? ' needs-attention' : '') + (needsMoreSparks ? ' insufficient-cluster' : '') + '" data-recipe-id="' + escapeAttr(recipe.id) + '"><div class="recipe-main"><span class="recipe-icon">' + uiIcon('recipes') + '</span><div class="recipe-copy">' +
     '<div class="recipe-eyebrow"><span>' + sourceLabel + ' · ' + escapeHtml(trust.supportLevel || 'experimental') + '</span><span>' + escapeHtml(recipeUpdatedLabel(recipe)) + '</span></div>' +
@@ -7924,8 +7987,8 @@ function recipeCard(recipe, data) {
     recipeFailureHTML(recipe,data) +
     recipeCleanupHTML(cleanup) +
     recipePreflightHTML(recipe,data) +
-    (ready || cleanup || !executionAllowed ? '' : '<div class="recipe-warning">' + (tombstoned ? 'This recipe cannot start new work. Cloudless will remove its saved definition after all owned resources are verified absent.' : needsMoreSparks ? 'Requires ' + nodes + ' DGX Sparks. ' + connected + (connected === 1 ? ' is' : ' are') + ' connected.' : 'This recipe needs ' + nodes + ' healthy DGX Spark' + (nodes === 1 ? '' : 's') + ' before it can run.') + '</div>') +
-    '</div><div class="recipe-side"><div class="recipe-actions">' + action + '<button class="btn" type="button" data-recipe-check="' + escapeAttr(recipe.id) + '"' + (tombstoned || active || job || cleanup || !ready ? ' disabled' : '') + '>' + uiIcon('search') + '<span>Check</span></button><button class="btn" type="button" data-recipe-edit="' + escapeAttr(recipe.id) + '"' + (tombstoned || active || job || cleanup ? ' disabled' : '') + '>' + uiIcon('settings') + '<span>Edit</span></button><button class="btn recipe-remove" type="button" data-recipe-delete="' + escapeAttr(recipe.id) + '"' + (tombstoned || active || job || cleanup ? ' disabled' : '') + '>' + uiIcon('trash') + '<span>Remove</span></button></div></div></div>' + recipeProgressHTML(job) + '</article>';
+    (ready || cleanup || !executionAllowed ? '' : '<div class="recipe-warning">' + (tombstoned ? 'This recipe cannot start new work. Cloudless will remove its saved definition after all owned resources are verified absent.' : !modelInstalled ? 'Install the exact model revision first. Validate and Run stay locked until the download is complete.' : needsMoreSparks ? 'Requires ' + nodes + ' DGX Sparks. ' + connected + (connected === 1 ? ' is' : ' are') + ' connected.' : !validated ? 'Validate this exact recipe revision and machine before launch.' : 'This recipe needs ' + nodes + ' healthy DGX Spark' + (nodes === 1 ? '' : 's') + ' before it can run.') + '</div>') +
+    '</div><div class="recipe-side"><div class="recipe-actions">' + action + '<div class="recipe-secondary-actions">' + secondaryActions + '</div></div></div></div>' + recipeProgressHTML(job) + '</article>';
 }
 function recipeGitHubURL(value) {
   let path = String(value || '').trim().replace(/^(?:https?:\/\/)?(?:www\.)?github\.com\//i, '');
@@ -7972,12 +8035,16 @@ function openRecipeImport() {
   requestAnimationFrame(() => source.focus());
 }
 function recipeLibraryHeaderHTML(local) {
-  const installed = (local.recipes || []).length;
-  return '<section class="recipe-intro"><div class="recipe-intro-copy"><span class="recipe-section-icon">' + uiIcon('recipes') + '</span><div><div class="recipe-heading-row"><h3>Recipe Library</h3><span>' + installed + '</span></div><p>Manage inference recipes saved on this machine.</p></div></div><div class="recipe-toolbar"><button class="btn" id="recipe-import-open" type="button">' + uiIcon('download') + '<span>Import recipe</span></button><button class="btn primary" id="recipe-create" type="button">' + uiIcon('plus') + '<span>New recipe</span></button></div></section>';
+  const recipes = local.recipes || [], trust = local.trust || {};
+  const supported = recipes.filter(recipe => trust[recipe.id] && trust[recipe.id].executionAllowed === true).length;
+  const drafts = recipes.length - supported;
+  return '<section class="recipe-intro"><div class="recipe-intro-copy"><span class="recipe-section-icon">' + uiIcon('recipes') + '</span><div><div class="recipe-heading-row"><h3>Recipe Library</h3><span>' + supported + '</span></div><p>Only recipes Cloudless can execute appear in the library.</p><div class="recipe-library-tabs"><button class="btn' + (mmRecipeView.library === 'supported' ? ' primary' : '') + '" id="recipe-show-supported" type="button">Runnable <b>' + supported + '</b></button><button class="btn' + (mmRecipeView.library === 'drafts' ? ' primary' : '') + '" id="recipe-show-drafts" type="button">Drafts <b>' + drafts + '</b></button></div></div></div><div class="recipe-toolbar"><button class="btn" id="recipe-import-open" type="button">' + uiIcon('download') + '<span>Import recipe</span></button><button class="btn primary" id="recipe-create" type="button">' + uiIcon('plus') + '<span>New recipe</span></button></div></section>';
 }
-function wireRecipeLibraryHeader(c) {
+function wireRecipeLibraryHeader(c, data) {
   document.getElementById('recipe-create').onclick = () => openRecipeBuilder();
   document.getElementById('recipe-import-open').onclick = openRecipeImport;
+  document.getElementById('recipe-show-supported').onclick = () => { mmRecipeView.library='supported'; mmRecipeView.page=1; paintLocalRecipes(c,data); };
+  document.getElementById('recipe-show-drafts').onclick = () => { mmRecipeView.library='drafts'; mmRecipeView.page=1; paintLocalRecipes(c,data); };
 }
 function paintLocalRecipes(c, data) {
   const recipes = data.recipes || [];
@@ -7989,7 +8056,9 @@ function paintLocalRecipes(c, data) {
   const select = (id, label, value, options) => '<label class="recipe-select"><span>' + label + '</span><select id="' + id + '">' + options.map(option => '<option value="' + option[0] + '"' + (option[0] === value ? ' selected' : '') + '>' + option[1] + '</option>').join('') + '</select></label>';
   const empty = recipes.length === 0
     ? '<div class="recipe-empty"><span class="recipe-empty-icon">' + uiIcon('recipes') + '</span><h4>No recipes yet</h4><p>Import a reviewed recipe from GitHub, or build your own Cloudless-native configuration.</p><button class="btn primary" id="recipe-empty-import" type="button">' + uiIcon('download') + '<span>Import your first recipe</span></button></div>'
-    : '<div class="recipe-empty"><span class="recipe-empty-icon">' + uiIcon('search') + '</span><h4>No matching recipes</h4><p>Try a different search or clear the current filters.</p><button class="btn" id="recipe-clear-empty" type="button">Clear filters</button></div>';
+    : mmRecipeView.library === 'supported' && !recipes.some(recipe => data.trust && data.trust[recipe.id] && data.trust[recipe.id].executionAllowed === true)
+    ? '<div class="recipe-empty"><span class="recipe-empty-icon">' + uiIcon('recipes') + '</span><h4>No runnable recipes</h4><p>Drafts are kept separate because Cloudless will not execute unreviewed host commands. Import a reviewed profile to add it here.</p><button class="btn primary" id="recipe-empty-import" type="button">' + uiIcon('download') + '<span>Import reviewed recipe</span></button></div>'
+    : '<div class="recipe-empty"><span class="recipe-empty-icon">' + uiIcon('search') + '</span><h4>No matching ' + (mmRecipeView.library === 'drafts' ? 'drafts' : 'recipes') + '</h4><p>Try a different search or clear the current filters.</p><button class="btn" id="recipe-clear-empty" type="button">Clear filters</button></div>';
   const pagination = total ? '<footer class="recipe-pagination"><div><b>' + (start + 1) + '–' + Math.min(start + mmRecipeView.perPage, total) + '</b><span>of ' + total + ' recipe' + (total === 1 ? '' : 's') + '</span></div><div class="recipe-page-controls"><button class="recipe-page-arrow" type="button" data-recipe-page="' + (mmRecipeView.page - 1) + '" aria-label="Previous page"' + (mmRecipeView.page === 1 ? ' disabled' : '') + '>←</button>' + recipePageButtons(mmRecipeView.page, pages) + '<button class="recipe-page-arrow" type="button" data-recipe-page="' + (mmRecipeView.page + 1) + '" aria-label="Next page"' + (mmRecipeView.page === pages ? ' disabled' : '') + '>→</button></div><label class="recipe-per-page"><span>Show</span><select id="recipe-per-page"><option value="6"' + (mmRecipeView.perPage === 6 ? ' selected' : '') + '>6</option><option value="12"' + (mmRecipeView.perPage === 12 ? ' selected' : '') + '>12</option><option value="24"' + (mmRecipeView.perPage === 24 ? ' selected' : '') + '>24</option></select></label></footer>' : '';
   c.innerHTML = recipeLibraryHeaderHTML(data) +
     (recipes.length ? '<section class="recipe-controls"><label class="recipe-search">' + uiIcon('search') + '<input id="recipe-query" type="search" aria-label="Search recipes" placeholder="Search by recipe, model, engine…" value="' + escapeAttr(mmRecipeView.q) + '"></label><div class="recipe-filter-grid">' +
@@ -7998,7 +8067,7 @@ function paintLocalRecipes(c, data) {
       select('recipe-status-filter','Status',mmRecipeView.status,[['all','Any status'],['ready','Ready'],['attention','Needs attention'],['active','Active']]) +
       select('recipe-sort','Sort',mmRecipeView.sort,[['updated','Recently updated'],['name','Name A–Z'],['nodes','Most nodes'],['context','Largest context']]) + '</div><div class="recipe-results"><span><b>' + total + '</b> result' + (total === 1 ? '' : 's') + '</span>' + (filterActive ? '<button class="lnk" id="recipe-clear-filters" type="button">Clear filters</button>' : '') + '</div></section>' : '') +
     '<div class="recipe-grid">' + (visible.length ? visible.map(recipe => recipeCard(recipe,data)).join('') : empty) + '</div>' + pagination;
-  wireRecipeLibraryHeader(c);
+  wireRecipeLibraryHeader(c, data);
   document.getElementById('recipe-empty-import')?.addEventListener('click', openRecipeImport);
   const clearFilters = () => { mmRecipeView = {...mmRecipeView, q:'', source:'all', sparks:'all', status:'all', page:1}; paintLocalRecipes(c, data); };
   document.getElementById('recipe-clear-filters')?.addEventListener('click', clearFilters);
@@ -8010,6 +8079,10 @@ function paintLocalRecipes(c, data) {
   c.querySelectorAll('[data-recipe-page]').forEach(button => button.onclick=()=>{const page=Number(button.dataset.recipePage);if(page>=1&&page<=pages&&page!==mmRecipeView.page){mmRecipeView.page=page;paintLocalRecipes(c,data);c.closest('.mm-body')?.scrollTo({top:0,behavior:'smooth'});}});
   c.querySelectorAll('[data-recipe-source]').forEach(button => button.onclick = () => { const card=button.closest('[data-recipe-id]'); if(card) openAppSurface('Recipe source','/api/recipes/' + encodeURIComponent(card.dataset.recipeId) + '/source','📖'); });
   c.querySelectorAll('[data-recipe-edit]').forEach(button => button.onclick = () => { const recipe=recipes.find(item=>item.id===button.dataset.recipeEdit); if(recipe) openRecipeBuilder(recipe); });
+  c.querySelectorAll('[data-recipe-install-model]').forEach(button => button.onclick = () => {
+    const recipe=recipes.find(item=>item.id===button.dataset.recipeInstallModel);
+    if (recipe && recipe.model && recipe.model.id) openModelManagerFor(recipe.model.id);
+  });
   c.querySelectorAll('[data-recipe-run]').forEach(button => button.onclick = async () => {
     button.disabled = true; const id=button.dataset.recipeRun, recipe=recipes.find(item=>item.id===id), plan=data.plans&&data.plans[id]||{};
     if(recipe && !(await openRecipeLaunchDialog(recipe,plan,button))){button.disabled=false;return;}
@@ -8716,17 +8789,48 @@ async function renderDoctorPage(c) {
   try { report = await api('/api/system/doctor'); }
   catch { c.innerHTML = '<div class="set-hint">Cloudless Doctor could not complete its checks.</div>'; return; }
   const checks = Array.isArray(report.checks) ? report.checks : [];
+  const repairs = report.repairs || {};
   const counts = checks.reduce((value, check) => { value[check.status] = (value[check.status] || 0) + 1; return value; }, {});
   const healthy = report.overall === 'healthy';
   const headline = healthy ? 'CloudlessOS looks healthy' : report.overall === 'warning' ? 'CloudlessOS has a few recommendations' : 'CloudlessOS needs attention';
   const detail = `${checks.length} checks · ${counts.pass || 0} passed${counts.warning ? ` · ${counts.warning} warning${counts.warning === 1 ? '' : 's'}` : ''}${counts.fail ? ` · ${counts.fail} failed` : ''}`;
   c.innerHTML = `<div class="doctor-page">
     <div class="doctor-summary"><span class="doctor-summary-mark">${uiIcon(healthy ? 'check' : 'metrics')}</span><div class="doctor-summary-copy"><b>${headline}</b><span>${detail}</span></div><span class="doctor-state ${escapeAttr(report.overall || '')}">${escapeHtml((report.overall || 'unknown').replace('-', ' '))}</span></div>
-    <div class="doctor-checks">${checks.map(check => `<div class="doctor-check ${escapeAttr(check.status)}"><span class="doctor-check-dot">${check.status === 'pass' ? '✓' : check.status === 'warning' ? '!' : '×'}</span><div class="doctor-check-copy"><b>${escapeHtml(check.name)}</b><span>${escapeHtml(check.summary)}</span>${check.action ? `<small>${escapeHtml(check.action)}</small>` : ''}</div></div>`).join('')}</div>
+    <div class="doctor-checks">${checks.map(check => { const repair = repairs[check.id] || {}; return `<div class="doctor-check ${escapeAttr(check.status)}"><span class="doctor-check-dot">${check.status === 'pass' ? '✓' : check.status === 'warning' ? '!' : '×'}</span><div class="doctor-check-copy"><b>${escapeHtml(check.name)}</b><span>${escapeHtml(check.summary)}</span>${check.action ? `<small>${escapeHtml(check.action)}</small>` : ''}${repair.action === 'stop-orphaned-recipe' && repair.target ? `<button class="btn danger doctor-check-repair" data-doctor-stop-recipe="${escapeAttr(repair.target)}">${uiIcon('stop')}<span>Stop orphaned runtime</span></button>` : ''}</div></div>`; }).join('')}</div>
     <div class="set-block"><h3>privacy-safe support bundle</h3><div class="fld-help">Creates a ZIP on this device containing this report, Cloudless container status, and recent logs. Tokens, passwords, API-key hashes, hostnames, and home paths are removed before the ZIP is created. Nothing is uploaded automatically.</div></div>
     <div class="doctor-actions"><button class="btn" id="doctor-rerun">${uiIcon('restart')}<span>Run checks again</span></button><button class="btn primary" id="doctor-bundle">${uiIcon('download')}<span>Save support bundle</span></button></div>
   </div>`;
   document.getElementById('doctor-rerun').onclick = () => renderDoctorPage(c);
+  c.querySelectorAll('[data-doctor-stop-recipe]').forEach(button => button.onclick = async () => {
+    const recipeId = button.dataset.doctorStopRecipe;
+    button.disabled = true;
+    button.innerHTML = '<span class="key-dialog-spinner" aria-hidden="true"></span><span>Stopping on every Spark…</span>';
+    const result = await api('/api/recipes/' + encodeURIComponent(recipeId) + '/stop', { method: 'POST' }).catch(() => ({ error: 'Could not start the repair.' }));
+    if (result.error || !result.jobId) {
+      toast(result.error || 'Could not start the repair.', true);
+      renderDoctorPage(c);
+      return;
+    }
+    const stream = new EventSource(`/api/jobs/${result.jobId}/events`);
+    let ended = false;
+    const finish = ok => {
+      if (ended) return;
+      ended = true;
+      stream.close();
+      toast(ok ? 'Orphaned runtime stopped on every Spark' : 'The repair needs attention', !ok);
+      renderDoctorPage(c);
+      refreshActiveModel();
+    };
+    stream.onmessage = event => {
+      const update = JSON.parse(event.data);
+      if (update.phase === 'error') finish(false);
+      else if (update.done) finish(true);
+    };
+    stream.onerror = async () => {
+      const update = await api(`/api/jobs/${result.jobId}`).catch(() => null);
+      if (update && update.done) finish(update.phase !== 'error');
+    };
+  });
   document.getElementById('doctor-bundle').onclick = async event => {
     const button = event.currentTarget;
     button.disabled = true;
@@ -8761,6 +8865,8 @@ async function renderGeneralPage(c) {
   const available = update.availableVersion || '';
   const progress = Math.max(0, Math.min(100, Number(update.progress) || 0));
   const showProgress = state === 'installing';
+  const channel = update.channel === 'beta' ? 'beta' : 'stable';
+  const nextChannel = channel === 'stable' ? 'beta' : 'stable';
   const changelog = Array.isArray(update.changelog) ? update.changelog.filter(change => typeof change === 'string' && change.trim()) : [];
   let updateTitle = 'CloudlessOS is up to date';
   if (!update.configured) updateTitle = 'Updates are not configured yet';
@@ -8792,6 +8898,10 @@ async function renderGeneralPage(c) {
         ${update.error ? `<div class="sys-update-error">${escapeHtml(update.error)}</div>` : ''}
         ${update.checkedAt ? `<div class="upd-src">Last checked ${new Date(update.checkedAt).toLocaleString()}</div>` : ''}
         ${updateActions ? `<div class="sys-update-actions">${updateActions}</div>` : ''}
+        <div class="release-channel">
+          <div class="release-channel-copy"><div class="release-channel-label">Release channel <span class="release-channel-badge">${channel}</span></div><div class="release-channel-help">${channel === 'stable' ? 'Recommended releases with the most testing.' : 'Early releases for testing new CloudlessOS features.'}</div></div>
+          <button class="btn" id="sys-update-channel" ${busy ? 'disabled' : ''}>Switch to ${nextChannel === 'beta' ? 'Beta' : 'Stable'}</button>
+        </div>
       </div>
     </div>
     <div class="set-block"><h3>welcome</h3>
@@ -8816,6 +8926,30 @@ async function renderGeneralPage(c) {
     if (approved) startSystemUpdate('apply');
   };
   const reboot = document.getElementById('sys-update-reboot'); if (reboot) reboot.onclick = () => openPowerDialog('reboot');
+  const channelButton = document.getElementById('sys-update-channel'); if (channelButton) channelButton.onclick = async () => {
+    const switchingToBeta = nextChannel === 'beta';
+    const approved = await openCloudlessDecision({
+      title: `Switch to the ${switchingToBeta ? 'Beta' : 'Stable'} channel?`,
+      message: switchingToBeta ? 'Beta releases arrive earlier and may contain unfinished features or bugs.' : 'CloudlessOS will follow Stable releases from now on.',
+      detail: switchingToBeta ? 'Nothing is installed yet. CloudlessOS will check the signed Beta repository and let you review any available update first.' : 'This does not downgrade the version already installed. Stable updates will appear when a newer Stable release is published.',
+      confirmLabel: `Switch to ${switchingToBeta ? 'Beta' : 'Stable'}`,
+      icon: switchingToBeta ? 'alert' : 'shield',
+      returnFocus: channelButton,
+    });
+    if (!approved) return;
+    channelButton.disabled = true;
+    const old = channelButton.innerHTML;
+    channelButton.innerHTML = '<span class="key-dialog-spinner" aria-hidden="true"></span><span>Switchingâ€¦</span>';
+    try {
+      await api('/api/system/update/channel', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Cloudless-Action': 'update-channel' }, body: JSON.stringify({ channel: nextChannel }) });
+      toast(`Switched to the ${nextChannel === 'beta' ? 'Beta' : 'Stable'} channel â€” checking for updatesâ€¦`);
+      await renderGeneralPage(c);
+    } catch {
+      toast('Could not change the release channel', true);
+      channelButton.disabled = false;
+      channelButton.innerHTML = old;
+    }
+  };
   document.getElementById('gen-replay').onclick = () => {
     closeSettings();
     showStartupIntro(showOnboarding, '', true);

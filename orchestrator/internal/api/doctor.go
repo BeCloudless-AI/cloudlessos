@@ -13,6 +13,7 @@ func (s *Server) systemDoctor(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
 	defer cancel()
 	report := doctor.Run(ctx, s.eng, s.state)
+	report = s.addDoctorRuntimeReconciliation(ctx, report)
 	writeJSON(w, http.StatusOK, report)
 }
 
@@ -24,6 +25,7 @@ func (s *Server) systemDoctorBundle(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 	report := doctor.Run(ctx, s.eng, s.state)
+	report = s.addDoctorRuntimeReconciliation(ctx, report)
 	bundle, err := doctor.BuildBundle(ctx, s.eng, s.state, report)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "could not build support bundle"})
@@ -35,4 +37,16 @@ func (s *Server) systemDoctorBundle(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Length", fmt.Sprint(len(bundle)))
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(bundle)
+}
+
+func (s *Server) addDoctorRuntimeReconciliation(ctx context.Context, report doctor.Report) doctor.Report {
+	if s.recipes == nil || s.eng == nil || s.state == nil {
+		return report
+	}
+	containers, containerErr := s.eng.List(ctx)
+	recipes, recipeErr := s.recipes.List()
+	if containerErr != nil || recipeErr != nil {
+		return report
+	}
+	return doctor.AddOrphanedRecipeChecks(report, s.state.Get(), containers, recipes)
 }

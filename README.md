@@ -124,6 +124,7 @@ while architecture-specific images, hardware setup and capability gates remain e
 
 Important documentation:
 
+- [User guide](./docs/USER_GUIDE.md)
 - [Architecture](./docs/ARCHITECTURE.md)
 - [Inference API identity](./docs/INFERENCE_API.md)
 - [Local inference recipes](./docs/LOCAL_RECIPES.md)

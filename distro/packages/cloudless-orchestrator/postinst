@@ -7,13 +7,30 @@ if ! getent passwd cloudlessd >/dev/null; then
     adduser --system --no-create-home --home /nonexistent --shell /usr/sbin/nologin --ingroup cloudless-control cloudlessd
 fi
 adduser cloudlessd cloudless >/dev/null 2>&1 || true
-install -d -m 0750 -o cloudlessd -g cloudless-control /var/lib/cloudless /var/lib/cloudless/builds
+# The desktop follows read-only links from Models into models-cache. Grant
+# traversal (not listing) on the state root; each child retains its own strict
+# group/mode, and the desktop is never added to cloudless-control.
+install -d -m 0751 -o cloudlessd -g cloudless-control /var/lib/cloudless
+install -d -m 0750 -o cloudlessd -g cloudless-control /var/lib/cloudless/builds
 install -d -m 2750 -o cloudlessd -g cloudless /var/lib/cloudless/models-cache
+
+# Older root-run orchestrators created the read-only Models view as root. Only
+# repair directories carrying Cloudless's own revision marker; user-created
+# folders and files are never touched. Files are hard links into the cache and
+# do not need ownership changes for a safe unlink.
+model_view=/home/cloudless/Cloudless/Models
+if [ -d "$model_view" ]; then
+    for marker in "$model_view"/*/.cloudless-revision; do
+        [ -f "$marker" ] || continue
+        managed_dir=${marker%/.cloudless-revision}
+        find "$managed_dir" -type d -exec chown cloudlessd:cloudless {} + -exec chmod 0755 {} +
+    done
+fi
 
 # Releases before the unprivileged daemon migration created cluster identity
 # and recipe metadata as root. Preserve their contents while transferring only
 # Cloudless control-plane paths to the service account that now reads them.
-for state_path in cluster recipes; do
+for state_path in cluster recipes recipes-runtime; do
     install -d -m 0700 -o cloudlessd -g cloudless-control "/var/lib/cloudless/$state_path"
     chown -R cloudlessd:cloudless-control "/var/lib/cloudless/$state_path"
 done

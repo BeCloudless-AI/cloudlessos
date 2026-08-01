@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 
 	"github.com/cloudless/orchestrator/internal/platform"
 )
@@ -421,6 +422,23 @@ func (d *Docker) ExportImage(ctx context.Context, image, destination string) err
 		_ = temporary.Close()
 		return err
 	}
+	directoryInfo, err := os.Stat(filepath.Dir(destination))
+	if err != nil {
+		_ = temporary.Close()
+		return fmt.Errorf("inspect image export directory: %w", err)
+	}
+	directoryStat, ok := directoryInfo.Sys().(*syscall.Stat_t)
+	if !ok {
+		_ = temporary.Close()
+		return errors.New("image export directory ownership is unavailable")
+	}
+	// cloudless-engine runs as root while cloudlessd deliberately does not.
+	// Hand the archive to the transfer directory's trusted group so the
+	// orchestrator can stream it without making the image world-readable.
+	if err := temporary.Chown(-1, int(directoryStat.Gid)); err != nil {
+		_ = temporary.Close()
+		return fmt.Errorf("set image export ownership: %w", err)
+	}
 	if err := temporary.Chmod(0o640); err != nil {
 		_ = temporary.Close()
 		return err
@@ -438,7 +456,7 @@ func admittedImageExportPath(path string) bool {
 	if !filepath.IsAbs(path) || filepath.Base(path) == "." {
 		return false
 	}
-	for _, root := range []string{"/run/cloudless/transfers"} {
+	for _, root := range []string{"/var/lib/cloudless/image-transfers"} {
 		relative, err := filepath.Rel(filepath.Clean(root), path)
 		if err == nil && relative != "." && relative != ".." &&
 			!strings.HasPrefix(relative, ".."+string(os.PathSeparator)) &&

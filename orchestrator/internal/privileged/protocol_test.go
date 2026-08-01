@@ -120,6 +120,45 @@ func TestTimezoneRequiresCanonicalTypedValue(t *testing.T) {
 	}
 }
 
+func TestUpdateChannelAcceptsOnlyNamedChannels(t *testing.T) {
+	for _, value := range []string{"stable", "beta"} {
+		if err := validateRequest(request{Action: ActionSystemUpdateChannel, Value: value}); err != nil {
+			t.Fatalf("%q: %v", value, err)
+		}
+	}
+	for _, value := range []string{"", "testing", "stable beta", "stable\nSuites: beta", "../beta"} {
+		if validateRequest(request{Action: ActionSystemUpdateChannel, Value: value}) == nil {
+			t.Fatalf("%q was accepted", value)
+		}
+	}
+}
+
+func TestRecipeContainerRemovalAcceptsOnlyOneExactName(t *testing.T) {
+	for _, value := range []string{"deepseek-v4-flash-dual-dspark-1m-vllm-1", "cloudless-engine"} {
+		if err := validateRequest(request{Action: ActionRecipeContainerRemove, Value: value}); err != nil {
+			t.Fatalf("%q: %v", value, err)
+		}
+	}
+	for _, value := range []string{"", "../docker", "name;reboot", "name other", "/absolute", "$(id)"} {
+		if validateRequest(request{Action: ActionRecipeContainerRemove, Value: value}) == nil {
+			t.Fatalf("%q was accepted", value)
+		}
+	}
+}
+
+func TestModelUninstallAcceptsOnlyCanonicalRepositoryIDs(t *testing.T) {
+	for _, value := range []string{"Qwen/Qwen3.6-35B-A3B", "deepseek-ai/DeepSeek_V4.Flash", "org/team/model"} {
+		if err := validateRequest(request{Action: ActionModelUninstall, Value: value}); err != nil {
+			t.Fatalf("%q: %v", value, err)
+		}
+	}
+	for _, value := range []string{"", "model", "../model", "org/../model", "/absolute/model", "org/model;reboot", "org/model other", "org\\model"} {
+		if validateRequest(request{Action: ActionModelUninstall, Value: value}) == nil {
+			t.Fatalf("%q was accepted", value)
+		}
+	}
+}
+
 func TestClusterNetworkRequiresTwoSafeInterfacesAndBoundedIndex(t *testing.T) {
 	for _, value := range []string{"1|enp1s0f0|enp1s0f1", "8|enP2p1s0f1np1|enP2p1s0f1np2"} {
 		if err := validateRequest(request{Action: ActionClusterNetworkApply, Value: value}); err != nil {

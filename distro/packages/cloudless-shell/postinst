@@ -13,6 +13,13 @@ done
 install -d -o cloudless -g cloudless -m 0750 /home/cloudless /home/cloudless/.config /home/cloudless/.config/openbox
 install -d -o cloudless -g cloudless -m 2775 /home/cloudless/Cloudless /home/cloudless/Cloudless/Models /home/cloudless/Cloudless/Outputs /home/cloudless/Cloudless/Workspace /home/cloudless/Downloads
 install -o cloudless -g cloudless -m 0644 /usr/share/cloudless/openbox-autostart /home/cloudless/.config/openbox/autostart
+# Ubuntu's unclutter package also injects itself through Xsession, independently
+# of Openbox's autostart file. Its one-second idle timeout makes the pointer
+# flash on noisy mice and looks like foreground Cloudless windows are blinking.
+if [ -f /etc/default/unclutter ]; then
+    sed -i 's/^START_UNCLUTTER=.*/START_UNCLUTTER="false"/' /etc/default/unclutter
+fi
+pkill -x unclutter >/dev/null 2>&1 || true
 systemd-tmpfiles --create \
     /usr/lib/tmpfiles.d/cloudless-browser.conf \
     /usr/lib/tmpfiles.d/cloudless-desktop.conf >/dev/null 2>&1 || true

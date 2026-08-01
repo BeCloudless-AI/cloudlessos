@@ -7,9 +7,16 @@ Cloudless recipes are machine-owned, editable launch profiles for specialized in
 They use the native `cloudless.recipe/v1` format and run through Cloudless itself; SparkRun or
 another third-party recipe runtime is not installed or required.
 
-Recipes are available from **Model Manager -> Recipes**. A user can create and inspect one locally
-or import an authenticated Cloudless profile. Only the authenticated profile can currently cross
-into Check and Run; both operations use the same Cloudless model lifecycle as the desktop.
+Recipes are available from **Model Manager -> Recipes**. The page separates **Runnable** profiles
+from **Drafts**. Runnable profiles are admitted by the installed Cloudless package or the
+constrained declarative container policy. Drafts can be created, imported, inspected, edited and
+removed, but arbitrary host-command drafts cannot cross into Validate or Run.
+
+“Cloudless reviewed” is deliberately literal and offline: the complete executable definition was
+inspected and tested by the Cloudless project, compiled into a Cloudless package, and authenticated
+by the archive signature installed on the machine. It is not an automatic scanner, a pending review
+request or a remote moderation service. Changing any executable field makes that saved definition a
+local draft immediately.
 
 ## What a recipe controls
 
@@ -29,9 +36,26 @@ recipes. The current `source-scripts-v1` adapter is executable only when the com
 exactly matches one authenticated inside the signed CloudlessOS package. Any edit removes that
 status and blocks both Check and Run before a process, image build or Docker operation begins.
 
-A constrained declarative runner is planned for user-authored recipes. Until it ships, saving and
-inspecting a custom recipe is supported, while executing it requires turning it into a reviewed
-Cloudless profile. A passing compatibility Check never promotes local code into a reviewed profile.
+The `managed-container-v1` constrained declarative runner is the executable path for compatible
+user-authored containers. It requires an immutable image and model, generates the complete command,
+uses a read-only root, denies host commands/mounts/capabilities and binds only the private inference
+port. Recipes that require arbitrary source scripts still need an exact signed compatibility
+profile. A passing validation never changes local code into a reviewed profile.
+
+## Install, validate and run
+
+A recipe being visible does not imply its weights are installed. The normal sequence is:
+
+1. Under **Runnable**, choose **Install model** when the exact model revision is absent. Cloudless
+   opens that model in Model Manager.
+2. After the download is complete, choose **Validate**. This checks the exact recipe revision,
+   runtime, architecture, capacity, ports, fabric and selected Spark topology without replacing the
+   active model.
+3. Choose **Run recipe** only after the current validation succeeds.
+
+Cloudless rejects direct Check/Run API requests when the exact model snapshot is incomplete. An
+`.incomplete` snapshot never counts as installed. Validation evidence is revision- and
+topology-specific; editing the recipe or changing selected Sparks requires validation again.
 
 ## Launch lifecycle
 
@@ -129,12 +153,27 @@ window becomes shorter, but the ownership protections remain unchanged. Read-onl
 manual cleanup pass are available through `GET /api/recipes/cache` and
 `POST /api/recipes/cache/cleanup`.
 
-## Check a recipe first
+## Validate a recipe first
 
-The **Check** action validates cluster size, topology, required tools and pinned source without
-downloading the model or replacing the active engine. A passing check means that the declared
-requirements are present; it is not a guarantee that an unverified upstream runtime will start or
-produce correct inference.
+The **Validate** action checks cluster size, topology, required tools, pinned source, immutable
+runtime image, storage, accelerator compatibility, ports, private fabric and stable API contract
+without replacing the active engine. It is available only for an executable recipe with its exact
+model revision installed. Passing validation means this signed/constrained profile is launchable on
+the current checked topology; it does not convert a Draft into executable code.
+
+### A recipe says Draft only
+
+Open the **Drafts** collection to edit or remove it. Cloudless will not execute arbitrary saved
+shell or Docker commands. To become a signed compatibility profile, its exact definition must be
+reviewed, tested, added to Cloudless source and delivered in an authenticated Cloudless package.
+There is no automatic background review process.
+
+### A previously reviewed recipe became a draft after an update
+
+Do not bypass the trust check. Confirm that the saved definition was not edited. Cloudless contains
+targeted migrations for exact known legacy built-in fields, such as the old MiaAI model-cache
+location; all other differences stay drafts intentionally. Remove and re-import the packaged
+profile if the local edits are not required.
 
 ## Troubleshooting
 
@@ -155,6 +194,14 @@ Open the recipe failure details and inspect the reported command and stderr. Con
 revision, image architecture, model revision, cluster size and health path. A recipe that needs a
 different CLI or API shape requires a dedicated reviewed adapter; changing the public Cloudless
 port or alias is not a compatible fix.
+
+### Cloudless is unloaded but accelerator memory is still occupied
+
+Open **Settings > Cloudless Doctor**. If a saved recipe's container is still running, Doctor shows
+**Orphaned inference runtime** and offers **Stop orphaned runtime**. This constrained repair removes
+only exact matched containers locally and on selected workers and preserves downloaded model files.
+If the repair still needs attention, save the operation details/support bundle: an unreachable
+worker or an unmatched process must be resolved before Cloudless can claim cleanup succeeded.
 
 ### The private health check passes but promotion fails
 

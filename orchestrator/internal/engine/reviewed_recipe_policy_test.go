@@ -116,6 +116,8 @@ func TestReviewedRecipeDockerArgumentsFailClosed(t *testing.T) {
 		{"run", "--rm", "-v", cacheRoot + ":/cache/huggingface", recipe.Engine.Image, "true"},
 		{"run", "--rm", "-v", tokenPath + ":" + HuggingFaceTokenContainerPath + ":ro", recipe.Engine.Image, "true"},
 		{"volume", "create", "cloudless-hf"},
+		{"run", "--rm", "--name", "cloudless-contract-probe-test", "--network", "host", "--ipc", "host", "--gpus", "all", "--ulimit", "memlock=-1", recipe.Engine.Image, "true"},
+		{"run", "--rm", "--name", "cloudless-nccl-probe-0-test", "--network", "host", "--ipc", "host", "--gpus", "all", "--ulimit", "memlock=-1", "--device", "/dev/infiniband:/dev/infiniband", recipe.Engine.Image, "true"},
 	}
 	for _, args := range allowed {
 		if err := authorizeReviewedDockerArgs(operation, checkout, stateDir, args); err != nil {
@@ -128,6 +130,8 @@ func TestReviewedRecipeDockerArgumentsFailClosed(t *testing.T) {
 		want string
 	}{
 		{[]string{"run", "--privileged", recipe.Engine.Image}, "forbidden"},
+		{[]string{"run", "--name", "cloudless-nccl-probe-test", "--device", "/dev/sda:/dev/sda", recipe.Engine.Image}, "device is not admitted"},
+		{[]string{"run", "--name", "cloudless-not-a-probe", "--ipc", "host", recipe.Engine.Image}, "runtime probe"},
 		{[]string{"run", "-v", "/:/host", recipe.Engine.Image}, "model storage"},
 		{[]string{"run", "-v", "/run/docker.sock:/run/docker.sock", recipe.Engine.Image}, "forbidden"},
 		{[]string{"run", "-v", tokenPath + ":/tmp/token:ro", recipe.Engine.Image}, "model storage"},

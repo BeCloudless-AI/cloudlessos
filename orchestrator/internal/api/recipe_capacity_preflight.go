@@ -17,6 +17,7 @@ import (
 const (
 	recipeCapacityMinimumReserve  int64 = 5 * 1024 * 1024 * 1024
 	recipeRegistryExpansionFactor int64 = 2
+	peerRecipeCapacityProbe             = `df -B1 --output=avail "$1" 2>/dev/null | tail -n 1`
 )
 
 type recipeCapacityRequirement struct {
@@ -115,9 +116,8 @@ func peerRecipeAvailableBytes(ctx context.Context, checkout string, env map[stri
 	if !strings.HasPrefix(home, "/home/") || strings.Contains(strings.TrimPrefix(home, "/home/"), "/") {
 		return 0, errors.New("peer checkout does not identify a safe home directory")
 	}
-	const probe = `df -PB1 --output=avail "$1" 2>/dev/null | tail -n 1`
 	output, err := recipeCommandOutput(recipeSSHCommand(ctx, checkout, env, peer,
-		"/bin/sh", "-c", probe, "cloudless-capacity", home))
+		"/bin/sh", "-c", peerRecipeCapacityProbe, "cloudless-capacity", home))
 	if err != nil {
 		return 0, err
 	}

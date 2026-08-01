@@ -15,6 +15,7 @@ type fakeExecutor struct {
 	mu      sync.Mutex
 	applied string
 	key     string
+	place   string
 }
 
 func (f *fakeExecutor) QueryDisplay(context.Context) (string, error) {
@@ -33,6 +34,12 @@ func (f *fakeExecutor) EmitKey(_ context.Context, action, value string) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.key = action + ":" + value
+	return nil
+}
+func (f *fakeExecutor) OpenPlace(_ context.Context, id string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.place = id
 	return nil
 }
 
@@ -58,7 +65,10 @@ func TestDesktopProtocolIsTypedAndRoundTrips(t *testing.T) {
 	if err := client.EmitKey(requestCtx, "text", "@"); err != nil {
 		t.Fatal(err)
 	}
-	if executor.applied != "DP-1:1920x1080" || executor.key != "text:@" {
+	if err := client.OpenPlace(requestCtx, "models"); err != nil {
+		t.Fatal(err)
+	}
+	if executor.applied != "DP-1:1920x1080" || executor.key != "text:@" || executor.place != "models" {
 		t.Fatalf("executor = %+v", executor)
 	}
 }
@@ -71,6 +81,8 @@ func TestDesktopRequestsFailClosed(t *testing.T) {
 		{Action: ActionDisplayApply, Output: "DP-1", Width: 0, Height: 1080},
 		{Action: ActionInputKey, KeyAction: "text", Value: "too long"},
 		{Action: ActionInputKey, KeyAction: "ctrl-alt-delete"},
+		{Action: ActionPlaceOpen, PlaceID: "../../etc"},
+		{Action: ActionPlaceOpen, PlaceID: "models", Value: "unrelated"},
 	}
 	for _, request := range rejected {
 		if err := request.Validate(); err == nil {

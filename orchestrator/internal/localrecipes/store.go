@@ -327,7 +327,24 @@ func recipeFromDraft(id, origin, trust, now string, draft Draft) Recipe {
 }
 
 func DraftFromRecipe(recipe Recipe) Draft {
+	// normalize updates nested maps for exact legacy migrations. Detach the
+	// value first so calculating an identity can never mutate a persisted
+	// operation snapshot supplied by the caller.
+	if payload, err := json.Marshal(recipe); err == nil {
+		var detached Recipe
+		if json.Unmarshal(payload, &detached) == nil {
+			recipe = detached
+		}
+	}
 	recipe = normalize(recipe)
+	return DraftFromSnapshot(recipe)
+}
+
+// DraftFromSnapshot returns the executable fields exactly as they were
+// persisted. Operation journals use this only to authenticate historical
+// snapshots created before a later normalizer migration. New recipe identity
+// must continue to use DraftFromRecipe.
+func DraftFromSnapshot(recipe Recipe) Draft {
 	return Draft{Name: recipe.Name, Description: recipe.Description, Platform: recipe.Platform, Source: recipe.Source,
 		Engine: recipe.Engine, Model: recipe.Model, Distributed: recipe.Distributed, Runtime: recipe.Runtime, Health: recipe.Health}
 }
@@ -420,6 +437,13 @@ func normalize(recipe Recipe) Recipe {
 	// Letting vLLM discover an incomplete snapshot during startup hides hundreds
 	// of gigabytes of Internet transfer behind a misleading "launching" state.
 	if recipe.Source.URL == DeepSeekV4Flash1MSource && recipe.Source.Revision == DeepSeekV4Flash1MRevision {
+		// Releases before 0.2.7 stored the Hugging Face cache under a Docker
+		// volume name. The reviewed profile now uses Cloudless' durable host
+		// model cache. Migrate only that exact legacy value; all other edits
+		// remain local customizations and therefore stay unreviewed.
+		if recipe.ID == DeepSeekV4Flash1MID && recipe.Origin == "github" && recipe.Trust == "reviewed-import" && recipe.Runtime.Environment["HF_CACHE"] == "cloudless-hf" {
+			recipe.Runtime.Environment["HF_CACHE"] = "/var/lib/cloudless/models-cache"
+		}
 		recipe.Runtime.DownloadOnce = true
 		recipe.Runtime.Lifecycle.Download = command("bash", "./prepare-deepseek-v4-flash-model.sh")
 		recipe.Health.TimeoutSeconds = 7200

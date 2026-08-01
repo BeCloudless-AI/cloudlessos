@@ -55,9 +55,9 @@ func TestEmbeddedWebRecipeActionsKeepDestructiveControlReadable(t *testing.T) {
 	}
 	web := string(content)
 	for _, want := range []string{
-		".recipe-actions { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 7px; }",
+		".recipe-actions { width: 100%; display: grid; gap: 8px; }",
+		".recipe-secondary-actions { display: grid; grid-template-columns: repeat(auto-fit,minmax(76px,1fr)); gap: 7px; }",
 		".recipe-actions .recipe-primary-action { grid-column: 1 / -1;",
-		".recipe-actions .recipe-remove { grid-column: 2; }",
 	} {
 		if !strings.Contains(web, want) {
 			t.Fatalf("embedded recipe action layout is missing %q", want)

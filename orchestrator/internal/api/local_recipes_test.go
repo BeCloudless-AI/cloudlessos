@@ -686,12 +686,11 @@ func TestRecipeUIUsesRecipesIconAndCloudlessSourceViewer(t *testing.T) {
 		`${uiIcon('recipes')}<span>Recipes</span>`,
 		`<h3>Recipe Library</h3>`,
 		`.recipe-actions .btn`,
-		`.recipe-actions { display: grid; grid-template-columns: repeat(2,minmax(0,1fr));`,
-		`.recipe-actions .recipe-remove { grid-column: 2; }`,
+		`.recipe-secondary-actions { display: grid; grid-template-columns: repeat(auto-fit,minmax(76px,1fr));`,
 		`function recipeGitHubURL(value)`,
 		`function recipeImportRequest(sourceValue)`,
 		`function openRecipeImport()`,
-		`let mmRecipeView = { q: '', source: 'all', sparks: 'all', status: 'all', sort: 'updated', page: 1, perPage: 6 }`,
+		`let mmRecipeView = { library: 'supported', q: '', source: 'all', sparks: 'all', status: 'all', sort: 'updated', page: 1, perPage: 6 }`,
 		`function recipeMatchesView(recipe, data)`,
 		`function recipeConnectedSparks(data)`,
 		`function recipeNeedsMoreSparks(recipe, data)`,
@@ -710,8 +709,14 @@ func TestRecipeUIUsesRecipesIconAndCloudlessSourceViewer(t *testing.T) {
 		`.recipe-primary-action`,
 		`/api/recipes/import/preview`,
 		`<span>Import recipe</span>`,
-		`<span>Check</span>`,
+		`<span>Validate again</span>`,
+		`!validated ? '<button class="btn primary recipe-primary-action" type="button" data-recipe-check=`,
+		`id="recipe-show-supported"`,
+		`id="recipe-show-drafts"`,
 		`trust.executionAllowed === true`,
+		`data-recipe-install-model`,
+		`recipeModelInstalled(recipe, data)`,
+		`recipeValidated(recipe, data)`,
 		`Execution blocked`,
 		`'/api/recipes/' + encodeURIComponent(id) + '/check'`,
 		"`https://github.com/${path}`",
@@ -730,6 +735,9 @@ func TestRecipeUIUsesRecipesIconAndCloudlessSourceViewer(t *testing.T) {
 	}
 	if strings.Contains(page, `${uiIcon('workflows')}<span>Local recipes</span>`) {
 		t.Fatal("recipe tab still uses the missing workflows icon or old name")
+	}
+	if strings.Contains(page, `<span>Validate first</span>`) {
+		t.Fatal("recipe card still renders a duplicate disabled validation action")
 	}
 	if strings.Contains(page, "Recipe templates") || strings.Contains(page, "Built-in template") {
 		t.Fatal("recipe editor still exposes the removed template workflow")
@@ -755,6 +763,8 @@ func TestRecipeUIFiltersSortsAndPaginatesRenderedCollection(t *testing.T) {
 		`Math.ceil(total / mmRecipeView.perPage)`,
 		`filtered.slice(start, start + mmRecipeView.perPage)`,
 		`view.source !== 'all'`,
+		`view.library === 'supported' && !executable`,
+		`view.library === 'drafts' && executable`,
 		`view.sparks !== 'all' && nodes !== Number(view.sparks)`,
 		`recipeNeedsMoreSparks(recipe, data)`,
 		`recipeSparkFilterOptions(recipes,data)`,
@@ -823,7 +833,7 @@ func TestRecipeCardsExposeDurablePreflightEvidence(t *testing.T) {
 		`operation.phase==='prepared'`,
 		`operation.recipeRevision===revision`,
 		`function recipePreflightHTML(recipe, data)`,
-		`Not checked for this recipe revision`,
+		`Not validated on this Spark`,
 		`Launch evidence verified`,
 		`Requirements checked with warnings`,
 		`recipePreflightHTML(recipe,data)`,
@@ -895,7 +905,7 @@ func TestRecipeManagerOnlyShowsLocalLibrary(t *testing.T) {
 	for _, want := range []string{
 		`function recipeLibraryHeaderHTML(local)`,
 		`<h3>Recipe Library</h3>`,
-		`Manage inference recipes saved on this machine.`,
+		`Only recipes Cloudless can execute appear in the library.`,
 		`paintLocalRecipes(c, mmRecipes)`,
 	} {
 		if !strings.Contains(page, want) {

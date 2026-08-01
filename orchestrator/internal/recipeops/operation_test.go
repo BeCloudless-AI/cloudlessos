@@ -1,6 +1,7 @@
 package recipeops
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"strings"
@@ -719,6 +720,44 @@ func TestOpenRejectsCorruptStore(t *testing.T) {
 	}
 	if _, err := Open(dir); err == nil {
 		t.Fatal("corrupt operation store was accepted")
+	}
+}
+
+func TestOpenAcceptsAuthenticHistoricalSnapshotAfterNormalizerMigration(t *testing.T) {
+	dir := t.TempDir()
+	path := dir + "/recipe-operations/index.json"
+	if err := os.MkdirAll(dir+"/recipe-operations", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	recipe := testRecipe()
+	recipe.Engine.ServedModelName = "legacy-model-name"
+	recipe.Engine.RestartPolicy = "unless-stopped"
+	revision, err := snapshotRecipeRevision(recipe)
+	if err != nil {
+		t.Fatal(err)
+	}
+	operation := Operation{
+		ID: "rop-legacy", Kind: KindStop, RecipeID: recipe.ID, RecipeRevision: revision,
+		RecipeSnapshot: recipe, Phase: PhaseFailed, Sequence: 2,
+		CreatedAt: time.Now().UTC().Format(time.RFC3339Nano), UpdatedAt: time.Now().UTC().Format(time.RFC3339Nano),
+	}
+	payload, err := json.Marshal(document{Version: documentVersion, Operations: map[string]Operation{operation.ID: operation}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, payload, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Open(dir); err != nil {
+		t.Fatalf("authentic historical snapshot was rejected: %v", err)
+	}
+	operation.RecipeRevision = "sha256:" + strings.Repeat("0", 64)
+	payload, _ = json.Marshal(document{Version: documentVersion, Operations: map[string]Operation{operation.ID: operation}})
+	if err := os.WriteFile(path, payload, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Open(dir); err == nil {
+		t.Fatal("forged historical snapshot revision was accepted")
 	}
 }
 

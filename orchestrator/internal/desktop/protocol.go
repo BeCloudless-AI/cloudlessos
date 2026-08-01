@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -22,6 +23,7 @@ const (
 	ActionDisplayQuery Action = "display.query"
 	ActionDisplayApply Action = "display.apply"
 	ActionInputKey     Action = "input.key"
+	ActionPlaceOpen    Action = "place.open"
 )
 
 var outputNamePattern = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,64}$`)
@@ -33,6 +35,7 @@ type Request struct {
 	Height    int    `json:"height,omitempty"`
 	KeyAction string `json:"keyAction,omitempty"`
 	Value     string `json:"value,omitempty"`
+	PlaceID   string `json:"placeId,omitempty"`
 }
 
 type Response struct {
@@ -44,6 +47,7 @@ type Executor interface {
 	QueryDisplay(context.Context) (string, error)
 	ApplyDisplay(context.Context, string, int, int) error
 	EmitKey(context.Context, string, string) error
+	OpenPlace(context.Context, string) error
 }
 
 type Authorizer func(net.Conn) error
@@ -51,7 +55,7 @@ type Authorizer func(net.Conn) error
 func (r Request) Validate() error {
 	switch r.Action {
 	case ActionDisplayQuery:
-		if r.Output != "" || r.Width != 0 || r.Height != 0 || r.KeyAction != "" || r.Value != "" {
+		if r.Output != "" || r.Width != 0 || r.Height != 0 || r.KeyAction != "" || r.Value != "" || r.PlaceID != "" {
 			return errors.New("display query does not accept parameters")
 		}
 	case ActionDisplayApply:
@@ -61,20 +65,48 @@ func (r Request) Validate() error {
 		if r.Width < 320 || r.Width > 16384 || r.Height < 200 || r.Height > 16384 {
 			return errors.New("display dimensions are invalid")
 		}
-		if r.KeyAction != "" || r.Value != "" {
+		if r.KeyAction != "" || r.Value != "" || r.PlaceID != "" {
 			return errors.New("display change contains unrelated parameters")
 		}
 	case ActionInputKey:
-		if r.Output != "" || r.Width != 0 || r.Height != 0 {
+		if r.Output != "" || r.Width != 0 || r.Height != 0 || r.PlaceID != "" {
 			return errors.New("input request contains unrelated parameters")
 		}
 		if err := validateKey(r.KeyAction, r.Value); err != nil {
+			return err
+		}
+	case ActionPlaceOpen:
+		if r.Output != "" || r.Width != 0 || r.Height != 0 || r.KeyAction != "" || r.Value != "" {
+			return errors.New("place request contains unrelated parameters")
+		}
+		if _, err := PlacePath("/home/cloudless", r.PlaceID); err != nil {
 			return err
 		}
 	default:
 		return errors.New("desktop action is not admitted")
 	}
 	return nil
+}
+
+// PlacePath maps the small, typed Places API to folders owned by the desktop
+// user. The desktop agent never accepts an arbitrary filesystem path.
+func PlacePath(home, id string) (string, error) {
+	home = filepath.Clean(strings.TrimSpace(home))
+	if !filepath.IsAbs(home) || home == string(filepath.Separator) {
+		return "", errors.New("desktop home is invalid")
+	}
+	switch id {
+	case "models":
+		return filepath.Join(home, "Cloudless", "Models"), nil
+	case "outputs":
+		return filepath.Join(home, "Cloudless", "Outputs"), nil
+	case "workspace":
+		return filepath.Join(home, "Cloudless", "Workspace"), nil
+	case "downloads":
+		return filepath.Join(home, "Downloads"), nil
+	default:
+		return "", errors.New("desktop place is not admitted")
+	}
 }
 
 func validateKey(action, value string) error {
@@ -113,6 +145,11 @@ func (c *Client) ApplyDisplay(ctx context.Context, output string, width, height 
 
 func (c *Client) EmitKey(ctx context.Context, action, value string) error {
 	_, err := c.call(ctx, Request{Action: ActionInputKey, KeyAction: action, Value: value})
+	return err
+}
+
+func (c *Client) OpenPlace(ctx context.Context, id string) error {
+	_, err := c.call(ctx, Request{Action: ActionPlaceOpen, PlaceID: id})
 	return err
 }
 
@@ -204,6 +241,8 @@ func serveConnection(ctx context.Context, connection net.Conn, authorize Authori
 		err = executor.ApplyDisplay(ctx, request.Output, request.Width, request.Height)
 	case ActionInputKey:
 		err = executor.EmitKey(ctx, request.KeyAction, request.Value)
+	case ActionPlaceOpen:
+		err = executor.OpenPlace(ctx, request.PlaceID)
 	}
 	if err != nil {
 		response.Error = err.Error()

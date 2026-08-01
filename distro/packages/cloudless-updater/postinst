@@ -2,8 +2,20 @@
 set -e
 install -d -m 0755 /var/lib/cloudless-updater
 install -d -m 0700 /var/lib/cloudless-updater/current /var/lib/cloudless-updater/rollback
+if [ -e /var/lib/cloudless-updater/status.json ]; then
+    chmod 0644 /var/lib/cloudless-updater/status.json
+fi
 if [ ! -s /etc/cloudless/update-channel ]; then
     printf '%s\n' stable > /etc/cloudless/update-channel
+fi
+channel=$(tr -d '[:space:]' < /etc/cloudless/update-channel)
+case "$channel" in
+    stable|beta) ;;
+    *) channel=stable; printf '%s\n' "$channel" > /etc/cloudless/update-channel ;;
+esac
+chmod 0644 /etc/cloudless/update-channel
+if [ -f /etc/apt/sources.list.d/cloudless.sources ]; then
+    sed -i "s/^Suites:.*/Suites: $channel/" /etc/apt/sources.list.d/cloudless.sources
 fi
 systemctl daemon-reload >/dev/null 2>&1 || true
 systemctl enable cloudless-update-check.timer >/dev/null 2>&1 || true

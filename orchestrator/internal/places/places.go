@@ -3,12 +3,15 @@
 package places
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"os/user"
 	"path/filepath"
-	"strconv"
+	"time"
+
+	"github.com/cloudless/orchestrator/internal/desktop"
 )
 
 // Place is a well-known folder.
@@ -84,65 +87,20 @@ func Get(id string) (Place, bool) {
 // session. Installed CloudlessOS systems set CLOUDLESS_DESKTOP_USER; local
 // development environments retain the conventional xdg-open fallback.
 func Open(p Place) error {
+	if desktopUser := os.Getenv("CLOUDLESS_DESKTOP_USER"); desktopUser != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+		defer cancel()
+		if err := desktop.NewClient().OpenPlace(ctx, p.ID); err != nil {
+			return fmt.Errorf("open folder in desktop session: %w", err)
+		}
+		return nil
+	}
 	if err := os.MkdirAll(p.Path, 0o755); err != nil {
 		return err
-	}
-	if desktopUser := os.Getenv("CLOUDLESS_DESKTOP_USER"); desktopUser != "" {
-		return openForDesktopUser(desktopUser, p.Path)
 	}
 	bin, err := exec.LookPath("xdg-open")
 	if err != nil {
 		return fmt.Errorf("no file manager available (xdg-open not found)")
 	}
 	return exec.Command(bin, p.Path).Start()
-}
-
-func openForDesktopUser(name, path string) error {
-	u, err := user.Lookup(name)
-	if err != nil {
-		return fmt.Errorf("desktop user %q not found: %w", name, err)
-	}
-	uid, err := strconv.Atoi(u.Uid)
-	if err != nil {
-		return fmt.Errorf("invalid uid for desktop user %q: %w", name, err)
-	}
-	gid, err := strconv.Atoi(u.Gid)
-	if err != nil {
-		return fmt.Errorf("invalid gid for desktop user %q: %w", name, err)
-	}
-	if err := os.Chown(path, uid, gid); err != nil {
-		return fmt.Errorf("give desktop user access to folder: %w", err)
-	}
-
-	runner, err := exec.LookPath("systemd-run")
-	if err != nil {
-		return fmt.Errorf("graphical launcher unavailable (systemd-run not found)")
-	}
-	fileManager, err := exec.LookPath("pcmanfm")
-	if err != nil {
-		return fmt.Errorf("file manager unavailable (pcmanfm not found)")
-	}
-
-	display := os.Getenv("CLOUDLESS_DISPLAY")
-	if display == "" {
-		display = ":0"
-	}
-	args := desktopRunArgs(u, display, fileManager, path)
-	if out, err := exec.Command(runner, args...).CombinedOutput(); err != nil {
-		return fmt.Errorf("launch file manager: %w: %s", err, out)
-	}
-	return nil
-}
-
-func desktopRunArgs(u *user.User, display, fileManager, path string) []string {
-	runtimeDir := filepath.Join("/run/user", u.Uid)
-	return []string{
-		"--quiet", "--collect", "--property=Type=exec", "--uid=" + u.Username,
-		"--setenv=HOME=" + u.HomeDir,
-		"--setenv=DISPLAY=" + display,
-		"--setenv=XAUTHORITY=" + filepath.Join(u.HomeDir, ".Xauthority"),
-		"--setenv=XDG_RUNTIME_DIR=" + runtimeDir,
-		"--setenv=DBUS_SESSION_BUS_ADDRESS=unix:path=" + filepath.Join(runtimeDir, "bus"),
-		fileManager, "--no-desktop", "--new-win", path,
-	}
 }

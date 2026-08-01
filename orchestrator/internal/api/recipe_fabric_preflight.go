@@ -138,9 +138,11 @@ func recipeNCCLProbeArgs(image string, rank, world int, env map[string]string) [
 		name += "-" + operation[:8]
 	}
 	args := []string{"docker", "run", "--rm", "--name", name, "--network", "host", "--ipc", "host", "--gpus", "all", "--ulimit", "memlock=-1",
+		"--device", "/dev/infiniband:/dev/infiniband",
 		"-e", "MASTER_ADDR=" + env["MASTER_ADDR"], "-e", "MASTER_PORT=" + env["MASTER_PORT"],
 		"-e", "WORLD_SIZE=" + strconv.Itoa(world), "-e", "RANK=" + strconv.Itoa(rank),
-		"-e", "NCCL_DEBUG=WARN"}
+		"-e", "NCCL_DEBUG=WARN", "-e", "NCCL_NET=IB", "-e", "NCCL_IB_DISABLE=0",
+		"-e", "NCCL_CROSS_NIC=0", "-e", "NCCL_CUMEM_ENABLE=0", "-e", "NCCL_IGNORE_CPU_AFFINITY=1"}
 	for _, key := range []string{"NCCL_SOCKET_IFNAME", "NCCL_IB_HCA", "NCCL_IB_GID_INDEX"} {
 		if value := strings.TrimSpace(env[key]); value != "" {
 			args = append(args, "-e", key+"="+value)

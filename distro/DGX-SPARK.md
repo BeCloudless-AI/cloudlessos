@@ -83,8 +83,8 @@ does not divert `/usr/lib/os-release` on a Spark.
 
 ## Connect two to eight DGX Sparks
 
-CloudlessOS includes a Spark-only guided setup under **Settings > Spark
-Cluster**. Add one Spark at a time through the three guided screens:
+CloudlessOS includes a Spark-only guided setup under **Settings > DGX Spark > Spark cluster**.
+Add one Spark at a time through the three guided screens:
 
 1. Find or enter the other Spark.
 2. Confirm the cable and run the readiness check.
@@ -173,9 +173,9 @@ runtime is installed or required.
 
 Recipe preparation continues in the background when Model Manager is closed. For multi-Spark
 recipes, `buildOnce` and `downloadOnce` prepare data on the coordinator and copy missing runtime or
-model data to peers over the private SSH link. The current model-cache check requires the exact
-snapshot and matching whole-repository directory size; a partial or mismatched peer cache is
-replaced with a complete tar-stream copy rather than resumed. See
+model data to peers over the private SSH link. A per-file content manifest retains verified files,
+resumes missing/invalid content in durable staging and promotes the snapshot only after its complete
+cryptographic manifest matches. See
 [`../docs/LOCAL_RECIPES.md`](../docs/LOCAL_RECIPES.md) for the lifecycle and current limitations.
 
 The private engine identity remains `cloudless-ai:8000` with model name `cloudless`. API clients

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/cloudless/orchestrator/internal/engine"
+	"github.com/cloudless/orchestrator/internal/localrecipes"
 	"github.com/cloudless/orchestrator/internal/securityaudit"
 	"github.com/cloudless/orchestrator/internal/sparkcluster"
 	"github.com/cloudless/orchestrator/internal/state"
@@ -85,6 +86,39 @@ func TestDoctorRespectsIntentionalModelUnload(t *testing.T) {
 		if check.ID == "app-vllm" && check.Status == "fail" {
 			t.Fatal("intentionally unloaded engine was reported as failed")
 		}
+	}
+}
+
+func TestOrphanedRecipeRuntimeOffersDistributedStopRepair(t *testing.T) {
+	recipe := localrecipes.Recipe{
+		ID: "deepseek-dual", Name: "DeepSeek Dual Spark",
+		Engine: localrecipes.Engine{Image: "example/deepseek:reviewed"},
+	}
+	report := AddOrphanedRecipeChecks(
+		Report{Overall: "healthy"},
+		state.State{EngineUnloaded: true},
+		[]engine.Container{{Name: "deepseek-dual-vllm-1", Image: recipe.Engine.Image, State: "running"}},
+		[]localrecipes.Recipe{recipe},
+	)
+	if report.Overall != "needs-attention" || len(report.Checks) != 1 {
+		t.Fatalf("orphaned runtime report = %#v", report)
+	}
+	check, repair := report.Checks[0], report.Repairs[report.Checks[0].ID]
+	if repair.Action != "stop-orphaned-recipe" || repair.Target != recipe.ID || check.Status != "fail" {
+		t.Fatalf("orphaned runtime repair = %#v, %#v", check, repair)
+	}
+}
+
+func TestRunningRecipeIsNotOrphanedWhileCloudlessOwnsIt(t *testing.T) {
+	recipe := localrecipes.Recipe{ID: "owned", Engine: localrecipes.Engine{Image: "example/owned:1"}}
+	report := AddOrphanedRecipeChecks(
+		Report{Overall: "healthy"},
+		state.State{EngineUnloaded: false},
+		[]engine.Container{{Name: "owned-vllm-1", Image: recipe.Engine.Image, State: "running"}},
+		[]localrecipes.Recipe{recipe},
+	)
+	if len(report.Checks) != 0 || report.Overall != "healthy" {
+		t.Fatalf("owned runtime was reported as orphaned: %#v", report)
 	}
 }
 

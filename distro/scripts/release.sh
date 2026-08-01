@@ -3,6 +3,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "$ROOT/distro/scripts/release-version.sh"
 VERSION="${1:-}"
 CHANNEL="${2:-stable}"
 source "$ROOT/distro/scripts/release-env.sh"
@@ -14,7 +15,10 @@ usage() {
 }
 [ -n "$VERSION" ] || { usage; exit 2; }
 case "$CHANNEL" in stable|beta) ;; *) usage; exit 2 ;; esac
-[[ "$VERSION" != *dev* ]] || { echo "Development versions cannot be published." >&2; exit 2; }
+cloudless_is_release_version "$VERSION" || {
+    echo "Release version must be X.Y.Z or X.Y.Z-N (for example 0.2.7-1)." >&2
+    exit 2
+}
 
 for command in docker find git gpg python3 realpath sort; do
     command -v "$command" >/dev/null || { echo "Missing required command: $command" >&2; exit 1; }
@@ -27,8 +31,12 @@ test -s "$SECRET_KEY" || { echo "Signing-key backup not found: $SECRET_KEY" >&2;
 bash "$ROOT/distro/scripts/release-preflight.sh" "$ROOT" "$VERSION" "$CHANNEL" "$SECRET_KEY"
 
 source_version="$(tr -d '[:space:]' < "$ROOT/distro/VERSION")"
-[ "${source_version%-dev}" = "$VERSION" ] || {
-    echo "distro/VERSION is $source_version; expected $VERSION or $VERSION-dev." >&2
+cloudless_is_source_version "$source_version" || {
+    echo "distro/VERSION is malformed: $source_version" >&2
+    exit 1
+}
+[ "$(cloudless_release_version_from_source "$source_version")" = "$VERSION" ] || {
+    echo "distro/VERSION is $source_version; expected $VERSION or $VERSION~dev." >&2
     exit 1
 }
 test -s "$ROOT/distro/release/notes/$VERSION.json" || {

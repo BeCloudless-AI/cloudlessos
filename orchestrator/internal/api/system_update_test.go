@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"net/http"
 	"net/http/httptest"
@@ -75,6 +76,49 @@ func TestSystemUpdateActionsUsePrivilegedBroker(t *testing.T) {
 	}
 }
 
+func TestSystemUpdateChannelRequiresConfirmationAndNamedChannel(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		header string
+		body   string
+	}{
+		{"confirmation", "", `{"channel":"beta"}`},
+		{"channel", "update-channel", `{"channel":"nightly"}`},
+		{"unknown field", "update-channel", `{"channel":"beta","command":"reboot"}`},
+		{"trailing document", "update-channel", `{"channel":"beta"}{"channel":"stable"}`},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "/api/system/update/channel", bytes.NewBufferString(tt.body))
+			req.Header.Set("X-Cloudless-Action", tt.header)
+			rec := httptest.NewRecorder()
+			(&Server{}).systemUpdateChannel(rec, req)
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+			}
+		})
+	}
+}
+
+func TestSystemUpdateChannelUsesTypedPrivilegedBroker(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CLOUDLESS_UPDATE_CHANNEL_PATH", filepath.Join(dir, "update-channel"))
+	called := false
+	server := &Server{privilegedValue: func(_ context.Context, action privileged.Action, value string) error {
+		called = true
+		if action != privileged.ActionSystemUpdateChannel || value != "beta" {
+			t.Fatalf("action=%q value=%q", action, value)
+		}
+		return nil
+	}}
+	req := httptest.NewRequest(http.MethodPost, "/api/system/update/channel", bytes.NewBufferString(`{"channel":"beta"}`))
+	req.Header.Set("X-Cloudless-Action", "update-channel")
+	rec := httptest.NewRecorder()
+	server.systemUpdateChannel(rec, req)
+	if rec.Code != http.StatusAccepted || !called {
+		t.Fatalf("status=%d called=%v body=%s", rec.Code, called, rec.Body.String())
+	}
+}
+
 func TestEmbeddedSystemUpdateUIKeepsTruthfulLifecycleStates(t *testing.T) {
 	payload, err := webFS.ReadFile("web/index.html")
 	if err != nil {
@@ -89,6 +133,9 @@ func TestEmbeddedSystemUpdateUIKeepsTruthfulLifecycleStates(t *testing.T) {
 		"Installing verified update",
 		"openCloudlessDecision({",
 		"updateQualificationNote(update)",
+		"Switch to the ${switchingToBeta ? 'Beta' : 'Stable'} channel?",
+		"This does not downgrade the version already installed.",
+		"/api/system/update/channel",
 	} {
 		if !strings.Contains(source, contract) {
 			t.Fatalf("embedded update UI is missing contract %q", contract)

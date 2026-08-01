@@ -6,19 +6,25 @@ import (
 	"fmt"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/cloudless/orchestrator/internal/localrecipes"
 	"github.com/cloudless/orchestrator/internal/recipeops"
 	"github.com/cloudless/orchestrator/internal/sparkcluster"
 )
 
+type recipeModelEvidence struct {
+	Manifest    recipeArtifactManifest
+	PeerDigests map[string]string
+}
+
 // revalidateRecipeBeforeSwitch repeats every identity or availability check
 // that can become stale during a long build/download. It runs while the current
 // Cloudless model is still available and therefore fails without causing an
 // outage.
-func (s *Server) revalidateRecipeBeforeSwitch(ctx context.Context, recipe localrecipes.Recipe, operation recipeops.Operation, checkout string, env map[string]string) error {
+func (s *Server) revalidateRecipeBeforeSwitch(ctx context.Context, recipe localrecipes.Recipe, operation recipeops.Operation, checkout string, env map[string]string, modelEvidence recipeModelEvidence) error {
 	if s.recipeRevalidate != nil {
-		return s.recipeRevalidate(ctx, recipe, operation, checkout, env)
+		return s.recipeRevalidate(ctx, recipe, operation, checkout, env, modelEvidence)
 	}
 	if operation.Preflight == nil || !operation.Preflight.Runnable {
 		return recipeops.ErrPreflightRequired
@@ -57,7 +63,11 @@ func (s *Server) revalidateRecipeBeforeSwitch(ctx context.Context, recipe localr
 	}
 
 	var image recipeImagePreflight
-	if recipe.Runtime.Lifecycle.Build.Program != "" {
+	preparedReference := strings.TrimSpace(operation.PreparedImageReference)
+	preparedDigest := strings.ToLower(strings.TrimSpace(operation.PreparedImageDigest))
+	if preparedReference != "" {
+		image, err = inspectLocalRecipeImage(ctx, s.eng, preparedReference)
+	} else if recipe.Runtime.Lifecycle.Build.Program != "" {
 		image, err = inspectLocalRecipeImage(ctx, s.eng, recipe.Engine.Image)
 	} else {
 		image, err = inspectRecipeRegistryImage(ctx, s.eng, recipe.Engine.Image)
@@ -68,18 +78,31 @@ func (s *Server) revalidateRecipeBeforeSwitch(ctx context.Context, recipe localr
 	if expected := operation.Preflight.ImageDigest; expected != "" && image.Digest != expected {
 		return fmt.Errorf("inference image changed after Check: checked %s, prepared %s", expected, image.Digest)
 	}
+	attestedImageDigest := image.Digest
+	if preparedReference != "" {
+		if !recipeImageDigestPattern.MatchString(preparedDigest) || image.LocalID != preparedDigest {
+			return fmt.Errorf("prepared local image changed after preparation: expected %s, found %s", preparedDigest, image.LocalID)
+		}
+		attestedImageDigest = preparedDigest
+	}
 	if recipe.Distributed.Nodes > 1 && recipe.Runtime.Lifecycle.Build.Program == "" {
 		peers, peerErr := recipeDistributionPeers(recipe, currentCluster, env)
 		if peerErr != nil {
 			return peerErr
 		}
 		for _, peer := range peers {
-			digest, digestErr := inspectPeerRecipeRegistryDigest(ctx, checkout, env, peer, recipe.Engine.Image)
+			var digest string
+			var digestErr error
+			if preparedReference != "" {
+				digest, digestErr = inspectPeerRecipeLocalImageDigest(ctx, checkout, env, peer, preparedReference)
+			} else {
+				digest, digestErr = inspectPeerRecipeRegistryDigest(ctx, checkout, env, peer, recipe.Engine.Image)
+			}
 			if digestErr != nil {
 				return digestErr
 			}
-			if digest != image.Digest {
-				return fmt.Errorf("%s resolves image %s while the coordinator resolves %s", peer.Name, digest, image.Digest)
+			if digest != attestedImageDigest {
+				return fmt.Errorf("%s resolves image %s while the coordinator resolves %s", peer.Name, digest, attestedImageDigest)
 			}
 		}
 	}
@@ -93,32 +116,27 @@ func (s *Server) revalidateRecipeBeforeSwitch(ctx context.Context, recipe localr
 	if _, err := s.probePreparedRecipeContract(ctx, operation.ID, checkout, workdir, env, recipe, recipe.Engine.Image); err != nil {
 		return fmt.Errorf("runtime API contract changed after Check: %w", err)
 	}
-	jobManifest, err := verifyRecipeModelCache(ctx, s.eng, recipe)
+	jobManifest, err := inspectRecipeModelManifest(ctx, s.eng, recipe)
 	if err != nil {
 		return fmt.Errorf("prepared model integrity changed before switch: %w", err)
+	}
+	if modelEvidence.Manifest.ModelID != recipe.Model.ID || modelEvidence.Manifest.Revision != recipe.Model.Revision ||
+		modelEvidence.Manifest.Digest != jobManifest.Digest || modelEvidence.Manifest.Bytes != jobManifest.Bytes ||
+		len(modelEvidence.Manifest.Files) != len(jobManifest.Files) {
+		return errors.New("prepared model evidence no longer matches the verified snapshot")
 	}
 	if recipe.Distributed.Nodes > 1 {
 		peers, peerErr := recipeDistributionPeers(recipe, currentCluster, env)
 		if peerErr != nil {
 			return peerErr
 		}
-		volume, volumeErr := recipeCacheVolume(recipe)
-		if volumeErr != nil {
-			return volumeErr
-		}
-		cacheName, mapped := modelCacheName(recipe.Model.ID)
-		if !mapped {
-			return errors.New("recipe model ID cannot be mapped to a Hugging Face cache")
-		}
-		relative := filepath.ToSlash(filepath.Join("hub", cacheName))
 		for _, peer := range peers {
-			digest, digestErr := recipeSnapshotSignature(ctx, checkout, env, &peer, recipe.Engine.Image, volume, relative, recipe.Model.Revision)
-			if digestErr != nil || digest != jobManifest.Digest {
+			if digest := modelEvidence.PeerDigests[peer.Name]; digest != jobManifest.Digest {
 				return fmt.Errorf("prepared model integrity on %s changed before switch", peer.Name)
 			}
 		}
 	}
-	attestations, err := attestRecipeNodes(ctx, recipe, operation, currentCluster, checkout, env, image.Digest, jobManifest.Digest)
+	attestations, err := attestRecipeNodes(ctx, recipe, operation, currentCluster, checkout, env, attestedImageDigest, jobManifest.Digest)
 	if err != nil {
 		return fmt.Errorf("node consistency attestation failed: %w", err)
 	}

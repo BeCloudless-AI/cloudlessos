@@ -69,7 +69,83 @@ func Channel() string {
 	if err != nil || strings.TrimSpace(string(b)) == "" {
 		return "stable"
 	}
-	return strings.TrimSpace(string(b))
+	channel := strings.TrimSpace(string(b))
+	if !ValidChannel(channel) {
+		return "stable"
+	}
+	return channel
+}
+
+func ValidChannel(channel string) bool {
+	return channel == "stable" || channel == "beta"
+}
+
+// SetChannel changes both the administrator-visible channel and the APT suite.
+// Keeping those files in one operation prevents the UI and package manager from
+// silently following different release streams.
+func SetChannel(channel string) error {
+	if !ValidChannel(channel) {
+		return errors.New("update channel must be stable or beta")
+	}
+	sourcePath := SourcesPath()
+	sources, err := os.ReadFile(sourcePath)
+	if err != nil {
+		return err
+	}
+	lines := strings.Split(string(sources), "\n")
+	found := 0
+	for index, line := range lines {
+		if strings.HasPrefix(strings.TrimSpace(line), "Suites:") {
+			lines[index] = "Suites: " + channel
+			found++
+		}
+	}
+	if found != 1 {
+		return errors.New("Cloudless APT source must contain exactly one Suites field")
+	}
+	if err := atomicWrite(sourcePath, []byte(strings.Join(lines, "\n")), 0o644); err != nil {
+		return err
+	}
+	if err := atomicWrite(ChannelPath(), []byte(channel+"\n"), 0o644); err != nil {
+		_ = atomicWrite(sourcePath, sources, 0o644)
+		return err
+	}
+	return nil
+}
+
+func SourcesPath() string {
+	if path := os.Getenv("CLOUDLESS_UPDATE_SOURCES_PATH"); path != "" {
+		return path
+	}
+	return sourcesPath
+}
+
+func atomicWrite(path string, contents []byte, mode os.FileMode) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".cloudless-update-*")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	defer os.Remove(tmpPath)
+	if err := tmp.Chmod(mode); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if _, err := tmp.Write(contents); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmpPath, path)
 }
 
 func ChannelPath() string {
@@ -83,7 +159,7 @@ func Configured() bool {
 	if _, err := os.Stat(keyringPath); err != nil {
 		return false
 	}
-	b, err := os.ReadFile(sourcesPath)
+	b, err := os.ReadFile(SourcesPath())
 	if err != nil {
 		return false
 	}
@@ -127,6 +203,14 @@ func Write(status Status) error {
 	}
 	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, append(b, '\n'), 0o644); err != nil {
+		return err
+	}
+	// Update services intentionally use a restrictive umask for their private
+	// staging data. The status document is the narrow, non-secret handoff to
+	// the unprivileged UI daemon, so enforce its read-only public mode after the
+	// write instead of weakening the service-wide umask.
+	if err := os.Chmod(tmp, 0o644); err != nil {
+		_ = os.Remove(tmp)
 		return err
 	}
 	return os.Rename(tmp, path)

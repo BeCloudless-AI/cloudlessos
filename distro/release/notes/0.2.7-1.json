@@ -1,0 +1,12 @@
+{
+  "title": "Reliable local recipe launches and recovery",
+  "summary": "CloudlessOS 0.2.7-1 is the first Debian-revision maintenance release for 0.2.7, focused on reusing verified model weights, truthful launch progress, and safer recovery on DGX Spark clusters.",
+  "changes": [
+    "Reuse already-downloaded Hugging Face model weights instead of copying or downloading them again for each recipe launch.",
+    "Verify model artifacts once per node, retain the resulting evidence through activation, and show byte-level progress and time estimates while verification runs.",
+    "Keep recipe preparation and launch work running independently from the Model Manager so closing or reopening the modal does not interrupt it.",
+    "Harden recipe validation, abort, cleanup, privilege separation, and stale-process recovery paths across local and two-Spark launches.",
+    "Correct model inventory, storage access, update-center permissions, and Cloudless Doctor recovery actions.",
+    "Adopt Debian-native maintenance release numbering so subsequent 0.2.7 fixes can ship as 0.2.7-2, 0.2.7-3, and later revisions."
+  ]
+}

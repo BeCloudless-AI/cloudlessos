@@ -1,7 +1,10 @@
 package api
 
 import (
+	"os/exec"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -32,5 +35,16 @@ func TestFilesystemAvailableBytesFindsExistingParent(t *testing.T) {
 	}
 	if available <= 0 || measuredAt != root {
 		t.Fatalf("available=%d measuredAt=%q, want existing root %q", available, measuredAt, root)
+	}
+}
+
+func TestPeerRecipeCapacityProbeReturnsBytes(t *testing.T) {
+	output, err := exec.Command("/bin/sh", "-c", peerRecipeCapacityProbe, "cloudless-capacity", t.TempDir()).Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	available, err := strconv.ParseInt(strings.TrimSpace(string(output)), 10, 64)
+	if err != nil || available <= 0 {
+		t.Fatalf("capacity probe = %q, %v", output, err)
 	}
 }

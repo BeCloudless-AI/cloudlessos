@@ -4,6 +4,7 @@
 
 - [Project overview and developer quick start](../README.md)
 - [Current validated status](./STATUS.md)
+- [Using CloudlessOS](./USER_GUIDE.md)
 - [Architecture](./ARCHITECTURE.md)
 - [Roadmap](./ROADMAP.md)
 

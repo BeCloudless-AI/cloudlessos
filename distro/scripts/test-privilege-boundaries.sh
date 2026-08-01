@@ -37,7 +37,9 @@ for required in \
   ActionTailscaleInstaller \
   ActionTimezoneSet \
   ActionClusterNetworkApply \
-  ActionClusterNetworkRemove
+  ActionClusterNetworkRemove \
+  ActionModelUninstall \
+  ActionModelViewsReconcile
 do
   grep -Fq "$required" "$protocol"
   grep -Fq "$required" "$broker"
@@ -45,11 +47,13 @@ done
 
 grep -Fq 'decoder.DisallowUnknownFields()' "$protocol"
 grep -Fq 'time.LoadLocation(req.Value)' "$protocol"
+grep -Fq 'ValidModelID(req.Value)' "$protocol"
 grep -Fq 'syscall.SO_PEERCRED' "$ORCHESTRATOR/internal/privileged/peer_linux.go"
 grep -Fqx 'User=root' "$service"
 grep -Fqx 'ProtectSystem=strict' "$service"
 grep -Fq 'cloudless-control' "$postinst"
 grep -Fq 'adduser --system --no-create-home' "$postinst"
+grep -Fq '"$model_view"/*/.cloudless-revision' "$postinst"
 grep -Fq 'cloudless-privileged.service' "$build"
 grep -Fq 'cloudless-privileged"' "$build"
 grep -Fq 'cloudless-engine.service' "$build"
@@ -102,6 +106,11 @@ fi
 
 model_cache="$ORCHESTRATOR/internal/modelcache/migration.go"
 engine_service="$ROOT/distro/packages/cloudless-orchestrator/cloudless-engine.service"
+privileged_service="$ROOT/distro/packages/cloudless-orchestrator/cloudless-privileged.service"
+grep -Fqx 'Group=cloudless-control' "$engine_service"
+grep -Fqx 'RuntimeDirectoryMode=0750' "$engine_service"
+grep -Fqx 'Group=cloudless-control' "$privileged_service"
+grep -Fqx 'RuntimeDirectoryMode=0750' "$privileged_service"
 daemon_service="$ROOT/distro/packages/cloudless-orchestrator/cloudlessd.service"
 grep -Fq 'DefaultRoot = "/var/lib/cloudless/models-cache"' "$model_cache"
 grep -Fq 'modelcache.Prepare(root, source, uid, gid)' "$ORCHESTRATOR/cmd/cloudless-engine/main.go"

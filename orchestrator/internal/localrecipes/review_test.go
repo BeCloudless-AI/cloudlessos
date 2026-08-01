@@ -40,3 +40,24 @@ func TestReviewInventoryContainsEveryExactReviewedRecipe(t *testing.T) {
 		}
 	}
 }
+
+func TestLegacyMiaAICacheLocationMigratesBackToReviewedProfile(t *testing.T) {
+	recipe := recipeFromDraft(DeepSeekV4Flash1MID, "github", "reviewed-import", "now", deepSeekV4Flash1MDraft())
+	recipe.Runtime.Environment["HF_CACHE"] = "cloudless-hf"
+	recipe = normalize(recipe)
+	if got := recipe.Runtime.Environment["HF_CACHE"]; got != "/var/lib/cloudless/models-cache" {
+		t.Fatalf("HF_CACHE = %q", got)
+	}
+	if review, ok := ReviewedProfile(recipe); !ok {
+		t.Fatalf("migrated built-in recipe is not reviewed: %#v", review)
+	}
+}
+
+func TestDraftFromRecipeDoesNotMutateHistoricalSnapshot(t *testing.T) {
+	recipe := recipeFromDraft(DeepSeekV4Flash1MID, "github", "reviewed-import", "now", deepSeekV4Flash1MDraft())
+	recipe.Runtime.Environment["HF_CACHE"] = "cloudless-hf"
+	_ = DraftFromRecipe(recipe)
+	if got := recipe.Runtime.Environment["HF_CACHE"]; got != "cloudless-hf" {
+		t.Fatalf("identity calculation mutated historical snapshot: HF_CACHE = %q", got)
+	}
+}

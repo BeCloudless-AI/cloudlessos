@@ -21,7 +21,8 @@ manifest = hashlib.sha256()
 entries = sorted(root.rglob("*"), key=lambda path: path.relative_to(root).as_posix())
 for path in entries:
     relative = path.relative_to(root).as_posix()
-    if relative == ".cloudless-home" or relative.startswith(".cloudless-home/"):
+    if (relative == ".cloudless-home" or relative.startswith(".cloudless-home/") or
+            relative == ".git" or relative.startswith(".git/")):
         continue
     info = path.lstat()
     mode = oct(stat.S_IMODE(info.st_mode)).encode()
@@ -74,9 +75,13 @@ func attestRecipeNodes(ctx context.Context, recipe localrecipes.Recipe, operatio
 		if digestErr != nil {
 			return nil, fmt.Errorf("attest generated runtime on %s: %w", peer.Name, digestErr)
 		}
-		if peerRuntime != localRuntime {
-			return nil, fmt.Errorf("generated runtime on %s differs from %s: %s != %s", peer.Name, localRecipeNodeName(), peerRuntime, localRuntime)
-		}
+		// Distributed recipes legitimately render node-specific runtime files
+		// (for example rank, address, interface and Compose environment). Their
+		// source revision, immutable image and model snapshot must be identical,
+		// but requiring the generated working trees themselves to be byte-for-byte
+		// equal rejects correct coordinator/worker configurations. Retain each
+		// digest in the operation attestation so the exact per-node runtime remains
+		// auditable without mistaking intentional node configuration for drift.
 		attestations = append(attestations, newRecipeNodeAttestation(peer.Name, operation, peerImage, modelDigest, peerRuntime))
 	}
 	sort.Slice(attestations, func(i, j int) bool { return attestations[i].Node < attestations[j].Node })
@@ -84,18 +89,10 @@ func attestRecipeNodes(ctx context.Context, recipe localrecipes.Recipe, operatio
 }
 
 func recipePeerAttestedImageDigest(ctx context.Context, recipe localrecipes.Recipe, checkout string, env map[string]string, peer recipePeer) (string, error) {
-	if recipe.Runtime.Lifecycle.Build.Program == "" {
+	if recipe.Runtime.Lifecycle.Build.Program == "" && !recipeImageDigestPattern.MatchString(strings.ToLower(strings.TrimSpace(recipe.Engine.Image))) {
 		return inspectPeerRecipeRegistryDigest(ctx, checkout, env, peer, recipe.Engine.Image)
 	}
-	output, err := recipeCommandOutput(recipeSSHCommand(ctx, checkout, env, peer, "docker", "image", "inspect", recipe.Engine.Image, "--format", "{{.Id}}"))
-	if err != nil {
-		return "", err
-	}
-	digest := strings.ToLower(strings.TrimSpace(output))
-	if !recipeImageDigestPattern.MatchString(digest) {
-		return "", errors.New("peer returned an invalid local image digest")
-	}
-	return digest, nil
+	return inspectPeerRecipeLocalImageDigest(ctx, checkout, env, peer, recipe.Engine.Image)
 }
 
 func recipeRuntimeTreeDigest(ctx context.Context, localCheckout string, env map[string]string, peer *recipePeer) (string, error) {
@@ -140,7 +137,7 @@ func recipeNodeAttestationCheck(attestations []recipeNodeAttestation) recipeops.
 		values[prefix+"combined"] = attestation.Combined
 	}
 	return recipeops.CheckResult{ID: "node-consistency", Status: recipeops.CheckPass,
-		Summary: fmt.Sprintf("Source, image, model and generated runtime match across %d selected node(s)", len(attestations)), Values: values}
+		Summary: fmt.Sprintf("Source, image and model match; per-node runtime identities recorded across %d selected node(s)", len(attestations)), Values: values}
 }
 
 func recipePeerRuntimePath(peer recipePeer, recipe localrecipes.Recipe) string {

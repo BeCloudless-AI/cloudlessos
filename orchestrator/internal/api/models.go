@@ -24,6 +24,7 @@ import (
 	"github.com/cloudless/orchestrator/internal/models"
 	"github.com/cloudless/orchestrator/internal/places"
 	"github.com/cloudless/orchestrator/internal/platform"
+	"github.com/cloudless/orchestrator/internal/privileged"
 	"github.com/cloudless/orchestrator/internal/state"
 )
 
@@ -104,10 +105,9 @@ func modelCacheComplete(repoDir string) bool {
 	return !incomplete
 }
 
-// exposeModelCache gives each completed cache snapshot a normal folder under
-// Models. Files are hard-linked to Docker's cache, so there is still only one
-// physical copy and the view remains visible outside cloudlessd's systemd mount
-// namespace.
+// exposeModelCache is the development fallback for environments without the
+// privileged broker. Production uses model.views.reconcile so root-owned cache
+// blobs can be exposed without duplicating model weights.
 func exposeModelCache(cacheRoot string, have map[string]bool) error {
 	p, ok := places.Get("models")
 	if !ok || cacheRoot == "" {
@@ -202,8 +202,9 @@ func hardlinkTree(source, destination string) error {
 		}
 		if err := os.Link(resolved, target); err == nil {
 			return nil
+		} else {
+			return fmt.Errorf("hard-link %s into the Models view: %w", entry.Name(), err)
 		}
-		return fmt.Errorf("hard-link %s into the Models view: model cache and desktop storage must share a filesystem", entry.Name())
 	})
 }
 
@@ -226,7 +227,12 @@ func (s *Server) downloadedModels(ctx context.Context) map[string]bool {
 	root := s.modelVolumePath(c)
 	have := scanModelHub(root)
 	if root != "" {
-		if err := exposeModelCache(root, have); err != nil {
+		if s.privilegedAction != nil {
+			if err := s.runPrivileged(c, privileged.ActionModelViewsReconcile); err != nil {
+				log.Printf("models: reconcile Models folder: %v", err)
+			}
+		} else if err := exposeModelCache(root, have); err != nil {
+			// Development and unit-test environments do not run the host broker.
 			log.Printf("models: expose cache in Models folder: %v", err)
 		}
 	}
@@ -603,6 +609,13 @@ func (s *Server) removeModelCache(ctx context.Context, repo string) error {
 	if root == "" {
 		return errors.New("Cloudless model cache is unavailable")
 	}
+	if s.privilegedValue != nil {
+		if err := s.runPrivilegedValue(ctx, privileged.ActionModelUninstall, repo); err != nil {
+			return err
+		}
+		s.invalidateDownloadedModels()
+		return nil
+	}
 	if err := os.RemoveAll(filepath.Join(root, "hub", cacheName)); err != nil {
 		return err
 	}
@@ -640,10 +653,8 @@ func (s *Server) modelUninstall(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if !s.downloadedModels(r.Context())[body.ID] {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "model is not installed"})
-		return
-	}
+	// Removal is intentionally idempotent. A cache may already be gone while a
+	// legacy root-owned Models view remains; the broker must still clean it up.
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 	if err := s.removeModelCache(ctx, body.ID); err != nil {
@@ -664,41 +675,71 @@ func huggingFaceModelRevisionBytes(ctx context.Context, repo, revision, token st
 }
 
 func huggingFaceModelRevisionSize(ctx context.Context, repo, revision, token string) (int64, error) {
+	files, err := huggingFaceModelRevisionFiles(ctx, repo, revision, token)
+	if err != nil {
+		return 0, err
+	}
+	var total int64
+	for _, size := range files {
+		total += size
+	}
+	if total <= 0 {
+		return 0, errors.New("Hugging Face model metadata did not include file sizes")
+	}
+	return total, nil
+}
+
+func huggingFaceModelRevisionFiles(ctx context.Context, repo, revision, token string) (map[string]int64, error) {
 	endpoint := "https://huggingface.co/api/models/" + repo
 	if revision = strings.TrimSpace(revision); revision != "" {
 		endpoint += "/revision/" + url.PathEscape(revision)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint+"?blobs=true", nil)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 	if token = strings.TrimSpace(token); token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return 0, fmt.Errorf("Hugging Face model metadata returned HTTP %d", resp.StatusCode)
+		return nil, fmt.Errorf("Hugging Face model metadata returned HTTP %d", resp.StatusCode)
 	}
 	var info struct {
 		Siblings []struct {
-			Size int64 `json:"size"`
+			Name string `json:"rfilename"`
+			Size int64  `json:"size"`
+			LFS  *struct {
+				Size int64 `json:"size"`
+			} `json:"lfs"`
 		} `json:"siblings"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
-		return 0, err
+		return nil, err
 	}
-	var total int64
+	files := make(map[string]int64, len(info.Siblings))
 	for _, file := range info.Siblings {
-		total += file.Size
+		name := filepath.ToSlash(filepath.Clean(strings.TrimSpace(file.Name)))
+		if name == "." || strings.HasPrefix(name, "/") || name == ".." || strings.HasPrefix(name, "../") {
+			return nil, errors.New("Hugging Face model metadata contained an unsafe file path")
+		}
+		size := file.Size
+		if file.LFS != nil && file.LFS.Size > 0 {
+			size = file.LFS.Size
+		}
+		if size < 0 {
+			return nil, errors.New("Hugging Face model metadata contained an invalid file size")
+		}
+		files[name] = size
 	}
-	if total <= 0 {
-		return 0, errors.New("Hugging Face model metadata did not include file sizes")
+	if len(files) == 0 {
+		return nil, errors.New("Hugging Face model metadata did not include files")
 	}
-	return total, nil
+	return files, nil
 }
 
 func directoryBytes(path string) int64 {

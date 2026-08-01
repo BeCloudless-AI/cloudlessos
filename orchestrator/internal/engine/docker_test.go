@@ -48,6 +48,21 @@ printf '%s\n' '[{"Id":"sha256:abc","Architecture":"arm64","Size":4096,"Config":{
 	}
 }
 
+func TestAdmittedImageExportPathUsesDiskBackedCloudlessStorage(t *testing.T) {
+	if !admittedImageExportPath("/var/lib/cloudless/image-transfers/cloudless-image-123.tar") {
+		t.Fatal("disk-backed Cloudless transfer path was rejected")
+	}
+	for _, path := range []string{
+		"/run/cloudless/transfers/cloudless-image-123.tar",
+		"/var/lib/cloudless/image-transfers/not-a-transfer.tar",
+		"/var/lib/cloudless/image-transfers/../cloudless-image-123.tar",
+	} {
+		if admittedImageExportPath(path) {
+			t.Fatalf("unsafe or obsolete image transfer path was admitted: %s", path)
+		}
+	}
+}
+
 func TestShellSplit(t *testing.T) {
 	cases := []struct {
 		in   string

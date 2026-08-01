@@ -8,7 +8,7 @@ server_pid=""
 trap 'test -z "$server_pid" || kill "$server_pid" 2>/dev/null || true; rm -rf "$work"' EXIT
 install -d -m 0700 "$GNUPGHOME"
 public="$work/public"
-version=1.2.3
+version=1.2.3-1
 commit=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 artifact_dir="$public/artifacts/$version/beta"
 package_dir="$public/apt/pool/main/c"

@@ -37,14 +37,29 @@ done
 broker="$ROOT/distro/packages/cloudless-orchestrator/cloudless-privileged.service"
 grep -Fqx 'User=root' "$broker"
 grep -Fqx 'ProtectSystem=strict' "$broker"
-grep -Fqx 'ProtectHome=yes' "$broker"
+grep -Fqx 'ProtectHome=read-only' "$broker"
+grep -Fq '/var/lib/cloudless/models-cache' "$broker"
+grep -Fq -- '-/home/cloudless/Cloudless/Models' "$broker"
 grep -Fqx 'PrivateDevices=yes' "$broker"
 grep -Fqx 'ExecStart=/usr/lib/cloudless/cloudless-privileged' "$broker"
 
+daemon="$ROOT/distro/packages/cloudless-orchestrator/cloudlessd.service"
+grep -Fqx 'StateDirectoryMode=0751' "$daemon" || {
+  echo "cloudlessd must leave traversal-only access to the read-only model cache view" >&2
+  exit 1
+}
+grep -Fq 'install -d -m 0751 -o cloudlessd -g cloudless-control /var/lib/cloudless' \
+  "$ROOT/distro/packages/cloudless-orchestrator/postinst"
+
 engine_broker="$ROOT/distro/packages/cloudless-orchestrator/cloudless-engine.service"
+privileged_broker="$ROOT/distro/packages/cloudless-orchestrator/cloudless-privileged.service"
 grep -Fqx 'User=root' "$engine_broker"
 grep -Fqx 'ProtectSystem=strict' "$engine_broker"
 grep -Fqx 'ExecStart=/usr/lib/cloudless/cloudless-engine' "$engine_broker"
+grep -Fqx 'Group=cloudless-control' "$engine_broker"
+grep -Fqx 'RuntimeDirectoryMode=0750' "$engine_broker"
+grep -Fqx 'Group=cloudless-control' "$privileged_broker"
+grep -Fqx 'RuntimeDirectoryMode=0750' "$privileged_broker"
 grep -Fq '/run/docker.sock' "$engine_broker"
 if grep -Fq '/run/docker.sock' "$ROOT/distro/packages/cloudless-orchestrator/cloudlessd.service"; then
   echo "Only cloudless-engine may retain Docker socket access." >&2

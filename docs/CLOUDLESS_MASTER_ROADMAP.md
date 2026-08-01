@@ -577,6 +577,15 @@ Implementation status (July 31, 2026):
   Cloudless package. Editing any executable field removes that provenance immediately. Unreviewed
   recipes remain saveable and inspectable, with requested commands and permissions visible, but
   cannot start a process or image build.
+- Recipe Library now presents those states as separate **Runnable** and **Drafts** collections.
+  Reviewed means exact provenance in the installed signed package, not an automatic review queue.
+  Validate and Run also require the exact model revision to be completely installed; a partial
+  Hugging Face snapshot is rejected at the API boundary. Cloudless migrates only exact known legacy
+  fields in packaged profiles, including the MiaAI cache-location transition.
+- Cloudless Doctor reconciles “inference unloaded” against running recipe containers. Its repair
+  can fix legacy runtime-directory ownership and remove only exact observed recipe container names
+  through fixed coordinator/worker privileged actions, retaining model weights and failing visibly
+  when any selected peer cannot prove cleanup.
 - The `managed-container-v1` adapter is the command-free path for user-authored recipes. It accepts
   only an immutable image digest, immutable model revision, one local vLLM node and a small
   allow-list of non-contract engine toggles. Cloudless synthesizes the entrypoint and complete

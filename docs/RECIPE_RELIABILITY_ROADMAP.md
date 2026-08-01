@@ -32,6 +32,14 @@ Current checkpoint (July 31, 2026):
   multi-Spark release matrix. Do not start additional inference-engine features before these gates.
 - The working tree may contain the implementation described here without a release commit. Inspect
   `git status`, run the full Go suite, and preserve unrelated user changes before continuing.
+- The Recipe Library now defaults to executable **Runnable** profiles and keeps arbitrary local
+  definitions under **Drafts**. Exact model installation is an API-level prerequisite for Validate
+  and Run, not merely a disabled browser button. “Reviewed” means an exact package-authenticated
+  compatibility profile; it never means queued or automatic remote review.
+- Cloudless Doctor now reconciles unloaded inference state with observed recipe containers. Its
+  repair is intentionally narrower than recipe execution: it can repair legacy runtime-directory
+  ownership and remove only exact observed container names on the coordinator and selected workers,
+  while preserving model caches and refusing arbitrary Docker arguments.
 
 Required verification after every lifecycle change:
 
@@ -466,6 +474,9 @@ Implementation status (July 31, 2026):
   distinct from editable local or unverified catalog code. The record exposes the pinned source,
   resolved image digest, compatibility metadata digest, Check evidence, redacted lifecycle commands
   and requested host permissions. Passing compatibility checks never promotes local code to reviewed.
+  The main library contains only execution-admitted profiles; local definitions are explicitly
+  separated into Drafts. Legacy built-in metadata is migrated only for exact known historical
+  values, restoring package provenance without blessing unrelated edits.
 - RR-604 exports a no-store ZIP for a specific durable operation containing its sanitized journal,
   recipe commands with secret arguments removed, environment keys without values, live resource
   inventory, selected topology, immutable digests, failure classification and bounded container logs
@@ -477,6 +488,9 @@ Implementation status (July 31, 2026):
   recommended next action. A later successful operation clears the stale failure. Streaming failures
   no longer display raw `exit status 1`; users are directed to the durable details and can download
   the diagnostic bundle without opening a terminal.
+  Doctor additionally detects the concrete failure mode where Cloudless reports inference unloaded
+  while a saved recipe container still owns accelerator memory. The user can initiate fixed orphan
+  cleanup and receives an attention result until all reachable nodes prove absence.
 - RR-606 keeps preparation in the orchestrator rather than the modal lifecycle. Durable operation
   progress is reconstructed after navigation or reload, rendered both on the desktop and in Recipe
   Library, refreshed without repaint blinking, and includes the active transfer route, percentage,

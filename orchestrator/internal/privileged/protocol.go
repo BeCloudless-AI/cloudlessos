@@ -24,25 +24,32 @@ const (
 type Action string
 
 const (
-	ActionPowerOff             Action = "power.shutdown"
-	ActionReboot               Action = "power.restart"
-	ActionSystemUpdateCheck    Action = "update.system.check"
-	ActionSystemUpdateApply    Action = "update.system.apply"
-	ActionNVIDIAUpdateCheck    Action = "update.nvidia.check"
-	ActionNVIDIAUpdateApply    Action = "update.nvidia.apply"
-	ActionTailscaleInstaller   Action = "tailscale.install"
-	ActionTimezoneSet          Action = "timezone.set"
-	ActionClusterNetworkApply  Action = "cluster.network.apply"
-	ActionClusterNetworkRemove Action = "cluster.network.remove"
+	ActionPowerOff              Action = "power.shutdown"
+	ActionReboot                Action = "power.restart"
+	ActionSystemUpdateCheck     Action = "update.system.check"
+	ActionSystemUpdateApply     Action = "update.system.apply"
+	ActionSystemUpdateChannel   Action = "update.system.channel"
+	ActionNVIDIAUpdateCheck     Action = "update.nvidia.check"
+	ActionNVIDIAUpdateApply     Action = "update.nvidia.apply"
+	ActionTailscaleInstaller    Action = "tailscale.install"
+	ActionTimezoneSet           Action = "timezone.set"
+	ActionClusterNetworkApply   Action = "cluster.network.apply"
+	ActionClusterNetworkRemove  Action = "cluster.network.remove"
+	ActionRecipeRuntimeRepair   Action = "recipe.runtime.repair"
+	ActionRecipeContainerRemove Action = "recipe.container.remove"
+	ActionModelUninstall        Action = "model.uninstall"
+	ActionModelViewsReconcile   Action = "model.views.reconcile"
 )
 
 func (a Action) Valid() bool {
 	switch a {
 	case ActionPowerOff, ActionReboot,
-		ActionSystemUpdateCheck, ActionSystemUpdateApply,
+		ActionSystemUpdateCheck, ActionSystemUpdateApply, ActionSystemUpdateChannel,
 		ActionNVIDIAUpdateCheck, ActionNVIDIAUpdateApply,
 		ActionTailscaleInstaller, ActionTimezoneSet,
-		ActionClusterNetworkApply, ActionClusterNetworkRemove:
+		ActionClusterNetworkApply, ActionClusterNetworkRemove,
+		ActionRecipeRuntimeRepair, ActionRecipeContainerRemove,
+		ActionModelUninstall, ActionModelViewsReconcile:
 		return true
 	default:
 		return false
@@ -178,6 +185,11 @@ func handleConnection(ctx context.Context, conn net.Conn, authorize Authorizer, 
 func validateRequest(req request) error {
 	req.Value = strings.TrimSpace(req.Value)
 	switch req.Action {
+	case ActionSystemUpdateChannel:
+		if req.Value != "stable" && req.Value != "beta" {
+			return errors.New("invalid update channel")
+		}
+		return nil
 	case ActionTimezoneSet:
 		if req.Value == "" || len(req.Value) > 128 || strings.ContainsRune(req.Value, '\x00') {
 			return errors.New("invalid timezone")
@@ -189,6 +201,16 @@ func validateRequest(req request) error {
 	case ActionClusterNetworkApply:
 		_, _, _, err := ParseClusterNetworkValue(req.Value)
 		return err
+	case ActionRecipeContainerRemove:
+		if !recipeContainerName.MatchString(req.Value) || strings.Contains(req.Value, "..") {
+			return errors.New("invalid recipe container name")
+		}
+		return nil
+	case ActionModelUninstall:
+		if !ValidModelID(req.Value) {
+			return errors.New("invalid model id")
+		}
+		return nil
 	}
 	if req.Value != "" {
 		return errors.New("action does not accept a value")
@@ -200,6 +222,25 @@ func validateRequest(req request) error {
 }
 
 var clusterInterfaceName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,31}$`)
+var recipeContainerName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`)
+var modelIDPart = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$`)
+
+func ValidModelID(value string) bool {
+	value = strings.TrimSpace(value)
+	if value == "" || len(value) > 200 || strings.ContainsAny(value, "\\\x00\r\n") {
+		return false
+	}
+	parts := strings.Split(value, "/")
+	if len(parts) < 2 {
+		return false
+	}
+	for _, part := range parts {
+		if !modelIDPart.MatchString(part) || part == "." || part == ".." {
+			return false
+		}
+	}
+	return true
+}
 
 func ParseClusterNetworkValue(value string) (nodeIndex int, first, second string, err error) {
 	parts := strings.Split(value, "|")

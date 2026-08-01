@@ -30,6 +30,12 @@ If a peer is lost, Cloudless marks the selected compute topology degraded. Abort
 operation or unload the distributed model before changing membership. After reconnecting a cable or
 rebooting a peer, run **Check connection** and require zero packet loss before retrying inference.
 
+Cloudless migrates legacy root-owned cluster state and restricted-worker configuration during a
+package update. If a previously configured cluster unexpectedly reports **Unavailable**, run
+**Settings > Cloudless Doctor** before reconnecting or deleting it. The Doctor checks configuration
+ownership, the restricted SSH path and declared/runtime disagreement. Do not create a second
+cluster over retained state merely to clear the warning.
+
 Disconnecting the cluster stops cluster-owned inference and returns the coordinator to a truthful
 single-machine state. A model that only fits the cluster must remain unloaded; Cloudless must not
 pretend it is still starting. Rebinding credentials or reversing coordinator/worker roles is an

@@ -35,6 +35,19 @@ func TestRecipeRuntimeTreeDigestTracksExecutableContentButNotPrivateSSHHome(t *t
 	if privateChange != first {
 		t.Fatalf("private SSH home changed runtime digest: %s != %s", privateChange, first)
 	}
+	if err := os.MkdirAll(filepath.Join(dir, ".git"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".git", "FETCH_HEAD"), []byte("mutable checkout metadata"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	gitChange, err := recipeRuntimeTreeDigest(context.Background(), dir, environment, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gitChange != first {
+		t.Fatalf("Git metadata changed runtime digest: %s != %s", gitChange, first)
+	}
 	if err := os.WriteFile(filepath.Join(dir, "start.sh"), []byte("#!/bin/sh\necho second\n"), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -50,16 +63,16 @@ func TestRecipeRuntimeTreeDigestTracksExecutableContentButNotPrivateSSHHome(t *t
 func TestRecipeNodeAttestationBindsEveryRuntimeIdentity(t *testing.T) {
 	operation := recipeops.Operation{ID: "operation", RecipeRevision: "sha256:recipe", ResolvedSourceRevision: "source-commit"}
 	left := newRecipeNodeAttestation("Spark A", operation, "sha256:image", "sha256:model", "sha256:runtime")
-	right := newRecipeNodeAttestation("Spark B", operation, "sha256:image", "sha256:model", "sha256:runtime")
-	if left.Combined != right.Combined {
-		t.Fatalf("identical node inputs produced different attestations: %#v %#v", left, right)
+	right := newRecipeNodeAttestation("Spark B", operation, "sha256:image", "sha256:model", "sha256:node-specific-runtime")
+	if left.Combined == right.Combined {
+		t.Fatalf("node-specific runtime identity was not preserved: %#v %#v", left, right)
 	}
 	changed := newRecipeNodeAttestation("Spark B", operation, "sha256:image", "sha256:model-two", "sha256:runtime")
 	if changed.Combined == left.Combined {
 		t.Fatal("changed model identity retained the old combined attestation")
 	}
 	check := recipeNodeAttestationCheck([]recipeNodeAttestation{left, right})
-	if check.Status != recipeops.CheckPass || check.Values["node.1.runtime"] != "sha256:runtime" {
+	if check.Status != recipeops.CheckPass || check.Values["node.1.runtime"] != "sha256:node-specific-runtime" {
 		t.Fatalf("node consistency check = %#v", check)
 	}
 }

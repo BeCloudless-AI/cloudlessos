@@ -36,6 +36,12 @@ readiness still requires broader hardware, security, recovery and licensing vali
   `/v1/models` protocol/model verification, bounded promotion and cleanup of a failed candidate to
   an explicit unloaded/error state.
 - Persistent coordinator and worker recipe lifecycle paths that survive orchestrator restarts.
+- Recipe Library separation between executable signed/constrained profiles and non-executable local
+  drafts, with exact-model installation required before per-machine validation or launch.
+- Cloudless Doctor reconciliation of unloaded state against running recipe containers, including a
+  narrowly scoped coordinator/worker orphan-runtime repair that preserves downloaded weights.
+- Stable pointer behavior in the kiosk; Ubuntu's idle cursor-hiding service is disabled because it
+  produced apparent foreground-window blinking on noisy pointing devices.
 
 The custom-engine developer path is documented in
 [`CUSTOM_ENGINES.md`](./CUSTOM_ENGINES.md).
@@ -54,14 +60,22 @@ The current gateway identity and recipe lifecycle are documented in
 
 ## Current recipe and cluster-transfer boundaries
 
-- Local recipes are trusted machine-owned code, not signed community content.
+- Arbitrary local recipe commands are not trusted or executable. The **Runnable** library admits
+  exact profiles authenticated by the installed signed Cloudless package and constrained
+  declarative containers; editable definitions remain under **Drafts**.
+- “Cloudless reviewed” is package provenance, not a background review queue. It means the complete
+  executable profile exactly matches one shipped in the authenticated package; an edit removes
+  that status.
+- Recipe Check/Run requires the exact model revision to be completely installed. **Validate** then
+  records compatibility evidence for the current recipe revision and Spark topology before Run is
+  enabled.
 - Recipe work continues when Model Manager is closed and remains abortable from the desktop.
 - A private recipe health check is not activation; the locked stable endpoint must also return the
   required OpenAI response and internal `cloudless` model identity.
 - Multi-Spark `buildOnce` and `downloadOnce` copy coordinator artifacts to peers over SSH.
-- Peer model validation currently compares an exact snapshot and whole repository directory size.
-  Partial or mismatched caches are replaced with a complete tar-stream copy; transfer is not yet
-  incremental or resumable.
+- Coordinator-to-peer transfer uses a per-file content manifest, durable staging and atomic
+  promotion. Verified peer files are retained and interrupted transfers resume missing or invalid
+  content instead of recopying the complete repository.
 
 ## Verification baseline
 

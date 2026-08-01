@@ -3,6 +3,7 @@ package osupdate
 import (
 	"os"
 	"path/filepath"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -30,6 +31,23 @@ func TestStatusRoundTrip(t *testing.T) {
 	}
 	if got.State != want.State || got.CurrentSourceCommit != want.CurrentSourceCommit || got.AvailableVersion != want.AvailableVersion || got.AvailableSourceCommit != want.AvailableSourceCommit || got.ReleaseTitle != want.ReleaseTitle || len(got.Changelog) != 1 || got.Progress != want.Progress || len(got.Packages) != 1 {
 		t.Fatalf("Read() = %#v, want %#v", got, want)
+	}
+}
+
+func TestWriteStatusRemainsReadableUnderRestrictedServiceUmask(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "status.json")
+	t.Setenv("CLOUDLESS_UPDATE_STATUS", path)
+	previous := syscall.Umask(0o077)
+	defer syscall.Umask(previous)
+	if err := Write(DefaultStatus()); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o644 {
+		t.Fatalf("status mode = %o, want 644", info.Mode().Perm())
 	}
 }
 
@@ -97,5 +115,64 @@ func TestReadReconcilesPersistedChannelWithConfiguration(t *testing.T) {
 	}
 	if got.Channel != "beta" {
 		t.Fatalf("Read().Channel = %q, want beta", got.Channel)
+	}
+}
+
+func TestSetChannelUpdatesAPTAndMetadataTogether(t *testing.T) {
+	dir := t.TempDir()
+	channelPath := filepath.Join(dir, "update-channel")
+	sourcesPath := filepath.Join(dir, "cloudless.sources")
+	t.Setenv("CLOUDLESS_UPDATE_CHANNEL_PATH", channelPath)
+	t.Setenv("CLOUDLESS_UPDATE_SOURCES_PATH", sourcesPath)
+	if err := os.WriteFile(sourcesPath, []byte("Enabled: yes\nTypes: deb\nURIs: https://updates.becloudless.ai/apt\nSuites: stable\nComponents: main\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetChannel("beta"); err != nil {
+		t.Fatal(err)
+	}
+	sources, err := os.ReadFile(sourcesPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(sources) != "Enabled: yes\nTypes: deb\nURIs: https://updates.becloudless.ai/apt\nSuites: beta\nComponents: main\n" || Channel() != "beta" {
+		t.Fatalf("sources=%q channel=%q", sources, Channel())
+	}
+	for _, path := range []string{sourcesPath, channelPath} {
+		info, err := os.Stat(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Mode().Perm() != 0o644 {
+			t.Fatalf("%s mode=%v", path, info.Mode().Perm())
+		}
+	}
+}
+
+func TestSetChannelRejectsUnknownChannelWithoutChangingAPT(t *testing.T) {
+	dir := t.TempDir()
+	sourcesPath := filepath.Join(dir, "cloudless.sources")
+	t.Setenv("CLOUDLESS_UPDATE_CHANNEL_PATH", filepath.Join(dir, "update-channel"))
+	t.Setenv("CLOUDLESS_UPDATE_SOURCES_PATH", sourcesPath)
+	want := []byte("Suites: stable\n")
+	if err := os.WriteFile(sourcesPath, want, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetChannel("nightly"); err == nil {
+		t.Fatal("SetChannel accepted nightly")
+	}
+	got, err := os.ReadFile(sourcesPath)
+	if err != nil || string(got) != string(want) {
+		t.Fatalf("sources=%q err=%v", got, err)
+	}
+}
+
+func TestChannelFallsBackToStableForMalformedConfiguration(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "update-channel")
+	t.Setenv("CLOUDLESS_UPDATE_CHANNEL_PATH", path)
+	if err := os.WriteFile(path, []byte("nightly\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := Channel(); got != "stable" {
+		t.Fatalf("Channel()=%q", got)
 	}
 }

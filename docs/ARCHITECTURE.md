@@ -139,6 +139,18 @@ and stop metadata live under `/var/lib/cloudless/recipes-runtime`; worker assets
 enrolled user's `~/.local/share/cloudless/recipes-runtime`. They are deliberately outside temporary
 directories because systemd private temporary namespaces do not survive daemon restarts.
 
+Recipe editability and execution admission are separate. Exact package-authenticated script
+profiles and policy-valid constrained containers appear in the Runnable library; arbitrary local
+definitions remain Drafts. The API independently requires a complete exact model snapshot and
+current topology validation before launch. Package upgrades migrate only exact known historical
+profile fields, preserving the fail-closed boundary for every other edit.
+
+Cloudless Doctor adds a read-only reconciliation layer above declared engine state and observed
+containers. When unloaded state disagrees with an exact saved-recipe container, its repair invokes
+only fixed privileged actions: legacy runtime-directory ownership repair and exact container-name
+removal locally and through the restricted Spark worker helper. It cannot execute recipe content,
+select an image, mount a host path or delete model weights.
+
 ## Custom inference engines
 
 A registered custom engine is a locally built Docker image adapted to an existing managed
@@ -180,9 +192,10 @@ explicit user action permit LAN or public access.
 - The selected model is independent from the selected compatible engine.
 - Hermes Agent is a core system integration and follows the stable Cloudless engine endpoint.
 - Optional applications are described through signed catalog contracts and installed on demand.
-- Local native recipes remain machine-owned and separate from the custom generic-engine path.
-  They run as daemon-owned background jobs with check, progress, abort, cache reuse and optional
-  coordinator-to-peer distribution. See [LOCAL_RECIPES.md](./LOCAL_RECIPES.md).
+- Local native recipe definitions remain machine-owned and separate from the custom generic-engine
+  path. Only signed exact profiles or constrained declarative containers can execute. Admitted
+  recipes run as daemon-owned background jobs with validation, progress, abort, cache reuse and
+  optional coordinator-to-peer distribution. See [LOCAL_RECIPES.md](./LOCAL_RECIPES.md).
 
 ## Hardware and DGX Spark
 

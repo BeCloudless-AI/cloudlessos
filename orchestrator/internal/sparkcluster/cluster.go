@@ -75,6 +75,13 @@ case "$action" in
     fi
     printf '%s %s %s\n' "${bytes:-0}" "${incomplete:-0}" "$loaded"
     ;;
+  remove-container)
+    name=$(printf %s "$2" | base64 -d)
+    case "$name" in
+      ""|.*|*..*|*[!A-Za-z0-9_.-]*) echo "invalid container name" >&2; exit 2 ;;
+    esac
+    docker rm -f "$name" >/dev/null 2>&1 || true
+    ;;
   upgrade)
     payload=$(printf %s "$2" | base64 -d)
     tmp=$(mktemp)
@@ -83,7 +90,7 @@ case "$action" in
     mv -f "$tmp" /usr/lib/cloudless/cloudless-cluster-worker
     ;;
   *)
-    echo "usage: cloudless-cluster-worker start IMAGE_B64 HEAD_IP_B64 WORKER_IP_B64 IFACE_B64 | stop | status | model-progress MODEL_B64 | upgrade SCRIPT_B64" >&2
+    echo "usage: cloudless-cluster-worker start IMAGE_B64 HEAD_IP_B64 WORKER_IP_B64 IFACE_B64 | stop | status | model-progress MODEL_B64 | remove-container NAME_B64 | upgrade SCRIPT_B64" >&2
     exit 2
     ;;
 esac
@@ -94,6 +101,7 @@ var (
 	hostPattern       = regexp.MustCompile(`^[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$`)
 	userPattern       = regexp.MustCompile(`^[a-z_][a-z0-9_-]{0,31}$`)
 	ifacePattern      = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,64}$`)
+	containerPattern  = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`)
 	packetLossPattern = regexp.MustCompile(`([0-9]+(?:\.[0-9]+)?)%\s+packet loss`)
 	commandContext    = exec.CommandContext
 	now               = time.Now
@@ -1662,6 +1670,65 @@ func StartWorker(ctx context.Context, image, model string) error {
 		cleanupCtx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 		defer cancel()
 		_ = StopWorker(cleanupCtx)
+		return errors.New(strings.Join(failures, "; "))
+	}
+	return nil
+}
+
+// RemoveContainers removes exact container names from every selected worker
+// through the enrolled, sudo-restricted helper. It deliberately cannot run a
+// recipe shell command, select an image, mount a path, or execute arbitrary
+// Docker arguments, so Doctor can clean up an orphaned untrusted recipe safely.
+func RemoveContainers(ctx context.Context, names []string) error {
+	state, err := load()
+	if err != nil {
+		return err
+	}
+	if !state.Configured || !state.WorkerReady {
+		return errors.New("the distributed workers are not configured")
+	}
+	if len(names) == 0 || len(names) > 32 {
+		return errors.New("one through 32 container names are required")
+	}
+	encoded := make([]string, len(names))
+	for i, name := range names {
+		name = strings.TrimSpace(name)
+		if !containerPattern.MatchString(name) || strings.Contains(name, "..") {
+			return fmt.Errorf("invalid container name %q", name)
+		}
+		encoded[i] = base64.StdEncoding.EncodeToString([]byte(name))
+	}
+	nodes := selectedNodesForState(state)
+	if len(nodes) == 0 {
+		return errors.New("select at least one worker Spark")
+	}
+	upgrade64 := base64.StdEncoding.EncodeToString([]byte(workerScript))
+	errs := make(chan error, len(nodes))
+	var wg sync.WaitGroup
+	for _, node := range nodes {
+		wg.Add(1)
+		go func(node Node) {
+			defer wg.Done()
+			if _, err := remote(ctx, node.Host, node.Username, "", fmt.Sprintf("sudo -n %s upgrade %s", workerPath, upgrade64), nil); err != nil {
+				errs <- fmt.Errorf("update cleanup helper on %s: %w", node.Name, err)
+				return
+			}
+			for _, name64 := range encoded {
+				command := fmt.Sprintf("sudo -n %s remove-container %s", workerPath, name64)
+				if _, err := remote(ctx, node.Host, node.Username, "", command, nil); err != nil {
+					errs <- fmt.Errorf("remove orphaned container on %s: %w", node.Name, err)
+					return
+				}
+			}
+		}(node)
+	}
+	wg.Wait()
+	close(errs)
+	var failures []string
+	for err := range errs {
+		failures = append(failures, err.Error())
+	}
+	if len(failures) > 0 {
 		return errors.New(strings.Join(failures, "; "))
 	}
 	return nil

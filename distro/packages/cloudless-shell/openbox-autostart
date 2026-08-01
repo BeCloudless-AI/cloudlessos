@@ -3,7 +3,9 @@ feh --no-fehbg --bg-fill /usr/share/backgrounds/cloudless/startup.png &
 xset s off
 xset -dpms
 xset s noblank
-unclutter -idle 0.5 -root &
+# Keep the pointer stable. Hiding it after 500 ms made it flash whenever a
+# mouse reported tiny movement and looked like foreground windows were
+# refreshing, especially over Model Manager's frosted surface.
 /usr/bin/cloudless-desktop-agent &
 /usr/bin/cloudless-browser-agent &
 /usr/bin/cloudless-kiosk

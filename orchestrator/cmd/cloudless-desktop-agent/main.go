@@ -56,6 +56,28 @@ func (sessionExecutor) EmitKey(ctx context.Context, action, value string) error 
 	return nil
 }
 
+func (sessionExecutor) OpenPlace(ctx context.Context, id string) error {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("resolve desktop home: %w", err)
+	}
+	path, err := desktop.PlacePath(home, id)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		return fmt.Errorf("create desktop place: %w", err)
+	}
+	fileManager, err := exec.LookPath("pcmanfm")
+	if err != nil {
+		return errors.New("file manager unavailable (pcmanfm not found)")
+	}
+	if err := exec.CommandContext(ctx, fileManager, "--no-desktop", "--new-win", path).Start(); err != nil {
+		return fmt.Errorf("open desktop place: %w", err)
+	}
+	return nil
+}
+
 func main() {
 	socketPath := flag.String("socket", desktop.DefaultSocket, "desktop agent Unix socket")
 	authorizedUser := flag.String("authorized-user", "cloudlessd", "sole authorized client user")

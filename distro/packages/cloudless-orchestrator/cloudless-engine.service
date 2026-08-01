@@ -7,7 +7,7 @@ Before=cloudlessd.service
 [Service]
 Type=simple
 User=root
-Group=root
+Group=cloudless-control
 EnvironmentFile=-/etc/cloudless/cloudless.env
 Environment=CLOUDLESS_STATE_DIR=/var/lib/cloudless
 Environment=CLOUDLESS_MODEL_CACHE=/var/lib/cloudless/models-cache
@@ -16,6 +16,7 @@ Restart=always
 RestartSec=2
 RuntimeDirectory=cloudless
 RuntimeDirectoryMode=0750
+RuntimeDirectoryPreserve=yes
 UMask=0077
 NoNewPrivileges=true
 PrivateTmp=false

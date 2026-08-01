@@ -94,6 +94,13 @@ routing, and coordinator-to-peer distribution for Spark clusters. Recipes cannot
 private or client-facing inference identity. Current cache and transfer semantics are documented
 in [`../docs/LOCAL_RECIPES.md`](../docs/LOCAL_RECIPES.md).
 
+Execution is admitted independently from editing. An exact `source-scripts-v1` profile must match
+one authenticated in the installed package; a `managed-container-v1` definition must pass its
+constrained declarative policy. Other definitions appear as Drafts and cannot invoke host or Docker
+commands. Check and Run also reject an incomplete/missing exact model snapshot. The UI calls the
+per-machine Check operation **Validate** to distinguish compatibility evidence from package
+provenance.
+
 Recipe-private health is followed by the same stable `/v1/models` promotion check used for other
 engines. Active state is committed only after that check succeeds. Persistent lifecycle data lives
 under `/var/lib/cloudless/recipes-runtime` on the coordinator and the enrolled user's
@@ -136,8 +143,12 @@ The complete developer workflow is in
 | GET | `/api/gateway` | API keys and gateway exposure state |
 | POST | `/api/settings/inference-contract` | change the client API port and model alias |
 | GET | `/api/recipes` | local recipes, active jobs and inference contract |
+| POST | `/api/recipes/{id}/check` | validate an executable, installed recipe on the current topology |
 | POST | `/api/recipes/{id}/run` | launch a recipe as a background job |
+| POST | `/api/recipes/{id}/stop` | stop an active or exact detected orphaned recipe runtime |
 | POST | `/api/recipes/{id}/abort` | abort an active recipe operation |
+| GET | `/api/system/doctor` | read-only system, cluster, promotion and orphan-runtime reconciliation |
+| GET | `/api/system/doctor/bundle` | create a redacted local support ZIP |
 | POST | `/api/assistant/chat` | streamed Cloudless Assistant response |
 | GET | `/api/jobs` | reconnectable snapshots for all asynchronous jobs (optional `prefix`) |
 | GET | `/api/jobs/{id}` | asynchronous job snapshot |

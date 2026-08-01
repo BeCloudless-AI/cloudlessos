@@ -98,8 +98,11 @@ func (s *Server) prepareRecipeImageForPreflight(ctx context.Context, job *jobs.J
 	if err := s.claimRecipeResource(operationID, recipeops.Resource{Kind: "image", ID: transferReference, Node: localRecipeNodeName()}); err != nil {
 		return "", err
 	}
+	if _, err := s.bindPreparedRecipeImage(operationID, localImage.LocalID, localImage.LocalID); err != nil {
+		return "", err
+	}
 	if recipe.Distributed.Nodes <= 1 {
-		return transferReference, nil
+		return localImage.LocalID, nil
 	}
 	peers, err := recipeDistributionPeers(recipe, cluster, env)
 	if err != nil {
@@ -116,7 +119,9 @@ func (s *Server) prepareRecipeImageForPreflight(ctx context.Context, job *jobs.J
 			return "", err
 		}
 	}
-	return transferReference, nil
+	// Every node now has this exact immutable image ID. Run probes by content
+	// identity; the transfer tag exists only to make Docker save/load explicit.
+	return localImage.LocalID, nil
 }
 
 func parseRecipeRegistryManifest(payload string) (recipeRegistryManifest, error) {
@@ -251,6 +256,21 @@ func inspectPeerRecipeRegistryDigest(ctx context.Context, checkout string, env m
 		return "", fmt.Errorf("inspect registry image from %s: %w", peer.Name, err)
 	}
 	return selectRecipeImageManifest(manifest, hostplatform.Architecture())
+}
+
+func inspectPeerRecipeLocalImageDigest(ctx context.Context, checkout string, env map[string]string, peer recipePeer, reference string) (string, error) {
+	inspectionCtx, cancel := context.WithTimeout(ctx, 45*time.Second)
+	defer cancel()
+	output, err := recipeCommandOutput(recipeSSHCommand(inspectionCtx, checkout, env, peer,
+		"docker", "image", "inspect", reference, "--format", "{{.Id}}"))
+	if err != nil {
+		return "", fmt.Errorf("inspect prepared local image from %s: %w", peer.Name, err)
+	}
+	digest := strings.ToLower(strings.TrimSpace(output))
+	if !recipeImageDigestPattern.MatchString(digest) {
+		return "", fmt.Errorf("%s returned an invalid local image identity", peer.Name)
+	}
+	return digest, nil
 }
 
 func (result recipeImagePreflight) checkValues() map[string]string {

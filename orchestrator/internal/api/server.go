@@ -100,7 +100,7 @@ type Server struct {
 	// recipeRevalidate is an internal-only seam for the lifecycle failure
 	// matrix. Production servers leave it nil and always execute the complete
 	// hardware/topology/content revalidation.
-	recipeRevalidate func(context.Context, localrecipes.Recipe, recipeops.Operation, string, map[string]string) error
+	recipeRevalidate func(context.Context, localrecipes.Recipe, recipeops.Operation, string, map[string]string, recipeModelEvidence) error
 	// appHealthCheck is an internal-only seam for deterministic lifecycle tests.
 	// Production leaves it nil and performs the real container/HTTP checks.
 	appHealthCheck func(context.Context, catalog.App) error
@@ -203,6 +203,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/system/update", s.systemUpdateGet)
 	mux.HandleFunc("POST /api/system/update/check", s.systemUpdateCheck)
 	mux.HandleFunc("POST /api/system/update/apply", s.systemUpdateApply)
+	mux.HandleFunc("POST /api/system/update/channel", s.systemUpdateChannel)
 	mux.HandleFunc("GET /api/updates", s.updateCenterGet)
 	mux.HandleFunc("POST /api/updates/check", s.updateCenterCheck)
 	mux.HandleFunc("POST /api/updates/apps/apply", s.updateCenterAppsApply)

@@ -15,8 +15,10 @@ import (
 	"os/user"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"syscall"
 
+	"github.com/cloudless/orchestrator/internal/osupdate"
 	"github.com/cloudless/orchestrator/internal/privileged"
 )
 
@@ -98,6 +100,16 @@ func execute(ctx context.Context, action privileged.Action, value string) error 
 		args = []string{"start", "--no-block", "cloudless-update-check.service"}
 	case privileged.ActionSystemUpdateApply:
 		args = []string{"start", "--no-block", "cloudless-update-apply.service"}
+	case privileged.ActionSystemUpdateChannel:
+		previous := osupdate.Channel()
+		if err := osupdate.SetChannel(value); err != nil {
+			return err
+		}
+		if err := exec.CommandContext(ctx, "/usr/bin/systemctl", "start", "--no-block", "cloudless-update-check.service").Run(); err != nil {
+			_ = osupdate.SetChannel(previous)
+			return err
+		}
+		return nil
 	case privileged.ActionNVIDIAUpdateCheck:
 		args = []string{"start", "--no-block", "cloudless-nvidia-check.service"}
 	case privileged.ActionNVIDIAUpdateApply:
@@ -111,8 +123,85 @@ func execute(ctx context.Context, action privileged.Action, value string) error 
 		return applyClusterNetwork(ctx, value)
 	case privileged.ActionClusterNetworkRemove:
 		return removeClusterNetwork(ctx)
+	case privileged.ActionRecipeRuntimeRepair:
+		return repairRecipeRuntimeOwnership()
+	case privileged.ActionRecipeContainerRemove:
+		return exec.CommandContext(ctx, "/usr/bin/docker", "rm", "-f", "--", value).Run()
+	case privileged.ActionModelUninstall:
+		return uninstallManagedModel(value)
+	case privileged.ActionModelViewsReconcile:
+		if err := reconcileManagedModelViews(); err != nil {
+			log.Printf("model view reconciliation failed: %v", err)
+			return err
+		}
+		return nil
 	default:
 		return fmt.Errorf("unsupported action %q", action)
 	}
 	return exec.CommandContext(ctx, "/usr/bin/systemctl", args...).Run()
+}
+
+func uninstallManagedModel(modelID string) error {
+	return uninstallManagedModelAt(modelID, "/var/lib/cloudless/models-cache", "/home/cloudless/Cloudless/Models")
+}
+
+func uninstallManagedModelAt(modelID, cacheRoot, modelsPath string) error {
+	if !privileged.ValidModelID(modelID) {
+		return errors.New("invalid model id")
+	}
+	name := strings.ReplaceAll(modelID, "/", "--")
+	cachePath := filepath.Join(cacheRoot, "hub", "models--"+name)
+	var failures []error
+	for _, candidate := range []string{
+		filepath.Join(modelsPath, name),
+		filepath.Join(modelsPath, name+"-Cloudless"),
+	} {
+		marker, err := os.Lstat(filepath.Join(candidate, ".cloudless-revision"))
+		if err == nil && marker.Mode().IsRegular() {
+			if err := os.RemoveAll(candidate); err != nil {
+				failures = append(failures, err)
+			}
+		} else if err != nil && !errors.Is(err, os.ErrNotExist) {
+			failures = append(failures, err)
+		}
+	}
+	if err := os.RemoveAll(filepath.Join(modelsPath, ".materializing-"+name)); err != nil {
+		failures = append(failures, err)
+	}
+	if err := os.RemoveAll(cachePath); err != nil {
+		failures = append(failures, err)
+	}
+	return errors.Join(failures...)
+}
+
+func repairRecipeRuntimeOwnership() error {
+	const root = "/var/lib/cloudless/recipes-runtime"
+	serviceUser, err := user.Lookup("cloudlessd")
+	if err != nil {
+		return fmt.Errorf("lookup cloudless service account: %w", err)
+	}
+	controlGroup, err := user.LookupGroup("cloudless-control")
+	if err != nil {
+		return fmt.Errorf("lookup cloudless control group: %w", err)
+	}
+	uid, err := strconv.Atoi(serviceUser.Uid)
+	if err != nil {
+		return fmt.Errorf("parse cloudless service uid: %w", err)
+	}
+	gid, err := strconv.Atoi(controlGroup.Gid)
+	if err != nil {
+		return fmt.Errorf("parse cloudless control gid: %w", err)
+	}
+	if err := os.MkdirAll(root, 0o700); err != nil {
+		return fmt.Errorf("create recipe runtime root: %w", err)
+	}
+	return filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.Type()&os.ModeSymlink != 0 {
+			return os.Lchown(path, uid, gid)
+		}
+		return os.Chown(path, uid, gid)
+	})
 }

@@ -1,8 +1,15 @@
 # Support and diagnostics
 
-Run **Settings → Machine → Run checks** first. It performs read-only checks for Docker, GPU access,
-storage, memory, required services, model promotion and Spark state. **Save support bundle** creates
-a ZIP locally; CloudlessOS never uploads it automatically.
+Run **Settings > Cloudless Doctor** first. It performs read-only checks for Docker, GPU access,
+storage, memory, required services, model promotion, Spark state and disagreement between declared
+inference state and running recipe containers. **Save support bundle** creates a ZIP locally;
+CloudlessOS never uploads it automatically.
+
+When Doctor finds **Orphaned inference runtime**, Cloudless says the engine is unloaded but an exact
+container belonging to a saved recipe still runs. **Stop orphaned runtime** removes only those
+matched containers from the coordinator and selected workers through fixed privileged actions. It
+does not execute the recipe, delete model weights or accept arbitrary Docker arguments. A failed or
+unreachable worker remains visible as attention rather than being reported as repaired.
 
 From a terminal:
 
@@ -10,6 +17,7 @@ From a terminal:
 sudo cloudless-diagnostics
 systemctl status cloudlessd docker lightdm --no-pager
 journalctl -b -u cloudlessd -u lightdm --no-pager -n 200
+sudo systemctl status cloudless-engine cloudless-privileged --no-pager
 ```
 
 Before sharing a bundle:

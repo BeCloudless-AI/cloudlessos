@@ -10,7 +10,9 @@ TEST_VERSION="0.0.0-test-only"
 trap '[ -z "$http_pid" ] || kill "$http_pid" >/dev/null 2>&1 || true; rm -rf "$GNUPGHOME" "$work"' EXIT
 chmod 0700 "$GNUPGHOME"
 
-gpg --batch --passphrase '' --quick-generate-key \
+printf '%s' 'atomic-test-passphrase' > "$work/test-passphrase"
+chmod 0600 "$work/test-passphrase"
+gpg --batch --pinentry-mode loopback --passphrase-file "$work/test-passphrase" --quick-generate-key \
     'Cloudless Publish Test <test@invalid>' ed25519 sign 1d
 fingerprint="$(gpg --batch --with-colons --list-keys | awk -F: '$1 == "fpr" {print $10; exit}')"
 gpg --batch --export "$fingerprint" > "$work/test-keyring.pgp"
@@ -62,6 +64,7 @@ CLOUDLESS_PHYSICAL_QUALIFICATION="$work/test-physical-qualification.json" \
 CLOUDLESS_SECURITY_READINESS="$work/test-security-readiness.json" \
 CLOUDLESS_CI_QUALIFICATION="$work/test-ci-qualification.json" \
 CLOUDLESS_SBOM="$work/cloudless-$TEST_VERSION.spdx.json" \
+CLOUDLESS_GPG_PASSPHRASE_FILE="$work/test-passphrase" \
 CLOUDLESS_SOURCE_COMMIT=0123456789abcdef0123456789abcdef01234567 \
     bash "$ROOT/distro/scripts/build-apt-repository.sh" "$TEST_VERSION" stable
 
@@ -165,9 +168,11 @@ install -Dm0644 "$next_manifest" "$next_repo/dists/stable/by-hash/SHA256/$next_h
 sed -i '/ cloudless-release\.json$/d' "$next_release"
 sed -i "/^SHA256:/a\\ $next_hash $next_size cloudless-release.json" "$next_release"
 rm -f "$next_repo/dists/stable/Release.gpg" "$next_repo/dists/stable/InRelease"
-gpg --batch --yes --local-user "$fingerprint" --armor --detach-sign \
+gpg --batch --yes --pinentry-mode loopback --passphrase-file "$work/test-passphrase" \
+    --local-user "$fingerprint" --armor --detach-sign \
     --output "$next_repo/dists/stable/Release.gpg" "$next_release"
-gpg --batch --yes --local-user "$fingerprint" --clearsign \
+gpg --batch --yes --pinentry-mode loopback --passphrase-file "$work/test-passphrase" \
+    --local-user "$fingerprint" --clearsign \
     --output "$next_repo/dists/stable/InRelease" "$next_release"
 
 mkdir -p "$work/bin" "$work/fake-r2"

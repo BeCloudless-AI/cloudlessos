@@ -166,6 +166,18 @@ if [ "${CLOUDLESS_RELEASE_DRY_RUN:-0}" != "1" ]; then
     }
 fi
 
+gpg_sign() {
+    local arguments=(--batch --yes --local-user "$fingerprint")
+    if [ -n "${CLOUDLESS_GPG_PASSPHRASE_FILE:-}" ]; then
+        test -r "$CLOUDLESS_GPG_PASSPHRASE_FILE" || {
+            echo "The archive-key passphrase file is not readable." >&2
+            return 1
+        }
+        arguments+=(--pinentry-mode loopback --passphrase-file "$CLOUDLESS_GPG_PASSPHRASE_FILE")
+    fi
+    gpg "${arguments[@]}" "$@"
+}
+
 for arch in "${ARCHES[@]}"; do
     CLOUDLESS_VERSION="$VERSION" CLOUDLESS_ARCH="$arch" CLOUDLESS_PACKAGE_OUT="$PACKAGE_OUT" "$DISTRO/scripts/build-packages.sh"
 done
@@ -346,11 +358,9 @@ Suite: $CHANNEL
 Architectures: ${ARCHES[*]}
 Components: main
 Description: Signed CloudlessOS $CHANNEL updates
-SignWith: $fingerprint
 EOF
 cat > "$REPO/conf/options" <<'EOF'
 verbose
-ask-passphrase
 EOF
 for arch in "${ARCHES[@]}"; do
     for package in "${PACKAGES[@]}"; do
@@ -458,7 +468,7 @@ artifacts_file="$work/artifacts.tsv"
 for artifact in install-dgx-spark.sh cloudless-apps-manifest.json cloudless-models.json cloudless-diffusion.json "cloudless-$VERSION.spdx.json" cloudless-trust-inventory.json cloudless-physical-qualification.json cloudless-security-readiness.json cloudless-ci-qualification.json; do
     file="$artifacts_dir/$artifact"
     signature="$file.asc"
-    gpg --batch --yes --local-user "$fingerprint" --armor --detach-sign \
+    gpg_sign --armor --detach-sign \
         --output "$signature" "$file"
     printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
         "$artifact" \
@@ -585,8 +595,8 @@ install -Dm0644 "$REPO/dists/$CHANNEL/cloudless-release.json" \
 sed -i '/ cloudless-release\.json$/d' "$release"
 sed -i "/^SHA256:/a\\ $manifest_hash $manifest_size cloudless-release.json" "$release"
 rm -f "$release.gpg" "$REPO/dists/$CHANNEL/InRelease"
-gpg --batch --yes --local-user "$fingerprint" --armor --detach-sign --output "$release.gpg" "$release"
-gpg --batch --yes --local-user "$fingerprint" --clearsign --output "$REPO/dists/$CHANNEL/InRelease" "$release"
+gpg_sign --armor --detach-sign --output "$release.gpg" "$release"
+gpg_sign --clearsign --output "$REPO/dists/$CHANNEL/InRelease" "$release"
 
 cp "$KEY" "$REPO/cloudless-archive-keyring.pgp"
 echo "Signed APT repository ready at $REPO"

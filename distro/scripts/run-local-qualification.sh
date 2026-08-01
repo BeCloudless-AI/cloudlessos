@@ -66,6 +66,7 @@ source_job() {
     bash "$ROOT/distro/scripts/test-release-env.sh"
     bash "$ROOT/distro/scripts/test-release-preflight.sh"
     bash "$ROOT/distro/scripts/test-release-isolation.sh"
+    bash "$ROOT/distro/scripts/test-protected-signing.sh"
     python3 "$ROOT/distro/scripts/test-security-readiness.py"
     python3 "$ROOT/distro/scripts/test-ci-qualification.py"
     python3 "$ROOT/distro/scripts/test-beta-promotion.py"

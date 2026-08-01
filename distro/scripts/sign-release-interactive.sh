@@ -50,7 +50,7 @@ docker image inspect cloudless-release-builder >/dev/null 2>&1 || \
     docker build -t cloudless-release-builder \
         -f "$ROOT/distro/docker/release-builder/Dockerfile" "$ROOT"
 
-docker run --rm -it \
+docker run --rm \
     -e CLOUDLESS_SECRET_NAME="$secret_name" \
     -e CLOUDLESS_SOURCE_COMMIT="$source_commit" \
     -e CLOUDLESS_BETA_PROMOTION \
@@ -65,7 +65,6 @@ docker run --rm -it \
         export PATH="/usr/local/go/bin:$PATH"
         export GNUPGHOME="$(mktemp -d)"
         chmod 0700 "$GNUPGHOME"
-        export GPG_TTY="$(tty)"
         trap '\''rm -rf "$GNUPGHOME"'\'' EXIT
         gpg --batch --import "/secrets/$CLOUDLESS_SECRET_NAME"
         fingerprint="$(tr -d "[:space:]" < distro/release/keys/cloudless-archive-fingerprint.txt)"

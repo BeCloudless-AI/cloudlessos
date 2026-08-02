@@ -196,6 +196,11 @@ explicit user action permit LAN or public access.
   path. Only signed exact profiles or constrained declarative containers can execute. Admitted
   recipes run as daemon-owned background jobs with validation, progress, abort, cache reuse and
   optional coordinator-to-peer distribution. See [LOCAL_RECIPES.md](./LOCAL_RECIPES.md).
+- Community recipes use the same native manifest and local runner. The Cloudless account service
+  owns authorship, scoped publisher credentials, immutable revisions, asynchronous admission,
+  signatures, revocations, discovery and social metadata. The local orchestrator proxies the
+  signed-in session and verifies exact releases before installation; external authors use the same
+  API through the `cloudless recipes` CLI. See [COMMUNITY_RECIPES.md](./COMMUNITY_RECIPES.md).
 
 ## Hardware and DGX Spark
 
@@ -239,6 +244,7 @@ capabilities, not a forked frontend.
 - [Custom engine developer guide](./CUSTOM_ENGINES.md)
 - [Inference API identity](./INFERENCE_API.md)
 - [Local inference recipes](./LOCAL_RECIPES.md)
+- [Community recipe author and install guide](./COMMUNITY_RECIPES.md)
 - [Hardware strategy](./HARDWARE.md)
 - [Capability and platform locks](../distro/CAPABILITIES.md)
 - [DGX Spark installation and operations](../distro/DGX-SPARK.md)

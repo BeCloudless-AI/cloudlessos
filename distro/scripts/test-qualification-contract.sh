@@ -45,6 +45,12 @@ for check in {
 }:
     if check not in checks:
         raise SystemExit(f"missing physical check: {check}")
+community = set(matrix.get("communityChecks", []))
+expected_community = {
+    "community-signed-install", "community-update-rollback", "community-revocation",
+}
+if community != expected_community:
+    raise SystemExit(f"community physical checks differ: {community ^ expected_community}")
 cluster = set(matrix.get("clusterChecks", []))
 for check in {
     "discover-and-enroll", "fabric-and-ssh-preflight", "selected-topology",

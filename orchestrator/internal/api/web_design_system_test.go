@@ -72,7 +72,7 @@ func TestEmbeddedWebAppSurfacesFollowRuntimeLifecycle(t *testing.T) {
 	}
 	web := string(content)
 	required := []string{
-		`.filter(c => c.state === 'running')`,
+		`.filter(([, state]) => state === 'running')`,
 		`catalog.filter(a => a.id !== 'hermes' && !a.service && !a.hidden && installed.has(a.id))`,
 		`if (isRun || pinned) acts +=`,
 		"${installed && launchApp ? `<button class=\"ac-btn pin",
@@ -81,5 +81,213 @@ func TestEmbeddedWebAppSurfacesFollowRuntimeLifecycle(t *testing.T) {
 		if !strings.Contains(web, want) {
 			t.Fatalf("embedded frontend does not enforce app lifecycle contract %q", want)
 		}
+	}
+}
+
+func TestEmbeddedWebSettingsNavigationIsImmediateAndRaceSafe(t *testing.T) {
+	content, err := webFS.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	web := string(content)
+	for _, want := range []string{
+		"function renderSettings()",
+		"host.replaceChildren(c)",
+		"c.className = 'settings-page-mount'",
+		"if (!c.isConnected) return;",
+		"engineStateCache ? Promise.resolve(engineStateCache)",
+	} {
+		if !strings.Contains(web, want) {
+			t.Fatalf("embedded Settings navigation is missing %q", want)
+		}
+	}
+	if strings.Contains(web, "async function renderSettings()") {
+		t.Fatal("Settings navigation waits for network requests before changing tabs")
+	}
+}
+
+func TestEmbeddedWebMetricsAvoidGPUBackedCanvas(t *testing.T) {
+	content, err := webFS.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	web := string(content)
+	for _, want := range []string{
+		`<svg class="inf-hero-canvas" id="c-tput"`,
+		`<svg class="im-ring" id="c-gmem"`,
+		`function infGauge(id, pct, rgb)`,
+		`svg.innerHTML = markup.join('')`,
+	} {
+		if !strings.Contains(web, want) {
+			t.Fatalf("embedded metrics view is missing low-memory SVG contract %q", want)
+		}
+	}
+	if strings.Contains(web, `<canvas class="inf-`) || strings.Contains(web, `<canvas class="im-`) {
+		t.Fatal("metrics view must not allocate GPU-backed canvas surfaces")
+	}
+}
+
+func TestEmbeddedWebAccountClientOwnsTopBarIdentity(t *testing.T) {
+	content, err := webFS.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	web := string(content)
+	for _, want := range []string{
+		`id="auth-control"`,
+		`<span class="auth-control-name">Sign in</span>`,
+		`id="auth-menu-profile"`,
+		`<span>Profile</span>`,
+		`id="auth-menu-keys"`,
+		`<span>API Keys</span>`,
+		`id="auth-menu-recipes"`,
+		`<span>My Recipes</span>`,
+		`id="auth-menu-logout"`,
+		`<span>Log out</span>`,
+		`.auth-menu-wrap:hover .auth-menu:not(.hidden)`,
+		`function openPublisherKeysDialog()`,
+		`function openMyRecipes()`,
+		`id="my-recipes"`,
+		`id="my-recipes-body"`,
+		`id="my-recipes-x"`,
+		`function closeMyRecipes()`,
+		`renderCommunityRecipes(body,'mine')`,
+		`mmRecipeView.scope='mine'`,
+		`function openAuthDialog(mode = 'signin')`,
+		`data-auth-mode="signup"`,
+		`data-auth-provider="google"`,
+		`data-auth-provider="x"`,
+		`data-auth-provider="github"`,
+		`function completeAuthSession(payload, message)`,
+		`fetch('/api/account' + path`,
+		`await authRequest('/login'`,
+		`await authRequest('/signup'`,
+		`await authRequest('/refresh'`,
+		`await authRequest('/logout'`,
+		`await authenticatedAuthRequest('/picture'`,
+		`location.origin + '/auth/callback'`,
+		`function consumeAuthCallback()`,
+		`localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(authSession))`,
+		`localStorage.removeItem(AUTH_SESSION_KEY)`,
+	} {
+		if !strings.Contains(web, want) {
+			t.Fatalf("embedded account client is missing %q", want)
+		}
+	}
+	if strings.Contains(web, `localStorage.setItem(AUTH_SESSION_KEY, secret)`) || strings.Contains(web, `password: password.value`) {
+		t.Fatal("account client must never persist the submitted password")
+	}
+	if strings.Contains(web, `tab('mine','user','My recipes')`) {
+		t.Fatal("My Recipes must be a standalone account modal, not a Model Manager recipe tab")
+	}
+}
+
+func TestEmbeddedWebAccountUsesDisplayNameForVisibleIdentity(t *testing.T) {
+	content, err := webFS.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	web := string(content)
+	for _, want := range []string{
+		`function authDisplayName(user)`,
+		`[user?.displayName, user?.username, user?.email]`,
+		`if (normalized) return normalized;`,
+		`const displayName = authDisplayName(user);`,
+		`escapeHtml(displayName)`,
+		`button.setAttribute('aria-label', ` + "`Account: ${displayName}`" + `)`,
+	} {
+		if !strings.Contains(web, want) {
+			t.Fatalf("embedded account client does not prefer the profile display name: missing %q", want)
+		}
+	}
+}
+
+func TestEmbeddedWebAccountDialogsKeepActionsContained(t *testing.T) {
+	content, err := webFS.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	web := string(content)
+	for _, want := range []string{
+		`class="auth-account-actions"`,
+		`class="auth-account-action"`,
+		`class="auth-account-footer"`,
+		`class="publisher-key-list set-hint"`,
+		`class="publisher-key-fields"`,
+		`class="key-dialog-actions publisher-key-actions"`,
+		`class="publisher-secret"`,
+		`let authRefreshInFlight = null`,
+		`async function refreshAuthSession()`,
+		`async function authenticatedAuthRequest(path, options = {}, retried = false)`,
+		`function authReconnectView(content, message = '')`,
+		`id="auth-reconnect-back"`,
+		`id="auth-reconnect-signin"`,
+	} {
+		if !strings.Contains(web, want) {
+			t.Fatalf("embedded account dialog is missing contained layout contract %q", want)
+		}
+	}
+	if strings.Contains(web, `document.getElementById('auth-signout').before(publisherButton)`) {
+		t.Fatal("account actions must be rendered structurally, not injected into a fixed-width footer")
+	}
+	if strings.Contains(web, `authRequest('/publisher-keys',{},authSession.session.access_token)`) {
+		t.Fatal("publisher keys must use the refresh-and-retry authenticated account client")
+	}
+}
+
+func TestEmbeddedWebRecipeManagerDoesNotExposeAuthoringForms(t *testing.T) {
+	content, err := webFS.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	web := string(content)
+	for _, forbidden := range []string{
+		`id="recipe-create"`,
+		`id="recipe-community-create"`,
+		`data-recipe-edit=`,
+		`data-recipe-publish=`,
+		`<span>Create locally</span>`,
+		`<span>New recipe</span>`,
+		`<span>Import and edit</span>`,
+	} {
+		if strings.Contains(web, forbidden) {
+			t.Fatalf("recipe authoring must remain a CLI workflow; found GUI affordance %q", forbidden)
+		}
+	}
+	for _, want := range []string{
+		`Run recipes installed on this machine. Find signed community recipes in Discover.`,
+		`<span>Import recipe</span>`,
+		`const importAction = advanced ?`,
+		`Use the Cloudless CLI to validate and publish a recipe from your development environment.`,
+	} {
+		if !strings.Contains(web, want) {
+			t.Fatalf("recipe manager is missing the CLI-first workflow copy %q", want)
+		}
+	}
+}
+
+func TestEmbeddedWebCommunityRecipesInstallAndShowDetailsInline(t *testing.T) {
+	content, err := webFS.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	web := string(content)
+	for _, want := range []string{
+		`data-community-install=`,
+		`data-community-open-installed=`,
+		`function installCommunityRecipe(`,
+		`function renderCommunityRecipeDetail(`,
+		`class="community-detail"`,
+		`id="community-install"`,
+		`Follow its preparation steps, then choose Run recipe.`,
+		`.community-report.hidden { display:none; }`,
+		`mmRecipeView.scope==='local'&&!mmCommunityDetail`,
+	} {
+		if !strings.Contains(web, want) {
+			t.Fatalf("community recipe workflow is missing %q", want)
+		}
+	}
+	if strings.Contains(web, `function openCommunityRecipeDetail(slug){keyDialogReturnFocus=`) {
+		t.Fatal("community recipe details must render inside the Model Manager, not in a nested dialog")
 	}
 }

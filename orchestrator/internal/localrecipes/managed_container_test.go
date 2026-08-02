@@ -66,3 +66,31 @@ func TestManagedContainerDraftRejectsMutableOrExecutableInputs(t *testing.T) {
 		})
 	}
 }
+
+func TestAdvancedContainerDraftAllowsPinnedAuxiliaryModelsAndContainerCommand(t *testing.T) {
+	draft := managedContainerTestDraft()
+	draft.Runtime.Adapter = AdvancedContainerAdapter
+	draft.Engine.EntryPoint = "/bin/bash"
+	draft.Engine.Command = []string{"-lc", "exec vllm serve model --speculative-config '{\"method\":\"dflash\"}'"}
+	draft.Engine.Arguments = nil
+	draft.Model.Dependencies = []ModelDependency{{
+		ID: "example/dflash", Revision: strings.Repeat("d", 40), Role: "speculative-draft",
+	}}
+	draft.Runtime.Environment["CUTE_DSL_ARCH"] = "sm_121a"
+	draft.Runtime.Container = ContainerRuntime{
+		User: "0", IPC: "host", ShmSize: "32g", Ulimits: []string{"memlock=-1:-1"},
+		CapAdd: []string{"IPC_LOCK"}, ModelCachePath: "/root/.cache/huggingface",
+	}
+	if _, err := validateDraft(draft); err != nil {
+		t.Fatalf("validate advanced container draft: %v", err)
+	}
+}
+
+func TestAdvancedContainerDraftStillRequiresPinnedArtifacts(t *testing.T) {
+	draft := managedContainerTestDraft()
+	draft.Runtime.Adapter = AdvancedContainerAdapter
+	draft.Model.Dependencies = []ModelDependency{{ID: "example/dflash", Revision: "main"}}
+	if _, err := validateDraft(draft); err == nil || !strings.Contains(err.Error(), "immutable") {
+		t.Fatalf("mutable auxiliary model error = %v", err)
+	}
+}

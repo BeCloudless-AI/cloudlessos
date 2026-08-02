@@ -37,7 +37,7 @@ import (
 )
 
 var recipeInterfacePattern = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,64}$`)
-var localRecipeIDPattern = regexp.MustCompile(`^(?:deepseek-v4-flash-dspark-2x|deepseek-v4-flash-dual-dspark-1m|local-[0-9a-f]{16})$`)
+var localRecipeIDPattern = regexp.MustCompile(`^(?:deepseek-v4-flash-dspark-2x|deepseek-v4-flash-dual-dspark-1m|local-[0-9a-f]{16}|community-[0-9a-f]{16,32})$`)
 
 // recipeRuntimeRoot is fixed in production. It is a package variable only so
 // failure-injection tests can exercise real checkout/cleanup behavior without
@@ -86,7 +86,7 @@ func (s *Server) localRecipesList(w http.ResponseWriter, r *http.Request) {
 		"recipes": recipes, "active": active, "jobs": s.jobs.List("recipe:"),
 		"defaults":   localrecipes.NewManagedDraft(),
 		"contract":   s.inferenceContract(),
-		"cluster":    clusterCompute(r.Context(), totalVRAMGB(r.Context())),
+		"cluster":    s.cachedClusterCompute(r.Context(), totalVRAMGB(r.Context())),
 		"plans":      plans,
 		"revisions":  revisions,
 		"operations": operations,
@@ -501,7 +501,7 @@ func (s *Server) localRecipeRun(w http.ResponseWriter, r *http.Request) {
 	}
 	job := s.jobs.Create("recipe:" + recipe.ID)
 	s.observeRecipeJob(job, operation.ID)
-	if operation.RecipeSnapshot.Runtime.Adapter == localrecipes.ManagedContainerAdapter {
+	if localrecipes.IsContainerAdapter(operation.RecipeSnapshot.Runtime.Adapter) {
 		go s.runManagedContainerRecipe(job, operation.RecipeSnapshot, operation.ID)
 	} else {
 		go s.runLocalRecipe(job, operation.RecipeSnapshot, operation.ID)
@@ -544,7 +544,7 @@ func (s *Server) localRecipeCheck(w http.ResponseWriter, r *http.Request) {
 	}
 	job := s.jobs.Create("recipe:" + recipe.ID + ":check")
 	s.observeRecipeJob(job, operation.ID)
-	if operation.RecipeSnapshot.Runtime.Adapter == localrecipes.ManagedContainerAdapter {
+	if localrecipes.IsContainerAdapter(operation.RecipeSnapshot.Runtime.Adapter) {
 		go s.checkManagedContainerRecipe(job, operation.RecipeSnapshot, operation.ID)
 	} else {
 		go s.checkLocalRecipe(job, operation.RecipeSnapshot, operation.ID)
@@ -628,7 +628,7 @@ func (s *Server) localRecipeStop(w http.ResponseWriter, r *http.Request) {
 	if operation.PreparedImageReference != "" {
 		stopRecipe.Engine.Image = operation.PreparedImageReference
 	}
-	if stopRecipe.Runtime.Adapter == localrecipes.ManagedContainerAdapter {
+	if localrecipes.IsContainerAdapter(stopRecipe.Runtime.Adapter) {
 		go s.stopManagedContainerRecipe(job, stopRecipe, operation.ID)
 	} else {
 		go s.stopLocalRecipe(job, stopRecipe, operation.ID)
@@ -2133,6 +2133,27 @@ func (s *Server) finishRecipeOperation(job *jobs.Job, operationID string, err er
 				cleanupErr = s.cleanupInterruptedRecipe(reconcileCtx, job, operation, operation.RecipeSnapshot)
 			}
 			remaining, reconcileErr := s.releaseMissingRecipeResources(reconcileCtx, operationID, operation.RecipeSnapshot)
+			// Docker/container-network teardown is asynchronous. During an abort,
+			// give recently removed containers and listeners a short settling window
+			// before persisting a cleanup-proof failure.
+			if abortRequested && reconcileErr == nil && len(remaining) > 0 {
+				settleDeadline := time.Now().Add(5 * time.Second)
+				for len(remaining) > 0 && time.Now().Before(settleDeadline) && reconcileCtx.Err() == nil {
+					timer := time.NewTimer(200 * time.Millisecond)
+					select {
+					case <-reconcileCtx.Done():
+						timer.Stop()
+					case <-timer.C:
+					}
+					if reconcileCtx.Err() != nil {
+						break
+					}
+					remaining, reconcileErr = s.releaseMissingRecipeResources(reconcileCtx, operationID, operation.RecipeSnapshot)
+					if reconcileErr != nil {
+						break
+					}
+				}
+			}
 			cancel()
 			if len(remaining) > 0 {
 				cleanupVerified = false
@@ -2396,6 +2417,10 @@ func (s *Server) checkLocalRecipe(job *jobs.Job, recipe localrecipes.Recipe, ope
 		return
 	}
 	capacityValues := localCapacity.values("local.")
+	// local.modelBytes is the remaining download requirement and may be zero for
+	// a cached model. The immutable content size is required when Run recomputes
+	// the accelerator preflight fingerprint.
+	capacityValues["local.modelContentBytes"] = strconv.FormatInt(modelBytes, 10)
 	capacityValues["local.filesystem"] = measuredAt
 	if localCapacity.RequiredBytes > localCapacity.AvailableBytes {
 		s.failRecipeCheck(job, operationID, "capacity", "This node does not have enough free storage",
@@ -2554,17 +2579,23 @@ func (s *Server) stopLocalRecipe(job *jobs.Job, recipe localrecipes.Recipe, oper
 			return
 		}
 		if stopErr := runConfiguredRecipeCommand(ctx, job, "stopping", "Stop inference", workdir, env, recipe, recipe.Runtime.Lifecycle.Stop); stopErr != nil {
-			job.Progress("constrained-cleanup", "The legacy stop command is unavailable. Removing only the detected orphaned containers instead\u2026", 0, 1)
-			cleaned, cleanupErr := s.removeOrphanedRecipeRuntime(ctx, recipe)
+			job.Progress("constrained-cleanup", "The editable stop command is unavailable. Removing only resources owned by this recipe launch instead\u2026", 0, 1)
+			cleaned, cleanupErr := false, error(nil)
+			if ownership != nil {
+				cleanupErr = s.cleanupOwnedRecipeRuntime(ctx, *ownership, recipe)
+				cleaned = cleanupErr == nil
+			} else {
+				cleaned, cleanupErr = s.removeOrphanedRecipeRuntime(ctx, recipe)
+			}
 			if cleanupErr != nil {
-				s.finishRecipeOperation(job, operationID, fmt.Errorf("stop recipe runtime: %v; constrained orphan cleanup: %w", stopErr, cleanupErr))
+				s.finishRecipeOperation(job, operationID, fmt.Errorf("stop recipe runtime: %v; constrained ownership cleanup: %w", stopErr, cleanupErr))
 				return
 			}
 			if !cleaned {
 				s.finishRecipeOperation(job, operationID, fmt.Errorf("stop recipe runtime: %w", stopErr))
 				return
 			}
-			job.Progress("constrained-cleanup", "Removed the orphaned inference containers without executing the legacy recipe.", 1, 1)
+			job.Progress("constrained-cleanup", "Removed the recipe-owned inference resources without executing the editable recipe.", 1, 1)
 		}
 	} else {
 		s.finishRecipeOperation(job, operationID, fmt.Errorf("read cluster before stopping recipe: %w", err))
@@ -2596,13 +2627,15 @@ func (s *Server) stopLocalRecipe(job *jobs.Job, recipe localrecipes.Recipe, oper
 	s.pruneRecipeOperations()
 }
 
-// removeOrphanedRecipeRuntime is the deliberately narrow Doctor fallback for
-// legacy recipes whose editable lifecycle commands are no longer trusted. It
-// only operates while Cloudless declares inference unloaded, and it only
-// removes exact running container names independently observed by the engine.
-// It never executes recipe content or deletes downloaded model data.
+// removeOrphanedRecipeRuntime is the deliberately narrow fallback for legacy
+// recipes whose editable lifecycle commands are no longer trusted. It can
+// operate while inference is unloaded or while this exact recipe owns the
+// active runtime. It only removes exact running container names independently
+// observed by the engine. It never executes recipe content, touches another
+// active runtime, or deletes downloaded model data.
 func (s *Server) removeOrphanedRecipeRuntime(ctx context.Context, recipe localrecipes.Recipe) (bool, error) {
-	if !s.state.Get().EngineUnloaded {
+	current := s.state.Get()
+	if !constrainedRecipeCleanupAllowed(current.EngineUnloaded, current.LocalRecipeID, recipe.ID) {
 		return false, nil
 	}
 	containers, err := s.eng.List(ctx)
@@ -2625,6 +2658,10 @@ func (s *Server) removeOrphanedRecipeRuntime(ctx context.Context, recipe localre
 		}
 	}
 	return true, errors.Join(cleanupErrs...)
+}
+
+func constrainedRecipeCleanupAllowed(engineUnloaded bool, activeRecipeID, targetRecipeID string) bool {
+	return targetRecipeID != "" && (engineUnloaded || activeRecipeID == targetRecipeID)
 }
 
 func orphanedRecipeContainerNames(containers []engine.Container, recipe localrecipes.Recipe) []string {

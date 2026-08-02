@@ -8,6 +8,7 @@ import (
 )
 
 const ManagedContainerAdapter = "managed-container-v1"
+const AdvancedContainerAdapter = "advanced-container-v1"
 
 var (
 	immutableContainerImagePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/:@-]{0,430}@sha256:[0-9a-fA-F]{64}$`)
@@ -32,9 +33,25 @@ func ValidateManagedContainerRecipe(recipe Recipe) error {
 	return validateManagedContainerDraft(DraftFromRecipe(recipe))
 }
 
+func IsContainerAdapter(adapter string) bool {
+	switch strings.TrimSpace(adapter) {
+	case ManagedContainerAdapter, AdvancedContainerAdapter:
+		return true
+	default:
+		return false
+	}
+}
+
+func containerRuntimeConfigured(value ContainerRuntime) bool {
+	return value.User != "" || value.ReadOnly || value.IPC != "" || value.ShmSize != "" ||
+		len(value.Ulimits) != 0 || len(value.CapAdd) != 0 || len(value.CapDrop) != 0 ||
+		len(value.Tmpfs) != 0 || value.PidsLimit != 0 || value.ModelCachePath != ""
+}
+
 func validateManagedContainerDraft(d Draft) error {
-	if strings.TrimSpace(d.Runtime.Adapter) != ManagedContainerAdapter {
-		return fmt.Errorf("runtime adapter must be %q", ManagedContainerAdapter)
+	adapter := strings.TrimSpace(d.Runtime.Adapter)
+	if !IsContainerAdapter(adapter) {
+		return fmt.Errorf("runtime adapter must be %q or %q", ManagedContainerAdapter, AdvancedContainerAdapter)
 	}
 	if d.Source.URL != "" || d.Source.Revision != "" || len(d.Source.Files) != 0 {
 		return errors.New("managed container recipes cannot include source repositories")
@@ -42,8 +59,8 @@ func validateManagedContainerDraft(d Draft) error {
 	if !immutableContainerImagePattern.MatchString(strings.TrimSpace(d.Engine.Image)) {
 		return errors.New("managed container recipes require an image pinned as repository@sha256:<digest>")
 	}
-	if strings.ToLower(strings.TrimSpace(d.Engine.Type)) != "vllm" {
-		return errors.New("managed container recipes currently support the vLLM engine")
+	if strings.TrimSpace(d.Engine.Type) == "" || adapter == ManagedContainerAdapter && strings.ToLower(strings.TrimSpace(d.Engine.Type)) != "vllm" {
+		return errors.New("managed-container-v1 requires vLLM; advanced-container-v1 may declare another OpenAI-compatible engine")
 	}
 	if d.Engine.ServedModelName != CloudlessModelAlias || d.Engine.APIPath != "/v1" {
 		return errors.New("managed container recipes must preserve the Cloudless model and /v1 API contract")
@@ -53,6 +70,11 @@ func validateManagedContainerDraft(d Draft) error {
 	}
 	if !immutableModelRevisionPattern.MatchString(strings.TrimSpace(d.Model.Revision)) {
 		return errors.New("managed container recipes require an immutable 40- or 64-character model revision")
+	}
+	for _, dependency := range d.Model.Dependencies {
+		if strings.TrimSpace(dependency.ID) == "" || !immutableModelRevisionPattern.MatchString(strings.TrimSpace(dependency.Revision)) {
+			return errors.New("advanced container model dependencies require an ID and immutable 40- or 64-character revision")
+		}
 	}
 	if d.Distributed.Nodes != 1 || len(d.Distributed.SelectedNodes) != 0 || d.Runtime.BuildOnce || d.Runtime.DownloadOnce {
 		return errors.New("managed container recipes currently support one local node")
@@ -71,9 +93,25 @@ func validateManagedContainerDraft(d Draft) error {
 			return fmt.Errorf("managed container recipes cannot provide a %s command", label)
 		}
 	}
-	for _, argument := range d.Engine.Arguments {
-		if _, ok := managedVLLMBooleanArguments[argument]; !ok {
-			return fmt.Errorf("vLLM argument %q is not available in the constrained recipe runtime", argument)
+	if adapter == ManagedContainerAdapter {
+		if d.Engine.EntryPoint != "" || len(d.Engine.Command) != 0 || len(d.Model.Dependencies) != 0 || containerRuntimeConfigured(d.Runtime.Container) {
+			return errors.New("managed-container-v1 cannot override the container command or security profile; use advanced-container-v1")
+		}
+		for _, argument := range d.Engine.Arguments {
+			if _, ok := managedVLLMBooleanArguments[argument]; !ok {
+				return fmt.Errorf("vLLM argument %q is not available in the constrained recipe runtime", argument)
+			}
+		}
+	} else {
+		if len(d.Engine.Command) == 0 && strings.TrimSpace(d.Engine.EntryPoint) != "" {
+			return errors.New("advanced container entryPoint requires an explicit command")
+		}
+		if strings.ContainsRune(d.Engine.EntryPoint, '\x00') {
+			return errors.New("advanced container entryPoint contains an invalid byte")
+		}
+		container := d.Runtime.Container
+		if container.ModelCachePath != "" && !strings.HasPrefix(container.ModelCachePath, "/") {
+			return errors.New("advanced container modelCachePath must be absolute")
 		}
 	}
 	if d.Health.Scheme != "http" || d.Health.Host != "127.0.0.1" || d.Health.Port != d.Engine.ContainerPort {

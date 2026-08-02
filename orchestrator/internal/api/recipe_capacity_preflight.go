@@ -106,6 +106,33 @@ func recipeModelPreflightBytes(ctx context.Context, recipe localrecipes.Recipe, 
 	return huggingFaceModelRevisionSize(ctx, recipe.Model.ID, recipe.Model.Revision, token)
 }
 
+func recipeModelSet(recipe localrecipes.Recipe) []localrecipes.Recipe {
+	models := []localrecipes.Recipe{recipe}
+	for _, dependency := range recipe.Model.Dependencies {
+		item := recipe
+		item.Model.ID = dependency.ID
+		item.Model.Revision = dependency.Revision
+		item.Model.Dependencies = nil
+		models = append(models, item)
+	}
+	return models
+}
+
+func recipeModelSetPreflightBytes(ctx context.Context, recipe localrecipes.Recipe, token string) (int64, error) {
+	var total int64
+	for _, item := range recipeModelSet(recipe) {
+		size, err := recipeModelPreflightBytes(ctx, item, token)
+		if err != nil {
+			return 0, fmt.Errorf("measure model %s@%s: %w", item.Model.ID, item.Model.Revision, err)
+		}
+		if size > math.MaxInt64-total {
+			return 0, errors.New("combined recipe model size overflowed")
+		}
+		total += size
+	}
+	return total, nil
+}
+
 func peerRecipeAvailableBytes(ctx context.Context, checkout string, env map[string]string, peer recipePeer) (int64, error) {
 	marker := string(os.PathSeparator) + ".local" + string(os.PathSeparator)
 	markerIndex := strings.Index(peer.Checkout, marker)

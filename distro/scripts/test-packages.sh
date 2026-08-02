@@ -28,6 +28,28 @@ sh -n "$DISTRO/packages/cloudless-branding/os-release"
 # background visible.
 grep -Fq '$HOME/snap/chromium/common/cloudless-browser' \
     "$DISTRO/packages/cloudless-shell/cloudless-kiosk"
+grep -Fq '$HOME/snap/firefox/common/cloudless-kiosk' \
+    "$DISTRO/packages/cloudless-shell/cloudless-kiosk"
+grep -Fq 'browser.sessionstore.resume_from_crash", false' \
+    "$DISTRO/packages/cloudless-shell/cloudless-kiosk"
+grep -Fq 'nvidia-smi -L' \
+    "$DISTRO/packages/cloudless-shell/cloudless-kiosk"
+grep -Fq 'gfx.canvas.accelerated", true' \
+    "$DISTRO/packages/cloudless-shell/cloudless-kiosk"
+grep -Fq 'gfx.webrender.all", true' \
+    "$DISTRO/packages/cloudless-shell/cloudless-kiosk"
+grep -Fq 'layers.acceleration.disabled", false' \
+    "$DISTRO/packages/cloudless-shell/cloudless-kiosk"
+grep -Fq 'MOZ_WEBRENDER=1' \
+    "$DISTRO/packages/cloudless-shell/cloudless-kiosk"
+grep -Fq 'gfx.canvas.accelerated", false' \
+    "$DISTRO/packages/cloudless-shell/cloudless-kiosk"
+grep -Fq 'gfx.webrender.software", true' \
+    "$DISTRO/packages/cloudless-shell/cloudless-kiosk"
+grep -Fq 'LIBGL_ALWAYS_SOFTWARE=1 MOZ_WEBRENDER=0' \
+    "$DISTRO/packages/cloudless-shell/cloudless-kiosk"
+grep -Fq -- '--no-remote --profile "$PROFILE_DIR"' \
+    "$DISTRO/packages/cloudless-shell/cloudless-kiosk"
 grep -Fq '$HOME/snap/chromium/common/cloudless-web-browser' \
     "$DISTRO/packages/cloudless-shell/cloudless-browser-agent"
 grep -Fq '$HOME/snap/firefox/common/cloudless-web-browser' \
@@ -98,6 +120,8 @@ dpkg-deb -f "$orchestrator_deb" Depends | grep -Eq '(^|, )util-linux(,|$)'
 dpkg-deb -f "$shell_deb" Depends | grep -Eq '(^|, )xdotool(,|$)'
 dpkg-deb -c "$orchestrator_deb" |
     grep -F './usr/share/cloudless/cloudless-archive-keyring.pgp' >/dev/null
+dpkg-deb -c "$orchestrator_deb" |
+    grep -F './usr/share/cloudless/community-keys.json' >/dev/null
 dpkg-deb -c "$orchestrator_deb" | grep -F './usr/lib/cloudless/cloudless-install-tailscale' >/dev/null
 dpkg-deb -c "$orchestrator_deb" | grep -F './usr/lib/cloudless/cloudless-privileged' >/dev/null
 dpkg-deb -c "$orchestrator_deb" | grep -F './usr/lib/cloudless/cloudless-engine' >/dev/null
@@ -124,11 +148,22 @@ grep -Fq 'ExecStart=/usr/lib/cloudless/cloudless-boot-audit' \
     "$DISTRO/packages/cloudless-firstboot/cloudless-firstboot.service"
 grep -Fq 'OnFailure=cloudless-graphical-recovery.service' \
     "$DISTRO/packages/cloudless-firstboot/cloudless-firstboot.service"
+grep -Fq 'WantedBy=graphical.target' \
+    "$DISTRO/packages/cloudless-firstboot/cloudless-firstboot.service"
+if grep -Eq '^(After|Wants)=.*graphical\.target' \
+    "$DISTRO/packages/cloudless-firstboot/cloudless-firstboot.service"; then
+    echo "cloudless-firstboot must not wait on the target that starts it" >&2
+    exit 1
+fi
+grep -Fq 'systemctl reenable cloudless-firstboot.service' \
+    "$DISTRO/packages/cloudless-firstboot/postinst"
 grep -Fq 'ExecStart=/usr/bin/cloudless-qualify boot-active' \
     "$DISTRO/packages/cloudless-firstboot/cloudless-qualification-boot.service"
 grep -Fq 'Requires=cloudless-firstboot.service' \
     "$DISTRO/packages/cloudless-firstboot/cloudless-qualification-boot.service"
-grep -Fq 'systemctl enable cloudless-qualification-boot.service' \
+grep -Fq 'WantedBy=graphical.target' \
+    "$DISTRO/packages/cloudless-firstboot/cloudless-qualification-boot.service"
+grep -Fq 'systemctl reenable cloudless-qualification-boot.service' \
     "$DISTRO/packages/cloudless-firstboot/postinst"
 grep -Fq 'cloudless-graphical-recovery-' \
     "$DISTRO/packages/cloudless-firstboot/cloudless-graphical-recovery"

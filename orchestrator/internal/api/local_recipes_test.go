@@ -684,13 +684,13 @@ func TestRecipeUIUsesRecipesIconAndCloudlessSourceViewer(t *testing.T) {
 	for _, want := range []string{
 		`id="ui-recipes"`,
 		`${uiIcon('recipes')}<span>Recipes</span>`,
-		`<h3>Recipe Library</h3>`,
+		`<h3>Local recipes</h3>`,
 		`.recipe-actions .btn`,
 		`.recipe-secondary-actions { display: grid; grid-template-columns: repeat(auto-fit,minmax(76px,1fr));`,
 		`function recipeGitHubURL(value)`,
 		`function recipeImportRequest(sourceValue)`,
 		`function openRecipeImport()`,
-		`let mmRecipeView = { library: 'supported', q: '', source: 'all', sparks: 'all', status: 'all', sort: 'updated', page: 1, perPage: 6 }`,
+		`let mmRecipeView = { scope: 'local', library: 'supported', q: '', source: 'all', sparks: 'all', status: 'all', sort: 'updated', page: 1, perPage: 6, communityCategory: '', communityPlatform: '', communityTrust: '' }`,
 		`function recipeMatchesView(recipe, data)`,
 		`function recipeConnectedSparks(data)`,
 		`function recipeNeedsMoreSparks(recipe, data)`,
@@ -722,12 +722,11 @@ func TestRecipeUIUsesRecipesIconAndCloudlessSourceViewer(t *testing.T) {
 		"`https://github.com/${path}`",
 		`source.onkeydown = event => { if (event.key === 'Enter')`,
 		`'/api/recipes/' + encodeURIComponent(card.dataset.recipeId) + '/source'`,
-		`['Engine', 'Inference server and container']`,
-		`['Model', 'Model, memory and parallelism']`,
-		`['Runtime', 'Commands and environment']`,
-		`rb-engine-type`,
-		`rb-runtime-env`,
-		`recipeCommandFields('start','Start inference step'`,
+		`function advancedInterfaceEnabled()`,
+		`if (!advancedInterfaceEnabled())`,
+		`const importAction = advanced ?`,
+		`Enable Advanced interface in Settings → General to import local recipes`,
+		`Use the Cloudless CLI to validate and publish a recipe from your development environment.`,
 	} {
 		if !strings.Contains(page, want) {
 			t.Fatalf("recipe UI is missing %q", want)
@@ -745,7 +744,7 @@ func TestRecipeUIUsesRecipesIconAndCloudlessSourceViewer(t *testing.T) {
 	if strings.Contains(page, `placeholder="https://github.com/owner/repository"`) {
 		t.Fatal("recipe import still asks users to type the fixed GitHub prefix")
 	}
-	for _, removed := range []string{`<span>Prefill from GitHub</span>`, `id="recipe-import-toggle"`} {
+	for _, removed := range []string{`<span>Prefill from GitHub</span>`, `id="recipe-import-toggle"`, `id="recipe-create"`, `data-recipe-edit=`, `data-recipe-publish=`} {
 		if strings.Contains(page, removed) {
 			t.Fatalf("duplicate recipe import UI still contains %q", removed)
 		}
@@ -896,7 +895,7 @@ func TestRecipeProgressFallsBackToDurableOperationJournal(t *testing.T) {
 	}
 }
 
-func TestRecipeManagerOnlyShowsLocalLibrary(t *testing.T) {
+func TestRecipeManagerSeparatesLocalAndCommunityLibraries(t *testing.T) {
 	content, err := webFS.ReadFile("web/index.html")
 	if err != nil {
 		t.Fatal(err)
@@ -904,15 +903,24 @@ func TestRecipeManagerOnlyShowsLocalLibrary(t *testing.T) {
 	page := string(content)
 	for _, want := range []string{
 		`function recipeLibraryHeaderHTML(local)`,
-		`<h3>Recipe Library</h3>`,
-		`Only recipes Cloudless can execute appear in the library.`,
+		`<h3>Local recipes</h3>`,
+		`function renderCommunityRecipes(c, scope)`,
+		`id="my-recipes-body"`,
+		`My Recipes`,
+		`Discover`,
+		`Run recipes installed on this machine. Find signed community recipes in Discover.`,
+		`function communitySocialHTML(activity, commentsHTML)`,
+		`class="community-filter-field search"`,
+		`for="community-rating"`,
+		`for="community-comment"`,
+		`for="community-report-category"`,
 		`paintLocalRecipes(c, mmRecipes)`,
 	} {
 		if !strings.Contains(page, want) {
 			t.Fatalf("local recipe UI is missing %q", want)
 		}
 	}
-	for _, removed := range []string{"Discover recipes", "/api/recipe-catalog", "mmRecipeCatalog", "paintCatalogRecipes", "data-catalog-install"} {
+	for _, removed := range []string{"/api/recipe-catalog", "mmRecipeCatalog", "paintCatalogRecipes", "data-catalog-install"} {
 		if strings.Contains(page, removed) {
 			t.Fatalf("recipe discovery UI still contains %q", removed)
 		}

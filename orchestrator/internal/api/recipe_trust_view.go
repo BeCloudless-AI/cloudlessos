@@ -44,15 +44,22 @@ type recipeExecutionDecision struct {
 // recipeExecutionPolicy is the boundary between editable recipe metadata and
 // privileged host/container execution. source-scripts-v1 may invoke arbitrary
 // programs and Docker is root-equivalent, so only an exact profile from the
-// signed Cloudless package may cross that boundary. managed-container-v1 is
-// separately admitted because Cloudless owns its complete constrained spec.
+// signed Cloudless package may cross that boundary. Container adapters are
+// admitted separately: managed-container-v1 is command-free, while
+// advanced-container-v1 exposes its signed in-container command and permissions.
 func recipeExecutionPolicy(recipe localrecipes.Recipe) recipeExecutionDecision {
+	if recipe.Community != nil && recipe.Community.Revoked {
+		return recipeExecutionDecision{Mode: "blocked-revoked", Reason: "This exact community revision was revoked: " + recipe.Community.RevokedReason}
+	}
 	if _, reviewed := localrecipes.ReviewedProfile(recipe); reviewed {
 		return recipeExecutionDecision{Allowed: true, Mode: "signed-profile"}
 	}
-	if recipe.Runtime.Adapter == localrecipes.ManagedContainerAdapter {
+	if localrecipes.IsContainerAdapter(recipe.Runtime.Adapter) {
 		if err := localrecipes.ValidateManagedContainerRecipe(recipe); err != nil {
 			return recipeExecutionDecision{Mode: "blocked-invalid-container", Reason: err.Error()}
+		}
+		if recipe.Runtime.Adapter == localrecipes.AdvancedContainerAdapter {
+			return recipeExecutionDecision{Allowed: true, Mode: "advanced-container"}
 		}
 		return recipeExecutionDecision{Allowed: true, Mode: "constrained-container"}
 	}
@@ -92,10 +99,31 @@ func buildRecipeTrustView(recipe localrecipes.Recipe, operations []recipeops.Ope
 		view.SupportLevel = "supported"
 		view.Summary = "This exact compatibility profile ships inside a package authenticated by the CloudlessOS archive key. Any edit removes reviewed status."
 		view.Signer, view.SigningKeyFingerprint, view.MetadataDigest = review.Signer, review.KeyFingerprint, review.MetadataDigest
-	} else if decision.Allowed && decision.Mode == "constrained-container" {
-		view.Level, view.Label = "cloudless-constrained", "Cloudless constrained"
+	} else if decision.Allowed && (decision.Mode == "constrained-container" || decision.Mode == "advanced-container") {
+		if recipe.Community != nil {
+			view.Level, view.Label = "community-signed", "Community signed"
+			if decision.Mode == "advanced-container" {
+				view.Summary = "Cloudless verified this immutable community signature. This advanced recipe owns its in-container command and requested permissions; review them before running."
+			} else {
+				view.Summary = "Cloudless verified this immutable community signature and enforces the constrained container policy. This does not mean Cloudless tested the model."
+			}
+		} else {
+			if decision.Mode == "advanced-container" {
+				view.Level, view.Label = "local-advanced", "Local advanced container"
+			} else {
+				view.Level, view.Label = "cloudless-constrained", "Cloudless constrained"
+			}
+		}
 		view.SupportLevel = "preview"
-		view.Summary = "Cloudless generates the complete container command and enforces an immutable image, immutable model, read-only root, no host commands, no host mounts, and no Linux capabilities."
+		if recipe.Community == nil && decision.Mode == "constrained-container" {
+			view.Summary = "Cloudless generates the complete container command and enforces an immutable image, immutable model, read-only root, no host commands, no host mounts, and no Linux capabilities."
+		} else if recipe.Community == nil {
+			view.Summary = "This local advanced recipe owns its in-container command and declared permissions. Review them before running; Cloudless still denies host commands and arbitrary host mounts."
+		}
+	}
+	if recipe.Community != nil && recipe.Community.Revoked {
+		view.Level, view.Label, view.SupportLevel = "community-revoked", "Community revoked", "blocked"
+		view.Summary = decision.Reason
 	}
 	if recipe.Origin == "catalog" && !reviewed {
 		view.Level, view.Label = "catalog-unverified", "Catalog · unverified"
@@ -134,6 +162,13 @@ func buildRecipeTrustView(recipe localrecipes.Recipe, operations []recipeops.Ope
 
 func recipeTrustCommands(recipe localrecipes.Recipe) []string {
 	commands := make([]string, 0, 4)
+	if recipe.Runtime.Adapter == localrecipes.AdvancedContainerAdapter && (recipe.Engine.EntryPoint != "" || len(recipe.Engine.Command) != 0) {
+		containerCommand := append([]string{}, recipe.Engine.Command...)
+		if recipe.Engine.EntryPoint != "" {
+			containerCommand = append([]string{recipe.Engine.EntryPoint}, containerCommand...)
+		}
+		commands = append(commands, "Container: "+strings.Join(containerCommand, " "))
+	}
 	for _, item := range []struct {
 		label   string
 		command localrecipes.Command
@@ -148,7 +183,33 @@ func recipeTrustCommands(recipe localrecipes.Recipe) []string {
 }
 
 func recipeHostPermissions(recipe localrecipes.Recipe) []string {
-	if recipe.Runtime.Adapter == localrecipes.ManagedContainerAdapter {
+	if localrecipes.IsContainerAdapter(recipe.Runtime.Adapter) {
+		if recipe.Runtime.Adapter == localrecipes.AdvancedContainerAdapter {
+			permissions := []string{
+				"Execute the recipe-defined command inside its pinned container image",
+				"Use NVIDIA accelerators and outbound container networking",
+				"Write to the Cloudless model-cache volume",
+				"Bind the loopback-only private inference port",
+			}
+			container := recipe.Runtime.Container
+			if container.User == "" || container.User == "0" {
+				permissions = append(permissions, "Run as root inside the container")
+			}
+			if !container.ReadOnly {
+				permissions = append(permissions, "Write to the container root filesystem")
+			}
+			if container.IPC != "" {
+				permissions = append(permissions, "Use container IPC mode "+container.IPC)
+			}
+			for _, capability := range container.CapAdd {
+				permissions = append(permissions, "Add Linux capability "+capability)
+			}
+			if recipe.Model.TrustRemoteCode {
+				permissions = append(permissions, "Execute model repository remote code inside the container")
+			}
+			sort.Strings(permissions)
+			return permissions
+		}
 		permissions := []string{
 			"Use NVIDIA accelerators",
 			"Use outbound container networking",

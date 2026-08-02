@@ -384,7 +384,7 @@ type modelView struct {
 // Each carries a VRAM-fit verdict, active and downloaded flags.
 func (s *Server) modelsList(w http.ResponseWriter, r *http.Request) {
 	gpuGB, memoryType, availableGB, reservedGB := acceleratorFitMemory(r.Context())
-	cluster := clusterCompute(r.Context(), gpuGB)
+	cluster := s.cachedClusterCompute(r.Context(), gpuGB)
 	currentState := s.state.Get()
 	engineUnloaded := currentState.EngineUnloaded
 	current := currentState.Model
@@ -820,7 +820,13 @@ func (s *Server) runModelDownload(ctx context.Context, cancel context.CancelFunc
 	cleanupCancel()
 	result := make(chan error, 1)
 	go func() {
-		env := map[string]string{"CLOUDLESS_MODEL_ID": repo}
+		const containerCache = "/cache/huggingface"
+		env := map[string]string{
+			"CLOUDLESS_MODEL_ID": repo,
+			"HF_HOME":            containerCache,
+			"HOME":               containerCache,
+			"XDG_CACHE_HOME":     containerCache,
+		}
 		secrets := map[string]string{}
 		if revision != "" {
 			env["CLOUDLESS_MODEL_REVISION"] = revision
@@ -834,7 +840,8 @@ func (s *Server) runModelDownload(ctx context.Context, cancel context.CancelFunc
 			Image:       img,
 			Env:         env,
 			SecretFiles: secrets,
-			Volumes:     map[string]string{modelcache.Root(): "/root/.cache/huggingface"},
+			Volumes:     map[string]string{modelcache.Root(): containerCache},
+			User:        managedContainerCacheUser(),
 			EntryPoint:  "python3",
 			Args:        []string{"-c", py},
 		})

@@ -30,6 +30,8 @@ echo "==> Building cloudlessd $VERSION for linux/$ARCH"
     -ldflags="-s -w" -o "$WORK/cloudless-docker" ./cmd/cloudless-docker )
 ( cd "$ROOT/orchestrator"; CGO_ENABLED=0 GOOS=linux GOARCH="$ARCH" go build \
     -ldflags="-s -w" -o "$WORK/cloudless-desktop-agent" ./cmd/cloudless-desktop-agent )
+( cd "$ROOT/orchestrator"; CGO_ENABLED=0 GOOS=linux GOARCH="$ARCH" go build \
+    -ldflags="-s -w" -o "$WORK/cloudless" ./cmd/cloudless )
 ( cd "$ROOT/orchestrator"; CGO_ENABLED=0 GOOS=linux GOARCH="$ARCH" go build -ldflags="-s -w" -o "$WORK/cloudless-updater-bin" ./cmd/cloudless-updater )
 
 make_control() {
@@ -59,8 +61,11 @@ install -Dm0755 "$WORK/cloudlessd" "$PKG/usr/lib/cloudless/cloudlessd"
 install -Dm0755 "$WORK/cloudless-privileged" "$PKG/usr/lib/cloudless/cloudless-privileged"
 install -Dm0755 "$WORK/cloudless-engine" "$PKG/usr/lib/cloudless/cloudless-engine"
 install -Dm0755 "$WORK/cloudless-docker" "$PKG/usr/lib/cloudless/cloudless-docker"
+install -Dm0755 "$WORK/cloudless" "$PKG/usr/bin/cloudless"
 install -Dm0644 "$DISTRO/release/keys/cloudless-archive-keyring.pgp" \
     "$PKG/usr/share/cloudless/cloudless-archive-keyring.pgp"
+install -Dm0644 "$DISTRO/release/keys/community-keys.json" \
+    "$PKG/usr/share/cloudless/community-keys.json"
 install -Dm0644 "$DISTRO/packages/cloudless-orchestrator/cloudlessd.service" "$PKG/lib/systemd/system/cloudlessd.service"
 install -Dm0644 "$DISTRO/packages/cloudless-orchestrator/cloudless-privileged.service" "$PKG/lib/systemd/system/cloudless-privileged.service"
 install -Dm0644 "$DISTRO/packages/cloudless-orchestrator/cloudless-engine.service" "$PKG/lib/systemd/system/cloudless-engine.service"

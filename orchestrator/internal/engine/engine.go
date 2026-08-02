@@ -24,6 +24,7 @@ type RunSpec struct {
 	User         string            // optional numeric container user ("0" is permitted for managed maintenance helpers)
 	Args         []string          // extra args appended after the image (container command)
 	ReadOnly     bool              // mount the image root filesystem read-only
+	CapAdd       []string          // Linux capabilities added to the container
 	CapDrop      []string          // Linux capabilities removed from the container
 	SecurityOpts []string          // Docker security options (for example no-new-privileges:true)
 	Tmpfs        []string          // isolated writable tmpfs mounts

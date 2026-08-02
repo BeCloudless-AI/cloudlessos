@@ -409,6 +409,41 @@ func (s *Server) removeRecoveryContainers(ctx context.Context, operation recipeo
 	return result
 }
 
+// cleanupOwnedRecipeRuntime stops only resources journaled by the exact active
+// run operation. It is the safe stop path when an editable recipe's lifecycle
+// command cannot be executed. Model caches, images and source checkouts are
+// retained; unrelated containers and processes are never selected.
+func (s *Server) cleanupOwnedRecipeRuntime(ctx context.Context, operation recipeops.Operation, recipe localrecipes.Recipe) error {
+	if !ownedRecipeCleanupOperationAllowed(operation, recipe.ID) {
+		return errors.New("recipe cleanup requires the exact active run operation")
+	}
+	var actionErr error
+	if s.eng != nil {
+		if proxy, err := s.eng.Find(ctx, "cloudless-cluster-engine-proxy"); err != nil {
+			actionErr = errors.Join(actionErr, err)
+		} else if proxy != nil {
+			actionErr = errors.Join(actionErr, s.eng.Remove(ctx, "cloudless-cluster-engine-proxy"))
+		}
+		actionErr = errors.Join(actionErr, s.removeRecoveryContainers(ctx, operation))
+	}
+	actionErr = errors.Join(actionErr, s.cleanupInterruptedRecipePeers(ctx, operation, recipe))
+	actionErr = errors.Join(actionErr, terminateRecipeProcesses(operation.ID))
+
+	remaining, inventoryErr := s.releaseMissingRecipeResources(ctx, operation.ID, recipe)
+	if len(remaining) > 0 {
+		return errors.Join(actionErr, inventoryErr, fmt.Errorf("%d recipe-owned runtime cleanup obligation(s) remain", len(remaining)))
+	}
+	if actionErr != nil && inventoryErr == nil {
+		log.Printf("[recipe-stop] %s cleanup reported an error after ownership inventory proved resources absent: %v", operation.ID, actionErr)
+		actionErr = nil
+	}
+	return errors.Join(actionErr, inventoryErr)
+}
+
+func ownedRecipeCleanupOperationAllowed(operation recipeops.Operation, targetRecipeID string) bool {
+	return targetRecipeID != "" && operation.Kind == recipeops.KindRun && operation.RecipeID == targetRecipeID && operation.Phase == recipeops.PhaseActive
+}
+
 func (s *Server) removeRecoveryStagingCheckout(path string) error {
 	base := filepath.Join(s.state.Dir(), "recipe-checks")
 	relative, err := filepath.Rel(base, filepath.Clean(path))

@@ -63,10 +63,24 @@ func Run(ctx context.Context, eng engine.Engine, st *state.Store, mf *manifest.S
 	// A reviewed local recipe owns its own pinned runtime and the stable
 	// cloudless-ai endpoint. Do not replace it with the generic catalog command
 	// after cloudlessd or the host restarts.
+	bootstrapMode := false
 	if current := st.Get(); current.LocalRecipeID != "" && !current.EngineUnloaded {
 		logf("local recipe " + current.LocalRecipeID + " owns the active inference runtime")
-		return
+	} else {
+		provisionEngine(ctx, eng, st, mf, logf, &bootstrapMode)
 	}
+
+	provisionBundledApps(ctx, eng, st, mf, logf)
+
+	// Local-network serving: match the persisted preference (default ON).
+	EnsureLAN(ctx, eng, mf, PrimaryLANIP(), st.LocalNetwork(), logf)
+	if bootstrapMode {
+		PromoteDefault(ctx, eng, st, mf, logf)
+	}
+	logf("done")
+}
+
+func provisionEngine(ctx context.Context, eng engine.Engine, st *state.Store, mf *manifest.Store, logf func(string), bootstrapMode *bool) {
 
 	// Engines: pull all images (either is ready); the slow pulls need no lock.
 	for _, e := range catalog.Engines() {
@@ -86,8 +100,8 @@ func Run(ctx context.Context, eng engine.Engine, st *state.Store, mf *manifest.S
 		desired = catalog.DefaultEngine()
 	}
 	model := currentState.Model
-	bootstrapMode := ShouldBootstrap(currentState, st.FirstRun()) && !customengine.IsCustom(desired)
-	if bootstrapMode {
+	*bootstrapMode = ShouldBootstrap(currentState, st.FirstRun()) && !customengine.IsCustom(desired)
+	if *bootstrapMode {
 		model = BootstrapModel()
 		promotion := promotionSnapshot(currentState.ModelPromotion, "bootstrap", model, catalog.DefaultModel(), model, "Starting a lightweight model so Cloudless AI becomes available quickly.")
 		promotion.Rollback = model
@@ -217,6 +231,9 @@ func Run(ctx context.Context, eng engine.Engine, st *state.Store, mf *manifest.S
 	}
 	reconcileInferenceOperation(ctx, eng, st, desired, clusterMode, logf)
 	EngineMu.Unlock()
+}
+
+func provisionBundledApps(ctx context.Context, eng engine.Engine, st *state.Store, mf *manifest.Store, logf func(string)) {
 
 	// Non-engine bundled apps (Open WebUI and Hermes): pull and run.
 	for _, app := range catalog.Bundled() {
@@ -290,12 +307,6 @@ func Run(ctx context.Context, eng engine.Engine, st *state.Store, mf *manifest.S
 		logf(app.ID + ": started")
 	}
 
-	// Local-network serving: match the persisted preference (default ON).
-	EnsureLAN(ctx, eng, mf, PrimaryLANIP(), st.LocalNetwork(), logf)
-	if bootstrapMode {
-		PromoteDefault(ctx, eng, st, mf, logf)
-	}
-	logf("done")
 }
 
 // reconcileInferenceOperation closes the durable journal only after startup

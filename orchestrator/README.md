@@ -95,9 +95,11 @@ private or client-facing inference identity. Current cache and transfer semantic
 in [`../docs/LOCAL_RECIPES.md`](../docs/LOCAL_RECIPES.md).
 
 Execution is admitted independently from editing. An exact `source-scripts-v1` profile must match
-one authenticated in the installed package; a `managed-container-v1` definition must pass its
-constrained declarative policy. Other definitions appear as Drafts and cannot invoke host or Docker
-commands. Check and Run also reject an incomplete/missing exact model snapshot. The UI calls the
+one authenticated in the installed package. `managed-container-v1` provides the constrained,
+command-free policy; `advanced-container-v1` admits a signed immutable image with its declared
+in-container command, auxiliary models, environment, and permissions. Neither container adapter
+may invoke host commands or mount arbitrary host paths. Other definitions appear as Drafts and
+cannot execute. Check and Run also reject an incomplete/missing exact model snapshot. The UI calls the
 per-machine Check operation **Validate** to distinguish compatibility evidence from package
 provenance.
 
@@ -106,6 +108,12 @@ engines. Active state is committed only after that check succeeds. Persistent li
 under `/var/lib/cloudless/recipes-runtime` on the coordinator and the enrolled user's
 `~/.local/share/cloudless/recipes-runtime` on workers so stop and replacement remain possible after
 an orchestrator restart.
+
+Community publication is a separate control plane over the same manifest. The browser uses the
+loopback account/community proxy, while `/usr/bin/cloudless recipes validate|publish|status`
+supports external author workflows with a scoped publisher API key. Both paths create immutable
+revisions in the becloudless.ai service; signed exact releases are verified again before local
+installation. See [`../docs/COMMUNITY_RECIPES.md`](../docs/COMMUNITY_RECIPES.md).
 
 ## Custom source-built engines
 
@@ -125,6 +133,15 @@ The complete developer workflow is in
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/api/health` | daemon and Docker health |
+| POST | `/api/account/signup` | create a becloudless.ai account without exposing credentials to browser cross-origin requests |
+| POST | `/api/account/login` | authenticate with email and password through the loopback account gateway |
+| POST | `/api/account/refresh` | rotate an authenticated Cloudless account session |
+| GET | `/api/account/me` | fetch the signed-in profile |
+| POST | `/api/account/logout` | revoke the current account session |
+| GET | `/api/account/oauth/{provider}` | begin Google, X or GitHub sign-in with the local Cloudless callback |
+| POST | `/api/account/picture` | upload the signed-in user's profile picture |
+| GET/POST/DELETE | `/api/account/publisher-keys` | manage scoped external recipe-publishing credentials |
+| GET/POST/PUT/PATCH/DELETE | `/api/community/recipes/{rest...}` | proxy account-authorized community recipe and social operations |
 | GET | `/api/updates` | unified CloudlessOS, platform-driver, managed-engine and installed-app update inventory |
 | POST | `/api/updates/check` | start system/driver checks before refreshing registry comparisons |
 | POST | `/api/updates/apps/apply` | start selected application updates as independent background jobs |
@@ -157,6 +174,11 @@ The complete developer workflow is in
 
 The browser UI is the primary client. API behavior must remain loopback-safe, asynchronous
 for long operations, and consistent across managed and custom engines.
+
+Cloudless account traffic is proxied by `cloudlessd` to `https://becloudless.ai/api` so the
+kiosk never needs permissive cross-origin access. Override the upstream only for development with
+`CLOUDLESS_ACCOUNT_API`. OAuth providers must allow the exact redirect URL
+`http://127.0.0.1:8765/auth/callback` in the Supabase Authentication URL configuration.
 
 ## State and update boundaries
 

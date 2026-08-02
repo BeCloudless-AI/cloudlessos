@@ -60,6 +60,11 @@ func recipeFailureViews(operations []recipeops.Operation) map[string]recipeFailu
 	views := make(map[string]recipeFailureView, len(latest))
 	for recipeID, operation := range latest {
 		if operation.Phase == recipeops.PhaseFailed {
+			if len(operationCleanupResources(operation)) == 0 && cleanupFailureWasOnlyInventoryProof(operation.Error) {
+				// Cleanup was subsequently proven complete. Do not keep presenting
+				// a stale proof failure as a current runtime problem.
+				continue
+			}
 			views[recipeID] = buildRecipeFailureView(operation)
 		}
 	}

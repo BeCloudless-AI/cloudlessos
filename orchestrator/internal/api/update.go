@@ -371,6 +371,9 @@ func (s *Server) updateCenterCheck(w http.ResponseWriter, r *http.Request) {
 			failures = append(failures, err.Error())
 		}
 	}
+	if err := s.syncCommunityRevocations(r); err != nil {
+		failures = append(failures, "community recipe revocations: "+err.Error())
+	}
 	if len(failures) > 0 {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": strings.Join(failures, "; ")})
 		return

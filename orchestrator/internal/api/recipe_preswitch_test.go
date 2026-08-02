@@ -8,11 +8,24 @@ import (
 
 func TestCheckedRecipeModelBytesUsesHashBoundCapacityEvidence(t *testing.T) {
 	artifact := recipeops.PreflightArtifact{Checks: []recipeops.CheckResult{
-		{ID: "capacity", Values: map[string]string{"local.modelBytes": "123456789"}},
+		{ID: "capacity", Values: map[string]string{
+			"local.modelBytes":        "0",
+			"local.modelContentBytes": "123456789",
+		}},
 	}}
 	got, err := checkedRecipeModelBytes(artifact)
 	if err != nil || got != 123456789 {
 		t.Fatalf("model bytes = %d, %v", got, err)
+	}
+}
+
+func TestCheckedRecipeModelBytesSupportsLegacyUncachedEvidence(t *testing.T) {
+	artifact := recipeops.PreflightArtifact{Checks: []recipeops.CheckResult{
+		{ID: "capacity", Values: map[string]string{"local.modelBytes": "123456789"}},
+	}}
+	got, err := checkedRecipeModelBytes(artifact)
+	if err != nil || got != 123456789 {
+		t.Fatalf("legacy model bytes = %d, %v", got, err)
 	}
 }
 

@@ -49,3 +49,4 @@ npm-debug.log*
 *.img
 *.qcow2
 /artifacts/visual-regression/
+/.codex-build/

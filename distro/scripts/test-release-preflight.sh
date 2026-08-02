@@ -14,6 +14,7 @@ git -C "$work" init -q repo
 git -C "$repo" config user.email release-test@becloudless.ai
 git -C "$repo" config user.name 'Cloudless Release Test'
 cp "$ROOT/distro/release/validation-matrix.json" "$repo/distro/release/validation-matrix.json"
+cp "$ROOT/distro/release/keys/community-keys.json" "$repo/distro/release/keys/community-keys.json"
 gpg --batch --passphrase '' --quick-generate-key \
     'CloudlessOS Archive <updates@becloudless.ai>' ed25519 sign 1d >/dev/null 2>&1
 fingerprint="$(gpg --batch --with-colons --list-keys | awk -F: '$1 == "fpr" {print $10; exit}')"

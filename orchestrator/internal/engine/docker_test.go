@@ -251,6 +251,13 @@ func TestRunArgsSupportsConstrainedRecipeSandbox(t *testing.T) {
 	}
 }
 
+func TestRunArgsSupportsAdvancedRecipeCapabilities(t *testing.T) {
+	args := strings.Join(runArgs(RunSpec{Name: "cloudless-advanced", Image: "img", CapAdd: []string{"SYS_NICE", "IPC_LOCK"}}), " ")
+	if !strings.Contains(args, "--cap-add IPC_LOCK") || !strings.Contains(args, "--cap-add SYS_NICE") {
+		t.Fatalf("advanced capability arguments missing: %s", args)
+	}
+}
+
 func TestGenericNVIDIAUsesDockerGPURequest(t *testing.T) {
 	t.Setenv("CLOUDLESS_PLATFORM", "generic")
 	args := strings.Join(runArgs(RunSpec{Name: "x", Image: "img", GPUs: "all"}), " ")

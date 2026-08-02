@@ -503,6 +503,9 @@ func runArgs(spec RunSpec) []string {
 	for _, capability := range sortedNonEmpty(spec.CapDrop) {
 		args = append(args, "--cap-drop", capability)
 	}
+	for _, capability := range sortedNonEmpty(spec.CapAdd) {
+		args = append(args, "--cap-add", capability)
+	}
 	for _, option := range sortedNonEmpty(spec.SecurityOpts) {
 		args = append(args, "--security-opt", option)
 	}

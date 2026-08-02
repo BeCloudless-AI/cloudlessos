@@ -3,14 +3,20 @@
 > Recipe execution is currently experimental. The ordered hardening work and release gates are
 > tracked in the [recipe reliability roadmap](./RECIPE_RELIABILITY_ROADMAP.md).
 
-Cloudless recipes are machine-owned, editable launch profiles for specialized inference setups.
+Cloudless recipes are portable launch profiles for specialized inference setups.
 They use the native `cloudless.recipe/v1` format and run through Cloudless itself; SparkRun or
 another third-party recipe runtime is not installed or required.
 
 Recipes are available from **Model Manager -> Recipes**. The page separates **Runnable** profiles
 from **Drafts**. Runnable profiles are admitted by the installed Cloudless package or the
-constrained declarative container policy. Drafts can be created, imported, inspected, edited and
-removed, but arbitrary host-command drafts cannot cross into Validate or Run.
+constrained declarative container policy. The interface manages recipes but does not author them:
+advanced users write and validate the native YAML/JSON manifest with the Cloudless CLI, then
+publish it to the shared Recipe Manager. Imported legacy drafts can be inspected or removed, but
+arbitrary host-command drafts cannot cross into Validate or Run.
+
+To author and publish a constrained recipe to the shared Recipe Manager, follow
+[`COMMUNITY_RECIPES.md`](./COMMUNITY_RECIPES.md). It documents the CLI/API-key workflow used both
+inside and outside CloudlessOS.
 
 “Cloudless reviewed” is deliberately literal and offline: the complete executable definition was
 inspected and tested by the Cloudless project, compiled into a Cloudless package, and authenticated
@@ -36,11 +42,13 @@ recipes. The current `source-scripts-v1` adapter is executable only when the com
 exactly matches one authenticated inside the signed CloudlessOS package. Any edit removes that
 status and blocks both Check and Run before a process, image build or Docker operation begins.
 
-The `managed-container-v1` constrained declarative runner is the executable path for compatible
-user-authored containers. It requires an immutable image and model, generates the complete command,
-uses a read-only root, denies host commands/mounts/capabilities and binds only the private inference
-port. Recipes that require arbitrary source scripts still need an exact signed compatibility
-profile. A passing validation never changes local code into a reviewed profile.
+The `managed-container-v1` runner remains the command-free path for standard user-authored vLLM
+containers. `advanced-container-v1` supports immutable custom engine images that own their complete
+in-container command, architecture-specific environment, auxiliary pinned models, writable-root
+mode, IPC, ulimits, and declared Linux capabilities. Both adapters deny host commands, arbitrary
+host mounts, and the Docker socket and bind only the private inference port. Recipes that require
+host source scripts still need an exact signed compatibility profile. A passing validation never
+changes local code into a reviewed profile.
 
 ## Install, validate and run
 

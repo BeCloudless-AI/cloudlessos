@@ -87,13 +87,6 @@ func clusterCompute(ctx context.Context, localMemoryGB int) clusterComputeView {
 		LocalAvailableGB: mbToGB(localBudget.WorkloadHeadroomMB),
 		LocalReservedGB:  mbToGB(localBudget.ReservedMB),
 	}
-	telemetry, _ := sparkcluster.ClusterGPUs(probeCtx)
-	telemetryByHost := make(map[string]sparkcluster.PeerTelemetry, len(telemetry))
-	for _, peer := range telemetry {
-		if peer.Reachable && len(peer.GPUs) > 0 {
-			telemetryByHost[peer.Host] = peer
-		}
-	}
 	totalMB := localBudget.TotalMB
 	capacityMB := localBudget.WorkloadCapacityMB
 	availableMB := localBudget.WorkloadHeadroomMB
@@ -112,7 +105,8 @@ func clusterCompute(ctx context.Context, localMemoryGB int) clusterComputeView {
 			SSH:          node.Health.SSH.Status, Fabric: node.Health.Fabric.Status,
 			WorkerRuntime: node.Health.WorkerRuntime.Status,
 		}
-		if peer, ok := telemetryByHost[node.Host]; ok {
+		if node.Telemetry != nil && node.Telemetry.Reachable && len(node.Telemetry.GPUs) > 0 {
+			peer := *node.Telemetry
 			gpu := peer.GPUs[0]
 			nodeCapacityMB := max(0, gpu.MemTotalMB-gpu.MemReservedMB)
 			worker.UtilizationPct = gpu.UtilPct
@@ -155,6 +149,59 @@ func clusterCompute(ctx context.Context, localMemoryGB int) clusterComputeView {
 		}
 		view.DistributedReady = true
 	}
+	return view
+}
+
+const clusterComputeCacheTTL = 5 * time.Second
+
+func cloneClusterComputeView(view clusterComputeView) clusterComputeView {
+	view.NodeNames = append([]string(nil), view.NodeNames...)
+	view.Workers = append([]clusterComputeWorkerView(nil), view.Workers...)
+	return view
+}
+
+// cachedClusterCompute keeps high-frequency desktop endpoints from launching
+// a complete ping/SSH/fabric/telemetry sweep on every UI poll. The first read
+// is authoritative; later reads return the last complete snapshot immediately
+// while one background refresh updates it at a bounded cadence.
+func (s *Server) cachedClusterCompute(ctx context.Context, localMemoryGB int) clusterComputeView {
+	now := time.Now()
+	s.clusterViewMu.Lock()
+	if s.clusterViewReady {
+		view := cloneClusterComputeView(s.clusterView)
+		expired := now.Sub(s.clusterViewAt) >= clusterComputeCacheTTL
+		if expired && !s.clusterViewRefreshing {
+			s.clusterViewRefreshing = true
+			probe := s.clusterComputeProbe
+			go func() {
+				refreshCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				if probe == nil {
+					probe = clusterCompute
+				}
+				fresh := probe(refreshCtx, localMemoryGB)
+				s.clusterViewMu.Lock()
+				s.clusterView = cloneClusterComputeView(fresh)
+				s.clusterViewAt = time.Now()
+				s.clusterViewReady = true
+				s.clusterViewRefreshing = false
+				s.clusterViewMu.Unlock()
+			}()
+		}
+		s.clusterViewMu.Unlock()
+		return view
+	}
+	probe := s.clusterComputeProbe
+	s.clusterViewMu.Unlock()
+	if probe == nil {
+		probe = clusterCompute
+	}
+	view := probe(ctx, localMemoryGB)
+	s.clusterViewMu.Lock()
+	s.clusterView = cloneClusterComputeView(view)
+	s.clusterViewAt = time.Now()
+	s.clusterViewReady = true
+	s.clusterViewMu.Unlock()
 	return view
 }
 

@@ -1,6 +1,7 @@
 package recipeops
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"os"
@@ -758,6 +759,50 @@ func TestOpenAcceptsAuthenticHistoricalSnapshotAfterNormalizerMigration(t *testi
 	}
 	if _, err := Open(dir); err == nil {
 		t.Fatal("forged historical snapshot revision was accepted")
+	}
+}
+
+func TestOpenAcceptsAuthenticHistoricalSnapshotBeforeNestedSchemaExpansion(t *testing.T) {
+	dir := t.TempDir()
+	path := dir + "/recipe-operations/index.json"
+	if err := os.MkdirAll(dir+"/recipe-operations", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	operation := json.RawMessage(`{
+		"id":"rop-legacy-expanded-schema","kind":"stop","recipeId":"legacy-recipe",
+		"recipeRevision":"sha256:placeholder",
+		"recipeSnapshot":{
+			"id":"legacy-recipe","name":"Legacy","description":"Historical snapshot","platform":"dgx-spark",
+			"source":{"url":"","revision":""},
+			"engine":{"type":"vllm","image":"example.invalid/image@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","servedModelName":"cloudless","containerPort":8890,"apiPath":"/v1","proxyHost":"host.docker.internal","restartPolicy":"no"},
+			"model":{"id":"example/model","revision":"0123456789012345678901234567890123456789","quantization":"none","dtype":"auto","kvCacheDtype":"auto","maxContext":32768,"maxSequences":1,"gpuMemoryUtilization":0.8,"tensorParallel":1,"pipelineParallel":1,"trustRemoteCode":false},
+			"distributed":{"nodes":1,"backend":"local","masterPort":29500,"interface":"","hca":"","ibGidIndex":0,"workerAlias":"worker"},
+			"runtime":{"adapter":"managed-container-v1","workingDir":"","timeoutMinutes":120,"lifecycle":{"build":{"program":"","args":[]},"download":{"program":"","args":[]},"start":{"program":"","args":[]},"stop":{"program":"","args":[]}}},
+			"health":{"scheme":"http","host":"127.0.0.1","port":8890,"path":"/health","timeoutSeconds":1800,"intervalSeconds":5}
+		},
+		"phase":"stopping","sequence":1,"createdAt":"2026-01-01T00:00:00Z","updatedAt":"2026-01-01T00:00:01Z"
+	}`)
+	revision, err := rawPersistedSnapshotRevision(operation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	operation = bytes.Replace(operation, []byte("sha256:placeholder"), []byte(revision), 1)
+	payload, err := json.Marshal(map[string]any{"version": documentVersion, "operations": map[string]json.RawMessage{"rop-legacy-expanded-schema": operation}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, payload, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	store, err := Open(dir)
+	if err != nil {
+		t.Fatalf("authentic pre-expansion snapshot was rejected: %v", err)
+	}
+	if _, err := store.Transition("rop-legacy-expanded-schema", PhaseStopped, nil); err != nil {
+		t.Fatalf("historical operation mutation failed: %v", err)
+	}
+	if _, err := Open(dir); err != nil {
+		t.Fatalf("historical snapshot identity was not preserved after mutation: %v", err)
 	}
 }
 

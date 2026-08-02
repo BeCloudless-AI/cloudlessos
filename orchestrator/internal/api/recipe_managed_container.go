@@ -2,17 +2,29 @@ package api
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/cloudless/orchestrator/internal/engine"
 	"github.com/cloudless/orchestrator/internal/localrecipes"
 	"github.com/cloudless/orchestrator/internal/modelcache"
 )
 
-// managedContainerRecipeSpec is the sole translation boundary from editable
-// recipe metadata to a runtime command. No recipe-provided executable,
-// entrypoint, host path, network namespace, capability, or socket crosses it.
+func managedContainerCacheUser() string {
+	uid, gid := os.Geteuid(), os.Getegid()
+	if info, err := os.Stat(modelcache.Root()); err == nil {
+		if stat, ok := info.Sys().(*syscall.Stat_t); ok {
+			gid = int(stat.Gid)
+		}
+	}
+	return strconv.Itoa(uid) + ":" + strconv.Itoa(gid)
+}
+
+// managedContainerRecipeSpec translates both the constrained and advanced
+// container adapters. Advanced recipes may own their in-container command and
+// permissions, but never gain host command execution or arbitrary host mounts.
 func managedContainerRecipeSpec(recipe localrecipes.Recipe, immutableImage, name, operationID, hfTokenPath string) (engine.RunSpec, error) {
 	if err := localrecipes.ValidateManagedContainerRecipe(recipe); err != nil {
 		return engine.RunSpec{}, err
@@ -46,6 +58,10 @@ func managedContainerRecipeSpec(recipe localrecipes.Recipe, immutableImage, name
 		args = append(args, "--trust-remote-code")
 	}
 	args = append(args, recipe.Engine.Arguments...)
+	advanced := recipe.Runtime.Adapter == localrecipes.AdvancedContainerAdapter
+	if advanced && len(recipe.Engine.Command) != 0 {
+		args = append([]string(nil), recipe.Engine.Command...)
+	}
 
 	env := make(map[string]string, len(recipe.Runtime.Environment)+3)
 	for key, value := range recipe.Runtime.Environment {
@@ -56,15 +72,21 @@ func managedContainerRecipeSpec(recipe localrecipes.Recipe, immutableImage, name
 			env[key] = value
 		}
 	}
-	env["HF_HOME"] = "/root/.cache/huggingface"
-	env["XDG_CACHE_HOME"] = "/root/.cache/huggingface"
-	env["VLLM_CONFIG_ROOT"] = "/root/.cache/huggingface/vllm"
+	containerCache := "/cache/huggingface"
+	if advanced && strings.TrimSpace(recipe.Runtime.Container.ModelCachePath) != "" {
+		containerCache = strings.TrimSpace(recipe.Runtime.Container.ModelCachePath)
+	}
+	env["HF_HOME"] = containerCache
+	env["HOME"] = containerCache
+	env["XDG_CACHE_HOME"] = containerCache
+	env["VLLM_CONFIG_ROOT"] = containerCache + "/vllm"
+	env["FLASHINFER_WORKSPACE_DIR"] = containerCache + "/flashinfer"
 	secrets := map[string]string{}
 	if hfTokenPath != "" {
 		env["HF_TOKEN_PATH"] = engine.HuggingFaceTokenContainerPath
 		secrets[hfTokenPath] = engine.HuggingFaceTokenContainerPath
 	}
-	return engine.RunSpec{
+	spec := engine.RunSpec{
 		Name:        name,
 		Image:       immutableImage,
 		Ports:       map[int]int{recipe.Engine.ContainerPort: recipe.Engine.ContainerPort},
@@ -73,19 +95,41 @@ func managedContainerRecipeSpec(recipe localrecipes.Recipe, immutableImage, name
 		Labels: map[string]string{
 			"cloudless.recipe.operation": operationID,
 			"cloudless.recipe.id":        recipe.ID,
-			"cloudless.recipe.runtime":   localrecipes.ManagedContainerAdapter,
+			"cloudless.recipe.runtime":   recipe.Runtime.Adapter,
 		},
-		Volumes:    map[string]string{modelcache.Root(): "/root/.cache/huggingface"},
+		Volumes:    map[string]string{modelcache.Root(): containerCache},
 		GPUs:       "all",
+		Network:    "cloudless",
 		EntryPoint: "vllm",
-		Args:       args,
-		ReadOnly:   true,
-		CapDrop:    []string{"ALL"},
+		// cloudlessd owns the private model cache. Matching its unprivileged
+		// identity lets the sandbox keep every Linux capability dropped.
+		User:     managedContainerCacheUser(),
+		Args:     args,
+		ReadOnly: true,
+		CapDrop:  []string{"ALL"},
 		SecurityOpts: []string{
 			"no-new-privileges:true",
 		},
 		Tmpfs:     []string{"/run:rw,nosuid,nodev,size=64m", "/tmp:rw,nosuid,nodev,size=16g"},
 		PidsLimit: 8192,
 		ShmSize:   "16g",
-	}, nil
+	}
+	if advanced {
+		container := recipe.Runtime.Container
+		spec.EntryPoint = strings.TrimSpace(recipe.Engine.EntryPoint)
+		spec.User = strings.TrimSpace(container.User)
+		if spec.User == "" {
+			spec.User = "0"
+		}
+		spec.ReadOnly = container.ReadOnly
+		spec.CapAdd = append([]string(nil), container.CapAdd...)
+		spec.CapDrop = append([]string(nil), container.CapDrop...)
+		spec.SecurityOpts = nil
+		spec.IPC = strings.TrimSpace(container.IPC)
+		spec.Ulimits = append([]string(nil), container.Ulimits...)
+		spec.Tmpfs = append([]string(nil), container.Tmpfs...)
+		spec.PidsLimit = container.PidsLimit
+		spec.ShmSize = strings.TrimSpace(container.ShmSize)
+	}
+	return spec, nil
 }

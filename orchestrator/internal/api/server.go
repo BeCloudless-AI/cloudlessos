@@ -82,6 +82,13 @@ type Server struct {
 	modelsHave   map[string]bool
 	modelsHaveAt time.Time
 
+	clusterViewMu         sync.Mutex
+	clusterView           clusterComputeView
+	clusterViewAt         time.Time
+	clusterViewReady      bool
+	clusterViewRefreshing bool
+	clusterComputeProbe   func(context.Context, int) clusterComputeView
+
 	modelJobsMu sync.Mutex
 	modelJobs   map[string]context.CancelFunc
 
@@ -106,8 +113,10 @@ type Server struct {
 	appHealthCheck func(context.Context, catalog.App) error
 	// appConfigure is the matching post-install seam. Production leaves it nil
 	// and executes each app's real integration hook.
-	appConfigure func(context.Context, *jobs.Job, catalog.App) error
-	remoteAccess remoteaccess.Service
+	appConfigure      func(context.Context, *jobs.Job, catalog.App) error
+	remoteAccess      remoteaccess.Service
+	accountBaseURL    string
+	accountHTTPClient *http.Client
 }
 
 // NewServer constructs a Server backed by the given engine, state store and manifests.
@@ -179,6 +188,16 @@ func (s *Server) infraImage(ctx context.Context, key, fallback string) string {
 func (s *Server) Routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", s.health)
+	mux.HandleFunc("POST /api/account/signup", s.accountSignup)
+	mux.HandleFunc("POST /api/account/login", s.accountLogin)
+	mux.HandleFunc("POST /api/account/refresh", s.accountRefresh)
+	mux.HandleFunc("GET /api/account/me", s.accountCurrent)
+	mux.HandleFunc("POST /api/account/logout", s.accountLogout)
+	mux.HandleFunc("GET /api/account/oauth/{provider}", s.accountOAuth)
+	mux.HandleFunc("POST /api/account/picture", s.accountPicture)
+	mux.HandleFunc("GET /api/account/publisher-keys", s.accountPublisherKeys)
+	mux.HandleFunc("POST /api/account/publisher-keys", s.accountPublisherKeys)
+	mux.HandleFunc("DELETE /api/account/publisher-keys/{id}", s.accountPublisherKeys)
 	mux.Handle("GET /terminal/", cloudlessTerminalProxy())
 	mux.HandleFunc("GET /api/gpu", s.gpu)
 	mux.HandleFunc("GET /api/system", s.system)
@@ -271,6 +290,20 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/recipes/{id}/run", s.localRecipeRun)
 	mux.HandleFunc("POST /api/recipes/{id}/abort", s.localRecipeAbort)
 	mux.HandleFunc("POST /api/recipes/{id}/stop", s.localRecipeStop)
+	mux.HandleFunc("POST /api/community/install", s.communityRecipeInstall)
+	mux.HandleFunc("POST /api/community/rollback", s.communityRecipeRollback)
+	for _, method := range []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete} {
+		mux.HandleFunc(method+" /api/community/recipes", s.communityRecipes)
+		mux.HandleFunc(method+" /api/community/recipes/{rest...}", s.communityRecipes)
+	}
+	for _, method := range []string{http.MethodGet, http.MethodPost} {
+		mux.HandleFunc(method+" /api/community/moderation", s.communityModeration)
+		mux.HandleFunc(method+" /api/community/moderation/{rest...}", s.communityModeration)
+	}
+	for _, method := range []string{http.MethodGet, http.MethodPut, http.MethodDelete} {
+		mux.HandleFunc(method+" /api/community/social", s.communitySocial)
+		mux.HandleFunc(method+" /api/community/social/{rest...}", s.communitySocial)
+	}
 	mux.HandleFunc("GET /api/diffusion", s.diffusionList)
 	mux.HandleFunc("GET /api/diffusion/downloads", s.diffusionDownloads)
 	mux.HandleFunc("POST /api/diffusion/{id}/download", s.diffusionDownload)
@@ -324,6 +357,12 @@ func (s *Server) Routes() http.Handler {
 		log.Fatalf("embed web assets: %v", err)
 	}
 	ui := http.FileServer(http.FS(sub))
+	mux.Handle("GET /auth/callback", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		clone := r.Clone(r.Context())
+		clone.URL.Path = "/"
+		ui.ServeHTTP(w, clone)
+	}))
 	mux.Handle("GET /", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// CloudlessOS updates replace the embedded interface in cloudlessd.
 		// Never let the long-running kiosk reuse HTML or JavaScript from the
@@ -528,7 +567,7 @@ func (s *Server) engineState(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	clusterView := clusterCompute(ctx, totalVRAMGB(ctx))
+	clusterView := s.cachedClusterCompute(ctx, totalVRAMGB(ctx))
 	endpointReady := active != "" && engineReady(ctx)
 	ready, clusterDegraded := clusterRuntimeReady(currentState.ExecutionMode, endpointReady, clusterView)
 	durableOperation := currentState.InferenceOperation

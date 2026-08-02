@@ -19,6 +19,8 @@ signed, reversible layer.
 - One active OpenAI-compatible inference engine with managed vLLM, SGLang and llama.cpp
   choices.
 - Model Manager with curated models, Hugging Face account support and fit guidance.
+- Cloudless accounts plus a signed community Recipe Manager with guided publishing, discovery,
+  immutable versions, author profiles, ratings, comments, and revocation checks.
 - Hermes Agent-powered Cloudless Assistant using the selected local model.
 - Optional AI applications and background native recipes with progress, abort and multi-Spark
   distribution.
@@ -128,6 +130,7 @@ Important documentation:
 - [Architecture](./docs/ARCHITECTURE.md)
 - [Inference API identity](./docs/INFERENCE_API.md)
 - [Local inference recipes](./docs/LOCAL_RECIPES.md)
+- [Publish and discover community recipes](./docs/COMMUNITY_RECIPES.md)
 - [Custom engines](./docs/CUSTOM_ENGINES.md)
 - [Development environment](./docs/DEV_ENVIRONMENT.md)
 - [Hardware and multi-GPU strategy](./docs/HARDWARE.md)

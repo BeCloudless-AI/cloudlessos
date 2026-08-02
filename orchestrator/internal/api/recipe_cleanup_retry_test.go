@@ -93,3 +93,39 @@ func TestRecipeCleanupRetryRejectsOperationWithoutObligations(t *testing.T) {
 		t.Fatalf("cleanup response = %d: %s", response.Code, response.Body.String())
 	}
 }
+
+func TestRecipeCleanupRetryClearsInventoryOnlyFailure(t *testing.T) {
+	dir := t.TempDir()
+	recipes := localrecipes.New(dir)
+	recipe, err := recipes.Create(localrecipes.NewDraft())
+	if err != nil {
+		t.Fatal(err)
+	}
+	operations, err := recipeops.Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	operation, err := operations.Begin(recipeops.KindRun, recipe, recipeops.PhasePreparing)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resource := recipeops.Resource{Kind: "process-set", ID: operation.ID, Node: localRecipeNodeName()}
+	if _, err := operations.Claim(operation.ID, resource); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := operations.Transition(operation.ID, recipeops.PhaseFailed, errors.New("3 runtime cleanup obligation(s) remain")); err != nil {
+		t.Fatal(err)
+	}
+	operation, _ = operations.Get(operation.ID)
+	original := operation
+	if _, err = operations.Transition(operation.ID, recipeops.PhaseRecovering, nil); err != nil {
+		t.Fatal(err)
+	}
+	server := &Server{jobs: jobs.NewManager(), recipes: recipes, recipeOps: operations}
+	job := server.jobs.Create("cleanup")
+	server.retryRecipeCleanup(job, original)
+	cleaned, ok := operations.Get(operation.ID)
+	if !ok || cleaned.Phase != recipeops.PhaseStopped || cleaned.Error != "" || len(operationCleanupResources(cleaned)) != 0 {
+		t.Fatalf("cleaned operation = %#v", cleaned)
+	}
+}

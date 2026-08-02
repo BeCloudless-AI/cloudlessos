@@ -1,7 +1,7 @@
 [Unit]
 Description=Audit the CloudlessOS graphical boot ownership chain
-After=cloudlessd.service lightdm.service graphical.target
-Wants=cloudlessd.service graphical.target
+After=cloudlessd.service lightdm.service
+Wants=cloudlessd.service lightdm.service
 OnFailure=cloudless-graphical-recovery.service
 
 [Service]
@@ -16,4 +16,4 @@ ReadWritePaths=/var/lib/cloudless
 UMask=0077
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=graphical.target

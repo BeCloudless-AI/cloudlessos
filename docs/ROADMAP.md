@@ -48,6 +48,7 @@ production-ready distribution rather than proving that a local web control plane
 ## See also
 
 - [Master execution roadmap](./CLOUDLESS_MASTER_ROADMAP.md)
+- [Community recipes roadmap](./COMMUNITY_RECIPES_ROADMAP.md)
 - [Live status](./STATUS.md)
 - [Architecture](./ARCHITECTURE.md)
 - [Custom engine guide](./CUSTOM_ENGINES.md)

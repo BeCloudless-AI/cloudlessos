@@ -13,6 +13,7 @@
 - [Development environment](./DEV_ENVIRONMENT.md)
 - [Use and configure the inference API](./INFERENCE_API.md)
 - [Create and run local inference recipes](./LOCAL_RECIPES.md)
+- [Publish and discover community recipes](./COMMUNITY_RECIPES.md)
 - [Build and register a custom inference engine](./CUSTOM_ENGINES.md)
 - [Use AI training and data workbenches](./AI_WORKBENCHES.md)
 - [Build the distribution](../distro/README.md)
@@ -26,6 +27,8 @@
 - [Hardware strategy](./HARDWARE.md)
 - [Hermes Agent integration](./HERMES_INTEGRATION.md)
 - [Decision log](./DECISIONS.md)
+- [Community recipes execution roadmap](./COMMUNITY_RECIPES_ROADMAP.md)
+- [Community recipe trust and API contract](./COMMUNITY_RECIPE_CONTRACT.md)
 - [Design references](./ODS-INSPIRED.md)
 
 The decision log is historical: older entries describe the system at the time a decision was

@@ -41,6 +41,9 @@ func recipeGCReferenceSet(recipes []localrecipes.Recipe, operations []recipeops.
 		refs.RecipeIDs[recipe.ID] = struct{}{}
 		refs.ArtifactKeys[recipeModelArtifactKey(recipe)] = struct{}{}
 		refs.Models[recipe.Model.ID+"\x00"+recipe.Model.Revision] = struct{}{}
+		for _, dependency := range recipe.Model.Dependencies {
+			refs.Models[dependency.ID+"\x00"+dependency.Revision] = struct{}{}
+		}
 	}
 	for _, recipe := range recipes {
 		protectRecipe(recipe)

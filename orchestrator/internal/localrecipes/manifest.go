@@ -15,12 +15,14 @@ import (
 type NativeManifest struct {
 	Schema   string `yaml:"schema" json:"schema"`
 	Metadata struct {
-		Name        string   `yaml:"name" json:"name"`
-		Description string   `yaml:"description" json:"description"`
-		Version     string   `yaml:"version" json:"version"`
-		Author      string   `yaml:"author" json:"author"`
-		Category    string   `yaml:"category" json:"category"`
-		Tags        []string `yaml:"tags" json:"tags"`
+		Name                       string   `yaml:"name" json:"name"`
+		Description                string   `yaml:"description" json:"description"`
+		Version                    string   `yaml:"version" json:"version"`
+		Author                     string   `yaml:"author" json:"author"`
+		Category                   string   `yaml:"category" json:"category"`
+		License                    string   `yaml:"license" json:"license"`
+		Tags                       []string `yaml:"tags" json:"tags"`
+		MinimumAcceleratorMemoryGB int      `yaml:"minimumAcceleratorMemoryGB" json:"minimumAcceleratorMemoryGB"`
 	} `yaml:"metadata" json:"metadata"`
 	Recipe Draft `yaml:"recipe" json:"recipe"`
 }
@@ -39,7 +41,7 @@ func ParseNativeManifest(data []byte) (NativeManifest, Draft, error) {
 	if err := decoder.Decode(&extra); err != io.EOF {
 		return NativeManifest{}, Draft{}, errors.New("Cloudless recipe must contain exactly one document")
 	}
-	if manifest.Schema != "cloudless.recipe/v1" {
+	if manifest.Schema != "cloudless.recipe/v1" && manifest.Schema != "cloudless.recipe/v2" {
 		return NativeManifest{}, Draft{}, errors.New("unsupported Cloudless recipe schema")
 	}
 	if manifest.Recipe.Name == "" {

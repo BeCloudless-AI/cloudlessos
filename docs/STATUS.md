@@ -1,6 +1,6 @@
 # CloudlessOS live status
 
-**Last updated:** 2026-07-31
+**Last updated:** 2026-08-02
 
 CloudlessOS is in active pre-release development. The orchestrator, fullscreen interface,
 installer/update pipeline and DGX Spark layer work on development hardware, but public production
@@ -38,6 +38,11 @@ readiness still requires broader hardware, security, recovery and licensing vali
 - Persistent coordinator and worker recipe lifecycle paths that survive orchestrator restarts.
 - Recipe Library separation between executable signed/constrained profiles and non-executable local
   drafts, with exact-model installation required before per-machine validation or launch.
+- Cloudless accounts in the top bar, including email/password and Google, X, or GitHub sign-in,
+  profile display, and revocable scoped publisher API keys.
+- Community Recipe Manager with guided in-Cloudless publishing, an external CLI publishing path,
+  immutable revisions, asynchronous policy validation, signed discovery/install, author pages,
+  stars, ratings, comments, reports, notifications, and exact-revision revocation checks.
 - Cloudless Doctor reconciliation of unloaded state against running recipe containers, including a
   narrowly scoped coordinator/worker orphan-runtime repair that preserves downloaded weights.
 - Stable pointer behavior in the kiosk; Ubuntu's idle cursor-hiding service is disabled because it
@@ -139,7 +144,8 @@ Resume in this order:
 - Reliability and accurate progress/error reporting before catalog breadth.
 - One signed cross-architecture pipeline rather than platform branches.
 - Managed defaults plus explicit reversible expert workflows.
-- Native Cloudless community recipes later, with identity, provenance, validation and moderation.
+- Expand community recipes beyond the current constrained single-node managed-container policy
+  only after each additional execution path has equally strong validation and rollback behavior.
 
 ## Documentation
 
@@ -151,5 +157,6 @@ Resume in this order:
 - [Custom engines](./CUSTOM_ENGINES.md)
 - [Inference API identity](./INFERENCE_API.md)
 - [Local inference recipes](./LOCAL_RECIPES.md)
+- [Publish and discover community recipes](./COMMUNITY_RECIPES.md)
 - [DGX Spark](../distro/DGX-SPARK.md)
 - [Decision log](./DECISIONS.md)

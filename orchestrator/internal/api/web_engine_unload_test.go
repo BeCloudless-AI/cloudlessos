@@ -32,7 +32,7 @@ func TestEmbeddedWebIncludesPersistentModelUnloadExperience(t *testing.T) {
 		`function syncEngineState(d)`,
 		`if (engineReady && operation === 'loading') operation = 'idle';`,
 		`else if (m.active && engineReady)`,
-		`renderSystem(); renderEngine(); }, 4000);`,
+		`setInterval(refreshCoreDashboard, 4000);`,
 		`if (modelsOpen()) closeModelManager();`,
 		"const snapshot = await api(`/api/jobs/${jobId}`);",
 		`accelerator memory released`,

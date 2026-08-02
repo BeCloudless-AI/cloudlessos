@@ -22,6 +22,17 @@ func operationCleanupResources(operation recipeops.Operation) []recipeops.Resour
 	return resources
 }
 
+func cleanupFailureWasOnlyInventoryProof(message string) bool {
+	message = strings.ToLower(strings.TrimSpace(message))
+	if message == "" {
+		return false
+	}
+	message = strings.TrimPrefix(message, "context canceled\n")
+	return (strings.Contains(message, "cleanup obligation(s) remain") ||
+		strings.Contains(message, "runtime cleanup obligation(s) remain")) &&
+		!strings.Contains(message, "\n")
+}
+
 func (s *Server) localRecipeCleanupRetry(w http.ResponseWriter, r *http.Request) {
 	if s.recipeOpsErr != nil || s.recipeOps == nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "recipe operation journal is unavailable"})
@@ -37,7 +48,7 @@ func (s *Server) localRecipeCleanupRetry(w http.ResponseWriter, r *http.Request)
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "this recipe operation is not waiting for cleanup"})
 		return
 	}
-	if len(operationCleanupResources(operation)) == 0 {
+	if len(operationCleanupResources(operation)) == 0 && !cleanupFailureWasOnlyInventoryProof(operation.Error) {
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "this recipe operation has no unresolved runtime resources"})
 		return
 	}
@@ -70,6 +81,13 @@ func (s *Server) retryRecipeCleanup(job *jobs.Job, original recipeops.Operation)
 	target := original.Phase
 	if target != recipeops.PhaseFailed && target != recipeops.PhaseAborted && target != recipeops.PhaseStopped {
 		target = recipeops.PhaseFailed
+	}
+	// A stop/abort can briefly observe a container or listener while Docker is
+	// still finishing teardown. Once the retry proves every ephemeral claim is
+	// absent, an error made solely from that stale inventory is resolved rather
+	// than being restored forever as a failed operation.
+	if target == recipeops.PhaseFailed && cleanupFailureWasOnlyInventoryProof(original.Error) {
+		target = recipeops.PhaseStopped
 	}
 	var originalErr error
 	if target == recipeops.PhaseFailed {

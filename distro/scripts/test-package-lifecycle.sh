@@ -317,6 +317,11 @@ PY
   chown root:root /var/lib/cloudless/cluster/state.json /var/lib/cloudless/cluster/id_ed25519
   chmod 0600 /var/lib/cloudless/cluster/state.json /var/lib/cloudless/cluster/id_ed25519
 
+  install -d -o root -g root -m 0700 /var/lib/cloudless/secrets
+  printf 'legacy-hermes-key\n' >/var/lib/cloudless/secrets/hermes-api-key
+  chown root:root /var/lib/cloudless/secrets/hermes-api-key
+  chmod 0600 /var/lib/cloudless/secrets/hermes-api-key
+
   # Upgrade while the old daemon and its model endpoint are live, then restart
   # into the candidate binary and prove the exact cache-backed runtime again.
   install_generation "$candidate" "$expected_new"
@@ -324,6 +329,9 @@ PY
   test "$(stat -c '%U:%G:%a' /var/lib/cloudless/cluster/state.json)" = "cloudlessd:cloudless-control:600"
   test "$(stat -c '%U:%G:%a' /var/lib/cloudless/cluster/id_ed25519)" = "cloudlessd:cloudless-control:600"
   runuser -u cloudlessd -- grep -Fq '192.0.2.10' /var/lib/cloudless/cluster/state.json
+  test "$(stat -c '%U:%G:%a' /var/lib/cloudless/secrets)" = "cloudlessd:cloudless-control:700"
+  test "$(stat -c '%U:%G:%a' /var/lib/cloudless/secrets/hermes-api-key)" = "cloudlessd:cloudless-control:600"
+  runuser -u cloudlessd -- grep -Fqx 'legacy-hermes-key' /var/lib/cloudless/secrets/hermes-api-key
   grep -Fq '"qualification":"preserve-me"' /var/lib/cloudless/qualification-preserve.json
   cmp "$legacy_cache/hub/models--qualification--model/blobs/weights" "$migrated"
   assert_active_model

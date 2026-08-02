@@ -50,8 +50,10 @@ case "${CLOUDLESS_R2_BUCKET,,}" in *test*|*fake*|*example*|*invalid*) fail "test
 [[ "$AWS_SECRET_ACCESS_KEY" =~ ^[0-9a-fA-F]{64}$ ]] || fail "R2 secret-access-key format is invalid"
 
 fingerprint_file="$ROOT/distro/release/keys/cloudless-archive-fingerprint.txt"
+community_keyring="$ROOT/distro/release/keys/community-keys.json"
 matrix="$ROOT/distro/release/validation-matrix.json"
 [ -s "$fingerprint_file" ] || fail "archive fingerprint contract is missing"
+[ -s "$community_keyring" ] || fail "community recipe trust root is missing"
 [ -s "$matrix" ] || fail "platform validation contract is missing"
 expected_fingerprint="$(tr -d '[:space:]' < "$fingerprint_file")"
 [[ "$expected_fingerprint" =~ ^[0-9A-Fa-f]{40}$ ]] || fail "archive fingerprint contract is malformed"
@@ -63,6 +65,29 @@ actual_fingerprint="$(printf '%s\n' "$key_listing" | awk -F: '$1 == "fpr" {print
 uid="$(printf '%s\n' "$key_listing" | awk -F: '$1 == "uid" {print tolower($10); exit}')"
 case "$uid" in *test*|*invalid*|*example*) fail "test signing identities cannot publish production releases" ;; esac
 case "$uid" in *updates@becloudless.ai*) ;; *) fail "archive signing identity is not the CloudlessOS update identity" ;; esac
+
+python3 - "$community_keyring" <<'PY'
+import base64, json, re, sys
+with open(sys.argv[1], encoding="utf-8") as handle:
+    document = json.load(handle)
+if document.get("schema") != "cloudless.community.keys/v1":
+    raise SystemExit("Release preflight: unsupported community keyring schema")
+keys = document.get("keys")
+if not isinstance(keys, list) or not keys:
+    raise SystemExit("Release preflight: community keyring contains no trusted key")
+seen = set()
+for key in keys:
+    identifier = key.get("id", "")
+    if not re.fullmatch(r"[a-z0-9-]{3,80}", identifier) or identifier in seen:
+        raise SystemExit("Release preflight: community key identifier is malformed or duplicated")
+    seen.add(identifier)
+    try:
+        der = base64.b64decode(key.get("publicKey", ""), validate=True)
+    except Exception as error:
+        raise SystemExit("Release preflight: community public key is malformed") from error
+    if len(der) != 44 or not der.startswith(bytes.fromhex("302a300506032b6570032100")):
+        raise SystemExit("Release preflight: community trust root is not an Ed25519 SPKI key")
+PY
 
 python3 - "$matrix" <<'PY'
 import json, sys

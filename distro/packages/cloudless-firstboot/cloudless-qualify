@@ -118,7 +118,7 @@ def load_matrix(path: Path) -> dict:
             raise ValueError("physical qualification targets must declare a supported or preview tier")
         if target["required"] != (target["supportTier"] == "supported"):
             raise ValueError("supported physical targets must be required and preview targets optional")
-    for field in ("requiredChecks", "clusterChecks", "clusterFailureDomains", "inferenceLifecyclePhases"):
+    for field in ("requiredChecks", "communityChecks", "clusterChecks", "clusterFailureDomains", "inferenceLifecyclePhases"):
         values = matrix.get(field, [])
         if not isinstance(values, list) or any(not re.fullmatch(r"[a-z0-9-]+", str(value)) for value in values):
             raise ValueError(f"physical qualification {field} must contain normalized names")
@@ -405,6 +405,8 @@ def campaign_target(campaign: Path, matrix: dict) -> dict:
 
 def applicable_checks(matrix: dict, target: dict) -> list[str]:
     checks = list(matrix.get("requiredChecks", []))
+    if target.get("platform") != "virtualbox":
+        checks.extend(matrix.get("communityChecks", []))
     if int(target.get("nodes", 0)) >= 2:
         checks.extend(matrix.get("clusterChecks", []))
     if target.get("failureMatrix"):
@@ -430,6 +432,9 @@ CHECK_GUIDANCE = {
     "update-and-rollback": "Upgrade this candidate with a model active, interrupt one durable preparation, and prove signed rollback plus retained model data.",
     "backup-and-restore": "Create and verify an encrypted backup, change control-plane state, restore it, reboot and retain before/after diagnostics.",
     "support-bundle": "Generate a redacted support bundle and review it before retaining it as evidence.",
+    "community-signed-install": "Discover one policy-approved published recipe, install its exact signed revision, validate and run it, then retain the displayed publisher/version plus healthy fixed Cloudless inference endpoint without credentials.",
+    "community-update-rollback": "Install a newer signed revision without auto-running it, prove the previous exact revision remains available, then stop inference and roll back to that retained revision.",
+    "community-revocation": "Use the controlled qualification revision from the signed revocation feed, prove a new install is rejected before the local store changes, and prove an already-installed copy is visibly marked revoked without deleting local data.",
     "discover-and-enroll": "Discover and enroll the exact selected Spark nodes, retaining their identity and topology without credentials.",
     "fabric-and-ssh-preflight": "Prove physical link, management reachability, restricted SSH identity and private-fabric health separately.",
     "selected-topology": "Select this campaign's exact node count and prove standby nodes are excluded from distributed inference.",

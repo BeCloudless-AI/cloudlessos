@@ -6,10 +6,18 @@ capabilities; they are not separate copies of the interface.
 
 ## Desktop and navigation
 
-The top bar contains the Cloudless logo, the clock, NVIDIA identification on DGX Spark, and the
-power control. The power control opens a confirmation window with separate **Restart** and
-**Shutdown** actions. Application shortcuts belong in the left launcher rather than being repeated
-in the top bar.
+The top bar contains the Cloudless logo, the clock, NVIDIA identification on DGX Spark, account
+access, and the power control. **Sign in** opens account creation and email/password, Google, X, or
+GitHub login. Once authenticated, the username and profile picture replace Sign in. The power
+control opens a confirmation window with separate **Restart** and **Shutdown** actions. Hovering
+the signed-in username opens the account menu: **Profile**, **API Keys**, **My Recipes**, and
+**Log out**. My Recipes opens the account-owned recipe library directly; it does not duplicate the
+recipe manager or create a second local collection. The permanent **Community** sidebar button opens
+the social activity window even before sign-in, so anyone can browse public activity.
+Its Following view contains newly published recipes from members you follow; Explore shows recent
+publication activity from everyone. Open a member to see their profile, follower counts and public
+recipes, then select Follow or Following to change the relationship. Application
+shortcuts belong in the left launcher rather than being repeated in the top bar.
 
 The bottom desktop area combines the selected-model state and its metrics. The desktop metrics
 control appears only while a model is loaded; the permanent sidebar Metrics entry remains
@@ -149,6 +157,14 @@ Preparation runs in the background and reports coordinator/worker phases, byte p
 Abort stops the operation while retaining verified reusable downloads. Cloudless promotes a recipe
 only after the stable `/v1/models` endpoint returns the required internal `cloudless` identity.
 
+Community recipes use **On this machine** and **Discover** inside Model Manager. **My Recipes** is a
+separate account window for drafts, submissions and published releases. A signed-in author can
+publish a constrained `managed-container-v1` local recipe
+through a guided four-step flow. Advanced authors can create a scoped publisher API key and submit
+the same manifest from another computer with the `cloudless recipes` CLI. Published versions are
+immutable and appear in Discover only after server validation and signing. See
+[`COMMUNITY_RECIPES.md`](./COMMUNITY_RECIPES.md) for the complete author and installation guide.
+
 ## Cloudless Doctor
 
 Run **Settings > Cloudless Doctor** when the interface, model lifecycle or cluster state looks
@@ -169,6 +185,6 @@ the ZIP before sharing it.
 - [Current validated status](./STATUS.md)
 - [DGX Spark cluster operation](./CLUSTER.md)
 - [Local inference recipes](./LOCAL_RECIPES.md)
+- [Publish and discover community recipes](./COMMUNITY_RECIPES.md)
 - [Support and diagnostics](./SUPPORT_AND_DIAGNOSTICS.md)
 - [Updates and rollback](../distro/UPDATES.md)
-

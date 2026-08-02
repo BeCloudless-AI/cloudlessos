@@ -1346,6 +1346,33 @@ published as healthy when Cloudless consumers cannot actually reach or identify 
 
 ---
 
+## D49 - Use one immutable community recipe service for CloudlessOS and external publishers
+
+**Date:** 2026-08-01 · **Status:** Accepted; implementation planned
+
+**Decision:** Extend the authenticated becloudless.ai account backend into the single native
+community recipe service. CloudlessOS publishes with its signed-in session; external tools publish
+with scoped user API keys. Both principals use the same validation, ownership, signing, audit and
+moderation path.
+
+- API keys are publishing identities, not privileged bypasses. Initial scopes are
+  `recipes:read`, `recipes:write` and `recipes:publish`.
+- Published revisions wrap the existing `cloudless.recipe/v1` manifest in an immutable signed
+  release envelope. Editing always creates another revision.
+- Community signatures prove provenance and integrity, while the installed Cloudless policy
+  independently decides whether a revision can execute.
+- Initially only constrained `managed-container-v1` community revisions can be publicly
+  installable. Arbitrary source-script submissions remain private until an exact definition is
+  admitted by a signed Cloudless package.
+- Discovery, comments, ratings and moderation live in this service rather than another crawler or
+  recipe indexer.
+- The community signing key is independent from the APT archive key.
+
+The ordered implementation and release gates are maintained in
+[`COMMUNITY_RECIPES_ROADMAP.md`](./COMMUNITY_RECIPES_ROADMAP.md).
+
+---
+
 ## Open questions (not yet decided)
 
 - **Open-source CloudlessOS?** Leaning yes (trust/community for a privacy brand, like

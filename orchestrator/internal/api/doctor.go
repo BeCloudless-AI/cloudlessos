@@ -40,7 +40,13 @@ func (s *Server) systemDoctorBundle(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) addDoctorRuntimeReconciliation(ctx context.Context, report doctor.Report) doctor.Report {
-	if s.recipes == nil || s.eng == nil || s.state == nil {
+	if s.eng == nil || s.state == nil {
+		return report
+	}
+	current := s.state.Get()
+	active := s.activeEngine(ctx) != ""
+	report = doctor.ReconcileInferenceEndpoint(report, current, active, engineEndpointError(ctx))
+	if s.recipes == nil {
 		return report
 	}
 	containers, containerErr := s.eng.List(ctx)
@@ -48,5 +54,5 @@ func (s *Server) addDoctorRuntimeReconciliation(ctx context.Context, report doct
 	if containerErr != nil || recipeErr != nil {
 		return report
 	}
-	return doctor.AddOrphanedRecipeChecks(report, s.state.Get(), containers, recipes)
+	return doctor.AddOrphanedRecipeChecks(report, current, containers, recipes)
 }

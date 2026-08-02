@@ -1,10 +1,67 @@
 package api
 
 import (
+	"context"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/cloudless/orchestrator/internal/state"
 )
+
+func TestCachedClusterComputeReturnsImmediatelyAndCoalescesRefresh(t *testing.T) {
+	var calls atomic.Int32
+	refreshStarted := make(chan struct{})
+	releaseRefresh := make(chan struct{})
+	s := &Server{}
+	s.clusterComputeProbe = func(ctx context.Context, _ int) clusterComputeView {
+		call := calls.Add(1)
+		if call == 2 {
+			close(refreshStarted)
+			select {
+			case <-releaseRefresh:
+			case <-ctx.Done():
+			}
+		}
+		return clusterComputeView{Nodes: int(call)}
+	}
+
+	if got := s.cachedClusterCompute(context.Background(), 128); got.Nodes != 1 {
+		t.Fatalf("initial nodes = %d, want 1", got.Nodes)
+	}
+	s.clusterViewMu.Lock()
+	s.clusterViewAt = time.Now().Add(-clusterComputeCacheTTL)
+	s.clusterViewMu.Unlock()
+
+	started := time.Now()
+	if got := s.cachedClusterCompute(context.Background(), 128); got.Nodes != 1 {
+		t.Fatalf("stale snapshot nodes = %d, want 1", got.Nodes)
+	}
+	if elapsed := time.Since(started); elapsed > 100*time.Millisecond {
+		t.Fatalf("stale snapshot blocked for %s", elapsed)
+	}
+	select {
+	case <-refreshStarted:
+	case <-time.After(time.Second):
+		t.Fatal("background refresh did not start")
+	}
+	if got := s.cachedClusterCompute(context.Background(), 128); got.Nodes != 1 {
+		t.Fatalf("concurrent stale snapshot nodes = %d, want 1", got.Nodes)
+	}
+	if got := calls.Load(); got != 2 {
+		t.Fatalf("probe calls while refresh is active = %d, want 2", got)
+	}
+
+	close(releaseRefresh)
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		if got := s.cachedClusterCompute(context.Background(), 128); got.Nodes == 2 {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatal("refreshed snapshot was not published")
+}
 
 func TestClusterRuntimeReadinessFailsClosedWhenSelectedNodeIsLost(t *testing.T) {
 	tests := []struct {

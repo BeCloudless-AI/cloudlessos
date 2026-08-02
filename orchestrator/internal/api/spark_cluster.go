@@ -12,6 +12,7 @@ import (
 	"github.com/cloudless/orchestrator/internal/capabilities"
 	"github.com/cloudless/orchestrator/internal/catalog"
 	"github.com/cloudless/orchestrator/internal/jobs"
+	"github.com/cloudless/orchestrator/internal/localrecipes"
 	"github.com/cloudless/orchestrator/internal/modelfit"
 	"github.com/cloudless/orchestrator/internal/models"
 	"github.com/cloudless/orchestrator/internal/platform"
@@ -307,7 +308,11 @@ func (s *Server) runSparkClusterDisconnect(job *jobs.Job, passwords map[string]s
 		}
 		stopJob := s.jobs.Create("recipe:" + recipe.ID + ":disconnect-stop")
 		s.observeRecipeJob(stopJob, operation.ID)
-		s.stopLocalRecipe(stopJob, operation.RecipeSnapshot, operation.ID)
+		if localrecipes.IsContainerAdapter(operation.RecipeSnapshot.Runtime.Adapter) {
+			s.stopManagedContainerRecipe(stopJob, operation.RecipeSnapshot, operation.ID)
+		} else {
+			s.stopLocalRecipe(stopJob, operation.RecipeSnapshot, operation.ID)
+		}
 		if stopped := stopJob.Snapshot(); stopped.Error != "" {
 			job.Fail(errors.New("the recipe could not be fully stopped, so the cluster was left connected: " + stopped.Error))
 			return

@@ -18,6 +18,8 @@ var (
 	ulimitValue        = regexp.MustCompile(`^(memlock|stack)=-?[0-9]+(?::-?[0-9]+)?$`)
 	sizeValue          = regexp.MustCompile(`^[1-9][0-9]*(?:[kKmMgG])?$`)
 	labelValue         = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.:-]{0,191}$`)
+	capabilityName     = regexp.MustCompile(`^(?:ALL|[A-Z][A-Z0-9_]{0,63})$`)
+	unprivilegedUser   = regexp.MustCompile(`^[1-9][0-9]*:[1-9][0-9]*$`)
 )
 
 // ValidateRunSpec is the container-broker admission policy. It rejects host
@@ -58,6 +60,11 @@ func ValidateRunSpec(spec RunSpec) error {
 			return fmt.Errorf("security option %q is not allowed", option)
 		}
 	}
+	for _, capability := range append(append([]string{}, spec.CapAdd...), spec.CapDrop...) {
+		if !capabilityName.MatchString(strings.TrimSpace(capability)) {
+			return fmt.Errorf("container capability %q is invalid", capability)
+		}
+	}
 	for _, limit := range spec.Ulimits {
 		if !ulimitValue.MatchString(strings.TrimSpace(limit)) {
 			return fmt.Errorf("ulimit %q is not allowed", limit)
@@ -86,7 +93,7 @@ func ValidateRunSpec(spec RunSpec) error {
 	if strings.ContainsRune(spec.EntryPoint, '\x00') {
 		return errors.New("entrypoint contains an invalid byte")
 	}
-	if spec.User != "" && spec.User != "0" {
+	if spec.User != "" && spec.User != "0" && !unprivilegedUser.MatchString(spec.User) {
 		return errors.New("container user is not allowed")
 	}
 	for _, arg := range spec.Args {

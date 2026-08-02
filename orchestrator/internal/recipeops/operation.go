@@ -284,17 +284,59 @@ type document struct {
 	Tombstones map[string]string    `json:"tombstones,omitempty"`
 }
 
+type rawDocument struct {
+	Operations map[string]json.RawMessage `json:"operations"`
+}
+
+type rawPersistedOperation struct {
+	RecipeSnapshot json.RawMessage `json:"recipeSnapshot"`
+}
+
+// rawRecipeDraft preserves the JSON field set that existed when a historical
+// operation revision was created. Decoding into today's Recipe structs can add
+// zero-value fields introduced by later schema versions and change the hash of
+// an otherwise authentic immutable snapshot.
+type rawRecipeDraft struct {
+	Name        json.RawMessage `json:"name"`
+	Description json.RawMessage `json:"description"`
+	Platform    json.RawMessage `json:"platform"`
+	Source      json.RawMessage `json:"source"`
+	Engine      json.RawMessage `json:"engine"`
+	Model       json.RawMessage `json:"model"`
+	Distributed json.RawMessage `json:"distributed"`
+	Runtime     json.RawMessage `json:"runtime"`
+	Health      json.RawMessage `json:"health"`
+}
+
+func rawPersistedSnapshotRevision(raw json.RawMessage) (string, error) {
+	var operation rawPersistedOperation
+	if err := json.Unmarshal(raw, &operation); err != nil || len(operation.RecipeSnapshot) == 0 || string(operation.RecipeSnapshot) == "null" {
+		return "", errors.New("persisted operation has no recipe snapshot")
+	}
+	var draft rawRecipeDraft
+	if err := json.Unmarshal(operation.RecipeSnapshot, &draft); err != nil {
+		return "", fmt.Errorf("decode persisted recipe snapshot: %w", err)
+	}
+	payload, err := json.Marshal(draft)
+	if err != nil {
+		return "", fmt.Errorf("encode persisted recipe snapshot: %w", err)
+	}
+	sum := sha256.Sum256(payload)
+	return "sha256:" + hex.EncodeToString(sum[:]), nil
+}
+
 // Store persists lifecycle records independently from UI jobs. Jobs may be
 // pruned or lost during a service restart; operation ownership may not.
 type Store struct {
-	mu   sync.Mutex
-	path string
-	doc  document
+	mu                  sync.Mutex
+	path                string
+	doc                 document
+	historicalSnapshots map[string]json.RawMessage
 }
 
 // Open loads the operation store below the Cloudless state directory.
 func Open(stateDir string) (*Store, error) {
-	s := &Store{path: filepath.Join(stateDir, "recipe-operations", "index.json")}
+	s := &Store{path: filepath.Join(stateDir, "recipe-operations", "index.json"), historicalSnapshots: make(map[string]json.RawMessage)}
 	s.doc = document{Version: documentVersion, Operations: make(map[string]Operation), Tombstones: make(map[string]string)}
 	data, err := os.ReadFile(s.path)
 	if errors.Is(err, os.ErrNotExist) {
@@ -306,6 +348,10 @@ func Open(stateDir string) (*Store, error) {
 	if err := json.Unmarshal(data, &s.doc); err != nil {
 		return nil, fmt.Errorf("decode recipe operation store: %w", err)
 	}
+	var raw rawDocument
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, fmt.Errorf("decode raw recipe operation store: %w", err)
+	}
 	if s.doc.Version != documentVersion {
 		return nil, fmt.Errorf("unsupported recipe operation store version %d", s.doc.Version)
 	}
@@ -316,7 +362,18 @@ func Open(stateDir string) (*Store, error) {
 		s.doc.Tombstones = make(map[string]string)
 	}
 	for id, operation := range s.doc.Operations {
-		if operation.ID != id || !validOperation(operation) {
+		authenticHistoricalSnapshot := false
+		if rawOperation, ok := raw.Operations[id]; ok {
+			revision, err := rawPersistedSnapshotRevision(rawOperation)
+			authenticHistoricalSnapshot = err == nil && revision == operation.RecipeRevision
+			if authenticHistoricalSnapshot && !validOperation(operation) {
+				var persisted rawPersistedOperation
+				if json.Unmarshal(rawOperation, &persisted) == nil && len(persisted.RecipeSnapshot) > 0 {
+					s.historicalSnapshots[id] = append(json.RawMessage(nil), persisted.RecipeSnapshot...)
+				}
+			}
+		}
+		if operation.ID != id || !validOperationWithHistoricalSnapshot(operation, authenticHistoricalSnapshot) {
 			return nil, fmt.Errorf("invalid persisted recipe operation %q", id)
 		}
 	}
@@ -911,7 +968,31 @@ func (s *Store) saveLocked() error {
 	if err := os.MkdirAll(filepath.Dir(s.path), 0o750); err != nil {
 		return err
 	}
-	payload, err := json.MarshalIndent(s.doc, "", "  ")
+	operations := make(map[string]json.RawMessage, len(s.doc.Operations))
+	for id, operation := range s.doc.Operations {
+		payload, err := json.Marshal(operation)
+		if err != nil {
+			return err
+		}
+		if snapshot := s.historicalSnapshots[id]; len(snapshot) > 0 {
+			var fields map[string]json.RawMessage
+			if err := json.Unmarshal(payload, &fields); err != nil {
+				return err
+			}
+			fields["recipeSnapshot"] = snapshot
+			payload, err = json.Marshal(fields)
+			if err != nil {
+				return err
+			}
+		}
+		operations[id] = payload
+	}
+	persisted := struct {
+		Version    int                        `json:"version"`
+		Operations map[string]json.RawMessage `json:"operations"`
+		Tombstones map[string]string          `json:"tombstones,omitempty"`
+	}{Version: s.doc.Version, Operations: operations, Tombstones: s.doc.Tombstones}
+	payload, err := json.MarshalIndent(persisted, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -957,6 +1038,10 @@ func initialPhase(kind Kind) Phase {
 }
 
 func validOperation(operation Operation) bool {
+	return validOperationWithHistoricalSnapshot(operation, false)
+}
+
+func validOperationWithHistoricalSnapshot(operation Operation, authenticHistoricalSnapshot bool) bool {
 	if operation.ID == "" || !validKind(operation.Kind) || operation.RecipeID == "" || operation.RecipeRevision == "" || operation.Sequence == 0 {
 		return false
 	}
@@ -981,7 +1066,7 @@ func validOperation(operation Operation) bool {
 			// the exact immutable snapshot stored in that journal. This does not
 			// trust or execute the snapshot; it proves the revision was not altered.
 			storedRevision, storedErr := snapshotRecipeRevision(operation.RecipeSnapshot)
-			if storedErr != nil || storedRevision != operation.RecipeRevision {
+			if (storedErr != nil || storedRevision != operation.RecipeRevision) && !authenticHistoricalSnapshot {
 				return false
 			}
 		}

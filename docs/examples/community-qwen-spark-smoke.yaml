@@ -1,0 +1,70 @@
+schema: cloudless.recipe/v1
+
+metadata:
+  name: Qwen 2.5 1.5B Spark Starter
+  description: A small pinned Qwen recipe for testing the Cloudless community publishing flow on DGX Spark.
+  version: 1.0.1
+  author: samuelcardillo
+  category: language-model
+  license: Apache-2.0
+  tags: [vllm, qwen, dgx-spark, starter]
+  minimumAcceleratorMemoryGB: 8
+
+recipe:
+  name: Qwen 2.5 1.5B Spark Starter
+  description: Runs an exact Qwen 2.5 1.5B Instruct revision with the pinned NVIDIA vLLM image used by CloudlessOS.
+  platform: dgx-spark
+  source:
+    url: ""
+    revision: ""
+    files: {}
+  engine:
+    type: vllm
+    image: nvcr.io/nvidia/vllm@sha256:1de8e6bfdb4c81c1f31a806cc9b13b5c6352714a7cec87f4d24964bcc91159b2
+    servedModelName: cloudless
+    containerPort: 8890
+    apiPath: /v1
+    proxyHost: host.docker.internal
+    restartPolicy: "no"
+    arguments: [--enable-prefix-caching]
+  model:
+    id: Qwen/Qwen2.5-1.5B-Instruct
+    revision: "989aa7980e4cf806f80c7fef2b1adb7bc71aa306"
+    quantization: ""
+    dtype: auto
+    kvCacheDtype: auto
+    maxContext: 32768
+    maxSequences: 16
+    gpuMemoryUtilization: 0.9
+    tensorParallel: 1
+    pipelineParallel: 1
+    trustRemoteCode: false
+  distributed:
+    nodes: 1
+    backend: local
+    masterPort: 29500
+    interface: ""
+    hca: ""
+    ibGidIndex: 0
+    workerAlias: worker
+    selectedNodes: []
+  runtime:
+    adapter: managed-container-v1
+    buildOnce: false
+    downloadOnce: false
+    workingDir: ""
+    timeoutMinutes: 120
+    prerequisites: []
+    environment: {}
+    lifecycle:
+      build: {program: "", args: []}
+      download: {program: "", args: []}
+      start: {program: "", args: []}
+      stop: {program: "", args: []}
+  health:
+    scheme: http
+    host: 127.0.0.1
+    port: 8890
+    path: /v1/models
+    timeoutSeconds: 1800
+    intervalSeconds: 5

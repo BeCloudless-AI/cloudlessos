@@ -199,21 +199,9 @@ func effectiveCapability(status []byte, capability uint) bool {
 }
 
 func probeApp(parent context.Context, app catalog.App) error {
-	hostPort := app.Health.Port
-	if hostPort == 0 {
-		for host, container := range app.Ports {
-			if container == app.Health.Port || app.Health.Port == 0 {
-				hostPort = host
-				break
-			}
-		}
-	}
+	hostPort, path := appHealthEndpoint(app)
 	if hostPort == 0 {
 		return fmt.Errorf("health port is not mapped")
-	}
-	path := app.Health.Path
-	if path == "" {
-		path = "/"
 	}
 	ctx, cancel := context.WithTimeout(parent, 3*time.Second)
 	defer cancel()
@@ -229,6 +217,29 @@ func probeApp(parent context.Context, app catalog.App) error {
 	return nil
 }
 
+func appHealthEndpoint(app catalog.App) (int, string) {
+	// Hermes' dashboard can be healthy while the authenticated agent API has
+	// refused to start. Doctor must check the API that Cloudless Assistant uses,
+	// not the decorative dashboard served by the same container.
+	if app.ID == "hermes" {
+		return catalog.HermesAPIPort, "/health"
+	}
+	hostPort := app.Health.Port
+	if hostPort == 0 {
+		for host, container := range app.Ports {
+			if container == app.Health.Port || app.Health.Port == 0 {
+				hostPort = host
+				break
+			}
+		}
+	}
+	path := app.Health.Path
+	if path == "" {
+		path = "/"
+	}
+	return hostPort, path
+}
+
 func overall(checks []Check) string {
 	result := "healthy"
 	for _, check := range checks {
@@ -240,6 +251,45 @@ func overall(checks []Check) string {
 		}
 	}
 	return result
+}
+
+// ReconcileInferenceEndpoint replaces the container-name-based engine check
+// with the stable Cloudless inference contract used by the desktop and every
+// client. Reviewed recipes deliberately run under generated container names
+// (and distributed recipes are reached through a proxy), so looking only for
+// cloudless-vllm reports a healthy recipe runtime as stopped.
+func ReconcileInferenceEndpoint(report Report, current state.State, active bool, endpointErr error) Report {
+	if current.EngineUnloaded {
+		return report
+	}
+	selected := current.Engine
+	if selected == "" {
+		selected = catalog.DefaultEngine()
+	}
+	checks := make([]Check, 0, len(report.Checks))
+	for _, check := range report.Checks {
+		if check.ID != "app-"+selected {
+			checks = append(checks, check)
+		}
+	}
+	report.Checks = checks
+	check := Check{ID: "inference-engine", Name: "Inference engine"}
+	switch {
+	case endpointErr == nil:
+		check.Status = "pass"
+		check.Summary = "Cloudless AI is running and serving the stable model endpoint."
+	case active:
+		check.Status = "warning"
+		check.Summary = "The inference runtime is running but its model endpoint is not ready yet: " + endpointErr.Error()
+		check.Action = "Wait for model startup to finish, then run Cloudless Doctor again."
+	default:
+		check.Status = "fail"
+		check.Summary = "No inference runtime is serving the stable Cloudless AI endpoint: " + endpointErr.Error()
+		check.Action = "Open Model Manager and load a model, then run Cloudless Doctor again."
+	}
+	report.Checks = append(report.Checks, check)
+	report.Overall = overall(report.Checks)
+	return report
 }
 
 // AddOrphanedRecipeChecks compares Cloudless's declared inference state with

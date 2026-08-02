@@ -54,20 +54,29 @@ type Engine struct {
 	ProxyHost       string   `json:"proxyHost" yaml:"proxyHost"`
 	RestartPolicy   string   `json:"restartPolicy" yaml:"restartPolicy"`
 	Arguments       []string `json:"arguments,omitempty" yaml:"arguments,omitempty"`
+	EntryPoint      string   `json:"entryPoint,omitempty" yaml:"entryPoint,omitempty"`
+	Command         []string `json:"command,omitempty" yaml:"command,omitempty"`
+}
+
+type ModelDependency struct {
+	ID       string `json:"id" yaml:"id"`
+	Revision string `json:"revision" yaml:"revision"`
+	Role     string `json:"role,omitempty" yaml:"role,omitempty"`
 }
 
 type Model struct {
-	ID                   string  `json:"id" yaml:"id"`
-	Revision             string  `json:"revision" yaml:"revision"`
-	Quantization         string  `json:"quantization" yaml:"quantization"`
-	DType                string  `json:"dtype" yaml:"dtype"`
-	KVCacheDType         string  `json:"kvCacheDtype" yaml:"kvCacheDtype"`
-	MaxContext           int     `json:"maxContext" yaml:"maxContext"`
-	MaxSequences         int     `json:"maxSequences" yaml:"maxSequences"`
-	GPUMemoryUtilization float64 `json:"gpuMemoryUtilization" yaml:"gpuMemoryUtilization"`
-	TensorParallel       int     `json:"tensorParallel" yaml:"tensorParallel"`
-	PipelineParallel     int     `json:"pipelineParallel" yaml:"pipelineParallel"`
-	TrustRemoteCode      bool    `json:"trustRemoteCode" yaml:"trustRemoteCode"`
+	ID                   string            `json:"id" yaml:"id"`
+	Revision             string            `json:"revision" yaml:"revision"`
+	Quantization         string            `json:"quantization" yaml:"quantization"`
+	DType                string            `json:"dtype" yaml:"dtype"`
+	KVCacheDType         string            `json:"kvCacheDtype" yaml:"kvCacheDtype"`
+	MaxContext           int               `json:"maxContext" yaml:"maxContext"`
+	MaxSequences         int               `json:"maxSequences" yaml:"maxSequences"`
+	GPUMemoryUtilization float64           `json:"gpuMemoryUtilization" yaml:"gpuMemoryUtilization"`
+	TensorParallel       int               `json:"tensorParallel" yaml:"tensorParallel"`
+	PipelineParallel     int               `json:"pipelineParallel" yaml:"pipelineParallel"`
+	TrustRemoteCode      bool              `json:"trustRemoteCode" yaml:"trustRemoteCode"`
+	Dependencies         []ModelDependency `json:"dependencies,omitempty" yaml:"dependencies,omitempty"`
 }
 
 type Distributed struct {
@@ -102,6 +111,23 @@ type Runtime struct {
 	Prerequisites  []string          `json:"prerequisites,omitempty" yaml:"prerequisites,omitempty"`
 	Environment    map[string]string `json:"environment,omitempty" yaml:"environment,omitempty"`
 	Lifecycle      Lifecycle         `json:"lifecycle" yaml:"lifecycle"`
+	Container      ContainerRuntime  `json:"container,omitempty" yaml:"container,omitempty"`
+}
+
+// ContainerRuntime exposes container-contained execution controls for advanced
+// recipes. It never grants host command execution or arbitrary host mounts;
+// every requested container permission remains part of the signed manifest.
+type ContainerRuntime struct {
+	User           string   `json:"user,omitempty" yaml:"user,omitempty"`
+	ReadOnly       bool     `json:"readOnly,omitempty" yaml:"readOnly,omitempty"`
+	IPC            string   `json:"ipc,omitempty" yaml:"ipc,omitempty"`
+	ShmSize        string   `json:"shmSize,omitempty" yaml:"shmSize,omitempty"`
+	Ulimits        []string `json:"ulimits,omitempty" yaml:"ulimits,omitempty"`
+	CapAdd         []string `json:"capAdd,omitempty" yaml:"capAdd,omitempty"`
+	CapDrop        []string `json:"capDrop,omitempty" yaml:"capDrop,omitempty"`
+	Tmpfs          []string `json:"tmpfs,omitempty" yaml:"tmpfs,omitempty"`
+	PidsLimit      int      `json:"pidsLimit,omitempty" yaml:"pidsLimit,omitempty"`
+	ModelCachePath string   `json:"modelCachePath,omitempty" yaml:"modelCachePath,omitempty"`
 }
 
 type Health struct {
@@ -130,34 +156,56 @@ type Draft struct {
 	Health      Health      `json:"health" yaml:"health"`
 }
 
+// CommunityProvenance binds a local installation to the exact immutable
+// community revision that was verified before it entered the executable
+// recipe store. It is deliberately separate from the editable recipe fields.
+type CommunityProvenance struct {
+	RecipeID      string `json:"recipeId"`
+	RevisionID    string `json:"revisionId"`
+	Slug          string `json:"slug"`
+	Version       string `json:"version"`
+	Digest        string `json:"digest"`
+	SigningKeyID  string `json:"signingKeyId"`
+	InstalledAt   string `json:"installedAt"`
+	Revoked       bool   `json:"revoked,omitempty"`
+	RevokedReason string `json:"revokedReason,omitempty"`
+}
+
+type CommunityRollback struct {
+	Draft      Draft               `json:"draft"`
+	Provenance CommunityProvenance `json:"provenance"`
+}
+
 // Recipe retains several top-level compatibility fields so an installed
 // 0.2.x UI can still render migrated recipes while the complete specification
 // lives in the structured fields below.
 type Recipe struct {
-	ID            string            `json:"id"`
-	Name          string            `json:"name"`
-	Description   string            `json:"description"`
-	Platform      string            `json:"platform"`
-	Origin        string            `json:"origin"`
-	Trust         string            `json:"trust"`
-	ImportedAt    string            `json:"importedAt"`
-	UpdatedAt     string            `json:"updatedAt"`
-	TombstonedAt  string            `json:"tombstonedAt,omitempty"`
-	Source        Source            `json:"source"`
-	Engine        Engine            `json:"engine"`
-	Model         Model             `json:"model"`
-	Distributed   Distributed       `json:"distributed"`
-	Runtime       Runtime           `json:"runtime"`
-	Health        Health            `json:"health"`
-	SourceURL     string            `json:"sourceUrl,omitempty"`
-	Revision      string            `json:"revision,omitempty"`
-	Adapter       string            `json:"adapter,omitempty"`
-	ModelID       string            `json:"modelId,omitempty"`
-	ModelRevision string            `json:"modelRevision,omitempty"`
-	Nodes         int               `json:"nodes,omitempty"`
-	Files         map[string]string `json:"files,omitempty"`
-	DefaultPreset string            `json:"defaultPreset,omitempty"`
-	Presets       []legacyPreset    `json:"presets,omitempty"`
+	ID                string               `json:"id"`
+	Name              string               `json:"name"`
+	Description       string               `json:"description"`
+	Platform          string               `json:"platform"`
+	Origin            string               `json:"origin"`
+	Trust             string               `json:"trust"`
+	ImportedAt        string               `json:"importedAt"`
+	UpdatedAt         string               `json:"updatedAt"`
+	TombstonedAt      string               `json:"tombstonedAt,omitempty"`
+	Source            Source               `json:"source"`
+	Engine            Engine               `json:"engine"`
+	Model             Model                `json:"model"`
+	Distributed       Distributed          `json:"distributed"`
+	Runtime           Runtime              `json:"runtime"`
+	Health            Health               `json:"health"`
+	SourceURL         string               `json:"sourceUrl,omitempty"`
+	Revision          string               `json:"revision,omitempty"`
+	Adapter           string               `json:"adapter,omitempty"`
+	ModelID           string               `json:"modelId,omitempty"`
+	ModelRevision     string               `json:"modelRevision,omitempty"`
+	Nodes             int                  `json:"nodes,omitempty"`
+	Files             map[string]string    `json:"files,omitempty"`
+	DefaultPreset     string               `json:"defaultPreset,omitempty"`
+	Presets           []legacyPreset       `json:"presets,omitempty"`
+	Community         *CommunityProvenance `json:"community,omitempty"`
+	CommunityRollback []CommunityRollback  `json:"communityRollback,omitempty"`
 }
 
 type document struct {
@@ -571,6 +619,25 @@ func validateDraft(d Draft) (Draft, error) {
 	if d.Engine.Arguments, err = cleanStrings(d.Engine.Arguments, 256); err != nil {
 		return Draft{}, fmt.Errorf("engine arguments: %w", err)
 	}
+	d.Engine.EntryPoint = strings.TrimSpace(d.Engine.EntryPoint)
+	if len(d.Engine.EntryPoint) > 1024 || strings.ContainsRune(d.Engine.EntryPoint, '\x00') {
+		return Draft{}, errors.New("engine entry point is invalid")
+	}
+	if len(d.Engine.Command) > 512 {
+		return Draft{}, errors.New("engine command cannot contain more than 512 arguments")
+	}
+	command := make([]string, 0, len(d.Engine.Command))
+	for _, value := range d.Engine.Command {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if len(value) > 65536 || strings.ContainsRune(value, '\x00') {
+			return Draft{}, errors.New("engine command arguments must be plain text under 64 KiB")
+		}
+		command = append(command, value)
+	}
+	d.Engine.Command = command
 	d.Model.ID, d.Model.Revision = strings.TrimSpace(d.Model.ID), strings.TrimSpace(d.Model.Revision)
 	if d.Model.ID == "" || len(d.Model.ID) > 256 {
 		return Draft{}, errors.New("enter a model ID or path")
@@ -580,6 +647,16 @@ func validateDraft(d Draft) (Draft, error) {
 	}
 	if d.Model.MaxContext < 1 || d.Model.MaxContext > 10000000 {
 		return Draft{}, errors.New("context window must be between 1 and 10,000,000 tokens")
+	}
+	if len(d.Model.Dependencies) > 16 {
+		return Draft{}, errors.New("no more than 16 additional model dependencies are allowed")
+	}
+	for index := range d.Model.Dependencies {
+		dependency := &d.Model.Dependencies[index]
+		dependency.ID, dependency.Revision, dependency.Role = strings.TrimSpace(dependency.ID), strings.TrimSpace(dependency.Revision), strings.TrimSpace(dependency.Role)
+		if dependency.ID == "" || len(dependency.ID) > 256 || dependency.Revision == "" || len(dependency.Revision) > 128 || len(dependency.Role) > 64 {
+			return Draft{}, errors.New("additional model dependencies require a model ID, revision, and optional short role")
+		}
 	}
 	if d.Model.MaxSequences < 1 || d.Model.MaxSequences > 65536 {
 		return Draft{}, errors.New("maximum sequences must be between 1 and 65,536")
@@ -639,7 +716,21 @@ func validateDraft(d Draft) (Draft, error) {
 		}
 		*value = validated
 	}
-	if d.Runtime.Adapter == ManagedContainerAdapter {
+	if d.Runtime.Container.Ulimits, err = cleanStrings(d.Runtime.Container.Ulimits, 32); err != nil {
+		return Draft{}, fmt.Errorf("container ulimits: %w", err)
+	}
+	if d.Runtime.Container.CapAdd, err = cleanStrings(d.Runtime.Container.CapAdd, 64); err != nil {
+		return Draft{}, fmt.Errorf("container capabilities: %w", err)
+	}
+	if d.Runtime.Container.CapDrop, err = cleanStrings(d.Runtime.Container.CapDrop, 64); err != nil {
+		return Draft{}, fmt.Errorf("container dropped capabilities: %w", err)
+	}
+	if d.Runtime.Container.Tmpfs, err = cleanStrings(d.Runtime.Container.Tmpfs, 32); err != nil {
+		return Draft{}, fmt.Errorf("container tmpfs: %w", err)
+	}
+	d.Runtime.Container.User = strings.TrimSpace(d.Runtime.Container.User)
+	d.Runtime.Container.ModelCachePath = strings.TrimSpace(d.Runtime.Container.ModelCachePath)
+	if IsContainerAdapter(d.Runtime.Adapter) {
 		if err := validateManagedContainerDraft(d); err != nil {
 			return Draft{}, err
 		}
@@ -815,6 +906,122 @@ func (s *Store) CreateIndexed(draft Draft, trust, digest string) (Recipe, error)
 	}
 	draft.Runtime.ArtifactDigest = strings.ToLower(strings.TrimSpace(digest))
 	return s.create(draft, "catalog", trust)
+}
+
+// InstallCommunity atomically inserts or replaces one verified immutable
+// community revision. Callers must verify the release signature, revocation
+// feed and managed-container policy before invoking this method.
+func (s *Store) InstallCommunity(draft Draft, provenance CommunityProvenance) (Recipe, error) {
+	if strings.TrimSpace(provenance.RecipeID) == "" || strings.TrimSpace(provenance.RevisionID) == "" ||
+		strings.TrimSpace(provenance.Version) == "" || !strings.HasPrefix(strings.ToLower(provenance.Digest), "sha256:") ||
+		strings.TrimSpace(provenance.SigningKeyID) == "" || provenance.Revoked {
+		return Recipe{}, errors.New("community recipe provenance is incomplete or revoked")
+	}
+	draft, err := validateDraft(draft)
+	if err != nil {
+		return Recipe{}, err
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	provenance.InstalledAt = now
+	id := "community-" + strings.ReplaceAll(strings.ToLower(provenance.RecipeID), "-", "")
+	if len(id) > 42 {
+		id = id[:42]
+	}
+	recipe := recipeFromDraft(id, "community", "community-signed", now, draft)
+	recipe.Community = &provenance
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	doc, err := s.load()
+	if err != nil {
+		return Recipe{}, err
+	}
+	replaced := false
+	for index := range doc.Recipes {
+		if doc.Recipes[index].Community != nil && doc.Recipes[index].Community.RecipeID == provenance.RecipeID {
+			previous := doc.Recipes[index]
+			if previous.Community.RevisionID == provenance.RevisionID && previous.Community.Digest == provenance.Digest {
+				return previous, nil
+			}
+			recipe.CommunityRollback = append(previous.CommunityRollback, CommunityRollback{Draft: DraftFromSnapshot(previous), Provenance: *previous.Community})
+			if len(recipe.CommunityRollback) > 3 {
+				recipe.CommunityRollback = recipe.CommunityRollback[len(recipe.CommunityRollback)-3:]
+			}
+			doc.Recipes[index], replaced = recipe, true
+			break
+		}
+	}
+	if !replaced {
+		doc.Recipes = append(doc.Recipes, recipe)
+	}
+	if err := s.save(doc); err != nil {
+		return Recipe{}, err
+	}
+	return recipe, nil
+}
+
+func (s *Store) RollbackCommunity(id string) (Recipe, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	doc, err := s.load()
+	if err != nil {
+		return Recipe{}, err
+	}
+	for index := range doc.Recipes {
+		current := doc.Recipes[index]
+		if current.ID != id || current.Community == nil {
+			continue
+		}
+		if len(current.CommunityRollback) == 0 {
+			return Recipe{}, errors.New("no previous community revision is available")
+		}
+		last := current.CommunityRollback[len(current.CommunityRollback)-1]
+		if last.Provenance.Revoked {
+			return Recipe{}, errors.New("the previous community revision is revoked")
+		}
+		restored := recipeFromDraft(current.ID, "community", "community-signed", current.ImportedAt, last.Draft)
+		restored.Community = &last.Provenance
+		restored.CommunityRollback = current.CommunityRollback[:len(current.CommunityRollback)-1]
+		doc.Recipes[index] = restored
+		if err := s.save(doc); err != nil {
+			return Recipe{}, err
+		}
+		return restored, nil
+	}
+	return Recipe{}, os.ErrNotExist
+}
+
+// MarkCommunityRevoked leaves forensic and cleanup information in place while
+// ensuring catalog callers no longer treat the revision as executable.
+func (s *Store) MarkCommunityRevoked(revisionID, reason string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	doc, err := s.load()
+	if err != nil {
+		return err
+	}
+	found := false
+	for index := range doc.Recipes {
+		provenance := doc.Recipes[index].Community
+		if provenance != nil && provenance.RevisionID == revisionID {
+			provenance.Revoked = true
+			provenance.RevokedReason = strings.TrimSpace(reason)
+			doc.Recipes[index].Trust = "community-revoked"
+			found = true
+		}
+		for rollbackIndex := range doc.Recipes[index].CommunityRollback {
+			rollback := &doc.Recipes[index].CommunityRollback[rollbackIndex].Provenance
+			if rollback.RevisionID == revisionID {
+				rollback.Revoked = true
+				rollback.RevokedReason = strings.TrimSpace(reason)
+				found = true
+			}
+		}
+	}
+	if !found {
+		return os.ErrNotExist
+	}
+	return s.save(doc)
 }
 
 func (s *Store) create(draft Draft, origin, trust string) (Recipe, error) {

@@ -107,6 +107,15 @@ func recipeCachedModelReady(ctx context.Context, runtime engine.Engine, recipe l
 	return err == nil
 }
 
+func recipeCachedModelSetReady(ctx context.Context, runtime engine.Engine, recipe localrecipes.Recipe) bool {
+	for _, item := range recipeModelSet(recipe) {
+		if !recipeCachedModelReady(ctx, runtime, item) {
+			return false
+		}
+	}
+	return true
+}
+
 // inspectRecipeModelManifest is the inexpensive UI/inventory path. It proves
 // that the internally consistent manifest still maps to files of the expected
 // sizes. Full SHA-256 verification is reserved for preparation and the final

@@ -388,6 +388,8 @@ class PhysicalQualificationTest(unittest.TestCase):
 
     def test_representative_two_spark_target_expands_failure_phase_matrix(self):
         matrix = qualify.load_matrix(self.matrix)
+        virtualbox = qualify.target_by_id(matrix, "virtualbox-amd64")
+        generic = qualify.target_by_id(matrix, "generic-nvidia-amd64")
         two_spark = qualify.target_by_id(matrix, "dgx-spark-arm64-2")
         three_spark = qualify.target_by_id(matrix, "dgx-spark-arm64-3")
         two_checks = qualify.applicable_checks(matrix, two_spark)
@@ -396,6 +398,10 @@ class PhysicalQualificationTest(unittest.TestCase):
         self.assertEqual(len(failure_checks), 7 * 9)
         self.assertIn("cluster-failure--coordinator-loss--optimizing", failure_checks)
         self.assertFalse(any(check.startswith("cluster-failure--") for check in three_checks))
+        self.assertNotIn("community-signed-install", qualify.applicable_checks(matrix, virtualbox))
+        self.assertIn("community-signed-install", qualify.applicable_checks(matrix, generic))
+        self.assertIn("community-update-rollback", two_checks)
+        self.assertIn("community-revocation", two_checks)
 
     def test_guided_plan_is_resumable_and_detects_tampering(self):
         campaign = self.begin()

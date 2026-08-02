@@ -27,6 +27,8 @@ For every target, retain:
   terminal and power controls;
 - app install/open/restart/update/uninstall results;
 - model load, switch, Abort and unload results with operation IDs;
+- on generic NVIDIA and Spark targets, exact signed community recipe install/run,
+  explicit update/rollback and controlled revocation rejection/marking results;
 - update, deliberate interrupted-update rollback, encrypted backup restore and post-reboot checks;
 - the final redacted support bundle containing boot health and security audit evidence.
 

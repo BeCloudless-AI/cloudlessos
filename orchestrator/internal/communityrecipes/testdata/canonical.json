@@ -1,0 +1,13 @@
+{
+  "input": {
+    "zero": 0,
+    "fraction": 0.9,
+    "unicode": "Cloudless \u2028 🌤️",
+    "nested": {
+      "z": true,
+      "a": [3, "x"]
+    }
+  },
+  "canonical": "{\"fraction\":0.9,\"nested\":{\"a\":[3,\"x\"],\"z\":true},\"unicode\":\"Cloudless \u2028 🌤️\",\"zero\":0}",
+  "sha256": "e6a2eb53d944c9953cbebffdedbf4fb40f36ec5275b9beac893371112bcac2ef"
+}

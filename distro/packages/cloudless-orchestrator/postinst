@@ -14,6 +14,16 @@ install -d -m 0751 -o cloudlessd -g cloudless-control /var/lib/cloudless
 install -d -m 0750 -o cloudlessd -g cloudless-control /var/lib/cloudless/builds
 install -d -m 2750 -o cloudlessd -g cloudless /var/lib/cloudless/models-cache
 
+# Releases which ran cloudlessd as root created managed application credentials
+# below this directory as root:root 0700.  After the daemon privilege split that
+# made the files invisible to cloudlessd; Hermes consequently started with an
+# empty API_SERVER_KEY even though its key was safely present on disk.  Keep the
+# directory private while transferring only this Cloudless-owned secret store.
+install -d -m 0700 -o cloudlessd -g cloudless-control /var/lib/cloudless/secrets
+chown -R cloudlessd:cloudless-control /var/lib/cloudless/secrets
+find /var/lib/cloudless/secrets -type d -exec chmod 0700 {} +
+find /var/lib/cloudless/secrets -type f -exec chmod 0600 {} +
+
 # Older root-run orchestrators created the read-only Models view as root. Only
 # repair directories carrying Cloudless's own revision marker; user-created
 # folders and files are never touched. Files are hard links into the cache and

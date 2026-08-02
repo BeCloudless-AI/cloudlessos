@@ -64,7 +64,65 @@ while :; do
     echo "$(date -Is) launching $BROWSER"
     case "$(basename "$BROWSER")" in
         firefox)
-            "$BROWSER" --class CloudlessKiosk --kiosk "$START_URL"
+            # Never share Firefox's everyday profile with the kiosk. A hard
+            # graphical-session restart can otherwise restore every old kiosk
+            # tab, leaving several Cloudless pages polling and repainting at
+            # once. The result looks like Firefox is repeatedly refreshing even
+            # though its main process never exits.
+            case "$BROWSER" in
+                /snap/*|*/snap/*) PROFILE_DIR="$HOME/snap/firefox/common/cloudless-kiosk" ;;
+                *) PROFILE_DIR="$XDG_CONFIG_HOME/cloudless-firefox-kiosk" ;;
+            esac
+            mkdir -p "$PROFILE_DIR/sessionstore-backups"
+            cat >"$PROFILE_DIR/user.js" <<'EOF'
+user_pref("browser.sessionstore.resume_from_crash", false);
+user_pref("browser.sessionstore.max_resumed_crashes", 0);
+user_pref("browser.startup.page", 0);
+user_pref("browser.shell.checkDefaultBrowser", false);
+user_pref("browser.tabs.warnOnClose", false);
+user_pref("browser.warnOnQuitShortcut", false);
+user_pref("datareporting.policy.dataSubmissionEnabled", false);
+user_pref("toolkit.telemetry.reportingpolicy.firstRun", false);
+EOF
+            # Firefox software rendering was originally forced to make the
+            # generic VirtualBox image conservative. On physical NVIDIA hosts
+            # that disables HW_COMPOSITING and makes every translucent panel,
+            # scroll and transition run on the CPU. Prefer WebRender whenever
+            # the NVIDIA driver is live, while retaining the old safe path for
+            # VMs and machines without a usable NVIDIA device.
+            FIREFOX_HW_ACCEL=0
+            if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi -L >/dev/null 2>&1; then
+                FIREFOX_HW_ACCEL=1
+                cat >>"$PROFILE_DIR/user.js" <<'EOF'
+user_pref("gfx.canvas.accelerated", true);
+user_pref("gfx.webrender.all", true);
+user_pref("gfx.webrender.software", false);
+user_pref("layers.acceleration.disabled", false);
+user_pref("media.hardware-video-decoding.enabled", true);
+user_pref("webgl.disabled", false);
+EOF
+                echo "$(date -Is) NVIDIA graphics available; enabling Firefox hardware composition"
+            else
+                cat >>"$PROFILE_DIR/user.js" <<'EOF'
+user_pref("gfx.canvas.accelerated", false);
+user_pref("gfx.webrender.all", false);
+user_pref("gfx.webrender.software", true);
+user_pref("layers.acceleration.disabled", true);
+user_pref("media.hardware-video-decoding.enabled", false);
+user_pref("webgl.disabled", true);
+EOF
+                echo "$(date -Is) no usable NVIDIA graphics detected; using Firefox software rendering"
+            fi
+            rm -f "$PROFILE_DIR/sessionstore.jsonlz4" \
+                "$PROFILE_DIR"/sessionstore-backups/*
+            if [ "$FIREFOX_HW_ACCEL" -eq 1 ]; then
+                MOZ_WEBRENDER=1 "$BROWSER" --no-remote --profile "$PROFILE_DIR" \
+                    --class CloudlessKiosk --kiosk "$START_URL"
+            else
+                LIBGL_ALWAYS_SOFTWARE=1 MOZ_WEBRENDER=0 \
+                    "$BROWSER" --no-remote --profile "$PROFILE_DIR" \
+                    --class CloudlessKiosk --kiosk "$START_URL"
+            fi
             ;;
         *)
             # Strictly confined Chromium snaps cannot write arbitrary hidden

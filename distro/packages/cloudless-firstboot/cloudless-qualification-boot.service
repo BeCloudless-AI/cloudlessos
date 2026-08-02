@@ -15,4 +15,4 @@ ReadWritePaths=/var/lib/cloudless/qualification
 UMask=0077
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=graphical.target

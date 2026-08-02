@@ -28,6 +28,11 @@
     "backup-and-restore",
     "support-bundle"
   ],
+  "communityChecks": [
+    "community-signed-install",
+    "community-update-rollback",
+    "community-revocation"
+  ],
   "clusterChecks": [
     "discover-and-enroll",
     "fabric-and-ssh-preflight",

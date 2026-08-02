@@ -34,12 +34,13 @@ func managedContainerRecipeForTest() localrecipes.Recipe {
 }
 
 func TestManagedContainerRecipeSpecOwnsSecurityAndContract(t *testing.T) {
+	t.Setenv("CLOUDLESS_MODEL_CACHE", t.TempDir())
 	recipe := managedContainerRecipeForTest()
 	spec, err := managedContainerRecipeSpec(recipe, "sha256:"+strings.Repeat("c", 64), "cloudless-recipe-test", "operation-test", "/var/lib/cloudless/huggingface-token")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if spec.EntryPoint != "vllm" || spec.Network != "" || spec.IPC != "" || len(spec.ExtraHosts) != 0 {
+	if spec.EntryPoint != "vllm" || spec.Network != "cloudless" || spec.IPC != "" || len(spec.ExtraHosts) != 0 {
 		t.Fatalf("unsafe or unexpected runtime scaffold: %#v", spec)
 	}
 	if !spec.ReadOnly || !reflect.DeepEqual(spec.CapDrop, []string{"ALL"}) ||
@@ -47,13 +48,17 @@ func TestManagedContainerRecipeSpecOwnsSecurityAndContract(t *testing.T) {
 		spec.PidsLimit != 8192 {
 		t.Fatalf("sandbox controls missing: %#v", spec)
 	}
-	if spec.Volumes[modelcache.Root()] != "/root/.cache/huggingface" || len(spec.Volumes) != 1 {
+	if spec.Volumes[modelcache.Root()] != "/cache/huggingface" || len(spec.Volumes) != 1 {
 		t.Fatalf("unexpected mounts: %#v", spec.Volumes)
+	}
+	if spec.User != managedContainerCacheUser() {
+		t.Fatalf("managed runtime user does not match the cache owner: %q", spec.User)
 	}
 	if spec.Labels["cloudless.recipe.operation"] != "operation-test" {
 		t.Fatalf("operation ownership label missing: %#v", spec.Labels)
 	}
-	if spec.Env["HF_TOKEN"] != "" || spec.Env["HF_TOKEN_PATH"] != "/run/secrets/cloudless-huggingface-token" || spec.Env["HF_HOME"] != "/root/.cache/huggingface" ||
+	if spec.Env["HF_TOKEN"] != "" || spec.Env["HF_TOKEN_PATH"] != "/run/secrets/cloudless-huggingface-token" || spec.Env["HF_HOME"] != "/cache/huggingface" ||
+		spec.Env["HOME"] != "/cache/huggingface" || spec.Env["FLASHINFER_WORKSPACE_DIR"] != "/cache/huggingface/flashinfer" ||
 		spec.Env["HF_CACHE"] != "" || spec.Env["SAFE"] != "yes" {
 		t.Fatalf("credential/environment mediation failed: %#v", spec.Env)
 	}
@@ -69,5 +74,28 @@ func TestManagedContainerRecipeSpecOwnsSecurityAndContract(t *testing.T) {
 		if !strings.Contains(command, expected) {
 			t.Fatalf("managed command %q is missing %q", command, expected)
 		}
+	}
+}
+
+func TestAdvancedContainerRecipeSpecPreservesDeclaredCommandAndPermissions(t *testing.T) {
+	t.Setenv("CLOUDLESS_MODEL_CACHE", t.TempDir())
+	recipe := managedContainerRecipeForTest()
+	recipe.Runtime.Adapter = localrecipes.AdvancedContainerAdapter
+	recipe.Engine.Arguments = nil
+	recipe.Engine.EntryPoint = "/bin/bash"
+	recipe.Engine.Command = []string{"-lc", "exec vllm serve pinned-model"}
+	recipe.Model.Dependencies = []localrecipes.ModelDependency{{ID: "example/draft", Revision: strings.Repeat("d", 40), Role: "speculative-draft"}}
+	recipe.Runtime.Environment["CUTE_DSL_ARCH"] = "sm_121a"
+	recipe.Runtime.Container = localrecipes.ContainerRuntime{
+		User: "0", IPC: "host", ShmSize: "32g", Ulimits: []string{"memlock=-1:-1"},
+		CapAdd: []string{"IPC_LOCK"}, ModelCachePath: "/root/.cache/huggingface",
+	}
+	spec, err := managedContainerRecipeSpec(recipe, recipe.Engine.Image, "cloudless-recipe-advanced", "operation-advanced", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if spec.EntryPoint != "/bin/bash" || !reflect.DeepEqual(spec.Args, recipe.Engine.Command) || spec.User != "0" || spec.ReadOnly || spec.IPC != "host" ||
+		!reflect.DeepEqual(spec.CapAdd, []string{"IPC_LOCK"}) || spec.Volumes[modelcache.Root()] != "/root/.cache/huggingface" || spec.Env["CUTE_DSL_ARCH"] != "sm_121a" {
+		t.Fatalf("advanced runtime declaration was not preserved: %#v", spec)
 	}
 }

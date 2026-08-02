@@ -22,7 +22,7 @@ func (s *Server) restartActiveRecipeAfterBoot(ctx context.Context, job *jobs.Job
 	}
 	provision.EngineMu.Lock()
 	defer provision.EngineMu.Unlock()
-	if recipe.Runtime.Adapter == localrecipes.ManagedContainerAdapter {
+	if localrecipes.IsContainerAdapter(recipe.Runtime.Adapter) {
 		return s.restartManagedContainerRecipeAfterBoot(ctx, job, operation, recipe)
 	}
 	cluster, err := sparkcluster.Status(ctx)
@@ -132,7 +132,7 @@ func (s *Server) restartManagedContainerRecipeAfterBoot(ctx context.Context, job
 	if err := s.eng.Pull(ctx, proxyImage); err != nil {
 		return err
 	}
-	spec := sparkcluster.ProxySpecTarget(recipe.Engine.ProxyHost, recipe.Engine.ContainerPort)
+	spec := sparkcluster.ProxySpecTarget(runtimeName, recipe.Engine.ContainerPort)
 	spec.Image = proxyImage
 	proxyID, err := s.eng.Run(ctx, spec)
 	if err != nil {

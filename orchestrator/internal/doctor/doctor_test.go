@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cloudless/orchestrator/internal/catalog"
 	"github.com/cloudless/orchestrator/internal/engine"
 	"github.com/cloudless/orchestrator/internal/localrecipes"
 	"github.com/cloudless/orchestrator/internal/securityaudit"
@@ -119,6 +120,45 @@ func TestRunningRecipeIsNotOrphanedWhileCloudlessOwnsIt(t *testing.T) {
 	)
 	if len(report.Checks) != 0 || report.Overall != "healthy" {
 		t.Fatalf("owned runtime was reported as orphaned: %#v", report)
+	}
+}
+
+func TestReconcileInferenceEndpointUsesStableRuntimeContract(t *testing.T) {
+	report := Report{Overall: "needs-attention", Checks: []Check{
+		{ID: "app-vllm", Name: "vLLM", Status: "fail", Summary: "Required service is not running."},
+		{ID: "container-runtime", Name: "Container runtime", Status: "pass"},
+	}}
+	current := state.State{Engine: "vllm", LocalRecipeID: "local-recipe", ExecutionMode: "cluster"}
+	got := ReconcileInferenceEndpoint(report, current, true, nil)
+	if got.Overall != "healthy" {
+		t.Fatalf("overall = %q, checks = %#v", got.Overall, got.Checks)
+	}
+	for _, check := range got.Checks {
+		if check.ID == "app-vllm" {
+			t.Fatalf("legacy container-name check survived: %#v", got.Checks)
+		}
+	}
+	if got.Checks[len(got.Checks)-1].ID != "inference-engine" || got.Checks[len(got.Checks)-1].Status != "pass" {
+		t.Fatalf("stable endpoint check = %#v", got.Checks)
+	}
+}
+
+func TestReconcileInferenceEndpointDistinguishesStartingFromStopped(t *testing.T) {
+	starting := ReconcileInferenceEndpoint(Report{Checks: []Check{{ID: "app-vllm", Status: "pass"}}}, state.State{Engine: "vllm"}, true, os.ErrDeadlineExceeded)
+	if starting.Checks[0].Status != "warning" {
+		t.Fatalf("starting runtime = %#v", starting.Checks)
+	}
+	stopped := ReconcileInferenceEndpoint(Report{Checks: []Check{{ID: "app-vllm", Status: "pass"}}}, state.State{Engine: "vllm"}, false, os.ErrNotExist)
+	if stopped.Checks[0].Status != "fail" {
+		t.Fatalf("stopped runtime = %#v", stopped.Checks)
+	}
+}
+
+func TestHermesDoctorContractUsesAgentAPI(t *testing.T) {
+	hermes := catalog.App{ID: "hermes", Health: catalog.HealthContract{Port: catalog.HermesDashboardPort, Path: "/"}}
+	port, path := appHealthEndpoint(hermes)
+	if port != catalog.HermesAPIPort || path != "/health" {
+		t.Fatalf("Hermes Doctor endpoint = %d%s", port, path)
 	}
 }
 

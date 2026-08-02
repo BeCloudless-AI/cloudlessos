@@ -156,7 +156,7 @@ func (s *Server) assistantContext(ctx context.Context) assistant.Context {
 	cancel()
 	modelList = modelcatalog.Merge(modelList)
 	gpuGB, memoryType, availableGB, reservedGB := acceleratorFitMemory(ctx)
-	cluster := clusterCompute(ctx, gpuGB)
+	cluster := s.cachedClusterCompute(ctx, gpuGB)
 	fitEngine := st.Engine
 	if fitEngine == "" {
 		fitEngine = active

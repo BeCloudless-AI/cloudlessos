@@ -84,14 +84,29 @@ func TestRunSpecPolicyRejectsHostAuthority(t *testing.T) {
 	}
 }
 
-func TestRunSpecPolicyAllowsOnlyExplicitRootMaintenanceUser(t *testing.T) {
+func TestRunSpecPolicyAllowsRootMaintenanceOrNumericUnprivilegedUser(t *testing.T) {
 	spec := RunSpec{Name: "cloudless-helper", Image: "busybox", User: "0"}
 	if err := ValidateRunSpec(spec); err != nil {
 		t.Fatalf("root maintenance helper rejected: %v", err)
 	}
+	spec.User = "1000:1000"
+	if err := ValidateRunSpec(spec); err != nil {
+		t.Fatalf("numeric unprivileged user rejected: %v", err)
+	}
 	spec.User = "1000"
 	if err := ValidateRunSpec(spec); err == nil {
-		t.Fatal("arbitrary container user accepted")
+		t.Fatal("user without a bounded primary group accepted")
+	}
+}
+
+func TestRunSpecPolicyAllowsDeclaredContainerCapabilities(t *testing.T) {
+	spec := RunSpec{Name: "cloudless-advanced", Image: "example/image:1", CapAdd: []string{"IPC_LOCK", "SYS_NICE"}, CapDrop: []string{"NET_RAW"}}
+	if err := ValidateRunSpec(spec); err != nil {
+		t.Fatal(err)
+	}
+	spec.CapAdd = []string{"bad capability"}
+	if err := ValidateRunSpec(spec); err == nil {
+		t.Fatal("invalid capability was accepted")
 	}
 }
 

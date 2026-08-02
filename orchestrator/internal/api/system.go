@@ -43,7 +43,7 @@ func (s *Server) system(w http.ResponseWriter, r *http.Request) {
 		"locale":       locale.Detect(),
 		"gpuCount":     len(gpus),
 		"capabilities": capabilities.Current(),
-		"cluster":      clusterCompute(ctx, memoryGB),
+		"cluster":      s.cachedClusterCompute(ctx, memoryGB),
 	})
 }
 

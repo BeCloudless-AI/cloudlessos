@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/cloudless/orchestrator/internal/catalog"
+	"github.com/cloudless/orchestrator/internal/engine"
 	"github.com/cloudless/orchestrator/internal/jobs"
 	"github.com/cloudless/orchestrator/internal/localrecipes"
 	"github.com/cloudless/orchestrator/internal/provision"
@@ -26,20 +27,36 @@ func (s *Server) checkManagedContainerRecipe(job *jobs.Job, recipe localrecipes.
 	fail := func(id, summary string, err error) {
 		s.failRecipeCheck(job, operationID, id, summary, err)
 	}
-	job.Progress("checking-sandbox", "Validating the command-free container boundary...", 0, 6)
+	advanced := recipe.Runtime.Adapter == localrecipes.AdvancedContainerAdapter
+	boundaryMessage := "Validating the command-free container boundary..."
+	if advanced {
+		boundaryMessage = "Validating the signed advanced-container command and permissions..."
+	}
+	job.Progress("checking-sandbox", boundaryMessage, 0, 6)
 	if err := localrecipes.ValidateManagedContainerRecipe(recipe); err != nil {
 		fail("sandbox", "The constrained runtime contract is invalid", err)
 		return
 	}
-	if _, err := managedContainerRecipeSpec(recipe, recipe.Engine.Image, "cloudless-recipe-check", operationID, ""); err != nil {
+	containerSpec, err := managedContainerRecipeSpec(recipe, recipe.Engine.Image, "cloudless-recipe-check", operationID, "")
+	if err == nil {
+		err = engine.ValidateRunSpec(containerSpec)
+	}
+	if err != nil {
 		fail("sandbox", "Cloudless could not synthesize a safe runtime", err)
 		return
 	}
-	if err := s.recordRecipeCheck(operationID, "sandbox", recipeops.CheckPass,
-		"Cloudless owns the command, mounts, network, privileges, and lifecycle", "", map[string]string{
-			"adapter": localrecipes.ManagedContainerAdapter, "readOnlyRoot": "true",
-			"capabilities": "none", "hostCommands": "none", "hostMounts": "none",
-		}); err != nil {
+	boundarySummary := "Cloudless owns the command, mounts, network, privileges, and lifecycle"
+	boundaryValues := map[string]string{
+		"adapter": recipe.Runtime.Adapter, "readOnlyRoot": "true",
+		"capabilities": "none", "hostCommands": "none", "hostMounts": "none",
+	}
+	if advanced {
+		boundarySummary = "The signed recipe owns its in-container command and declared permissions"
+		boundaryValues["readOnlyRoot"] = strconv.FormatBool(recipe.Runtime.Container.ReadOnly)
+		boundaryValues["capabilities"] = strings.Join(recipe.Runtime.Container.CapAdd, ",")
+		boundaryValues["entryPoint"] = recipe.Engine.EntryPoint
+	}
+	if err := s.recordRecipeCheck(operationID, "sandbox", recipeops.CheckPass, boundarySummary, "", boundaryValues); err != nil {
 		s.finishRecipeOperation(job, operationID, err)
 		return
 	}
@@ -61,7 +78,7 @@ func (s *Server) checkManagedContainerRecipe(job *jobs.Job, recipe localrecipes.
 
 	job.Progress("checking-capacity", "Measuring model, runtime, and storage requirements...", 2, 6)
 	token, _ := s.state.HuggingFaceToken()
-	modelBytes, err := recipeModelPreflightBytes(ctx, recipe, token)
+	modelBytes, err := recipeModelSetPreflightBytes(ctx, recipe, token)
 	if err != nil {
 		fail("capacity", "The immutable model revision could not be measured", err)
 		return
@@ -74,7 +91,7 @@ func (s *Server) checkManagedContainerRecipe(job *jobs.Job, recipe localrecipes.
 	runtimeBytes := image.CompressedBytes * recipeRegistryExpansionFactor
 	_, localImageErr := inspectLocalRecipeImage(ctx, s.eng, image.Reference)
 	capacity, err := calculateRecipeCapacity(modelBytes, runtimeBytes, 0, availableBytes,
-		recipeCachedModelReady(ctx, s.eng, recipe), localImageErr == nil)
+		recipeCachedModelSetReady(ctx, s.eng, recipe), localImageErr == nil)
 	if err != nil || capacity.RequiredBytes > capacity.AvailableBytes {
 		if err == nil {
 			err = fmt.Errorf("requires %d bytes including reserve; %d bytes are available", capacity.RequiredBytes, capacity.AvailableBytes)
@@ -83,6 +100,11 @@ func (s *Server) checkManagedContainerRecipe(job *jobs.Job, recipe localrecipes.
 		return
 	}
 	capacityValues := capacity.values("local.")
+	// Capacity.ModelBytes is the amount still missing from disk, which is zero
+	// when the immutable model revision is already cached. Preserve the actual
+	// model size separately so Run revalidates the same accelerator requirement
+	// that Check used.
+	capacityValues["local.modelContentBytes"] = strconv.FormatInt(modelBytes, 10)
 	capacityValues["local.filesystem"] = measuredAt
 	if err := s.recordRecipeCheck(operationID, "capacity", recipeops.CheckPass,
 		"The model, image, and safety reserve fit on this machine", "", capacityValues); err != nil {
@@ -138,7 +160,11 @@ func (s *Server) checkManagedContainerRecipe(job *jobs.Job, recipe localrecipes.
 		s.finishRecipeOperation(job, operationID, errors.New("constrained runtime evidence was not launchable"))
 		return
 	}
-	job.Progress("validated", "The recipe can run without executing recipe-supplied code.", 6, 6)
+	validatedMessage := "The recipe can run without executing recipe-supplied code."
+	if advanced {
+		validatedMessage = "The signed advanced container definition passed local preflight."
+	}
+	job.Progress("validated", validatedMessage, 6, 6)
 	job.Succeed("validated")
 	s.pruneRecipeOperations()
 }
@@ -209,6 +235,12 @@ func (s *Server) runManagedContainerRecipe(job *jobs.Job, recipe localrecipes.Re
 		{Kind: "private-port", ID: strconv.Itoa(recipe.Engine.ContainerPort), Node: localNode},
 	} {
 		if err := s.claimRecipeResource(operationID, resource); err != nil {
+			s.finishRecipeOperation(job, operationID, err)
+			return
+		}
+	}
+	for _, dependency := range recipe.Model.Dependencies {
+		if err := s.claimRecipeResource(operationID, recipeops.Resource{Kind: "model-cache", ID: dependency.ID + "@" + dependency.Revision, Node: localNode}); err != nil {
 			s.finishRecipeOperation(job, operationID, err)
 			return
 		}
@@ -297,7 +329,9 @@ func (s *Server) runManagedContainerRecipe(job *jobs.Job, recipe localrecipes.Re
 		rollback(err)
 		return
 	}
-	proxySpec := sparkcluster.ProxySpecTarget(recipe.Engine.ProxyHost, recipe.Engine.ContainerPort)
+	// The private host port is intentionally loopback-only. Route the stable
+	// proxy to the managed container over Cloudless's private Docker network.
+	proxySpec := sparkcluster.ProxySpecTarget(runtimeName, recipe.Engine.ContainerPort)
 	proxySpec.Image = proxyImage
 	proxyID, err := s.eng.Run(ctx, proxySpec)
 	if err != nil {

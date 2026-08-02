@@ -151,7 +151,12 @@ func checkedRecipeModelBytes(artifact recipeops.PreflightArtifact) (int64, error
 		if check.ID != "capacity" {
 			continue
 		}
-		value := check.Values["local.modelBytes"]
+		value := check.Values["local.modelContentBytes"]
+		if strings.TrimSpace(value) == "" {
+			// Backward compatibility for checks created before content size and
+			// remaining download size were recorded separately.
+			value = check.Values["local.modelBytes"]
+		}
 		bytes, err := strconv.ParseInt(value, 10, 64)
 		if err != nil || bytes < 0 {
 			return 0, errors.New("checked model size evidence is invalid; run Check again")

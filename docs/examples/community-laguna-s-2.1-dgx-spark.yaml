@@ -1,0 +1,126 @@
+schema: cloudless.recipe/v2
+
+metadata:
+  name: Laguna S 2.1 NVFP4 DFlash DGX Spark
+  description: MiaAI-Lab's pinned Laguna S 2.1 NVFP4 and DFlash serving stack with SM121 FlashInfer optimization for DGX Spark.
+  version: 1.0.1
+  author: MiaLabs
+  category: language-model
+  license: Proprietary
+  tags: [vllm, laguna, poolside, nvfp4, dflash, flashinfer, sm121, dgx-spark, coding, reasoning]
+  minimumAcceleratorMemoryGB: 128
+
+recipe:
+  name: Laguna S 2.1 NVFP4 DFlash DGX Spark
+  description: Runs the exact Poolside Laguna S 2.1 target and DFlash draft revisions with vLLM 0.25.1 and the matched SM121 FlashInfer nightly stack from MiaAI-Lab's DGX Spark profile.
+  platform: dgx-spark
+  source:
+    url: ""
+    revision: ""
+    files: {}
+  engine:
+    type: vllm
+    image: ghcr.io/samuelcardillo/cloudless-vllm-laguna@sha256:eac72065ffc38fd99cf2875a4cbfc871ea6b9f9ca9e774681fe873d4000df99d
+    servedModelName: cloudless
+    containerPort: 8890
+    apiPath: /v1
+    proxyHost: host.docker.internal
+    restartPolicy: "no"
+    arguments: []
+    entryPoint: /bin/bash
+    command:
+      - -lc
+      - |-
+        set -euo pipefail
+        FLASHINFER_VERSION=0.6.15.dev20260712
+        INSTALLED="$(python3 -c 'import flashinfer; print(flashinfer.__version__)' 2>/dev/null || true)"
+        if [ "$INSTALLED" != "$FLASHINFER_VERSION" ]; then
+          pip install --upgrade --no-deps \
+            "flashinfer-python==$FLASHINFER_VERSION" \
+            "flashinfer-cubin==$FLASHINFER_VERSION" \
+            "flashinfer-jit-cache==$FLASHINFER_VERSION+cu130" \
+            --extra-index-url https://flashinfer.ai/whl/nightly/ \
+            --extra-index-url https://flashinfer.ai/whl/nightly/cu130/
+          pip install --upgrade "cuda-tile==1.5.0" "nccl4py==0.3.1"
+        fi
+        exec vllm serve poolside/Laguna-S-2.1-NVFP4 \
+          --revision f8fdfcdc4e7b0c474a0102430a8cae0a3a358669 \
+          --served-model-name cloudless \
+          --host 0.0.0.0 \
+          --port 8890 \
+          --tensor-parallel-size 1 \
+          --dtype bfloat16 \
+          --attention-backend FLASHINFER \
+          --trust-remote-code \
+          --gpu-memory-utilization 0.85 \
+          --max-model-len 262144 \
+          --max-num-seqs 4 \
+          --max-num-batched-tokens 8192 \
+          --enable-auto-tool-choice \
+          --tool-call-parser poolside_v1 \
+          --reasoning-parser poolside_v1 \
+          --default-chat-template-kwargs '{"enable_thinking":true}' \
+          --override-generation-config '{"temperature":0.7,"top_p":0.95,"top_k":20}' \
+          --speculative-config '{"model":"poolside/Laguna-S-2.1-DFlash-NVFP4","revision":"b3b5921a900b9e0a1e27e50bdaeb480692a6d19b","num_speculative_tokens":7,"method":"dflash"}'
+  model:
+    id: poolside/Laguna-S-2.1-NVFP4
+    revision: "f8fdfcdc4e7b0c474a0102430a8cae0a3a358669"
+    quantization: ""
+    dtype: bfloat16
+    kvCacheDtype: auto
+    maxContext: 262144
+    maxSequences: 4
+    gpuMemoryUtilization: 0.85
+    tensorParallel: 1
+    pipelineParallel: 1
+    trustRemoteCode: true
+    dependencies:
+      - id: poolside/Laguna-S-2.1-DFlash-NVFP4
+        revision: "b3b5921a900b9e0a1e27e50bdaeb480692a6d19b"
+        role: speculative-draft
+  distributed:
+    nodes: 1
+    backend: local
+    masterPort: 29500
+    interface: ""
+    hca: ""
+    ibGidIndex: 0
+    workerAlias: worker
+    selectedNodes: []
+  runtime:
+    adapter: advanced-container-v1
+    buildOnce: false
+    downloadOnce: false
+    workingDir: ""
+    timeoutMinutes: 180
+    prerequisites: []
+    environment:
+      VLLM_TARGET_DEVICE: cuda
+      VLLM_TRUST_REMOTE_CODE: "1"
+      CUTE_DSL_ARCH: sm_121a
+      MAX_JOBS: "4"
+      NVCC_THREADS: "2"
+      FLASHINFER_NVCC_THREADS: "2"
+    container:
+      user: "0"
+      readOnly: false
+      ipc: host
+      shmSize: 32g
+      ulimits: [memlock=-1:-1]
+      capAdd: [IPC_LOCK]
+      capDrop: []
+      tmpfs: []
+      pidsLimit: 8192
+      modelCachePath: /root/.cache/huggingface
+    lifecycle:
+      build: {program: "", args: []}
+      download: {program: "", args: []}
+      start: {program: "", args: []}
+      stop: {program: "", args: []}
+  health:
+    scheme: http
+    host: 127.0.0.1
+    port: 8890
+    path: /v1/models
+    timeoutSeconds: 3600
+    intervalSeconds: 5

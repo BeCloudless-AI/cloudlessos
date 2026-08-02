@@ -9,6 +9,11 @@ For the detailed recipe transaction plan, use
 [`RECIPE_RELIABILITY_ROADMAP.md`](./RECIPE_RELIABILITY_ROADMAP.md). That document is the source of
 truth for recipe Check, preparation, launch, abort, rollback and cluster recovery.
 
+For authenticated authorship, API-key publishing, immutable community revisions, discovery,
+installation, ratings, comments and moderation, use
+[`COMMUNITY_RECIPES_ROADMAP.md`](./COMMUNITY_RECIPES_ROADMAP.md). It is the ordered source of truth
+for the community recipe service and keeps social popularity separate from executable trust.
+
 ## How to use this roadmap
 
 - Work from the first unfinished milestone unless an item is explicitly marked parallel-safe.

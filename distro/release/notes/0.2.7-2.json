@@ -1,0 +1,14 @@
+{
+  "title": "Community recipes and clearer DGX Spark launches",
+  "summary": "CloudlessOS 0.2.7-2 adds signed community recipe publishing and installation, expands constrained recipe runtimes for DGX Spark, and makes long model launches visibly understandable and recoverable.",
+  "changes": [
+    "Add Cloudless accounts, scoped publisher API keys, and guided community recipe publishing from both Model Manager and the Cloudless CLI.",
+    "Discover, verify, install, update, roll back, and revoke immutable community recipe revisions through the signed community catalog.",
+    "Allow constrained recipes to select their own immutable runtime images for platform-specific optimizations such as SM121 kernels, FlashInfer, and DFlash without granting arbitrary host access.",
+    "Ship and document a DGX Spark Laguna S 2.1 NVFP4 and DFlash recipe backed by a digest-pinned patched vLLM runtime.",
+    "Keep recipe preparation and recovery durable across daemon restarts, clean up orphaned managed containers safely, and preserve downloaded model weights when recovery is possible.",
+    "Show dependency downloads, checkpoint shard counts, DFlash loading, kernel compilation, warmup progress, percentages, and estimated time during managed recipe startup.",
+    "Hide stale unloaded-model controls while a recipe is actively loading and prevent generic health polling from replacing detailed container progress.",
+    "Harden kiosk startup, package lifecycle behavior, community trust-root validation, and physical qualification coverage for signed community recipes."
+  ]
+}

@@ -5336,7 +5336,6 @@ function syncEngineState(d) {
   // Readiness is authoritative even if a launch job has not yet emitted its
   // final SSE update. A ready model must always expose Unload, never Abort.
   if (engineReady && operation === 'loading') operation = 'idle';
-  if (engineUnloaded && operation === 'loading') operation = 'idle';
   engineOperation = operation;
   engineSwitching = operation !== 'idle';
   engineAborting = operation === 'aborting';
@@ -5350,7 +5349,7 @@ async function renderEngine() {
   syncEngineState(d);
   // When readiness flips (model finished loading / engine went down), re-gate the
   // launch surfaces and update the banner.
-  const startupKey = `${engineStartup ? `${engineStartup.phase || ''}:${engineStartup.message || ''}:${engineStartup.layersDone || 0}:${engineStartup.layersTotal || 0}:${engineStartup.bytesDone || 0}:${engineStartup.bytesTotal || 0}:${JSON.stringify(engineStartup.nodes || [])}` : ''}|${enginePromotion ? `${enginePromotion.phase || ''}:${enginePromotion.message || ''}:${enginePromotion.bytesDone || 0}:${enginePromotion.bytesTotal || 0}:${enginePromotion.error || ''}` : ''}`;
+  const startupKey = `${engineStartup ? `${engineStartup.phase || ''}:${engineStartup.message || ''}:${engineStartup.percent || 0}:${engineStartup.layersDone || 0}:${engineStartup.layersTotal || 0}:${engineStartup.itemsDone || 0}:${engineStartup.itemsTotal || 0}:${engineStartup.bytesDone || 0}:${engineStartup.bytesTotal || 0}:${engineStartup.etaSeconds || 0}:${JSON.stringify(engineStartup.nodes || [])}` : ''}|${enginePromotion ? `${enginePromotion.phase || ''}:${enginePromotion.message || ''}:${enginePromotion.bytesDone || 0}:${enginePromotion.bytesTotal || 0}:${enginePromotion.error || ''}` : ''}`;
   const structuralChange = engineReady !== lastEngineReady || engineExecutionMode !== lastEngineMode || engineUnloaded !== lastEngineUnloaded || engineOperation !== lastEngineOperation;
   if (structuralChange || startupKey !== lastEngineStartup) {
     lastEngineReady = engineReady; lastEngineMode = engineExecutionMode; lastEngineUnloaded = engineUnloaded; lastEngineOperation = engineOperation; lastEngineStartup = startupKey;
@@ -5361,13 +5360,19 @@ async function renderEngine() {
 // Reflect engine readiness across the dashboard: a "starting up" banner, and the
 // chat/ask entry disabled until the Cloudless model is served.
 function applyEngineUI() {
-  const starting = !engineReady && !engineUnloaded;
-  const unavailable = starting || engineUnloaded;
+  // The persisted runtime remains marked unloaded until the replacement model
+  // passes health verification. During that interval the active loading
+  // operation is authoritative: show startup progress, never the stale
+  // "Cloudless AI is unloaded / Load model" prompt.
+  const unloaded = engineUnloaded && !['loading', 'aborting'].includes(engineOperation);
+  const starting = !engineReady && !unloaded;
+  const unavailable = starting || unloaded;
   const promotionActive = engineReady && enginePromotion && ['bootstrap', 'downloading', 'switching', 'verifying', 'rollback'].includes(enginePromotion.phase);
+  const hideEngineBannerWhileLoading = engineOperation === 'loading';
   const banner = document.getElementById('engine-banner');
   if (banner) {
-    banner.classList.toggle('hidden', !unavailable && !promotionActive);
-    banner.classList.toggle('unloaded', engineUnloaded);
+    banner.classList.toggle('hidden', hideEngineBannerWhileLoading || (!unavailable && !promotionActive));
+    banner.classList.toggle('unloaded', unloaded);
     const title = document.getElementById('eb-title');
     const sub = document.getElementById('eb-sub');
     const nodesHost = document.getElementById('eb-nodes');
@@ -5377,7 +5382,7 @@ function applyEngineUI() {
     const startupPhase = engineStartup?.phase || '';
     if (title) title.textContent = promotionActive
       ? (enginePromotion.phase === 'downloading' ? 'Preparing your full Cloudless model…' : enginePromotion.phase === 'verifying' ? 'Verifying your full Cloudless model…' : enginePromotion.phase === 'rollback' ? 'Keeping Cloudless AI available…' : 'Upgrading Cloudless AI…')
-      : engineUnloaded
+      : unloaded
       ? 'Cloudless AI is unloaded'
       : engineOperation === 'aborting'
       ? 'Stopping model loading…'
@@ -5387,6 +5392,18 @@ function applyEngineUI() {
       ? 'Cloudless AI needs attention'
       : startupPhase === 'error'
       ? 'Cloudless AI needs attention'
+      : startupPhase === 'installing-runtime'
+      ? 'Installing inference dependencies…'
+      : startupPhase === 'initializing-engine'
+      ? 'Initializing the inference engine…'
+      : startupPhase === 'loading-model'
+      ? 'Loading main model weights…'
+      : startupPhase === 'loading-draft'
+      ? 'Loading DFlash draft weights…'
+      : startupPhase === 'compiling-kernels'
+      ? 'Compiling optimized GPU kernels…'
+      : startupPhase === 'warming-engine'
+      ? 'Warming the inference engine…'
       : startupPhase === 'downloading' && engineExecutionMode !== 'cluster'
       ? 'Preparing the model and inference engine…'
       : startupPhase === 'downloading' || startupPhase === 'peer-downloading'
@@ -5399,9 +5416,9 @@ function applyEngineUI() {
       ? 'Optimizing distributed inference…'
       : 'Cloudless AI is starting up…';
     if (load) {
-      load.classList.toggle('hidden', !(engineUnloaded || abortable || engineAborting || engineOperation === 'error'));
+      load.classList.toggle('hidden', !(unloaded || abortable || engineAborting || engineOperation === 'error'));
       load.classList.toggle('abort', abortable || engineAborting);
-      load.classList.toggle('primary', engineUnloaded && !engineAborting);
+      load.classList.toggle('primary', unloaded && !engineAborting);
       load.disabled = engineAborting;
       load.innerHTML = engineAborting
         ? `<span class="key-dialog-spinner" aria-hidden="true"></span><span>Aborting…</span>`
@@ -5411,8 +5428,12 @@ function applyEngineUI() {
         ? `${uiIcon('models')}<span>Open Model Manager</span>`
         : `${uiIcon('rocket')}<span>Load model</span>`;
     }
-    if (sub && engineUnloaded) sub.textContent = 'Accelerator memory has been released. Your selected model remains downloaded and ready to load again.';
-    if (sub && starting) sub.textContent = engineStartup?.message || ((activeEngineName !== 'the engine' ? activeEngineName + ' is loading your model' : 'Your model is loading') + ' — chat and AI apps will be ready in a moment.');
+    if (sub && unloaded) sub.textContent = 'Accelerator memory has been released. Your selected model remains downloaded and ready to load again.';
+    if (sub && starting) {
+      const message = engineStartup?.message || ((activeEngineName !== 'the engine' ? activeEngineName + ' is loading your model' : 'Your model is loading') + ' — chat and AI apps will be ready in a moment.');
+      const remaining = Number(engineStartup?.etaSeconds) > 0 ? ` · about ${operationDuration(engineStartup.etaSeconds)} remaining` : '';
+      sub.textContent = message + remaining;
+    }
     if (sub && promotionActive) sub.textContent = enginePromotion.message || 'The lightweight model remains usable while Cloudless prepares the full model.';
     const nodeStages = starting && Array.isArray(engineStartup?.nodes) ? engineStartup.nodes : [];
     if (nodesHost) {
@@ -5428,7 +5449,9 @@ function applyEngineUI() {
       const phase = engineStartup?.phase || 'loading';
       const msg = (engineStartup?.message || '').toLowerCase();
       const done = +(engineStartup?.layersDone || 0), total = +(engineStartup?.layersTotal || 0);
+      const itemsDone = +(engineStartup?.itemsDone || 0), itemsTotal = +(engineStartup?.itemsTotal || 0);
       const bytesDone = +(engineStartup?.bytesDone || 0), bytesTotal = +(engineStartup?.bytesTotal || 0);
+      const reportedProgress = Number(engineStartup?.percent || 0);
       let progress = null, progressLabel = 'Preparing';
       if (promotionActive && enginePromotion.bytesTotal > 0) {
         progress = Math.round(enginePromotion.bytesDone / enginePromotion.bytesTotal * 100);
@@ -5436,6 +5459,10 @@ function applyEngineUI() {
       } else if (promotionActive && enginePromotion.phase === 'verifying') progressLabel = 'Verifying';
       else if (promotionActive && enginePromotion.phase === 'switching') progressLabel = 'Switching';
       else if (promotionActive && enginePromotion.phase === 'rollback') progressLabel = 'Restoring';
+      else if (Number.isFinite(reportedProgress) && reportedProgress > 0) {
+        progress = reportedProgress;
+        progressLabel = itemsTotal > 0 ? `${itemsDone}/${itemsTotal} · ${Math.round(progress)}%` : `${Math.round(progress)}%`;
+      }
       else if ((phase === 'downloading' || phase === 'peer-downloading') && bytesTotal > 0) {
         progress = Math.round(bytesDone / bytesTotal * 100);
         progressLabel = `${progress}%`;
@@ -5463,7 +5490,7 @@ function applyEngineUI() {
   }
   const ask = document.getElementById('hero-ask'), inp = document.getElementById('hero-ask-input'), go = ask && ask.querySelector('.ask-go');
   if (ask) ask.classList.toggle('engine-hidden', unavailable);
-  if (inp) { inp.disabled = unavailable; inp.placeholder = engineUnloaded ? 'Load a model to use Cloudless AI' : (starting ? 'Cloudless AI is starting…' : 'Ask about your models, apps, or this machine…'); }
+  if (inp) { inp.disabled = unavailable; inp.placeholder = unloaded ? 'Load a model to use Cloudless AI' : (starting ? 'Cloudless AI is starting…' : 'Ask about your models, apps, or this machine…'); }
   if (go) go.disabled = unavailable;
   document.getElementById('open-models-2')?.classList.toggle('engine-hidden', unavailable);
   document.getElementById('open-inference-2')?.classList.toggle('hidden', !engineReady);
@@ -7888,15 +7915,15 @@ const RECIPE_RUN_STAGES = [
   ['syncing-model','Model to peers'], ['stopping','Switch'], ['starting','Start'], ['connecting','Connect'],
 ];
 function recipeRunStageIndex(phase) {
-  const aliases = {'syncing-source':'syncing-image',health:'starting',ready:'connecting',running:'connecting',pending:'source'};
+  const aliases = {'syncing-source':'syncing-image','installing-runtime':'starting','initializing-engine':'starting','loading-model':'starting','loading-draft':'starting','compiling-kernels':'starting','warming-engine':'starting',health:'starting',ready:'connecting',running:'connecting',pending:'source'};
   const normalized = aliases[phase] || phase;
   return Math.max(0,RECIPE_RUN_STAGES.findIndex(stage => stage[0] === normalized));
 }
 function recipeRunPhaseLabel(phase) {
-  return ({pending:'Preparing recipe',source:'Verifying recipe',building:'Preparing custom runtime','syncing-source':'Copying recipe setup','syncing-image':'Direct-link runtime transfer',downloading:'Internet download to the primary Spark','syncing-model':'Direct-link model transfer',stopping:'Switching inference engines',starting:'Starting inference',health:'Checking engine readiness',connecting:'Connecting Cloudless',ready:'Recipe ready',running:'Recipe ready',canceled:'Launch canceled',error:'Launch failed'})[phase] || 'Preparing recipe';
+  return ({pending:'Preparing recipe',source:'Verifying recipe',building:'Preparing custom runtime','syncing-source':'Copying recipe setup','syncing-image':'Direct-link runtime transfer',downloading:'Internet download to the primary Spark','syncing-model':'Direct-link model transfer',stopping:'Switching inference engines',starting:'Starting inference','installing-runtime':'Installing inference dependencies','initializing-engine':'Initializing vLLM','loading-model':'Loading main model weights','loading-draft':'Loading DFlash draft weights','compiling-kernels':'Compiling GPU kernels','warming-engine':'Warming the inference engine',health:'Checking engine readiness',connecting:'Connecting Cloudless',ready:'Recipe ready',running:'Recipe ready',canceled:'Launch canceled',error:'Launch failed'})[phase] || 'Preparing recipe';
 }
 function recipeProgressParts(job) {
-  const overall=Number(job&&job.overallPercent);
+  const overall=Number(job&&job.overallPercent!=null?job.overallPercent:job&&job.percent>0?job.percent:NaN);
   if(Number.isFinite(overall))return {byteTotal:Number(job&&job.bytesTotal)||0,total:100,done:Math.max(0,Math.min(100,overall)),pct:Math.max(0,Math.min(100,Math.round(overall)))};
   const byteTotal = Number(job && job.bytesTotal) || 0;
   const total = byteTotal || Number(job && job.layersTotal) || 0;
@@ -7913,8 +7940,14 @@ function recipeProgressStages(phase) {
   return RECIPE_RUN_STAGES.map((stage,index) => '<span class="recipe-progress-stage ' + (index < active ? 'done' : index === active ? 'on' : '') + '"><span>' + escapeHtml(stage[1]) + '</span></span>').join('');
 }
 function recipeProgressMeta(job, parts) {
-  const amount = parts.byteTotal ? modelDownloadSize(job.bytesDone) + ' of ' + modelDownloadSize(job.bytesTotal) : (job.phase === 'downloading' ? 'Waiting for download-size data' : 'Artifacts stay cached for future launches');
-  return '<span>Stage ' + (recipeRunStageIndex(job.phase)+1) + ' of ' + RECIPE_RUN_STAGES.length + '</span><span>' + escapeHtml(amount) + '</span>';
+  const details=[];
+  if(parts.byteTotal)details.push(modelDownloadSize(job.bytesDone)+' of '+modelDownloadSize(job.bytesTotal));
+  else if(Number(job&&job.itemsTotal)>0)details.push((Number(job.itemsDone)||0)+' of '+Number(job.itemsTotal)+' checkpoint shards');
+  else if(job.phase==='downloading')details.push('Waiting for download-size data');
+  if(Number(job&&job.elapsedSeconds)>0)details.push(operationDuration(job.elapsedSeconds)+' elapsed');
+  if(Number(job&&job.etaSeconds)>0)details.push('about '+operationDuration(job.etaSeconds)+' remaining');
+  if(!details.length)details.push('Artifacts stay cached for future launches');
+  return '<span>Stage ' + (recipeRunStageIndex(job.phase)+1) + ' of ' + RECIPE_RUN_STAGES.length + '</span><span>' + escapeHtml(details.join(' · ')) + '</span>';
 }
 function recipeProgressRoute(phase) {
   if (phase === 'downloading') return 'Internet → primary Spark. Speed is limited by the internet connection and Hugging Face, not by the cable between Sparks. The high-speed Spark cable is idle until the model is ready.';

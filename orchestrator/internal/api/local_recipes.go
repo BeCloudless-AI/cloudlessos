@@ -1603,6 +1603,14 @@ func (s *Server) stopActiveLocalRecipeRuntime(parent context.Context, job *jobs.
 }
 
 func waitRecipeHealth(ctx context.Context, job *jobs.Job, recipe localrecipes.Recipe) error {
+	return waitRecipeHealthWithUpdates(ctx, job, recipe, true)
+}
+
+func waitRecipeHealthWithoutUpdates(ctx context.Context, job *jobs.Job, recipe localrecipes.Recipe) error {
+	return waitRecipeHealthWithUpdates(ctx, job, recipe, false)
+}
+
+func waitRecipeHealthWithUpdates(ctx context.Context, job *jobs.Job, recipe localrecipes.Recipe, reportWaiting bool) error {
 	address := fmt.Sprintf("%s://%s:%d%s", recipe.Health.Scheme, recipe.Health.Host, recipe.Health.Port, recipe.Health.Path)
 	deadline := time.Now().Add(time.Duration(recipe.Health.TimeoutSeconds) * time.Second)
 	client := &http.Client{Timeout: 5 * time.Second, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}
@@ -1613,7 +1621,9 @@ func waitRecipeHealth(ctx context.Context, job *jobs.Job, recipe localrecipes.Re
 		if time.Now().After(deadline) {
 			return fmt.Errorf("engine health check did not become ready at %s", address)
 		}
-		job.Progress("health", "Waiting for engine health check at "+address, -1, -1)
+		if reportWaiting {
+			job.Progress("health", "Waiting for engine health check at "+address, -1, -1)
+		}
 		select {
 		case <-ctx.Done():
 			return ctx.Err()

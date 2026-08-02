@@ -31,6 +31,14 @@ func TestEmbeddedWebIncludesPersistentModelUnloadExperience(t *testing.T) {
 		`.eb-action { grid-column: 4; grid-row: 1; }`,
 		`function syncEngineState(d)`,
 		`if (engineReady && operation === 'loading') operation = 'idle';`,
+		`const unloaded = engineUnloaded && !['loading', 'aborting'].includes(engineOperation);`,
+		`const hideEngineBannerWhileLoading = engineOperation === 'loading';`,
+		`banner.classList.toggle('hidden', hideEngineBannerWhileLoading || (!unavailable && !promotionActive));`,
+		`load.classList.toggle('hidden', !(unloaded || abortable || engineAborting || engineOperation === 'error'));`,
+		`engineStartup.itemsDone || 0`,
+		`engineStartup.etaSeconds || 0`,
+		`Loading main model weights`,
+		`Loading DFlash draft weights`,
 		`else if (m.active && engineReady)`,
 		`setInterval(refreshCoreDashboard, 4000);`,
 		`if (modelsOpen()) closeModelManager();`,
@@ -47,6 +55,9 @@ func TestEmbeddedWebIncludesPersistentModelUnloadExperience(t *testing.T) {
 	}
 	if strings.Contains(page, `if (!engineSwitching) renderEngine();`) {
 		t.Fatal("engine polling is suppressed during loading, which freezes progress and leaves stale actions")
+	}
+	if strings.Contains(page, `if (engineUnloaded && operation === 'loading') operation = 'idle';`) {
+		t.Fatal("an active load was collapsed back to the unloaded prompt")
 	}
 	readyAction := strings.Index(page, `else if (m.active && engineReady)`)
 	abortAction := strings.Index(page, `else if (m.active && engineLoadIsAbortable())`)

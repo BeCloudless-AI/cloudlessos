@@ -30,6 +30,7 @@ type Update struct {
 	ElapsedSecs int64          `json:"elapsedSeconds,omitempty"`
 	ETASecs     int64          `json:"etaSeconds,omitempty"`
 	Nodes       []NodeProgress `json:"nodes,omitempty"`
+	etaOverride int64
 }
 
 type NodeProgress struct {
@@ -222,7 +223,9 @@ func (j *Job) snapshotLocked(now time.Time) Update {
 	if !j.start.IsZero() {
 		u.ElapsedSecs = int64(now.Sub(j.start).Seconds())
 	}
-	if !u.Done && u.Percent > 0 && u.Percent < 100 && u.ElapsedSecs > 0 {
+	if !u.Done && u.etaOverride > 0 {
+		u.ETASecs = u.etaOverride
+	} else if !u.Done && u.Percent > 0 && u.Percent < 100 && u.ElapsedSecs > 0 {
 		u.ETASecs = u.ElapsedSecs * int64(100-u.Percent) / int64(u.Percent)
 	} else {
 		u.ETASecs = 0
@@ -234,6 +237,10 @@ func (j *Job) snapshotLocked(now time.Time) Update {
 // operations while retaining aggregate byte progress for the main progress bar.
 func (j *Job) ProgressNodes(phase, message string, nodes []NodeProgress, done, total int64) {
 	j.apply(func(u *Update) {
+		if u.Phase != phase {
+			u.etaOverride = 0
+			u.ItemsDone, u.ItemsTotal, u.CurrentItem = 0, 0, ""
+		}
 		u.Phase = phase
 		u.Message = message
 		u.Nodes = append([]NodeProgress(nil), nodes...)
@@ -252,6 +259,8 @@ func (j *Job) Progress(phase, msg string, done, total int) {
 			u.BytesDone = 0
 			u.BytesTotal = 0
 			u.Nodes = nil
+			u.etaOverride = 0
+			u.ItemsDone, u.ItemsTotal, u.CurrentItem = 0, 0, ""
 		}
 		u.Phase = phase
 		u.Message = msg
@@ -270,11 +279,25 @@ func (j *Job) Progress(phase, msg string, done, total int) {
 // ProgressOperation reports overall progress for a multi-stage operation while
 // retaining the lower-level layer/byte fields for detailed UI presentation.
 func (j *Job) ProgressOperation(phase, msg, currentItem string, percent, done, total int) {
+	j.progressOperation(phase, msg, currentItem, percent, done, total, 0)
+}
+
+// ProgressOperationETA reports overall multi-stage progress with a phase-local
+// ETA supplied by the underlying operation (for example, vLLM checkpoint
+// loading). The explicit estimate is preferable to extrapolating from the
+// lifetime of the entire parent job.
+func (j *Job) ProgressOperationETA(phase, msg, currentItem string, percent, done, total int, etaSeconds int64) {
+	j.progressOperation(phase, msg, currentItem, percent, done, total, etaSeconds)
+}
+
+func (j *Job) progressOperation(phase, msg, currentItem string, percent, done, total int, etaSeconds int64) {
 	j.apply(func(u *Update) {
 		if u.Phase != phase {
 			u.BytesDone = 0
 			u.BytesTotal = 0
 			u.Nodes = nil
+			u.LayersDone = 0
+			u.LayersTotal = 0
 		}
 		u.Phase = phase
 		u.Message = msg
@@ -282,6 +305,7 @@ func (j *Job) ProgressOperation(phase, msg, currentItem string, percent, done, t
 		u.Percent = clampPercent(percent)
 		u.ItemsDone = done
 		u.ItemsTotal = total
+		u.etaOverride = max(0, etaSeconds)
 	})
 }
 
@@ -289,6 +313,10 @@ func (j *Job) ProgressOperation(phase, msg, currentItem string, percent, done, t
 // overall percentage. App image pulls use it for layer detail and ETA together.
 func (j *Job) ProgressDetail(phase, msg string, done, total int) {
 	j.apply(func(u *Update) {
+		if u.Phase != phase {
+			u.etaOverride = 0
+			u.ItemsDone, u.ItemsTotal, u.CurrentItem = 0, 0, ""
+		}
 		u.Phase = phase
 		u.Message = msg
 		u.LayersDone = done
@@ -301,6 +329,8 @@ func (j *Job) ProgressBytes(phase, msg string, done, total int64) {
 	j.apply(func(u *Update) {
 		if u.Phase != phase {
 			u.Nodes = nil
+			u.etaOverride = 0
+			u.ItemsDone, u.ItemsTotal, u.CurrentItem = 0, 0, ""
 		}
 		u.Phase = phase
 		u.Message = msg
@@ -316,6 +346,10 @@ func (j *Job) ProgressBytes(phase, msg string, done, total int64) {
 // overall multi-stage percentage. It deliberately preserves that percentage.
 func (j *Job) ProgressBytesDetail(phase, msg string, done, total int64) {
 	j.apply(func(u *Update) {
+		if u.Phase != phase {
+			u.etaOverride = 0
+			u.ItemsDone, u.ItemsTotal, u.CurrentItem = 0, 0, ""
+		}
 		u.Phase = phase
 		u.Message = msg
 		u.BytesDone = done
@@ -332,6 +366,7 @@ func (j *Job) Succeed(containerID string) {
 		u.LayersDone = u.LayersTotal
 		u.Percent = 100
 		u.ETASecs = 0
+		u.etaOverride = 0
 		u.Done = true
 	})
 }
@@ -343,6 +378,7 @@ func (j *Job) Fail(err error) {
 		u.Message = "Failed"
 		u.Error = err.Error()
 		u.ETASecs = 0
+		u.etaOverride = 0
 		u.Done = true
 	})
 }
@@ -354,6 +390,7 @@ func (j *Job) Cancel() {
 		u.Message = "Canceled"
 		u.Error = ""
 		u.ETASecs = 0
+		u.etaOverride = 0
 		u.Done = true
 	})
 }

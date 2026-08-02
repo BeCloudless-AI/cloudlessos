@@ -95,6 +95,20 @@ func TestOperationProgressIncludesTimingAndETA(t *testing.T) {
 	}
 }
 
+func TestOperationProgressUsesExplicitPhaseETA(t *testing.T) {
+	job := NewManager().Create("recipe:test")
+	job.Progress("starting", "Starting container", 3, 6)
+	job.ProgressOperationETA("loading-model", "Loading checkpoint shards", "model", 60, 11, 49, 1127)
+	got := job.Snapshot()
+	if got.Percent != 60 || got.ItemsDone != 11 || got.ItemsTotal != 49 || got.ETASecs != 1127 || got.LayersDone != 0 || got.LayersTotal != 0 {
+		t.Fatalf("explicit progress = %#v", got)
+	}
+	job.Progress("connecting", "Connecting", 5, 6)
+	if got := job.Snapshot(); got.ETASecs == 1127 || got.ItemsDone != 0 || got.ItemsTotal != 0 || got.CurrentItem != "" {
+		t.Fatalf("phase-local detail survived the next lifecycle stage: %#v", got)
+	}
+}
+
 func TestObserverReceivesInitialAndSubsequentProgressOutsideJobLock(t *testing.T) {
 	job := NewManager().Create("recipe:test")
 	updates := make([]Update, 0, 2)

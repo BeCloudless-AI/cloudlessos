@@ -314,9 +314,12 @@ func (s *Server) runManagedContainerRecipe(job *jobs.Job, recipe localrecipes.Re
 		rollback(err)
 		return
 	}
-	job.Progress("health", "Waiting for the constrained engine and model to become ready...", 4, 6)
-	if err := waitRecipeHealth(ctx, job, recipe); err != nil {
-		rollback(err)
+	job.ProgressOperation("initializing-engine", "The container is running. Reading its startup progress while the model becomes ready…", "vLLM", 50, 0, 0)
+	stopStartupProgress := observeRecipeContainerStartup(ctx, s.eng, job, runtimeName, 3*time.Second)
+	healthErr := waitRecipeHealthWithoutUpdates(ctx, job, recipe)
+	stopStartupProgress()
+	if healthErr != nil {
+		rollback(healthErr)
 		return
 	}
 	if err := waitRecipePrivateContract(ctx, job, recipe); err != nil {

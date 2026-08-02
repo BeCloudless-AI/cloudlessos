@@ -557,8 +557,11 @@ func (s *Server) engineState(w http.ResponseWriter, r *http.Request) {
 	}
 	var startup *jobs.Snapshot
 	startupSequence := -1
-	for _, prefix := range []string{"engine:", "model:"} {
+	for _, prefix := range []string{"engine:", "model:", "recipe:"} {
 		for _, snapshot := range s.jobs.List(prefix) {
+			if !engineStartupCandidate(snapshot) {
+				continue
+			}
 			sequence, _ := strconv.Atoi(strings.TrimPrefix(snapshot.ID, "job-"))
 			if !snapshot.Done && sequence > startupSequence {
 				copy := snapshot
@@ -710,7 +713,7 @@ func (s *Server) engineState(w http.ResponseWriter, r *http.Request) {
 // describeEngineOperation turns the job manager's implementation details into a
 // stable UI contract. Readiness wins over a launch job that is about to publish
 // its final success update, while unload/abort jobs remain explicit operations.
-func describeEngineOperation(startup *jobs.Snapshot, ready, unloaded bool) (operation, jobID string, canAbort bool) {
+func describeEngineOperation(startup *jobs.Snapshot, ready, _ bool) (operation, jobID string, canAbort bool) {
 	if startup != nil && !startup.Done {
 		switch startup.AppID {
 		case "engine:unload":
@@ -718,11 +721,29 @@ func describeEngineOperation(startup *jobs.Snapshot, ready, unloaded bool) (oper
 		case "engine:abort":
 			return "aborting", startup.ID, false
 		}
-		if !ready && !unloaded && (strings.HasPrefix(startup.AppID, "engine:") || strings.HasPrefix(startup.AppID, "model:")) {
+		if strings.HasPrefix(startup.AppID, "recipe:") {
+			if strings.HasSuffix(startup.AppID, ":stop") || startup.Phase == "stopping" {
+				return "unloading", startup.ID, false
+			}
+			if !ready && !strings.HasSuffix(startup.AppID, ":check") {
+				return "loading", startup.ID, false
+			}
+		}
+		if !ready && (strings.HasPrefix(startup.AppID, "engine:") || strings.HasPrefix(startup.AppID, "model:")) {
 			return "loading", startup.ID, startup.ID != ""
 		}
 	}
 	return "idle", "", false
+}
+
+func engineStartupCandidate(snapshot jobs.Snapshot) bool {
+	if snapshot.Done {
+		return false
+	}
+	if strings.HasPrefix(snapshot.AppID, "recipe:") {
+		return !strings.HasSuffix(snapshot.AppID, ":check")
+	}
+	return strings.HasPrefix(snapshot.AppID, "engine:") || strings.HasPrefix(snapshot.AppID, "model:")
 }
 
 // describeClusterFailureOperation preserves the user's recovery action when a

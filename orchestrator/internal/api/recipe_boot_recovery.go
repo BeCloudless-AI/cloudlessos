@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/cloudless/orchestrator/internal/catalog"
 	"github.com/cloudless/orchestrator/internal/jobs"
@@ -117,8 +118,11 @@ func (s *Server) restartManagedContainerRecipeAfterBoot(ctx context.Context, job
 			return err
 		}
 	}
-	if err := waitRecipeHealth(ctx, job, recipe); err != nil {
-		return err
+	stopStartupProgress := observeRecipeContainerStartup(ctx, s.eng, job, runtimeName, 3*time.Second)
+	healthErr := waitRecipeHealthWithoutUpdates(ctx, job, recipe)
+	stopStartupProgress()
+	if healthErr != nil {
+		return healthErr
 	}
 	if err := waitRecipePrivateContract(ctx, job, recipe); err != nil {
 		return err

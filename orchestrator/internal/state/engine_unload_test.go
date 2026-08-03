@@ -8,8 +8,8 @@ func TestEngineUnloadedPersistsUntilExplicitlyLoaded(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if store.Get().EngineUnloaded {
-		t.Fatal("new installations must load their default model")
+	if !store.Get().EngineUnloaded {
+		t.Fatal("new installations must stay unloaded until the user chooses a setup path")
 	}
 	if err := store.SetEngineUnloaded(true); err != nil {
 		t.Fatal(err)

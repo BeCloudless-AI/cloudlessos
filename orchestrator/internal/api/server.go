@@ -61,6 +61,7 @@ type Server struct {
 	privilegedAction     func(context.Context, privileged.Action) error
 	privilegedValue      func(context.Context, privileged.Action, string) error
 	gatewayRebind        func(int) error
+	initialProvisioner   func()
 	gatewaySecurityMu    sync.Mutex
 	gatewayLimiter       *gatewayRateLimiter
 	gatewaySourceLimiter *gatewayRateLimiter
@@ -154,6 +155,10 @@ func NewServer(eng engine.Engine, st *state.Store, mf *manifest.Store, mfModels 
 // SetGatewayRebind wires the daemon's listener manager into the settings API.
 // Tests and embedded callers may omit it when they never change the API port.
 func (s *Server) SetGatewayRebind(rebind func(int) error) { s.gatewayRebind = rebind }
+
+// SetInitialProvisioner wires the explicit first-launch install action to the
+// daemon-owned startup provisioner. It is intentionally not invoked by NewServer.
+func (s *Server) SetInitialProvisioner(start func()) { s.initialProvisioner = start }
 
 // imageFor returns the image reference to pull/run for an app: the manifest's
 // validated digest pin ("image@sha256:…") when present, else the catalog's tag.
@@ -313,6 +318,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/diffusion/{id}/uninstall", s.diffusionUninstall)
 	mux.HandleFunc("POST /api/onboarding/reset", s.onboardingReset)
 	mux.HandleFunc("GET /api/onboarding", s.onboardingGet)
+	mux.HandleFunc("POST /api/onboarding/setup", s.onboardingSetup)
 	mux.HandleFunc("POST /api/onboarding/complete", s.onboardingComplete)
 	mux.HandleFunc("GET /api/folders", s.folders)
 	mux.HandleFunc("POST /api/folders/{id}/open", s.openFolder)
@@ -344,6 +350,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/keys", s.keyCreate)
 	mux.HandleFunc("DELETE /api/keys/{id}", s.keyDelete)
 	mux.HandleFunc("POST /api/gateway/lan", s.gatewayLanSet)
+	mux.HandleFunc("POST /api/gateway/tailnet", s.gatewayTailnetSet)
 	mux.HandleFunc("POST /api/gateway/tunnel", s.gatewayTunnelSet)
 	mux.HandleFunc("GET /api/gateway/audit", s.gatewayAuditGet)
 	mux.HandleFunc("GET /api/security/audit", s.securityAuditGet)
@@ -1501,10 +1508,44 @@ func currentBootID() string {
 func (s *Server) onboardingGet(w http.ResponseWriter, r *http.Request) {
 	st := s.state.Get()
 	writeJSON(w, http.StatusOK, map[string]any{
-		"completed":   st.Onboarded,
-		"firstLaunch": s.state.FirstRun(),
-		"firstSeen":   st.FirstSeen,
-		"bootID":      currentBootID(),
+		"completed":     st.Onboarded,
+		"firstLaunch":   s.state.FirstRun(),
+		"firstSeen":     st.FirstSeen,
+		"bootID":        currentBootID(),
+		"setupRequired": s.state.FirstLaunchSetupRequired(),
+		"setupChoice":   s.state.FirstLaunchSetup(),
+	})
+}
+
+// onboardingSetup records the user's first-launch provisioning choice. Nothing
+// is downloaded or started while the choice remains pending or becomes manual.
+func (s *Server) onboardingSetup(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Choice string `json:"choice"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid setup choice"})
+		return
+	}
+	if body.Choice != state.FirstLaunchSetupInstall && body.Choice != state.FirstLaunchSetupManual {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "choice must be install or manual"})
+		return
+	}
+	if body.Choice == state.FirstLaunchSetupInstall && s.initialProvisioner == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "initial installer is unavailable"})
+		return
+	}
+	if err := s.state.SetFirstLaunchSetup(body.Choice); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if body.Choice == state.FirstLaunchSetupInstall {
+		provision.RecordBootstrapApproved(s.state)
+		s.initialProvisioner()
+	}
+	writeJSON(w, http.StatusAccepted, map[string]any{
+		"choice":  body.Choice,
+		"started": body.Choice == state.FirstLaunchSetupInstall,
 	})
 }
 

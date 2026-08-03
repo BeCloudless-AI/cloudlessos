@@ -1,0 +1,16 @@
+{
+  "title": "Explicit first launch, private remote APIs, and built-in guidance",
+  "summary": "CloudlessOS 0.2.7-3 keeps fresh installations idle until the user chooses what to install, adds authenticated model and agent access through Tailscale, and introduces a permanent searchable guide for connecting external clients and understanding Cloudless concepts.",
+  "changes": [
+    "Stop fresh Cloudless installations from downloading or starting a model automatically and ask the user to choose the default installation or manage models and recipes themselves.",
+    "Persist the first-launch choice safely across daemon restarts while preserving the existing startup behavior of upgraded Cloudless installations.",
+    "Add private Tailscale model and agent API routes with scoped Cloudless API keys, exact live endpoint URLs, explicit enablement, and independent dashboard and API Serve configuration.",
+    "Refresh Tailscale and API Access state after sign-in, key creation, key revocation, and network changes so controls and displayed addresses always match the daemon.",
+    "Keep Local network and Tailscale API controls unavailable until an API key exists, explain the requirement on hover and click, and default new keys to Model and agent access.",
+    "Add a permanent searchable Cloudless Guide with ELI5 sections for Hermes Desktop, models versus recipes, API keys, Tailscale, engines, containers, and connection troubleshooting.",
+    "Show live machine-specific URLs and model aliases in the Hermes Desktop guide and link its actions directly to API Access, Remote access, Model Manager, recipes, and engine settings.",
+    "Keep model and recipe selection manual after an unloaded or user-managed first launch and prevent stale engine state from reviving an unwanted default workload.",
+    "Document a verified one-command DGX Spark installation path while retaining detached installer signature verification and side-by-side installation instructions.",
+    "Add regression coverage for first-launch consent, gateway URL selection, scoped Tailscale exposure, remote-access refresh behavior, and the built-in guide."
+  ]
+}

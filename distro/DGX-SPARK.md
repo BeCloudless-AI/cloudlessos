@@ -11,8 +11,24 @@ released and qualified together by NVIDIA.
 ## Install
 
 Start from an updated, working DGX OS installation. Verify that `nvidia-smi`,
-`docker info`, and `nvidia-ctk cdi list` work. Download the installer, its
-detached signature, and the Cloudless public archive key:
+`docker info`, and `nvidia-ctk cdi list` work. Install the default Cloudless
+appliance mode with one command:
+
+```bash
+curl -fsSL https://updates.becloudless.ai/install-dgx-spark.sh | sudo bash -s -- --yes
+```
+
+The installer refuses to run on a non-ARM64 or non-Spark machine. Before making
+changes it checks the GPU, Docker and the `nvidia.com/gpu=all` CDI device,
+verifies the pinned Cloudless archive-key fingerprint and signed APT metadata,
+refuses any package plan that changes NVIDIA's managed stack, and records
+recovery metadata under `/var/lib/cloudless/dgx-backup/`.
+
+### Advanced: verify the installer before execution
+
+The one-line installer is obtained over HTTPS and verifies the signed package
+repository before installing packages. For detached verification of the
+installer file itself, download it, its signature, and the public archive key:
 
 ```bash
 curl -fsSLO https://updates.becloudless.ai/install-dgx-spark.sh
@@ -23,28 +39,24 @@ test "$(gpg --batch --show-keys --with-colons cloudless-archive-keyring.pgp |
   "745BF7A97F64EB716DAF7677974145C2D867C99E"
 gpgv --keyring ./cloudless-archive-keyring.pgp \
   install-dgx-spark.sh.asc install-dgx-spark.sh
-sudo bash install-dgx-spark.sh
+sudo bash install-dgx-spark.sh --yes
 ```
 
 Do not execute the installer unless both the pinned fingerprint check and
 `gpgv` succeed. This verifies the file before any of its code runs.
 
 The default appliance mode selects the Cloudless kiosk at boot. To keep the
-normal NVIDIA GNOME login and use Cloudless in a browser instead:
+normal NVIDIA GNOME login and use Cloudless in a browser instead, use this
+single command:
 
 ```bash
-sudo bash install-dgx-spark.sh --side-by-side
+curl -fsSL https://updates.becloudless.ai/install-dgx-spark.sh | sudo bash -s -- --side-by-side --yes
 ```
-
-The installer refuses to run on a non-ARM64 or non-Spark machine. Before making
-changes it verifies the signed Cloudless APT metadata, checks the GPU, Docker and
-the `nvidia.com/gpu=all` CDI device, then records recovery metadata under
-`/var/lib/cloudless/dgx-backup/`.
 
 Run a completely read-only production readiness check with:
 
 ```bash
-sudo bash install-dgx-spark.sh --check
+curl -fsSL https://updates.becloudless.ai/install-dgx-spark.sh | sudo bash -s -- --check
 ```
 
 The stable repository must contain ARM64 packages before using the production

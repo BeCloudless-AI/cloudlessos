@@ -195,6 +195,7 @@ func NormalizeAPIKeyScope(scope string) string {
 type State struct {
 	FirstSeen              string                           `json:"firstSeen"`                        // RFC3339; when the daemon first initialized this store
 	Onboarded              bool                             `json:"onboarded"`                        // user has completed first-run onboarding
+	FirstLaunchSetup       string                           `json:"firstLaunchSetup,omitempty"`       // pending | install | manual; empty is a legacy installation
 	Engine                 string                           `json:"engine,omitempty"`                 // selected inference engine ("" = default)
 	Model                  string                           `json:"model,omitempty"`                  // selected model ("" = catalog default)
 	EngineUnloaded         bool                             `json:"engineUnloaded,omitempty"`         // selected model stays cached but no inference engine holds accelerator memory
@@ -221,6 +222,12 @@ type State struct {
 	// model is launched on that engine, overriding the catalog default.
 	EngineCmds map[string][]string `json:"engineCmds,omitempty"`
 }
+
+const (
+	FirstLaunchSetupPending = "pending"
+	FirstLaunchSetupInstall = "install"
+	FirstLaunchSetupManual  = "manual"
+)
 
 // InferenceRuntime is the subset of state that must change atomically when an
 // engine is promoted or rolled back. Keeping it as one transaction prevents a
@@ -329,7 +336,7 @@ func Open(dir string) (*Store, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		s.persist = false
 		s.firstRun = true
-		s.st = State{FirstSeen: now()}
+		s.st = State{FirstSeen: now(), FirstLaunchSetup: FirstLaunchSetupPending, EngineUnloaded: true}
 		return s, err
 	}
 
@@ -345,7 +352,7 @@ func Open(dir string) (*Store, error) {
 	}
 
 	s.firstRun = true
-	s.st = State{FirstSeen: now()}
+	s.st = State{FirstSeen: now(), FirstLaunchSetup: FirstLaunchSetupPending, EngineUnloaded: true}
 	_ = s.save() // best-effort; subsequent launches will read this back
 	return s, nil
 }
@@ -380,6 +387,50 @@ func (s *Store) SetOnboarded(v bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.st.Onboarded = v
+	return s.save()
+}
+
+// FirstLaunchSetup returns the user's durable first-launch provisioning choice.
+// State files created before this choice existed are treated as already installed
+// so an upgrade does not unexpectedly stop their normal engine boot lifecycle.
+func (s *Store) FirstLaunchSetup() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.st.FirstLaunchSetup == "" {
+		return FirstLaunchSetupInstall
+	}
+	return s.st.FirstLaunchSetup
+}
+
+// FirstLaunchSetupRequired reports whether a new installation is still waiting
+// for explicit permission before downloading or starting an inference runtime.
+func (s *Store) FirstLaunchSetupRequired() bool {
+	return s.FirstLaunchSetup() == FirstLaunchSetupPending
+}
+
+// StartupProvisioningEnabled determines whether daemon startup may reconcile the
+// managed inference runtime. Manual first-launch setup stays inert until the user
+// has explicitly selected an engine, model, or recipe.
+func (s *Store) StartupProvisioningEnabled() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	choice := s.st.FirstLaunchSetup
+	if choice == "" || choice == FirstLaunchSetupInstall {
+		return true
+	}
+	return choice == FirstLaunchSetupManual && (s.st.Model != "" || s.st.Engine != "" || s.st.LocalRecipeID != "")
+}
+
+// SetFirstLaunchSetup persists an explicit setup decision. Selecting install
+// permits the provisioner to start; selecting manual keeps inference unloaded.
+func (s *Store) SetFirstLaunchSetup(choice string) error {
+	if choice != FirstLaunchSetupInstall && choice != FirstLaunchSetupManual {
+		return fmt.Errorf("invalid first-launch setup choice %q", choice)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.st.FirstLaunchSetup = choice
+	s.st.EngineUnloaded = choice != FirstLaunchSetupInstall
 	return s.save()
 }
 

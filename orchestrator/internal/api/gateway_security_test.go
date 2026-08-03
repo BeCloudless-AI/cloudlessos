@@ -146,11 +146,12 @@ func TestGatewayExposureRequiresExplicitConfirmation(t *testing.T) {
 		path    string
 		handler http.HandlerFunc
 	}{
-		"LAN exposure":    {http.MethodPost, "/api/gateway/lan", (&Server{}).gatewayLanSet},
-		"public exposure": {http.MethodPost, "/api/gateway/tunnel", (&Server{}).gatewayTunnelSet},
-		"key creation":    {http.MethodPost, "/api/keys", (&Server{}).keyCreate},
-		"key revocation":  {http.MethodDelete, "/api/keys/example", (&Server{}).keyDelete},
-		"API identity":    {http.MethodPost, "/api/settings/inference-contract", (&Server{}).inferenceContractSet},
+		"LAN exposure":     {http.MethodPost, "/api/gateway/lan", (&Server{}).gatewayLanSet},
+		"Tailnet exposure": {http.MethodPost, "/api/gateway/tailnet", (&Server{}).gatewayTailnetSet},
+		"public exposure":  {http.MethodPost, "/api/gateway/tunnel", (&Server{}).gatewayTunnelSet},
+		"key creation":     {http.MethodPost, "/api/keys", (&Server{}).keyCreate},
+		"key revocation":   {http.MethodDelete, "/api/keys/example", (&Server{}).keyDelete},
+		"API identity":     {http.MethodPost, "/api/settings/inference-contract", (&Server{}).inferenceContractSet},
 	} {
 		t.Run(name, func(t *testing.T) {
 			recorder := httptest.NewRecorder()

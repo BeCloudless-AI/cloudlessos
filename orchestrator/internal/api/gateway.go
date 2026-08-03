@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -448,6 +449,16 @@ func (s *Server) gatewayGet(w http.ResponseWriter, r *http.Request) {
 	}
 
 	contract := s.inferenceContract()
+	var tailConnected, tailOn bool
+	var tailIP, tailDNS string
+	if s.remoteAccess != nil {
+		tailStatus := s.remoteAccess.Status(ctx)
+		tailConnected = tailStatus.Connected
+		tailOn = tailConnected && tailStatus.ServesTCP(contract.Port)
+		tailIP = tailscaleIPv4(tailStatus.IPs)
+		tailDNS = tailStatus.DNSName
+	}
+	modelURL, agentURL := gatewayClientURLs(lanOn, ip, contract.Port)
 	model := s.state.Get().Model
 	if model == "" {
 		model = catalog.DefaultModel()
@@ -456,14 +467,18 @@ func (s *Server) gatewayGet(w http.ResponseWriter, r *http.Request) {
 		"port":       contract.Port,
 		"servedName": contract.ModelAlias, // what callers put in "model"
 		"model":      model,               // the real model behind it
-		"localURL":   fmt.Sprintf("http://localhost:%d/v1", contract.Port),
+		"localURL":   modelURL,
 		"agent": map[string]any{
 			"ready": hermesReady(ctx), "servedName": "hermes-agent",
-			"localURL": fmt.Sprintf("http://localhost:%d/agent/v1", contract.Port),
+			"localURL": agentURL,
 		},
 		"keys": keys,
 		"lan": map[string]any{
 			"enabled": lanOn, "ip": ip, "url": lanURL(lanOn, ip, contract.Port), "agentURL": agentLanURL(lanOn, ip, contract.Port),
+		},
+		"tailnet": map[string]any{
+			"connected": tailConnected, "enabled": tailOn, "ip": tailIP, "dnsName": tailDNS,
+			"url": tailnetURL(tailOn, tailIP, contract.Port, "/v1"), "agentURL": tailnetURL(tailOn, tailIP, contract.Port, "/agent/v1"),
 		},
 		"tunnel": map[string]any{
 			"enabled": tunOn, "url": tunURL, "modelURL": appendURLPath(tunURL, "/v1"), "agentURL": appendURLPath(tunURL, "/agent/v1"),
@@ -549,7 +564,7 @@ func (s *Server) inferenceContractSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if requested.Port != previous.Port {
-		s.restartGatewayExposure(r.Context(), requested.Port)
+		s.restartGatewayExposure(r.Context(), previous.Port, requested.Port)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"port": requested.Port, "servedName": requested.ModelAlias,
@@ -557,13 +572,17 @@ func (s *Server) inferenceContractSet(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) restartGatewayExposure(parent context.Context, port int) {
+func (s *Server) restartGatewayExposure(parent context.Context, previousPort, port int) {
 	ctx, cancel := context.WithTimeout(parent, 45*time.Second)
 	defer cancel()
 	lan, _ := s.eng.Find(ctx, gatewayLanName)
 	tunnel, _ := s.eng.Find(ctx, gatewayTunnelName)
 	lanEnabled := lan != nil && lan.State == "running"
 	tunnelEnabled := tunnel != nil && tunnel.State == "running"
+	tailnetEnabled := false
+	if s.remoteAccess != nil {
+		tailnetEnabled = s.remoteAccess.Status(ctx).ServesTCP(previousPort)
+	}
 	_ = s.eng.Remove(ctx, gatewayLanName)
 	_ = s.eng.Remove(ctx, gatewayTunnelName)
 	if lanEnabled {
@@ -573,6 +592,10 @@ func (s *Server) restartGatewayExposure(parent context.Context, port int) {
 	}
 	if tunnelEnabled {
 		_, _ = s.eng.Run(ctx, gatewayTunnelSpec(s.infraImage(ctx, "cloudflared", catalog.CloudflaredImage), port))
+	}
+	if tailnetEnabled {
+		_ = s.remoteAccess.SetAPIServe(ctx, false, previousPort)
+		_ = s.remoteAccess.SetAPIServe(ctx, true, port)
 	}
 }
 
@@ -588,6 +611,32 @@ func agentLanURL(on bool, ip string, port int) string {
 		return fmt.Sprintf("http://%s:%d/agent/v1", ip, port)
 	}
 	return ""
+}
+
+func tailscaleIPv4(ips []string) string {
+	for _, value := range ips {
+		if ip := net.ParseIP(value); ip != nil && ip.To4() != nil {
+			return value
+		}
+	}
+	return ""
+}
+
+func tailnetURL(on bool, ip string, port int, path string) string {
+	if !on || ip == "" {
+		return ""
+	}
+	return fmt.Sprintf("http://%s:%d%s", ip, port, path)
+}
+
+// gatewayClientURLs returns the address clients should actually copy from the
+// API Access page. Loopback is correct while access is machine-local; once the
+// LAN forwarder is running, other devices need the machine's LAN address.
+func gatewayClientURLs(lanEnabled bool, ip string, port int) (string, string) {
+	if modelURL, agentURL := lanURL(lanEnabled, ip, port), agentLanURL(lanEnabled, ip, port); modelURL != "" && agentURL != "" {
+		return modelURL, agentURL
+	}
+	return fmt.Sprintf("http://localhost:%d/v1", port), fmt.Sprintf("http://localhost:%d/agent/v1", port)
 }
 
 func appendURLPath(base, path string) string {
@@ -694,6 +743,50 @@ func gatewayLANSpec(image, ip string, port int) engine.RunSpec {
 		fmt.Sprintf("TCP-LISTEN:%d,bind=%s,fork,reuseaddr", port, ip),
 		fmt.Sprintf("TCP:127.0.0.1:%d", port),
 	}}
+}
+
+func (s *Server) gatewayTailnetSet(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("X-Cloudless-Action") != "gateway-tailnet" {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "explicit Tailnet API access confirmation required"})
+		return
+	}
+	var body struct {
+		Enable bool `json:"enable"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad request"})
+		return
+	}
+	if s.remoteAccess == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "Tailscale is unavailable"})
+		return
+	}
+	if body.Enable && len(s.state.APIKeys()) == 0 {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "create a scoped API key before enabling Tailnet access"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 20*time.Second)
+	defer cancel()
+	status := s.remoteAccess.Status(ctx)
+	if body.Enable && (!status.Installed || !status.Connected) {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "connect Tailscale before enabling Tailnet API access"})
+		return
+	}
+	port := s.inferenceContract().Port
+	if err := s.remoteAccess.SetAPIServe(ctx, body.Enable, port); err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
+		return
+	}
+	ip := tailscaleIPv4(status.IPs)
+	outcome := "disabled"
+	if body.Enable {
+		outcome = "enabled"
+	}
+	s.auditGateway(gatewayAuditEvent{Event: "gateway-exposure", Outcome: outcome, Scope: "tailnet", Source: ip})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"enabled": body.Enable, "ip": ip,
+		"url": tailnetURL(body.Enable, ip, port, "/v1"), "agentURL": tailnetURL(body.Enable, ip, port, "/agent/v1"),
+	})
 }
 
 func (s *Server) gatewayTunnelSet(w http.ResponseWriter, r *http.Request) {

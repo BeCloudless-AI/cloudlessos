@@ -41,10 +41,10 @@ func (f *fakeCommands) Run(_ context.Context, name string, args ...string) ([]by
 }
 
 func TestStatusReportsConnectedTailnet(t *testing.T) {
-	f := &fakeCommands{installed: true, serve: `{"Web":{"cloudless":{"Handlers":{"/":{"Proxy":"http://127.0.0.1:8765"}}}}}`, prefs: `{"RunSSH":true}`, status: `{"Version":"1.90.6","BackendState":"Running","TailscaleIPs":["100.64.0.9"],"Self":{"HostName":"cloudless","DNSName":"cloudless.example.ts.net.","Online":true},"CurrentTailnet":{"Name":"example"}}`}
+	f := &fakeCommands{installed: true, serve: `{"Web":{"cloudless":{"Handlers":{"/":{"Proxy":"http://127.0.0.1:8765"}}}},"TCP":{"8766":{"TCPForward":"127.0.0.1:8766"}}}`, prefs: `{"RunSSH":true}`, status: `{"Version":"1.90.6","BackendState":"Running","TailscaleIPs":["100.64.0.9"],"Self":{"HostName":"cloudless","DNSName":"cloudless.example.ts.net.","Online":true},"CurrentTailnet":{"Name":"example"}}`}
 	c := &Client{commands: f}
 	status := c.Status(context.Background())
-	if !status.Installed || !status.Connected || !status.ServeEnabled || !status.SSHEnabled || status.DNSName != "cloudless.example.ts.net" || len(status.IPs) != 1 {
+	if !status.Installed || !status.Connected || !status.ServeEnabled || !status.SSHEnabled || !status.ServesTCP(8766) || status.ServesTCP(9999) || status.DNSName != "cloudless.example.ts.net" || len(status.IPs) != 1 {
 		t.Fatalf("unexpected status: %#v", status)
 	}
 }
@@ -65,14 +65,33 @@ func TestManagedActionsUseConstrainedCommands(t *testing.T) {
 	if err := c.SetServe(context.Background(), true); err != nil {
 		t.Fatal(err)
 	}
+	if err := c.SetServe(context.Background(), false); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.SetAPIServe(context.Background(), true, 8766); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.SetAPIServe(context.Background(), false, 8766); err != nil {
+		t.Fatal(err)
+	}
 	if err := c.Logout(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	joined := strings.Join(f.calls, "\n")
-	for _, want := range []string{"tailscale set --ssh=true", "tailscale serve --bg --yes http://127.0.0.1:8765", "tailscale logout"} {
+	for _, want := range []string{
+		"tailscale set --ssh=true",
+		"tailscale serve --bg --yes --https=443 http://127.0.0.1:8765",
+		"tailscale serve --yes --https=443 off",
+		"tailscale serve --bg --yes --tcp=8766 tcp://127.0.0.1:8766",
+		"tailscale serve --yes --tcp=8766 off",
+		"tailscale logout",
+	} {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("missing %q in %s", want, joined)
 		}
+	}
+	if strings.Contains(joined, "serve reset") {
+		t.Fatalf("a scoped Serve toggle reset unrelated routes: %s", joined)
 	}
 }
 

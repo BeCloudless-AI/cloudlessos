@@ -62,6 +62,20 @@ func RecordBootstrapPending(st *state.Store, message string) {
 	_ = st.SetModelPromotion(p)
 }
 
+// RecordBootstrapApproved makes an explicit first-launch install choice
+// resumable even when the daemon was restarted while waiting for that choice.
+// The provisioner can then use the normal bootstrap-to-default lifecycle.
+func RecordBootstrapApproved(st *state.Store) {
+	current := st.Get()
+	bootstrap, target := BootstrapModel(), catalog.DefaultModel()
+	if bootstrap == "" || bootstrap == target || current.Model != "" || current.EngineUnloaded || current.ExecutionMode == "cluster" {
+		return
+	}
+	p := promotionSnapshot(current.ModelPromotion, "approved", bootstrap, target, "", "Ready to install the default Cloudless AI.")
+	p.Rollback = bootstrap
+	_ = st.SetModelPromotion(p)
+}
+
 func promotionSnapshot(previous state.ModelPromotion, phase, bootstrap, target, active, message string) state.ModelPromotion {
 	previous.Phase = phase
 	previous.Bootstrap = bootstrap

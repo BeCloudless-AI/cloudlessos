@@ -109,6 +109,9 @@ func TestPendingBootstrapSurvivesMissingHardwareOnFirstDaemonBoot(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err := store.SetFirstLaunchSetup(state.FirstLaunchSetupInstall); err != nil {
+		t.Fatal(err)
+	}
 	RecordBootstrapPending(store, "waiting for driver")
 	p := store.Get().ModelPromotion
 	if p.Phase != "waiting-hardware" || p.Target != "Qwen/Qwen3.6-35B-A3B" {
@@ -116,5 +119,17 @@ func TestPendingBootstrapSurvivesMissingHardwareOnFirstDaemonBoot(t *testing.T) 
 	}
 	if !ShouldBootstrap(store.Get(), false) {
 		t.Fatal("persisted pending promotion must resume on a later daemon boot")
+	}
+}
+
+func TestPendingFirstLaunchDoesNotPrepareBootstrapWithoutConsent(t *testing.T) {
+	t.Setenv("CLOUDLESS_PLATFORM", platform.DGXSpark)
+	store, err := state.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	RecordBootstrapPending(store, "waiting for driver")
+	if p := store.Get().ModelPromotion; p.Phase != "" || p.Target != "" {
+		t.Fatalf("bootstrap was prepared without first-launch consent: %+v", p)
 	}
 }

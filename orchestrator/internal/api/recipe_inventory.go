@@ -123,6 +123,7 @@ func (i *recipeResourceInspector) inspectPeer(ctx context.Context, resource reci
 case "$kind" in
 	  checkout|staging-checkout) test -d "$identity" && echo present || echo missing ;;
   compose-project) ids="$(docker ps -aq --filter "label=com.docker.compose.project=$identity" 2>/dev/null)"; test -n "$ids" && printf 'present %s\n' "$(printf '%s\n' "$ids" | wc -l)" || echo missing ;;
+  container) docker container inspect "$identity" >/dev/null 2>&1 && echo present || echo missing ;;
   container-set) ids="$(docker ps -aq --filter "label=cloudless.recipe.operation=$identity" 2>/dev/null)"; test -n "$ids" && printf 'present %s\n' "$(printf '%s\n' "$ids" | wc -l)" || echo missing ;;
   image) docker image inspect "$identity" >/dev/null 2>&1 && echo present || echo missing ;;
   private-port|stable-port|rendezvous-port) ss -H -ltn "sport = :$identity" 2>/dev/null | grep -q . && echo present || echo missing ;;

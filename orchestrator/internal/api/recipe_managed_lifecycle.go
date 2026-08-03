@@ -503,12 +503,11 @@ func (s *Server) stopManagedContainerRecipe(job *jobs.Job, recipe localrecipes.R
 	defer provision.EngineMu.Unlock()
 	job.Progress("stopping", "Stopping the Cloudless-managed recipe container...", 0, 1)
 	if active, ok := s.recipeOps.ActiveForRecipe(recipe.ID); ok {
-		if err := s.removeRecoveryContainers(ctx, active); err != nil {
+		if err := s.cleanupOwnedRecipeRuntime(ctx, active, recipe); err != nil {
 			s.finishRecipeOperation(job, operationID, err)
 			return
 		}
 	}
-	_ = s.eng.Remove(ctx, "cloudless-cluster-engine-proxy")
 	stopped := s.state.Get().InferenceRuntime()
 	stopped.LocalRecipeID, stopped.EngineUnloaded = "", true
 	if err := s.state.CommitInferenceRuntime(stopped); err != nil {

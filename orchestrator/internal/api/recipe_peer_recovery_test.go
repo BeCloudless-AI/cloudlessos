@@ -85,6 +85,43 @@ func TestUnreachablePeerCleanupClaimSurvivesUntilAbsenceIsProven(t *testing.T) {
 	}
 }
 
+func TestPeerInventoryCanProveExactContainerIsMissing(t *testing.T) {
+	previousRoot, previousSSH := recipeRuntimeRoot, recipeSSHExecutable
+	recipeRuntimeRoot = t.TempDir()
+	binDir := t.TempDir()
+	ssh := filepath.Join(binDir, "ssh")
+	logPath := filepath.Join(binDir, "calls")
+	recipeSSHExecutable = ssh
+	t.Cleanup(func() {
+		recipeRuntimeRoot, recipeSSHExecutable = previousRoot, previousSSH
+	})
+	script := "#!/bin/sh\nprintf '%s\\n' \"$@\" > " + recipeShellQuote(logPath) + "\necho missing\n"
+	if err := os.WriteFile(ssh, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	recipe := localrecipes.Recipe{
+		ID: "local-0123456789abcdef", Name: "peer inventory",
+		Model: localrecipes.Model{ID: "owner/model", Revision: "revision"},
+	}
+	if err := os.MkdirAll(recipeCheckout(recipe), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	inspector := &recipeResourceInspector{server: &Server{}, recipe: recipe, localNode: "spark-a"}
+	observation := inspector.Inspect(context.Background(), recipeops.Resource{
+		Kind: "container", ID: "container-id", Node: "spark-b", Locator: "worker",
+	})
+	if observation.Presence != recipeops.PresenceMissing {
+		t.Fatalf("peer container observation = %#v", observation)
+	}
+	payload, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(payload), `container) docker container inspect "$identity"`) {
+		t.Fatalf("peer inventory probe does not inspect exact containers: %q", payload)
+	}
+}
+
 func TestPeerCleanupAttemptsEveryNodeWhenOneIsUnreachable(t *testing.T) {
 	previousRoot, previousSSH := recipeRuntimeRoot, recipeSSHExecutable
 	recipeRuntimeRoot = t.TempDir()

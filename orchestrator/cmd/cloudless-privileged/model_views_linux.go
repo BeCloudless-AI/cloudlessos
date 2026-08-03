@@ -113,15 +113,19 @@ func completeManagedModelSnapshots(cacheRoot string) (map[string]managedModelSna
 		if stat, statErr := os.Stat(source); statErr != nil || !stat.IsDir() {
 			continue
 		}
-		incomplete := false
-		_ = filepath.WalkDir(filepath.Join(repoRoot, "blobs"), func(path string, item os.DirEntry, walkErr error) error {
-			if walkErr == nil && !item.IsDir() && strings.HasSuffix(path, ".incomplete") {
-				incomplete = true
+		// Revision-scoped completion markers let canceled chunks from another
+		// commit remain resumable without hiding this completed snapshot.
+		if _, markerErr := os.Stat(filepath.Join(repoRoot, ".cloudless-complete", revision)); markerErr != nil {
+			incomplete := false
+			_ = filepath.WalkDir(filepath.Join(repoRoot, "blobs"), func(path string, item os.DirEntry, walkErr error) error {
+				if walkErr == nil && !item.IsDir() && strings.HasSuffix(path, ".incomplete") {
+					incomplete = true
+				}
+				return nil
+			})
+			if incomplete {
+				continue
 			}
-			return nil
-		})
-		if incomplete {
-			continue
 		}
 		name := strings.ReplaceAll(modelID, "/", "--")
 		result[name] = managedModelSnapshot{name: name, revision: revision, source: source}

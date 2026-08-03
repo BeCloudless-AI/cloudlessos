@@ -232,6 +232,20 @@ func TestInferenceRuntimeLimits(t *testing.T) {
 	}
 }
 
+func TestRunArgsSupportsBoundedInfiniBandDevice(t *testing.T) {
+	spec := RunSpec{Name: "cloudless-recipe", Image: "runtime", Devices: []string{"/dev/infiniband:/dev/infiniband"}}
+	if err := ValidateRunSpec(spec); err != nil {
+		t.Fatal(err)
+	}
+	if args := strings.Join(runArgs(spec), " "); !strings.Contains(args, "--device /dev/infiniband:/dev/infiniband") {
+		t.Fatalf("InfiniBand device missing: %s", args)
+	}
+	spec.Devices = []string{"/dev/sda:/dev/sda"}
+	if err := ValidateRunSpec(spec); err == nil {
+		t.Fatal("arbitrary host device was accepted")
+	}
+}
+
 func TestRunArgsSupportsConstrainedRecipeSandbox(t *testing.T) {
 	args := strings.Join(runArgs(RunSpec{
 		Name: "cloudless-recipe", Image: "runtime@sha256:abc", ReadOnly: true,

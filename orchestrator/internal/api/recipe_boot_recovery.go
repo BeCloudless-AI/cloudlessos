@@ -89,33 +89,85 @@ func (s *Server) restartManagedContainerRecipeAfterBoot(ctx context.Context, job
 	if image == "" {
 		image = recipe.Engine.Image
 	}
-	container, err := s.eng.Find(ctx, runtimeName)
-	if err != nil {
-		return err
-	}
-	if container == nil || container.State != "running" {
-		if container != nil {
-			if err := s.eng.Remove(ctx, runtimeName); err != nil {
+	if recipe.Distributed.Nodes > 1 {
+		topology, err := prepareManagedRecipeTopology(ctx, recipe, &operation, true)
+		if err != nil {
+			return err
+		}
+		_ = s.eng.Remove(ctx, runtimeName)
+		if err := s.cleanupInterruptedRecipePeers(ctx, operation, recipe); err != nil {
+			return fmt.Errorf("clean up distributed recipe peers before restart: %w", err)
+		}
+		for index, peer := range topology.Peers {
+			rank := index + 1
+			hostIP, iface, fabricErr := managedRecipeNodeFabric(topology, rank)
+			if fabricErr != nil {
+				return fabricErr
+			}
+			spec, specErr := managedContainerRecipeNodeSpec(recipe, image, runtimeName, operation.ID, "", rank,
+				hostIP, iface, topology.Env["NCCL_IB_HCA"], topology.Env["MASTER_ADDR"])
+			if specErr != nil {
+				return specErr
+			}
+			job.Progress("recovering", fmt.Sprintf("Restoring %s as distributed rank %d...", peer.Name, rank), -1, -1)
+			containerID, launchErr := launchManagedRecipePeer(ctx, recipe, topology, peer, spec)
+			if launchErr != nil {
+				return launchErr
+			}
+			if err := s.claimRecipeResource(operation.ID, recipeops.Resource{Kind: "container", ID: containerID, Node: peer.Name, Locator: peer.Alias}); err != nil {
 				return err
 			}
+		}
+		headIP, headInterface, err := managedRecipeNodeFabric(topology, 0)
+		if err != nil {
+			return err
 		}
 		token, _ := s.state.HuggingFaceToken()
 		tokenPath := ""
 		if strings.TrimSpace(token) != "" {
 			tokenPath = s.state.HuggingFaceTokenPath()
 		}
-		spec, err := managedContainerRecipeSpec(recipe, image, runtimeName, operation.ID, tokenPath)
+		spec, err := managedContainerRecipeNodeSpec(recipe, image, runtimeName, operation.ID, tokenPath, 0,
+			headIP, headInterface, topology.Env["NCCL_IB_HCA"], topology.Env["MASTER_ADDR"])
 		if err != nil {
 			return err
 		}
-		job.Progress("recovering", "Restoring the constrained recipe container from its pinned image...", -1, -1)
 		containerID, err := s.eng.Run(ctx, spec)
 		if err != nil {
 			return err
 		}
 		if err := s.claimRecipeResource(operation.ID, recipeops.Resource{Kind: "container", ID: containerID, Node: localRecipeNodeName()}); err != nil {
-			_ = s.eng.Remove(ctx, runtimeName)
 			return err
+		}
+	} else {
+		container, err := s.eng.Find(ctx, runtimeName)
+		if err != nil {
+			return err
+		}
+		if container == nil || container.State != "running" {
+			if container != nil {
+				if err := s.eng.Remove(ctx, runtimeName); err != nil {
+					return err
+				}
+			}
+			token, _ := s.state.HuggingFaceToken()
+			tokenPath := ""
+			if strings.TrimSpace(token) != "" {
+				tokenPath = s.state.HuggingFaceTokenPath()
+			}
+			spec, err := managedContainerRecipeSpec(recipe, image, runtimeName, operation.ID, tokenPath)
+			if err != nil {
+				return err
+			}
+			job.Progress("recovering", "Restoring the constrained recipe container from its pinned image...", -1, -1)
+			containerID, err := s.eng.Run(ctx, spec)
+			if err != nil {
+				return err
+			}
+			if err := s.claimRecipeResource(operation.ID, recipeops.Resource{Kind: "container", ID: containerID, Node: localRecipeNodeName()}); err != nil {
+				_ = s.eng.Remove(ctx, runtimeName)
+				return err
+			}
 		}
 	}
 	stopStartupProgress := observeRecipeContainerStartup(ctx, s.eng, job, runtimeName, 3*time.Second)
@@ -136,7 +188,11 @@ func (s *Server) restartManagedContainerRecipeAfterBoot(ctx context.Context, job
 	if err := s.eng.Pull(ctx, proxyImage); err != nil {
 		return err
 	}
-	spec := sparkcluster.ProxySpecTarget(runtimeName, recipe.Engine.ContainerPort)
+	proxyTarget := runtimeName
+	if recipe.Distributed.Nodes > 1 {
+		proxyTarget = "host.docker.internal"
+	}
+	spec := sparkcluster.ProxySpecTarget(proxyTarget, recipe.Engine.ContainerPort)
 	spec.Image = proxyImage
 	proxyID, err := s.eng.Run(ctx, spec)
 	if err != nil {

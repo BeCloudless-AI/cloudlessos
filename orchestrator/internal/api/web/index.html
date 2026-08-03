@@ -3240,7 +3240,15 @@
   .recipe-progress-meta span:last-child { text-align: right; }
   .recipe-progress-route { margin-top: 9px; padding: 9px 11px; display: flex; align-items: flex-start; gap: 8px; border: 1px solid var(--hair); border-radius: 9px; color: var(--muted); background: color-mix(in srgb,var(--control) 68%,transparent); font-size: 9px; font-weight: 620; line-height: 1.45; }
   .recipe-progress-route .ui-icon { width: 14px; height: 14px; flex: none; margin-top: 1px; color: var(--blue); }
-  .recipe-progress-stages { margin-top: 12px; display: grid; grid-template-columns: repeat(8,minmax(0,1fr)); gap: 4px; }
+  .recipe-progress-components { margin-top: 9px; display: grid; gap: 5px; }
+  .recipe-progress-component { padding: 7px 9px; display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 4px 10px; border: 1px solid var(--hair); border-radius: 8px; background: var(--control); font: 8px/1.35 'Roboto Mono',ui-monospace,monospace; }
+  .recipe-progress-component b { color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .recipe-progress-component span { color: var(--faint); text-transform: uppercase; }
+  .recipe-progress-component small { grid-column: 1 / -1; color: var(--muted); }
+  .recipe-progress-stall { margin-top: 9px; padding: 10px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid color-mix(in srgb,var(--err) 35%,var(--line)); border-radius: 9px; background: color-mix(in srgb,var(--err) 8%,var(--panel-2)); }
+  .recipe-progress-stall > span:first-child { color: var(--ink-2); font-size: 9px; line-height: 1.4; }
+  .recipe-progress-stall-actions { display: flex; gap: 6px; flex: none; }
+  .recipe-progress-stages { margin-top: 12px; display: grid; grid-template-columns: repeat(10,minmax(0,1fr)); gap: 4px; }
   .recipe-progress-stage { min-width: 0; display: grid; grid-template-columns: 8px minmax(0,1fr); align-items: center; gap: 4px; color: var(--faint); font: 7px/1.2 'Roboto Mono',ui-monospace,monospace; text-transform: uppercase; }
   .recipe-progress-stage::before { content: ''; width: 6px; height: 6px; border: 1px solid var(--line); border-radius: 50%; background: var(--control); }
   .recipe-progress-stage span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -7549,10 +7557,11 @@ function openHFTokenDialog(m) {
 function downloadModel(m, token = '') {
   if (m.gated && !token && !(mmHFAccount && mmHFAccount.valid)) { openHFTokenDialog(m); return; }
   if (modelDownloads.has(m.id)) return;
-  modelDownloads.set(m.id, { modelId: m.id, modelType: 'lm', phase: 'pending', message: 'Preparing download', bytesDone: 0, bytesTotal: 0 });
+  const revision = mmDownloadModelID === m.id ? mmDownloadRevision : '';
+  modelDownloads.set(m.id, { modelId: m.id, revision, modelType: 'lm', phase: 'pending', message: 'Preparing download', bytesDone: 0, bytesTotal: 0 });
   repaintModelDownloadSurfaces();
   toast('Downloading ' + m.name + '…');
-  api('/api/models/download', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: m.id, token }) })
+  api('/api/models/download', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: m.id, revision, token }) })
     .then(r => {
       if (r.jobId) {
         modelDownloads.set(m.id, { ...(modelDownloads.get(m.id) || {}), jobId: r.jobId, modelId: m.id, modelType: 'lm' });
@@ -7789,6 +7798,7 @@ function openModelUninstallDialog(m, modelType = 'lm') {
 }
 /* ---- Model Manager (standalone, opened from the dashboard) ---- */
 let mmTab = 'language', mmDetail = null, mmLM = null, mmDiff = null, mmRecipes = null, mmCustomPrefill = '', mmSort = 'recommended', mmHF = false, mmHFQuery = '', mmHFAccount = null;
+let mmDownloadModelID = '', mmDownloadRevision = '';
 let mmFilter = { q: '', fits: false, cluster: false, vision: false, tools: false, downloaded: false };
 let mmRecipeView = { scope: 'local', library: 'supported', q: '', source: 'all', sparks: 'all', status: 'all', sort: 'updated', page: 1, perPage: 6, communityCategory: '', communityPlatform: '', communityTrust: '' };
 let mmCommunityDetail = null;
@@ -7803,9 +7813,10 @@ function anyOverlayOpen() {
   return infOpen || modelsOpen() || myRecipesOpen() || settingsOpen() || launcherOpen()
     || document.getElementById('asst').classList.contains('full');
 }
-function openModelManager() { mmDetail = null; mmCustomPrefill = ''; mmHF = false; document.getElementById('models').classList.remove('hidden'); renderModelManager(); }
-async function openModelManagerFor(id) {
+function openModelManager() { mmDetail = null; mmCustomPrefill = ''; mmHF = false; mmDownloadModelID = ''; mmDownloadRevision = ''; document.getElementById('models').classList.remove('hidden'); renderModelManager(); }
+async function openModelManagerFor(id, revision = '') {
   closeAsst();
+  mmDownloadModelID = id || ''; mmDownloadRevision = revision || '';
   mmTab = 'language'; mmDetail = null; mmHF = false; mmFilter = { q: '', fits: false, cluster: false, vision: false, tools: false, downloaded: false };
   document.getElementById('models').classList.remove('hidden');
   if (!id) { mmCustomPrefill = ''; renderModelManager(); return; }
@@ -7824,7 +7835,7 @@ async function openModelManagerFor(id) {
 function closeModelManager() {
   if (activeRecipeCheck && !activeRecipeCheck.terminal) return;
   if (activeRecipeCheck) closeRecipeCheckOverlay();
-  mmCustomPrefill = ''; mmHF = false; mmCommunityDetail = null; document.getElementById('models').classList.add('hidden');
+  mmCustomPrefill = ''; mmHF = false; mmCommunityDetail = null; mmDownloadModelID = ''; mmDownloadRevision = ''; document.getElementById('models').classList.add('hidden');
 }
 function openModelDetail(type, id) { mmDetail = { type, id }; renderModelManager(); }
 function modelMatches(m, lm) {
@@ -7902,7 +7913,7 @@ function recipeOperationWorking(operation){
 }
 function recipeOperationAsJob(operation){
   const progress=operation.progress||{},overall=Number(progress.overallPercent);
-  return {id:'operation:'+operation.id,operationId:operation.id,appId:`recipe:${operation.recipeId}:recovery`,phase:progress.stage||operation.phase||'recovering',message:progress.message||'Recovering an interrupted recipe operation…',percent:Number.isFinite(overall)?overall:0,overallPercent:Number.isFinite(overall)?overall:0,layersDone:Number(progress.completed)||0,layersTotal:Number(progress.total)||0,bytesDone:Number(progress.bytesDone)||0,bytesTotal:Number(progress.bytesTotal)||0,elapsedSeconds:Number(progress.elapsedSeconds)||0,etaSeconds:Number(progress.etaSeconds)||0,durable:true,done:false};
+  return {id:'operation:'+operation.id,operationId:operation.id,appId:`recipe:${operation.recipeId}:recovery`,phase:progress.stage||operation.phase||'recovering',message:progress.message||'Recovering an interrupted recipe operation…',percent:Number.isFinite(overall)?overall:0,overallPercent:Number.isFinite(overall)?overall:0,layersDone:Number(progress.completed)||0,layersTotal:Number(progress.total)||0,bytesDone:Number(progress.bytesDone)||0,bytesTotal:Number(progress.bytesTotal)||0,bytesPerSecond:Number(progress.bytesPerSecond)||0,stalledSeconds:Number(progress.stalledSeconds)||0,components:Array.isArray(progress.components)?progress.components:[],elapsedSeconds:Number(progress.elapsedSeconds)||0,etaSeconds:Number(progress.etaSeconds)||0,durable:true,done:false};
 }
 function recipeLiveJobs(data){
   const live=(data&&data.jobs||[]).filter(job=>!job.done&&recipeRunID(job));
@@ -7911,16 +7922,16 @@ function recipeLiveJobs(data){
   return live;
 }
 const RECIPE_RUN_STAGES = [
-  ['source','Recipe'], ['building','Runtime'], ['syncing-image','Runtime to peers'], ['downloading','Internet download'],
-  ['syncing-model','Model to peers'], ['stopping','Switch'], ['starting','Start'], ['connecting','Connect'],
+  ['source','Recipe'], ['building','Runtime'], ['syncing-image','Transfer'], ['stopping','Switch'], ['preparing-dependencies','Prepare'],
+  ['downloading-dependencies','Dependencies'], ['downloading','Model'], ['loading-model','Load'], ['compiling-kernels','Optimize'], ['health','Health'],
 ];
 function recipeRunStageIndex(phase) {
-  const aliases = {'syncing-source':'syncing-image','installing-runtime':'starting','initializing-engine':'starting','loading-model':'starting','loading-draft':'starting','compiling-kernels':'starting','warming-engine':'starting',health:'starting',ready:'connecting',running:'connecting',pending:'source'};
+  const aliases = {'syncing-source':'syncing-image','syncing-model':'syncing-image','installing-runtime':'preparing-dependencies','installing-dependencies':'preparing-dependencies','initializing-engine':'loading-model','loading-draft':'loading-model','warming-engine':'compiling-kernels',starting:'loading-model',connecting:'health',ready:'health',running:'health',pending:'source'};
   const normalized = aliases[phase] || phase;
   return Math.max(0,RECIPE_RUN_STAGES.findIndex(stage => stage[0] === normalized));
 }
 function recipeRunPhaseLabel(phase) {
-  return ({pending:'Preparing recipe',source:'Verifying recipe',building:'Preparing custom runtime','syncing-source':'Copying recipe setup','syncing-image':'Direct-link runtime transfer',downloading:'Internet download to the primary Spark','syncing-model':'Direct-link model transfer',stopping:'Switching inference engines',starting:'Starting inference','installing-runtime':'Installing inference dependencies','initializing-engine':'Initializing vLLM','loading-model':'Loading main model weights','loading-draft':'Loading DFlash draft weights','compiling-kernels':'Compiling GPU kernels','warming-engine':'Warming the inference engine',health:'Checking engine readiness',connecting:'Connecting Cloudless',ready:'Recipe ready',running:'Recipe ready',canceled:'Launch canceled',error:'Launch failed'})[phase] || 'Preparing recipe';
+  return ({pending:'Preparing recipe',source:'Verifying recipe',building:'Preparing custom runtime','syncing-source':'Copying recipe setup','syncing-image':'Transferring runtime to peers',downloading:'Downloading model weights','syncing-model':'Transferring model to peers',stopping:'Switching inference engines',starting:'Starting inference','preparing-dependencies':'Resolving runtime dependencies','downloading-dependencies':'Downloading runtime dependencies','installing-dependencies':'Installing runtime dependencies','installing-runtime':'Installing runtime dependencies','initializing-engine':'Initializing inference engine','loading-model':'Loading main model weights','loading-draft':'Loading draft model weights','compiling-kernels':'Optimizing GPU kernels','warming-engine':'Warming the inference engine',health:'Checking engine readiness',connecting:'Connecting Cloudless',ready:'Recipe ready',running:'Recipe ready',canceled:'Launch canceled',error:'Launch failed'})[phase] || 'Preparing recipe';
 }
 function recipeProgressParts(job) {
   const overall=Number(job&&job.overallPercent!=null?job.overallPercent:job&&job.percent>0?job.percent:NaN);
@@ -7941,11 +7952,13 @@ function recipeProgressStages(phase) {
 }
 function recipeProgressMeta(job, parts) {
   const details=[];
-  if(parts.byteTotal)details.push(modelDownloadSize(job.bytesDone)+' of '+modelDownloadSize(job.bytesTotal));
+  if(parts.byteTotal)details.push(modelDownloadSize(job.bytesDone)+' of '+modelDownloadSize(job.bytesTotal)+' ('+Math.max(0,Math.min(100,Math.round(Number(job.bytesDone||0)/Number(job.bytesTotal)*100)))+'% of this download)');
   else if(Number(job&&job.itemsTotal)>0)details.push((Number(job.itemsDone)||0)+' of '+Number(job.itemsTotal)+' checkpoint shards');
   else if(job.phase==='downloading')details.push('Waiting for download-size data');
   if(Number(job&&job.elapsedSeconds)>0)details.push(operationDuration(job.elapsedSeconds)+' elapsed');
   if(Number(job&&job.etaSeconds)>0)details.push('about '+operationDuration(job.etaSeconds)+' remaining');
+  if(Number(job&&job.bytesPerSecond)>0)details.push(modelDownloadSize(job.bytesPerSecond)+'/s');
+  if(Number(job&&job.stalledSeconds)>=75)details.push('stalled for '+operationDuration(job.stalledSeconds));
   if(!details.length)details.push('Artifacts stay cached for future launches');
   return '<span>Stage ' + (recipeRunStageIndex(job.phase)+1) + ' of ' + RECIPE_RUN_STAGES.length + '</span><span>' + escapeHtml(details.join(' · ')) + '</span>';
 }
@@ -7959,10 +7972,25 @@ function recipeProgressRoute(phase) {
 function recipeProgressRouteHTML(phase) {
   const route=recipeProgressRoute(phase);return route ? '<div class="recipe-progress-route">'+uiIcon('network')+'<span>'+escapeHtml(route)+'</span></div>' : '';
 }
+function recipeProgressComponentsHTML(job){
+  const components=Array.isArray(job&&job.components)?job.components:[];if(!components.length)return '';
+  return '<div class="recipe-progress-components">'+components.map(component=>{const detail=[];if(Number(component.bytesTotal)>0)detail.push(modelDownloadSize(component.bytesDone||0)+' / '+modelDownloadSize(component.bytesTotal));if(Number(component.bytesPerSecond)>0)detail.push(modelDownloadSize(component.bytesPerSecond)+'/s');return '<div class="recipe-progress-component"><b>'+escapeHtml(component.name||'Dependency')+'</b><span>'+escapeHtml(component.status||'pending')+'</span>'+(detail.length?'<small>'+escapeHtml(detail.join(' · '))+'</small>':'')+'</div>';}).join('')+'</div>';
+}
+function recipeProgressStallHTML(job){
+  if(Number(job&&job.stalledSeconds)<75)return '';
+  return '<div class="recipe-progress-stall"><span>No download data has arrived for '+escapeHtml(operationDuration(job.stalledSeconds))+'. Retry safely keeps cached files, or abort the launch.</span><span class="recipe-progress-stall-actions"><button class="btn" type="button" data-retry-stalled-recipe>Retry</button><button class="btn danger" type="button" data-abort-stalled-recipe>Abort</button></span></div>';
+}
 function recipeProgressHTML(job) {
   if (!job) return '';
   const parts = recipeProgressParts(job);
-  return `<div class="recipe-progress" aria-live="polite"><div class="recipe-progress-head"><div class="recipe-progress-copy"><div class="recipe-progress-kicker">${escapeHtml(recipeRunPhaseLabel(job.phase))}</div><div class="recipe-progress-row">${escapeHtml(recipeProgressMessage(job))}</div></div><b class="recipe-progress-percent">${parts.total ? parts.pct + '%' : 'Active'}</b></div><div class="track" role="progressbar" aria-label="Overall recipe launch progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${parts.pct}"><i style="width:${parts.pct}%"></i></div><div class="recipe-progress-meta">${recipeProgressMeta(job,parts)}</div>${recipeProgressRouteHTML(job.phase)}<div class="recipe-progress-stages">${recipeProgressStages(job.phase)}</div></div>`;
+  return `<div class="recipe-progress" aria-live="polite"><div class="recipe-progress-head"><div class="recipe-progress-copy"><div class="recipe-progress-kicker">${escapeHtml(recipeRunPhaseLabel(job.phase))}</div><div class="recipe-progress-row">${escapeHtml(recipeProgressMessage(job))}</div></div><b class="recipe-progress-percent">${parts.total ? parts.pct + '%' : 'Active'}</b></div><div class="track" role="progressbar" aria-label="Overall recipe launch progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${parts.pct}"><i style="width:${parts.pct}%"></i></div><div class="recipe-progress-meta">${recipeProgressMeta(job,parts)}</div>${recipeProgressRouteHTML(job.phase)}${recipeProgressComponentsHTML(job)}${recipeProgressStallHTML(job)}<div class="recipe-progress-stages">${recipeProgressStages(job.phase)}</div></div>`;
+}
+function wireRecipeProgressRecovery(progress,recipeId){
+  if(!progress||!recipeId)return;
+  const abort=progress.querySelector('[data-abort-stalled-recipe]');
+  if(abort)abort.onclick=async()=>{abort.disabled=true;const result=await api('/api/recipes/'+encodeURIComponent(recipeId)+'/abort',{method:'POST'}).catch(()=>({error:'Could not abort this recipe.'}));if(result.error){toast(result.error,true);abort.disabled=false;}else toast('Stopping recipe launch');};
+  const retry=progress.querySelector('[data-retry-stalled-recipe]');
+  if(retry)retry.onclick=async()=>{retry.disabled=true;retry.innerHTML='<span class="key-dialog-spinner" aria-hidden="true"></span><span>Restarting…</span>';let result=await api('/api/recipes/'+encodeURIComponent(recipeId)+'/abort',{method:'POST'}).catch(()=>({error:'Could not stop the stalled launch.'}));if(result.error){toast(result.error,true);retry.disabled=false;retry.textContent='Retry';return;}for(let attempt=0;attempt<30;attempt++){await new Promise(resolve=>setTimeout(resolve,1000));const data=await api('/api/recipes').catch(()=>null);if(data&&!recipeJob(data,recipeId)){result=await api('/api/recipes/'+encodeURIComponent(recipeId)+'/run',{method:'POST'}).catch(()=>({error:'Could not retry this recipe.'}));if(result.error){toast(result.error,true);}else{toast('Recipe launch restarted; cached files were kept.');trackLocalRecipeJob(result.jobId,'run',recipeId);}return;}}toast('Cloudless is still stopping the previous launch. Try Retry again in a moment.',true);retry.disabled=false;retry.textContent='Retry';};
 }
 let recipeHomeSignature='';
 function recipeRunID(job){const match=/^recipe:([^:]+)(?::(?:check|stop|recovery|cleanup))?$/.exec(String(job&&job.appId||''));return match?match[1]:'';}
@@ -8044,6 +8072,10 @@ function updateRecipeRunCard(recipeId, jobId, update = {}) {
   const kicker=progress.querySelector('.recipe-progress-kicker');if(kicker)kicker.textContent=recipeRunPhaseLabel(update.phase);
   const meta=progress.querySelector('.recipe-progress-meta');if(meta)meta.innerHTML=recipeProgressMeta(update,parts);
   const route=progress.querySelector('.recipe-progress-route'),routeHTML=recipeProgressRouteHTML(update.phase);if(route){if(routeHTML){route.outerHTML=routeHTML}else{route.remove()}}else if(routeHTML){const metaNode=progress.querySelector('.recipe-progress-meta');if(metaNode)metaNode.insertAdjacentHTML('afterend',routeHTML)}
+  const oldComponents=progress.querySelector('.recipe-progress-components');if(oldComponents)oldComponents.remove();
+  const oldStall=progress.querySelector('.recipe-progress-stall');if(oldStall)oldStall.remove();
+  const stagesNode=progress.querySelector('.recipe-progress-stages');if(stagesNode)stagesNode.insertAdjacentHTML('beforebegin',recipeProgressComponentsHTML(update)+recipeProgressStallHTML(update));
+  wireRecipeProgressRecovery(progress,recipeId);
   const stages=progress.querySelector('.recipe-progress-stages');if(stages)stages.innerHTML=recipeProgressStages(update.phase);
 }
 function recipeReady(recipe, data) {
@@ -8507,7 +8539,7 @@ function paintLocalRecipes(c, data) {
   c.querySelectorAll('[data-community-rollback]').forEach(button => button.onclick = async () => { button.disabled=true;const result=await api('/api/community/rollback',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:button.dataset.communityRollback})}).catch(()=>({error:'Could not roll back this recipe.'}));if(result.error){toast(result.error,true);button.disabled=false;return;}toast('Previous signed recipe revision restored');mmRecipes=null;renderLocalRecipes(c); });
   c.querySelectorAll('[data-recipe-install-model]').forEach(button => button.onclick = () => {
     const recipe=recipes.find(item=>item.id===button.dataset.recipeInstallModel);
-    if (recipe && recipe.model && recipe.model.id) openModelManagerFor(recipe.model.id);
+    if (recipe && recipe.model && recipe.model.id) openModelManagerFor(recipe.model.id, recipe.model.revision || '');
   });
   c.querySelectorAll('[data-recipe-run]').forEach(button => button.onclick = async () => {
     button.disabled = true; const id=button.dataset.recipeRun, recipe=recipes.find(item=>item.id===id), plan=data.plans&&data.plans[id]||{};

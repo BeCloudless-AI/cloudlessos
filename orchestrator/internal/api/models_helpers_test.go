@@ -76,6 +76,85 @@ func TestModelCacheNameRejectsUnsafeIDs(t *testing.T) {
 	}
 }
 
+func TestImmutableHubRevisionRequiresFullCommitHash(t *testing.T) {
+	for _, valid := range []string{
+		"0123456789abcdef0123456789abcdef01234567",
+		"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+	} {
+		if !immutableHubRevision(valid) {
+			t.Errorf("immutableHubRevision(%q) rejected a commit hash", valid)
+		}
+	}
+	for _, invalid := range []string{"", "main", "0123456789abcdef0123456789abcdef0123456g", "ABCDEF0123456789ABCDEF0123456789ABCDEF01"} {
+		if immutableHubRevision(invalid) {
+			t.Errorf("immutableHubRevision(%q) accepted a mutable or malformed revision", invalid)
+		}
+	}
+}
+
+func TestModelRevisionBytesIgnoresOtherCachedRevisions(t *testing.T) {
+	root := t.TempDir()
+	repoRoot := filepath.Join(root, "hub", "models--owner--model")
+	wanted := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	other := "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	if err := os.MkdirAll(filepath.Join(repoRoot, "snapshots", wanted), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(repoRoot, "snapshots", other), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repoRoot, "snapshots", wanted, "config.json"), make([]byte, 7), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repoRoot, "snapshots", other, "model.bin"), make([]byte, 100), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	inventory := map[string]huggingFaceRevisionFile{
+		"config.json": {Size: 7},
+		"model.bin":   {Size: 200, BlobID: "wanted-blob"},
+	}
+	if got := modelRevisionBytes("owner/model", wanted, root, inventory); got != 7 {
+		t.Fatalf("revision progress = %d, want 7; another revision leaked into progress", got)
+	}
+	if err := os.MkdirAll(filepath.Join(repoRoot, "blobs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repoRoot, "blobs", "wanted-blob.incomplete"), make([]byte, 11), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := modelRevisionBytes("owner/model", wanted, root, inventory); got != 18 {
+		t.Fatalf("revision progress with resumable chunk = %d, want 18", got)
+	}
+}
+
+func TestCompletedRevisionSurvivesUnrelatedResumableChunks(t *testing.T) {
+	root := t.TempDir()
+	revision := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	repoRoot := filepath.Join(root, "hub", "models--owner--model")
+	if err := os.MkdirAll(filepath.Join(repoRoot, "snapshots", revision), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repoRoot, "snapshots", revision, "config.json"), []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(repoRoot, "blobs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repoRoot, "blobs", "other.incomplete"), []byte("partial"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := markModelRevisionComplete(root, "owner/model", revision); err != nil {
+		t.Fatal(err)
+	}
+	if !modelCacheComplete(repoRoot) {
+		t.Fatal("an unrelated resumable chunk invalidated the completed revision")
+	}
+	main, err := os.ReadFile(filepath.Join(repoRoot, "refs", "main"))
+	if err != nil || strings.TrimSpace(string(main)) != revision {
+		t.Fatalf("current cache revision = %q, %v", main, err)
+	}
+}
+
 func TestRemoveExposedModelPreservesUserFolder(t *testing.T) {
 	cloudlessHome := filepath.Join(t.TempDir(), "Cloudless")
 	t.Setenv("CLOUDLESS_HOME", cloudlessHome)
@@ -122,6 +201,29 @@ func TestModelDownloadCancelStopsRegisteredJob(t *testing.T) {
 	case <-ctx.Done():
 	default:
 		t.Fatal("registered download context was not canceled")
+	}
+}
+
+func TestModelDownloadRejectsMutableAndConflictingRevisions(t *testing.T) {
+	server := &Server{jobs: jobs.NewManager()}
+	request := httptest.NewRequest(http.MethodPost, "/api/models/download",
+		strings.NewReader(`{"id":"owner/model","revision":"main"}`))
+	recorder := httptest.NewRecorder()
+	server.modelDownload(recorder, request)
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("mutable revision status = %d, body = %s", recorder.Code, recorder.Body.String())
+	}
+
+	job := server.jobs.Create("model-dl:owner/model")
+	_, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	server.registerModelDownloadJob(job.ID, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", cancel)
+	request = httptest.NewRequest(http.MethodPost, "/api/models/download",
+		strings.NewReader(`{"id":"owner/model","revision":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}`))
+	recorder = httptest.NewRecorder()
+	server.modelDownload(recorder, request)
+	if recorder.Code != http.StatusConflict {
+		t.Fatalf("conflicting revision status = %d, body = %s", recorder.Code, recorder.Body.String())
 	}
 }
 

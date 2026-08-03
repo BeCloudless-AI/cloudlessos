@@ -18,8 +18,9 @@ import (
 )
 
 const (
-	DefaultRoot = "/var/lib/cloudless/models-cache"
-	markerName  = ".cloudless-model-cache-v1.json"
+	DefaultRoot      = "/var/lib/cloudless/models-cache"
+	markerName       = ".cloudless-model-cache-v1.json"
+	runtimeCacheName = ".cloudless-runtime"
 )
 
 // Root returns the configured host cache location. Packaged services set the
@@ -63,6 +64,18 @@ func Prepare(root, source string, uid, gid int) error {
 	}
 	if err := ensureDirectory(root, os.ModeSetgid|0o750, uid, gid); err != nil {
 		return fmt.Errorf("prepare model cache root: %w", err)
+	}
+	// Recipe containers may deliberately run under different numeric users.
+	// Keep dependency caches in one sticky, shared directory so pip/uv/kernel
+	// artifacts survive container replacement without allowing one container to
+	// delete another container's files.
+	if err := ensureDirectory(filepath.Join(root, runtimeCacheName), os.ModeSticky|0o777, uid, gid); err != nil {
+		return fmt.Errorf("prepare runtime dependency cache: %w", err)
+	}
+	for _, name := range []string{"pip", "uv", "torch-extensions"} {
+		if err := ensureDirectory(filepath.Join(root, runtimeCacheName, name), os.ModeSticky|0o777, uid, gid); err != nil {
+			return fmt.Errorf("prepare %s dependency cache: %w", name, err)
+		}
 	}
 	markerPath := filepath.Join(root, markerName)
 	if marker, err := readMarker(markerPath); err == nil && marker.Schema == 1 && marker.Source == source {

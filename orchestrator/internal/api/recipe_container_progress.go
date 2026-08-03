@@ -34,6 +34,7 @@ type recipeContainerProgress struct {
 	BytesDone      int64
 	BytesTotal     int64
 	ETASeconds     int64
+	Components     []jobs.ComponentProgress
 }
 
 func parseClockDuration(value string) int64 {
@@ -65,8 +66,8 @@ func parseRecipeContainerProgress(logs string) (recipeContainerProgress, bool) {
 	clean := containerANSISequencePattern.ReplaceAllString(logs, "")
 	clean = strings.ReplaceAll(clean, "\r", "\n")
 	currentModel, checkpointSize, availableRAM, currentDependency := "", "", "", ""
-	prefetchDisabled := false
 	progress := recipeContainerProgress{}
+	prefetchDisabled := false
 	found := false
 	for _, raw := range strings.Split(clean, "\n") {
 		line := strings.TrimSpace(raw)
@@ -200,7 +201,149 @@ func parseRecipeContainerProgress(logs string) (recipeContainerProgress, bool) {
 			found = true
 		}
 	}
+	if dependencyProgress, ok := parseDependencyProgress(clean); ok {
+		return dependencyProgress, true
+	}
 	return progress, found
+}
+
+func parseDependencyProgress(clean string) (recipeContainerProgress, bool) {
+	components := []jobs.ComponentProgress{}
+	indices := map[string]int{}
+	current := ""
+	phase, message := "", ""
+	var currentDone, currentTotal int64
+	complete := func(name string) {
+		if index, ok := indices[name]; ok {
+			components[index].Status = "complete"
+			if components[index].BytesTotal > 0 {
+				components[index].BytesDone = components[index].BytesTotal
+			}
+		}
+	}
+	start := func(name, status string, total int64) {
+		if current != "" && current != name {
+			complete(current)
+		}
+		current, currentDone, currentTotal = name, 0, total
+		index, ok := indices[name]
+		if !ok {
+			index = len(components)
+			indices[name] = index
+			components = append(components, jobs.ComponentProgress{Name: name})
+		}
+		components[index].Status, components[index].BytesTotal = status, total
+	}
+	for _, raw := range strings.Split(clean, "\n") {
+		line := strings.TrimSpace(raw)
+		if match := pipCollectPattern.FindStringSubmatch(line); len(match) == 2 {
+			name := strings.ReplaceAll(match[1], "_", "-")
+			start(name, "preparing", 0)
+			phase, message = "preparing-dependencies", "Preparing startup dependency "+name+"…"
+		}
+		if match := pipDownloadPattern.FindStringSubmatch(line); len(match) == 4 {
+			name := dependencyNameFromWheel(match[1])
+			total, _ := recipeByteValue(match[2], match[3])
+			start(name, "downloading", total)
+			phase, message = "downloading-dependencies", fmt.Sprintf("Downloading startup dependency %s (%s %s)…", name, match[2], strings.ToUpper(match[3]))
+			continue // never attach an older progress line to this new wheel
+		}
+		if current != "" && phase == "downloading-dependencies" {
+			var done, total int64
+			var doneOK, totalOK bool
+			if match := recipeByteProgressPattern.FindStringSubmatch(line); len(match) == 5 {
+				done, doneOK = recipeByteValue(match[1], match[2])
+				total, totalOK = recipeByteValue(match[3], match[4])
+			} else if match := pipSharedByteProgressPattern.FindStringSubmatch(line); len(match) == 4 {
+				done, doneOK = recipeByteValue(match[1], match[3])
+				total, totalOK = recipeByteValue(match[2], match[3])
+			}
+			if doneOK && totalOK && total > 0 {
+				currentDone, currentTotal = done, total
+				index := indices[current]
+				components[index].BytesDone, components[index].BytesTotal = done, total
+				message = fmt.Sprintf("Downloading startup dependency %s — %s (%d%%)", current, formatDownloadProgress(done, total), done*100/total)
+			}
+		}
+		if strings.Contains(line, "Installing collected packages:") {
+			complete(current)
+			for index := range components {
+				components[index].Status = "installing"
+			}
+			phase, message = "installing-dependencies", "Installing startup dependencies…"
+		}
+		if strings.Contains(line, "Successfully installed") {
+			return recipeContainerProgress{}, false
+		}
+	}
+	if phase == "" {
+		return recipeContainerProgress{}, false
+	}
+	percent := 51
+	if phase == "downloading-dependencies" {
+		percent = 52
+	}
+	if phase == "installing-dependencies" {
+		percent = 53
+	}
+	return recipeContainerProgress{Phase: phase, Message: message, CurrentItem: current, OverallPercent: percent, BytesDone: currentDone, BytesTotal: currentTotal, Components: components}, true
+}
+
+const recipeDependencyStallThreshold = 75 * time.Second
+
+type dependencyTransferTracker struct {
+	item                       string
+	baseReceived, lastReceived int64
+	lastSample, lastMovement   time.Time
+	bytesDone, rate            int64
+}
+
+func formatTransferRate(bytesPerSecond int64) string {
+	const kib, mib, gib = 1024, 1024 * 1024, 1024 * 1024 * 1024
+	switch {
+	case bytesPerSecond >= gib:
+		return fmt.Sprintf("%.1f GB/s", float64(bytesPerSecond)/gib)
+	case bytesPerSecond >= mib:
+		return fmt.Sprintf("%.1f MB/s", float64(bytesPerSecond)/mib)
+	default:
+		return fmt.Sprintf("%.0f KB/s", float64(bytesPerSecond)/kib)
+	}
+}
+
+func (tracker *dependencyTransferTracker) update(now time.Time, item string, received, parsedDone, total int64) (done, rate, stalled, eta int64) {
+	if tracker.item != item || received < tracker.lastReceived {
+		tracker.item, tracker.baseReceived, tracker.lastReceived = item, received, received
+		tracker.lastSample, tracker.lastMovement = now, now
+		tracker.bytesDone, tracker.rate = parsedDone, 0
+		return tracker.bytesDone, 0, 0, 0
+	}
+	delta, elapsed := received-tracker.lastReceived, now.Sub(tracker.lastSample)
+	if delta > 0 {
+		directDone := received - tracker.baseReceived
+		if directDone > tracker.bytesDone {
+			tracker.bytesDone = directDone
+		}
+		if parsedDone > tracker.bytesDone {
+			tracker.bytesDone = parsedDone
+		}
+		if elapsed > 0 {
+			tracker.rate = int64(float64(delta) / elapsed.Seconds())
+		}
+		tracker.lastMovement = now
+	} else {
+		tracker.rate = 0
+	}
+	if total > 0 && tracker.bytesDone > total {
+		tracker.bytesDone = total
+	}
+	tracker.lastReceived, tracker.lastSample = received, now
+	if !tracker.lastMovement.IsZero() {
+		stalled = int64(now.Sub(tracker.lastMovement).Seconds())
+	}
+	if tracker.rate > 0 && total > tracker.bytesDone {
+		eta = (total - tracker.bytesDone) / tracker.rate
+	}
+	return tracker.bytesDone, tracker.rate, stalled, eta
 }
 
 // observeRecipeContainerStartup reads captured container output without
@@ -219,7 +362,8 @@ func observeRecipeContainerStartup(ctx context.Context, runtime engine.Engine, j
 	wait.Add(1)
 	go func() {
 		defer wait.Done()
-		var previous recipeContainerProgress
+		previous := ""
+		var transfer dependencyTransferTracker
 		poll := func() {
 			logContext, stop := context.WithTimeout(observerContext, 5*time.Second)
 			logs, err := runtime.Logs(logContext, containerName)
@@ -228,13 +372,48 @@ func observeRecipeContainerStartup(ctx context.Context, runtime engine.Engine, j
 				return
 			}
 			progress, ok := parseRecipeContainerProgress(logs)
-			if !ok || progress == previous {
+			if !ok {
 				return
 			}
-			previous = progress
+			if progress.Phase == "downloading-dependencies" && progress.BytesTotal > 0 {
+				if reader, available := runtime.(engine.ContainerIOReader); available {
+					ioContext, stopIO := context.WithTimeout(observerContext, 3*time.Second)
+					ioSnapshot, ioErr := reader.ContainerIO(ioContext, containerName)
+					stopIO()
+					if ioErr == nil {
+						done, rate, stalled, eta := transfer.update(time.Now(), progress.CurrentItem, ioSnapshot.ReceivedBytes, progress.BytesDone, progress.BytesTotal)
+						progress.BytesDone, progress.ETASeconds = done, eta
+						for index := range progress.Components {
+							if progress.Components[index].Name == progress.CurrentItem {
+								progress.Components[index].BytesDone, progress.Components[index].BytesTotal = done, progress.BytesTotal
+								progress.Components[index].BytesPerSec, progress.Components[index].ETASeconds = rate, eta
+							}
+						}
+						message := fmt.Sprintf("Downloading startup dependency %s — %s", progress.CurrentItem, formatDownloadProgress(done, progress.BytesTotal))
+						if rate > 0 {
+							message += " at " + formatTransferRate(rate)
+						}
+						if eta > 0 {
+							message += " · about " + (time.Duration(eta) * time.Second).Round(time.Second).String() + " remaining"
+						}
+						if stalled >= int64(recipeDependencyStallThreshold.Seconds()) {
+							message = fmt.Sprintf("Download stalled — no data received for %s", time.Duration(stalled)*time.Second)
+						}
+						progress.Message = message
+						job.ProgressTransfer(progress.Phase, progress.Message, progress.CurrentItem, progress.OverallPercent, progress.BytesDone, progress.BytesTotal, rate, stalled, progress.ETASeconds, progress.Components)
+						previous = fmt.Sprintf("%#v", progress)
+						return
+					}
+				}
+			}
+			signature := fmt.Sprintf("%#v", progress)
+			if signature == previous {
+				return
+			}
+			previous = signature
 			job.ProgressOperationETA(progress.Phase, progress.Message, progress.CurrentItem, progress.OverallPercent, progress.ItemsDone, progress.ItemsTotal, progress.ETASeconds)
-			if progress.BytesTotal > 0 {
-				job.ProgressBytesDetail(progress.Phase, progress.Message, progress.BytesDone, progress.BytesTotal)
+			if progress.BytesTotal > 0 || len(progress.Components) > 0 {
+				job.ProgressTransfer(progress.Phase, progress.Message, progress.CurrentItem, progress.OverallPercent, progress.BytesDone, progress.BytesTotal, 0, 0, progress.ETASeconds, progress.Components)
 			}
 		}
 		poll()

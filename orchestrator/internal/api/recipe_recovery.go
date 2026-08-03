@@ -317,11 +317,7 @@ func (s *Server) failRecipeRecovery(job *jobs.Job, operationID string, cause err
 
 func (s *Server) recoveryRecipeSnapshot(operation recipeops.Operation) (localrecipes.Recipe, error) {
 	if operation.RecipeSnapshot.ID != "" {
-		recipe := operation.RecipeSnapshot
-		if operation.PreparedImageReference != "" {
-			recipe.Engine.Image = operation.PreparedImageReference
-		}
-		return recipe, nil
+		return operation.RecipeSnapshot, nil
 	}
 	recipe, ok, err := s.recipes.GetAny(operation.RecipeID)
 	if err != nil {
@@ -329,9 +325,6 @@ func (s *Server) recoveryRecipeSnapshot(operation recipeops.Operation) (localrec
 	}
 	if !ok {
 		return localrecipes.Recipe{}, errors.New("recipe snapshot and current recipe are unavailable")
-	}
-	if operation.PreparedImageReference != "" {
-		recipe.Engine.Image = operation.PreparedImageReference
 	}
 	return recipe, nil
 }

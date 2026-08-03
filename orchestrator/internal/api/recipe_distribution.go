@@ -169,6 +169,49 @@ func recipeRemoteImageID(ctx context.Context, dir string, env map[string]string,
 	return strings.TrimSpace(out)
 }
 
+// reconcileLoadedRecipeImage verifies the immutable image content independently
+// from its repository reference, then recreates that reference explicitly. Docker
+// save/load guarantees the image content but does not guarantee that a RepoDigest
+// or tag used to address the source daemon survives on a fresh destination daemon.
+// Treating the reference as proof of content therefore rejects valid transfers and
+// can also leave a stale destination tag pointing at older content.
+func reconcileLoadedRecipeImage(expectedID, reference string, inspect func(string) string, tag func(string, string) error) error {
+	expectedID = strings.TrimSpace(expectedID)
+	reference = strings.TrimSpace(reference)
+	if expectedID == "" || inspect(expectedID) != expectedID {
+		return errors.New("worker did not load the expected runtime image content")
+	}
+	if err := tag(expectedID, reference); err != nil {
+		return fmt.Errorf("restore verified runtime image reference: %w", err)
+	}
+	if inspect(reference) != expectedID {
+		return errors.New("worker runtime image reference does not resolve to the verified content")
+	}
+	return nil
+}
+
+func reconcileRemoteRecipeImage(ctx context.Context, dir string, env map[string]string, peer recipePeer, expectedID, reference string) error {
+	inspect := func(image string) string {
+		return recipeRemoteImageID(ctx, dir, env, peer, image)
+	}
+	tag := func(source, target string) error {
+		_, err := recipeCommandOutput(recipeSSHCommand(ctx, dir, env, peer, "docker", "image", "tag", source, target))
+		return err
+	}
+	if err := reconcileLoadedRecipeImage(expectedID, reference, inspect, tag); err != nil {
+		return fmt.Errorf("%s: %w", peer.Name, err)
+	}
+	return nil
+}
+
+func recipeImageTransferReference(localID string) (string, error) {
+	digest := strings.TrimPrefix(strings.TrimSpace(localID), "sha256:")
+	if len(digest) != 64 {
+		return "", errors.New("local runtime image has no immutable sha256 content ID")
+	}
+	return "cloudless/recipe-transfer:" + digest[:16], nil
+}
+
 func configureRecipeTransferProcess(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Cancel = func() error {
@@ -344,6 +387,16 @@ func distributeRecipeImage(ctx context.Context, runtime engine.Engine, job *jobs
 	if localID == "" || imageSize <= 0 {
 		return errors.New("local runtime image metadata is unavailable")
 	}
+	transferReference, err := recipeImageTransferReference(localID)
+	if err != nil {
+		return err
+	}
+	// Always export a Cloudless-owned tag. Registry digest references are valid
+	// pull/inspect addresses but Docker refuses to create them as tags, and
+	// save/load does not promise to preserve their RepoDigest metadata.
+	if err := runtime.TagImage(ctx, localID, transferReference); err != nil {
+		return fmt.Errorf("prepare runtime image transfer reference: %w", err)
+	}
 	if err := os.MkdirAll(recipeImageTransferRoot, 0o770); err != nil {
 		return fmt.Errorf("prepare image transfer staging: %w", err)
 	}
@@ -363,17 +416,20 @@ func distributeRecipeImage(ctx context.Context, runtime engine.Engine, job *jobs
 	grandTotal := imageSize * int64(len(peers))
 	for index, peer := range peers {
 		base := imageSize * int64(index)
-		if recipeRemoteImageID(ctx, dir, env, peer, recipe.Engine.Image) == localID {
+		if recipeRemoteImageID(ctx, dir, env, peer, localID) == localID {
+			if err := reconcileRemoteRecipeImage(ctx, dir, env, peer, localID, transferReference); err != nil {
+				return err
+			}
 			job.ProgressBytes("syncing-image", peer.Name+" already has the exact runtime image.", base+imageSize, grandTotal)
 			continue
 		}
 		// A mutable tag may point at an older local build. Remove only that exact
 		// tag before loading the coordinator's immutable image archive.
-		_, _ = recipeCommandOutput(recipeSSHCommand(ctx, dir, env, peer, "docker", "image", "rm", "-f", recipe.Engine.Image))
+		_, _ = recipeCommandOutput(recipeSSHCommand(ctx, dir, env, peer, "docker", "image", "rm", "-f", transferReference))
 		label := fmt.Sprintf("Copying the inference runtime from %s to %s over the direct Spark fabric (%d/%d)", localRecipeNodeName(), peer.Name, index+1, len(peers))
 		if !exported {
 			job.Progress("exporting-image", "Preparing the verified inference runtime for transfer...", -1, -1)
-			if err := runtime.ExportImage(ctx, recipe.Engine.Image, archive); err != nil {
+			if err := runtime.ExportImage(ctx, transferReference, archive); err != nil {
 				return err
 			}
 			exported = true
@@ -383,8 +439,8 @@ func distributeRecipeImage(ctx context.Context, runtime engine.Engine, job *jobs
 		if err := runRecipeTransfer(ctx, job, "syncing-image", label, base, grandTotal, producer, consumer); err != nil {
 			return err
 		}
-		if remoteID := recipeRemoteImageID(ctx, dir, env, peer, recipe.Engine.Image); remoteID != localID {
-			return fmt.Errorf("%s loaded a different runtime image digest", peer.Name)
+		if err := reconcileRemoteRecipeImage(ctx, dir, env, peer, localID, transferReference); err != nil {
+			return err
 		}
 	}
 	return nil

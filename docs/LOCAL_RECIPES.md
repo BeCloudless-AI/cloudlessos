@@ -45,7 +45,9 @@ status and blocks both Check and Run before a process, image build or Docker ope
 The `managed-container-v1` runner remains the command-free path for standard user-authored vLLM
 containers. `advanced-container-v1` supports immutable custom engine images that own their complete
 in-container command, architecture-specific environment, auxiliary pinned models, writable-root
-mode, IPC, ulimits, and declared Linux capabilities. Both adapters deny host commands, arbitrary
+mode, IPC, ulimits, declared Linux capabilities, and bounded NCCL launch across enrolled DGX
+Sparks. Distributed advanced containers receive per-node rank and fabric identity from Cloudless,
+while Cloudless copies the pinned image and verified model cache before launch. Both adapters deny host commands, arbitrary
 host mounts, and the Docker socket and bind only the private inference port. Recipes that require
 host source scripts still need an exact signed compatibility profile. A passing validation never
 changes local code into a reviewed profile.

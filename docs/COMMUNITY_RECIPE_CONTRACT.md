@@ -66,8 +66,10 @@ Published, withdrawn, suspended and revoked revision content is immutable.
 
 Public automatic admission supports `managed-container-v1` and `advanced-container-v1`. Both require
 an immutable image digest, immutable primary and auxiliary model commits, the fixed loopback
-Cloudless inference contract, one local node, and no host command, arbitrary host mount, Docker
-socket, or source repository. Advanced manifests may own the command, entry point, environment,
+Cloudless inference contract, and no host command, arbitrary host mount, Docker socket, or source
+repository. `managed-container-v1` remains local-only. An advanced manifest may request two through
+eight enrolled DGX Sparks when tensor parallelism matches node count and it explicitly declares
+NCCL, host IPC, and the fixed `/dev/infiniband` permission. Advanced manifests may own the command, entry point, environment,
 root filesystem mode, user, IPC, shared memory, ulimits, tmpfs, process limit, and Linux
 capabilities inside the pinned container. Those permissions are signed and displayed as executable
 trust data. `source-scripts-v1` remains private/manual-review only.

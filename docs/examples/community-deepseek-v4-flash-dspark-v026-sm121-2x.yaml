@@ -1,0 +1,162 @@
+schema: cloudless.recipe/v2
+
+metadata:
+  name: DeepSeek V4 Flash DSpark v0.26 SM121 2x DGX Spark
+  description: r0b0tlab's pinned vLLM 0.26 production profile for DeepSeek V4 Flash DSpark on two DGX Sparks, with NVFP4 DS-MLA KV cache, FlashInfer B12X, DSpark K6, and SM121 known fixes.
+  version: 1.0.0
+  author: r0b0tlab
+  category: language-model
+  license: MIT
+  tags: [vllm, deepseek-v4, dspark, nvfp4, flashinfer, b12x, sm121, dgx-spark, multi-node, coding, reasoning]
+  minimumAcceleratorMemoryGB: 128
+
+recipe:
+  name: DeepSeek V4 Flash DSpark v0.26 SM121 2x DGX Spark
+  description: Runs r0b0tlab's immutable ARM64 vLLM 0.26.0 SM121 image and validated production profile across two enrolled DGX Sparks with TP=2, a 327680-token context ceiling, 16 sequences, fixed NVFP4 KV memory, and DSpark K6 speculation.
+  platform: dgx-spark
+  source:
+    url: ""
+    revision: ""
+    files: {}
+  engine:
+    type: vllm
+    image: ghcr.io/r0b0tlab/deepseek-v4-flash-dspark-v026-sm121@sha256:269a1c6ac581f4fb2fe13110d2468159c3ca65c07ffb09b4080549673f625841
+    servedModelName: cloudless
+    containerPort: 8890
+    apiPath: /v1
+    proxyHost: host.docker.internal
+    restartPolicy: "no"
+    arguments: []
+    entryPoint: /bin/bash
+    command:
+      - -lc
+      - |-
+        set -euo pipefail
+        if [[ -x /usr/local/bin/vllm ]]; then
+          VLLM_BIN=/usr/local/bin/vllm
+          export CUDA_HOME="${CUDA_HOME:-/usr/local/cuda}"
+        else
+          VLLM_BIN=/opt/env/bin/vllm
+          export PATH="/opt/env/bin:/opt/env/nvvm/bin:/opt/env/targets/sbsa-linux/nvvm/bin:${PATH:-}"
+          export CUDA_HOME="${CUDA_HOME:-/opt/env/targets/sbsa-linux}"
+        fi
+        export CUDA_PATH="${CUDA_PATH:-${CUDA_HOME}}"
+        export CUDAToolkit_ROOT="${CUDAToolkit_ROOT:-${CUDA_HOME}}"
+        export LD_LIBRARY_PATH="${CUDA_HOME}/lib64:/opt/env/lib:/opt/env/targets/sbsa-linux/lib:${LD_LIBRARY_PATH:-}"
+
+        exec "$VLLM_BIN" serve deepseek-ai/DeepSeek-V4-Flash-DSpark \
+          --revision 913f0657a874f76844e2e91cbe706dbcaceeb6d7 \
+          --served-model-name cloudless \
+          --host 0.0.0.0 \
+          --port 8890 \
+          --trust-remote-code \
+          --tensor-parallel-size 2 \
+          --pipeline-parallel-size 1 \
+          --kv-cache-dtype nvfp4_ds_mla \
+          --block-size 256 \
+          --max-model-len 327680 \
+          --max-num-seqs 16 \
+          --max-num-batched-tokens 16384 \
+          --gpu-memory-utilization 0.835 \
+          --kv-cache-memory-bytes 15998753178 \
+          --enable-prefix-caching \
+          --speculative-config '{"method":"dspark","num_speculative_tokens":6}' \
+          --tokenizer-mode deepseek_v4 \
+          --distributed-executor-backend mp \
+          --tool-call-parser deepseek_v4 \
+          --enable-auto-tool-choice \
+          --reasoning-parser deepseek_v4 \
+          --reasoning-config '{"reasoning_parser":"deepseek_v4","reasoning_start_str":"<think>","reasoning_end_str":"</think>"}' \
+          --default-chat-template-kwargs '{"thinking":true}' \
+          --optimization-level 2 \
+          --performance-mode balanced \
+          --enable-flashinfer-autotune \
+          --jit-monitor-mode error \
+          --moe-backend flashinfer_b12x \
+          --nnodes 2 \
+          --node-rank "$NODE_RANK" \
+          --master-addr "$MASTER_ADDR" \
+          --master-port "$MASTER_PORT" \
+          ${HEADLESS:+--headless}
+  model:
+    id: deepseek-ai/DeepSeek-V4-Flash-DSpark
+    revision: "913f0657a874f76844e2e91cbe706dbcaceeb6d7"
+    quantization: ""
+    dtype: auto
+    kvCacheDtype: nvfp4_ds_mla
+    maxContext: 327680
+    maxSequences: 16
+    gpuMemoryUtilization: 0.835
+    tensorParallel: 2
+    pipelineParallel: 1
+    trustRemoteCode: true
+    dependencies: []
+  distributed:
+    nodes: 2
+    backend: nccl
+    masterPort: 25000
+    interface: auto
+    hca: auto
+    ibGidIndex: 3
+    workerAlias: cloudless-deepseek-v026-worker
+    selectedNodes: []
+  runtime:
+    adapter: advanced-container-v1
+    buildOnce: true
+    downloadOnce: true
+    workingDir: ""
+    timeoutMinutes: 360
+    prerequisites: []
+    environment:
+      HF_HOME: /cache/huggingface
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+      HF_HUB_DISABLE_XET: "1"
+      VLLM_CACHE_ROOT: /cache/huggingface/vllm-cache
+      FLASHINFER_WORKSPACE_BASE: /cache/huggingface/dspark-v026-flashinfer-topk256
+      VLLM_ALLOW_LONG_MAX_MODEL_LEN: "1"
+      VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: "256"
+      VLLM_USE_FLASHINFER_SAMPLER: "1"
+      VLLM_USE_BREAKABLE_CUDAGRAPH: "1"
+      TORCH_CUDA_ARCH_LIST: 12.1a
+      FLASHINFER_CUDA_ARCH_LIST: 12.1a
+      TILELANG_CLEANUP_TEMP_FILES: "1"
+      DG_JIT_USE_NVRTC: "0"
+      DG_JIT_NVCC_COMPILER: /usr/local/cuda/bin/nvcc
+      PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+      NCCL_NET: IB
+      NCCL_IB_DISABLE: "0"
+      NCCL_CROSS_NIC: "1"
+      NCCL_CUMEM_ENABLE: "0"
+      NCCL_IGNORE_CPU_AFFINITY: "1"
+      NCCL_DEBUG: INFO
+      NCCL_NVLS_ENABLE: "0"
+      NCCL_RAS_ENABLE: "1"
+      GLM52_DRAFTER_GATE: enforce
+      GLM52_FINGERPRINT_MODE: "off"
+      VLLM_TRITON_MLA_SPARSE: "1"
+      MTP_NUM_TOKENS: "6"
+    container:
+      user: "0"
+      readOnly: false
+      ipc: host
+      shmSize: 64g
+      ulimits: [memlock=-1:-1, stack=67108864]
+      capAdd: [IPC_LOCK]
+      capDrop: []
+      tmpfs: []
+      pidsLimit: 8192
+      modelCachePath: /cache/huggingface
+      infiniband: true
+    lifecycle:
+      build: {program: "", args: []}
+      download: {program: "", args: []}
+      start: {program: "", args: []}
+      stop: {program: "", args: []}
+  health:
+    scheme: http
+    host: 127.0.0.1
+    port: 8890
+    path: /v1/models
+    timeoutSeconds: 7200
+    intervalSeconds: 5

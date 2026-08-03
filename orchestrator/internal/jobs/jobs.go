@@ -12,24 +12,27 @@ import (
 
 // Update is a snapshot of a job's progress.
 type Update struct {
-	Phase       string         `json:"phase"` // pending | pulling | starting | running | error
-	Message     string         `json:"message"`
-	LayersDone  int            `json:"layersDone"`
-	LayersTotal int            `json:"layersTotal"`
-	BytesDone   int64          `json:"bytesDone,omitempty"`
-	BytesTotal  int64          `json:"bytesTotal,omitempty"`
-	ContainerID string         `json:"containerId,omitempty"`
-	Error       string         `json:"error,omitempty"`
-	Done        bool           `json:"done"`
-	Percent     int            `json:"percent"`
-	ItemsDone   int            `json:"itemsDone,omitempty"`
-	ItemsTotal  int            `json:"itemsTotal,omitempty"`
-	CurrentItem string         `json:"currentItem,omitempty"`
-	StartedAt   string         `json:"startedAt,omitempty"`
-	UpdatedAt   string         `json:"updatedAt,omitempty"`
-	ElapsedSecs int64          `json:"elapsedSeconds,omitempty"`
-	ETASecs     int64          `json:"etaSeconds,omitempty"`
-	Nodes       []NodeProgress `json:"nodes,omitempty"`
+	Phase       string              `json:"phase"` // pending | pulling | starting | running | error
+	Message     string              `json:"message"`
+	LayersDone  int                 `json:"layersDone"`
+	LayersTotal int                 `json:"layersTotal"`
+	BytesDone   int64               `json:"bytesDone,omitempty"`
+	BytesTotal  int64               `json:"bytesTotal,omitempty"`
+	ContainerID string              `json:"containerId,omitempty"`
+	Error       string              `json:"error,omitempty"`
+	Done        bool                `json:"done"`
+	Percent     int                 `json:"percent"`
+	ItemsDone   int                 `json:"itemsDone,omitempty"`
+	ItemsTotal  int                 `json:"itemsTotal,omitempty"`
+	CurrentItem string              `json:"currentItem,omitempty"`
+	StartedAt   string              `json:"startedAt,omitempty"`
+	UpdatedAt   string              `json:"updatedAt,omitempty"`
+	ElapsedSecs int64               `json:"elapsedSeconds,omitempty"`
+	ETASecs     int64               `json:"etaSeconds,omitempty"`
+	BytesPerSec int64               `json:"bytesPerSecond,omitempty"`
+	StalledSecs int64               `json:"stalledSeconds,omitempty"`
+	Components  []ComponentProgress `json:"components,omitempty"`
+	Nodes       []NodeProgress      `json:"nodes,omitempty"`
 	etaOverride int64
 }
 
@@ -41,6 +44,15 @@ type NodeProgress struct {
 	BytesTotal int64  `json:"bytesTotal,omitempty"`
 	Percent    int    `json:"percent,omitempty"`
 	ETASecs    int64  `json:"etaSeconds,omitempty"`
+}
+
+type ComponentProgress struct {
+	Name        string `json:"name"`
+	Status      string `json:"status"`
+	BytesDone   int64  `json:"bytesDone,omitempty"`
+	BytesTotal  int64  `json:"bytesTotal,omitempty"`
+	BytesPerSec int64  `json:"bytesPerSecond,omitempty"`
+	ETASeconds  int64  `json:"etaSeconds,omitempty"`
 }
 
 // Snapshot identifies a job together with its latest progress update.
@@ -220,6 +232,7 @@ func (j *Job) Observe(observer func(Update)) {
 func (j *Job) snapshotLocked(now time.Time) Update {
 	u := j.state
 	u.Nodes = append([]NodeProgress(nil), j.state.Nodes...)
+	u.Components = append([]ComponentProgress(nil), j.state.Components...)
 	if !j.start.IsZero() {
 		u.ElapsedSecs = int64(now.Sub(j.start).Seconds())
 	}
@@ -258,6 +271,7 @@ func (j *Job) Progress(phase, msg string, done, total int) {
 		if u.Phase != phase {
 			u.BytesDone = 0
 			u.BytesTotal = 0
+			u.BytesPerSec, u.StalledSecs, u.Components = 0, 0, nil
 			u.Nodes = nil
 			u.etaOverride = 0
 			u.ItemsDone, u.ItemsTotal, u.CurrentItem = 0, 0, ""
@@ -295,6 +309,7 @@ func (j *Job) progressOperation(phase, msg, currentItem string, percent, done, t
 		if u.Phase != phase {
 			u.BytesDone = 0
 			u.BytesTotal = 0
+			u.BytesPerSec, u.StalledSecs, u.Components = 0, 0, nil
 			u.Nodes = nil
 			u.LayersDone = 0
 			u.LayersTotal = 0
@@ -357,6 +372,19 @@ func (j *Job) ProgressBytesDetail(phase, msg string, done, total int64) {
 	})
 }
 
+// ProgressTransfer records structured, direct transfer telemetry while
+// preserving the caller's multi-stage overall percentage.
+func (j *Job) ProgressTransfer(phase, msg, currentItem string, percent int, done, total, bytesPerSecond, stalledSeconds, etaSeconds int64, components []ComponentProgress) {
+	j.apply(func(u *Update) {
+		u.Phase, u.Message, u.CurrentItem = phase, msg, currentItem
+		u.Percent = clampPercent(percent)
+		u.BytesDone, u.BytesTotal = done, total
+		u.BytesPerSec, u.StalledSecs = max(0, bytesPerSecond), max(0, stalledSeconds)
+		u.etaOverride = max(0, etaSeconds)
+		u.Components = append([]ComponentProgress(nil), components...)
+	})
+}
+
 // Succeed marks the job as running (terminal success).
 func (j *Job) Succeed(containerID string) {
 	j.apply(func(u *Update) {
@@ -367,6 +395,7 @@ func (j *Job) Succeed(containerID string) {
 		u.Percent = 100
 		u.ETASecs = 0
 		u.etaOverride = 0
+		u.BytesPerSec, u.StalledSecs, u.Components = 0, 0, nil
 		u.Done = true
 	})
 }
@@ -379,6 +408,7 @@ func (j *Job) Fail(err error) {
 		u.Error = err.Error()
 		u.ETASecs = 0
 		u.etaOverride = 0
+		u.BytesPerSec, u.StalledSecs, u.Components = 0, 0, nil
 		u.Done = true
 	})
 }
@@ -391,6 +421,7 @@ func (j *Job) Cancel() {
 		u.Error = ""
 		u.ETASecs = 0
 		u.etaOverride = 0
+		u.BytesPerSec, u.StalledSecs, u.Components = 0, 0, nil
 		u.Done = true
 	})
 }

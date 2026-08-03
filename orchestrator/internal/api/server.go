@@ -91,6 +91,9 @@ type Server struct {
 
 	modelJobsMu sync.Mutex
 	modelJobs   map[string]context.CancelFunc
+	// modelJobRevisions preserves the exact immutable Hub revision associated
+	// with each process-local download job. The durable copy lives in state.
+	modelJobRevisions map[string]string
 
 	engineJobsMu sync.Mutex
 	engineJobs   map[string]context.CancelFunc

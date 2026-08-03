@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -11,6 +12,14 @@ import (
 	"github.com/cloudless/orchestrator/internal/localrecipes"
 	"github.com/cloudless/orchestrator/internal/modelcache"
 )
+
+func managedPreparedImageReference(image engine.ImageInfo) (string, error) {
+	reference := strings.ToLower(strings.TrimSpace(image.ID))
+	if !recipeImageDigestPattern.MatchString(reference) {
+		return "", errors.New("pulled runtime image has no immutable local content ID")
+	}
+	return reference, nil
+}
 
 func managedContainerCacheUser() string {
 	uid, gid := os.Geteuid(), os.Getegid()
@@ -63,7 +72,7 @@ func managedContainerRecipeSpec(recipe localrecipes.Recipe, immutableImage, name
 		args = append([]string(nil), recipe.Engine.Command...)
 	}
 
-	env := make(map[string]string, len(recipe.Runtime.Environment)+3)
+	env := make(map[string]string, len(recipe.Runtime.Environment)+8)
 	for key, value := range recipe.Runtime.Environment {
 		switch key {
 		case "HF_CACHE", "HF_HOME", "HF_TOKEN", "HUGGING_FACE_HUB_TOKEN":
@@ -81,6 +90,9 @@ func managedContainerRecipeSpec(recipe localrecipes.Recipe, immutableImage, name
 	env["XDG_CACHE_HOME"] = containerCache
 	env["VLLM_CONFIG_ROOT"] = containerCache + "/vllm"
 	env["FLASHINFER_WORKSPACE_DIR"] = containerCache + "/flashinfer"
+	env["PIP_CACHE_DIR"] = containerCache + "/.cloudless-runtime/pip"
+	env["UV_CACHE_DIR"] = containerCache + "/.cloudless-runtime/uv"
+	env["TORCH_EXTENSIONS_DIR"] = containerCache + "/.cloudless-runtime/torch-extensions"
 	secrets := map[string]string{}
 	if hfTokenPath != "" {
 		env["HF_TOKEN_PATH"] = engine.HuggingFaceTokenContainerPath
@@ -130,6 +142,14 @@ func managedContainerRecipeSpec(recipe localrecipes.Recipe, immutableImage, name
 		spec.Tmpfs = append([]string(nil), container.Tmpfs...)
 		spec.PidsLimit = container.PidsLimit
 		spec.ShmSize = strings.TrimSpace(container.ShmSize)
+		if container.Infiniband {
+			spec.Devices = []string{"/dev/infiniband:/dev/infiniband"}
+		}
+		if recipe.Distributed.Nodes > 1 {
+			spec.Network = "host"
+			spec.NetworkAlias = ""
+			spec.Ports = nil
+		}
 	}
 	return spec, nil
 }

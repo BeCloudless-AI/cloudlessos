@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -33,6 +34,34 @@ func TestRecipeSnapshotCompleteRejectsPartialDownload(t *testing.T) {
 	}
 	if recipeSnapshotComplete(repo, revision) {
 		t.Fatal("partial snapshot was reported ready")
+	}
+}
+
+func TestRecipeSnapshotCompleteAcceptsMarkedRevisionWithOtherPartialBlob(t *testing.T) {
+	repo := t.TempDir()
+	revision := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	snapshot := filepath.Join(repo, "snapshots", revision)
+	if err := os.MkdirAll(snapshot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(snapshot, "config.json"), []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(repo, "blobs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "blobs", "other.incomplete"), []byte("partial"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	markers := filepath.Join(repo, ".cloudless-complete")
+	if err := os.MkdirAll(markers, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(markers, revision), []byte("complete\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if !recipeSnapshotComplete(repo, revision) {
+		t.Fatal("another revision's partial blob invalidated a marked complete snapshot")
 	}
 }
 
@@ -118,6 +147,47 @@ func TestCertifyExistingRecipeModelCacheRejectsMissingHubFile(t *testing.T) {
 		map[string]int64{"config.json": 2, "model.bin": 100}, nil)
 	if !errors.Is(err, errRecipeModelCacheIncomplete) {
 		t.Fatalf("missing Hub file error = %v", err)
+	}
+}
+
+func TestVerifyOrCertifyInstalledRecipeModelCacheAdoptsModelManagerSnapshot(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("CLOUDLESS_MODEL_CACHE", root)
+	recipe := localrecipes.Recipe{Model: localrecipes.Model{ID: "owner/model", Revision: "abc123"}}
+	repo := filepath.Join(root, "hub", "models--owner--model")
+	snapshot := filepath.Join(repo, "snapshots", recipe.Model.Revision)
+	if err := os.MkdirAll(snapshot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	payload := []byte("model-manager-verified-weights")
+	if err := os.WriteFile(filepath.Join(snapshot, "model.bin"), payload, 0o640); err != nil {
+		t.Fatal(err)
+	}
+	markers := filepath.Join(repo, ".cloudless-complete")
+	if err := os.MkdirAll(markers, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(markers, recipe.Model.Revision), []byte("complete\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	previousInventory := recipeModelRevisionInventory
+	recipeModelRevisionInventory = func(_ context.Context, modelID, revision, token string) (map[string]int64, error) {
+		if modelID != recipe.Model.ID || revision != recipe.Model.Revision || token != "token" {
+			t.Fatalf("inventory request = %s@%s token=%q", modelID, revision, token)
+		}
+		return map[string]int64{"model.bin": int64(len(payload))}, nil
+	}
+	t.Cleanup(func() { recipeModelRevisionInventory = previousInventory })
+
+	manifest, err := verifyOrCertifyInstalledRecipeModelCache(t.Context(), nil, recipe, "token", nil)
+	if err != nil {
+		t.Fatalf("adopt Model Manager snapshot: %v", err)
+	}
+	if manifest.Bytes != int64(len(payload)) {
+		t.Fatalf("manifest bytes = %d, want %d", manifest.Bytes, len(payload))
+	}
+	if _, err := verifyRecipeModelCache(t.Context(), nil, recipe); err != nil {
+		t.Fatalf("adopted snapshot was not reusable: %v", err)
 	}
 }
 

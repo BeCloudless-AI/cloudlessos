@@ -8,7 +8,7 @@ func TestModelDownloadJournalPersistsAndRemovesAtomically(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := ModelDownload{
-		ModelID: "owner/model", Phase: "downloading",
+		ModelID: "owner/model", Revision: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", Phase: "downloading",
 		BytesDone: 7, BytesTotal: 19,
 	}
 	if err := store.SetModelDownload(want); err != nil {
@@ -19,7 +19,7 @@ func TestModelDownloadJournalPersistsAndRemovesAtomically(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := reopened.ModelDownloads()
-	if len(got) != 1 || got[0].ModelID != want.ModelID ||
+	if len(got) != 1 || got[0].ModelID != want.ModelID || got[0].Revision != want.Revision ||
 		got[0].BytesDone != want.BytesDone || got[0].BytesTotal != want.BytesTotal ||
 		got[0].Started == "" || got[0].Updated == "" {
 		t.Fatalf("durable download = %#v", got)

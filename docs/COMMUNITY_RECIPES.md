@@ -32,7 +32,7 @@ Community publication accepts two immutable-image container adapters:
 - `advanced-container-v1` under `cloudless.recipe/v2` lets the signed recipe define its complete
   in-container entry point and command, arbitrary engine arguments and environment, additional
   pinned model revisions, writable-root behavior, container user, IPC, shared memory, ulimits,
-  tmpfs, process limit, and Linux capabilities. It is intended for SM-specific kernels,
+  tmpfs, process limit, Linux capabilities, and a bounded two-to-eight-Spark NCCL topology. It is intended for SM-specific kernels,
   speculative decoders such as DFlash, custom attention backends, and other engine-owned stacks.
 
 Both adapters retain the platform-level invariants needed by Cloudless:
@@ -40,7 +40,10 @@ Both adapters retain the platform-level invariants needed by Cloudless:
 - the container image must be pinned by SHA-256 digest;
 - every Hugging Face model, including draft/speculator models, must be pinned to an exact 40- or
   64-character commit;
-- the recipe uses one local node and one-way tensor/pipeline parallelism;
+- `managed-container-v1` uses one local node and one-way tensor/pipeline parallelism;
+- a distributed `advanced-container-v1` recipe uses two through eight enrolled DGX Sparks, tensor
+  parallelism equal to node count, pipeline parallelism one, host IPC, and only the fixed
+  `/dev/infiniband` device tree;
 - the public model identity is always `cloudless`;
 - the private recipe server uses port `8890` and `/v1`;
 - no host commands, arbitrary host mounts, Docker socket, or arbitrary source repository are

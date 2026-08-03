@@ -107,6 +107,31 @@ func TestReconcileManagedModelViewsPreservesUserCollision(t *testing.T) {
 	}
 }
 
+func TestReconcileManagedModelViewsAcceptsMarkedRevisionWithOtherPartialBlob(t *testing.T) {
+	root := t.TempDir()
+	cacheRoot := filepath.Join(root, "cache")
+	modelsPath := filepath.Join(root, "Models")
+	revision := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	writeCompleteModelCache(t, cacheRoot, "poolside/Laguna-S-2.1-NVFP4", revision)
+	repo := filepath.Join(cacheRoot, "hub", "models--poolside--Laguna-S-2.1-NVFP4")
+	if err := os.WriteFile(filepath.Join(repo, "blobs", "other.incomplete"), []byte("partial"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	markers := filepath.Join(repo, ".cloudless-complete")
+	if err := os.MkdirAll(markers, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(markers, revision), []byte("complete\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := reconcileManagedModelViewsAt(cacheRoot, modelsPath); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(modelsPath, "poolside--Laguna-S-2.1-NVFP4", "model.bin")); err != nil {
+		t.Fatalf("marked completed revision was not exposed: %v", err)
+	}
+}
+
 func TestHardlinkManagedModelTreeRejectsEscapingSymlink(t *testing.T) {
 	root := t.TempDir()
 	cacheRoot := filepath.Join(root, "cache")

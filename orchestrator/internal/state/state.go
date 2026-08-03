@@ -101,6 +101,7 @@ type ModelPromotion struct {
 // Partial blobs remain in the shared cache and snapshot_download resumes them.
 type ModelDownload struct {
 	ModelID    string `json:"modelId"`
+	Revision   string `json:"revision,omitempty"`
 	Phase      string `json:"phase"`
 	Message    string `json:"message,omitempty"`
 	BytesDone  int64  `json:"bytesDone,omitempty"`

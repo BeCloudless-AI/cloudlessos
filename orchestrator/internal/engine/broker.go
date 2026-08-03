@@ -45,6 +45,7 @@ type brokerResponse struct {
 	Containers []Container       `json:"containers,omitempty"`
 	Image      ImageInfo         `json:"image,omitempty"`
 	Images     []ImageDigestRef  `json:"images,omitempty"`
+	IO         ContainerIO       `json:"io,omitempty"`
 }
 
 type BrokerClient struct {
@@ -238,6 +239,10 @@ func (c *BrokerClient) Logs(ctx context.Context, name string) (string, error) {
 	response, err := c.call(ctx, brokerRequest{Action: "container.logs", Name: name}, nil)
 	return response.Output, err
 }
+func (c *BrokerClient) ContainerIO(ctx context.Context, name string) (ContainerIO, error) {
+	response, err := c.call(ctx, brokerRequest{Action: "container.io", Name: name}, nil)
+	return response.IO, err
+}
 func (c *BrokerClient) ImageDigest(ctx context.Context, image string) (string, error) {
 	response, err := c.call(ctx, brokerRequest{Action: "image.digest", Image: image}, nil)
 	return response.Output, err
@@ -410,6 +415,13 @@ func executeBrokerAction(
 		response.Container, err = runtime.Find(ctx, request.Name)
 	case "container.logs":
 		response.Output, err = runtime.Logs(ctx, request.Name)
+	case "container.io":
+		reader, ok := runtime.(ContainerIOReader)
+		if !ok {
+			err = errors.New("container IO telemetry is unavailable")
+		} else {
+			response.IO, err = reader.ContainerIO(ctx, request.Name)
+		}
 	case "image.digest":
 		response.Output, err = runtime.ImageDigest(ctx, request.Image)
 	case "image.remote-digest":

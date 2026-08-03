@@ -42,11 +42,16 @@ func (s *Server) observeRecipeJob(job *jobs.Job, operationID string) {
 		if overall > 0 && overall < 100 && update.ElapsedSecs > 0 {
 			eta = update.ElapsedSecs * int64(100-overall) / int64(overall)
 		}
+		components := make([]recipeops.ProgressComponent, 0, len(update.Components))
+		for _, component := range update.Components {
+			components = append(components, recipeops.ProgressComponent{Name: component.Name, Status: component.Status, BytesDone: component.BytesDone, BytesTotal: component.BytesTotal, BytesPerSecond: component.BytesPerSec, ETASeconds: component.ETASeconds})
+		}
 		_, err := s.recipeOps.RecordProgress(operationID, recipeops.Progress{
 			Stage: update.Phase, Message: update.Message, OverallPercent: overall, PhasePercent: phasePercent,
 			Completed: update.LayersDone, Total: update.LayersTotal,
 			BytesDone: update.BytesDone, BytesTotal: update.BytesTotal,
 			ElapsedSeconds: update.ElapsedSecs, ETASeconds: eta,
+			BytesPerSecond: update.BytesPerSec, StalledSeconds: update.StalledSecs, Components: components,
 		})
 		if err != nil {
 			log.Printf("[recipe-progress] persist %s: %v", operationID, err)

@@ -715,6 +715,8 @@ func TestRecipeUIUsesRecipesIconAndCloudlessSourceViewer(t *testing.T) {
 		`id="recipe-show-drafts"`,
 		`trust.executionAllowed === true`,
 		`data-recipe-install-model`,
+		`openModelManagerFor(recipe.model.id, recipe.model.revision || '')`,
+		`JSON.stringify({ id: m.id, revision, token })`,
 		`recipeModelInstalled(recipe, data)`,
 		`recipeValidated(recipe, data)`,
 		`Execution blocked`,

@@ -45,7 +45,7 @@ func IsContainerAdapter(adapter string) bool {
 func containerRuntimeConfigured(value ContainerRuntime) bool {
 	return value.User != "" || value.ReadOnly || value.IPC != "" || value.ShmSize != "" ||
 		len(value.Ulimits) != 0 || len(value.CapAdd) != 0 || len(value.CapDrop) != 0 ||
-		len(value.Tmpfs) != 0 || value.PidsLimit != 0 || value.ModelCachePath != ""
+		len(value.Tmpfs) != 0 || value.PidsLimit != 0 || value.ModelCachePath != "" || value.Infiniband
 }
 
 func validateManagedContainerDraft(d Draft) error {
@@ -76,8 +76,22 @@ func validateManagedContainerDraft(d Draft) error {
 			return errors.New("advanced container model dependencies require an ID and immutable 40- or 64-character revision")
 		}
 	}
-	if d.Distributed.Nodes != 1 || len(d.Distributed.SelectedNodes) != 0 || d.Runtime.BuildOnce || d.Runtime.DownloadOnce {
-		return errors.New("managed container recipes currently support one local node")
+	if adapter == ManagedContainerAdapter && (d.Distributed.Nodes != 1 || len(d.Distributed.SelectedNodes) != 0 || d.Runtime.BuildOnce || d.Runtime.DownloadOnce) {
+		return errors.New("managed-container-v1 supports one local node; use advanced-container-v1 for a distributed container")
+	}
+	if adapter == AdvancedContainerAdapter && d.Distributed.Nodes > 1 {
+		if d.Distributed.Nodes > 8 {
+			return errors.New("distributed advanced containers support two through eight DGX Sparks")
+		}
+		if d.Model.TensorParallel != d.Distributed.Nodes || d.Model.PipelineParallel != 1 {
+			return errors.New("distributed advanced containers require tensor parallelism equal to node count and pipeline parallelism 1")
+		}
+		if d.Platform != "dgx-spark" || !d.Runtime.BuildOnce || !d.Runtime.DownloadOnce {
+			return errors.New("distributed advanced containers require DGX Spark and coordinator-owned image and model distribution")
+		}
+		if d.Distributed.Backend != "nccl" || d.Runtime.Container.IPC != "host" || !d.Runtime.Container.Infiniband {
+			return errors.New("distributed advanced containers require NCCL, host IPC, and the bounded InfiniBand device permission")
+		}
 	}
 	if len(d.Runtime.Prerequisites) != 0 {
 		return errors.New("managed container recipes cannot request host prerequisites")

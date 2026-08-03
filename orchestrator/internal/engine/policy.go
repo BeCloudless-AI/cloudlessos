@@ -85,6 +85,11 @@ func ValidateRunSpec(spec RunSpec) error {
 			return fmt.Errorf("tmpfs target %q is not allowed", target)
 		}
 	}
+	for _, device := range spec.Devices {
+		if strings.TrimSpace(device) != "/dev/infiniband:/dev/infiniband" {
+			return fmt.Errorf("container device %q is not allowed", device)
+		}
+	}
 	for _, host := range spec.ExtraHosts {
 		if strings.TrimSpace(host) != "host.docker.internal:host-gateway" {
 			return fmt.Errorf("extra host %q is not allowed", host)

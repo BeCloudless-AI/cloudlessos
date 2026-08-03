@@ -128,6 +128,10 @@ type ContainerRuntime struct {
 	Tmpfs          []string `json:"tmpfs,omitempty" yaml:"tmpfs,omitempty"`
 	PidsLimit      int      `json:"pidsLimit,omitempty" yaml:"pidsLimit,omitempty"`
 	ModelCachePath string   `json:"modelCachePath,omitempty" yaml:"modelCachePath,omitempty"`
+	// Infiniband grants only the fixed /dev/infiniband device tree. Distributed
+	// advanced containers use it for the enrolled Spark fabric; arbitrary
+	// device paths remain impossible to express in a recipe.
+	Infiniband bool `json:"infiniband,omitempty" yaml:"infiniband,omitempty"`
 }
 
 type Health struct {

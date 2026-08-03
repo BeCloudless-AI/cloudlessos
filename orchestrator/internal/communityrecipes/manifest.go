@@ -101,8 +101,8 @@ func ValidateManagedManifest(manifest map[string]any) error {
 	if err != nil {
 		return err
 	}
-	if !modelRevisionPattern.MatchString(textField(model, "revision")) || numberField(model, "tensorParallel") != 1 || numberField(model, "pipelineParallel") != 1 {
-		return errors.New("managed recipes require a pinned model and one-way local parallelism")
+	if !modelRevisionPattern.MatchString(textField(model, "revision")) {
+		return errors.New("container recipes require a pinned model revision")
 	}
 	if dependencies, ok := model["dependencies"].([]any); ok {
 		for _, item := range dependencies {
@@ -112,10 +112,6 @@ func ValidateManagedManifest(manifest map[string]any) error {
 			}
 		}
 	}
-	distributed, err := mapField(recipe, "distributed")
-	if err != nil || numberField(distributed, "nodes") != 1 {
-		return errors.New("managed recipes currently require one local node")
-	}
 	runtime, err := mapField(recipe, "runtime")
 	adapter := textField(runtime, "adapter")
 	if err != nil || (adapter != "managed-container-v1" && adapter != "advanced-container-v1") || textField(runtime, "workingDir") != "" {
@@ -123,6 +119,22 @@ func ValidateManagedManifest(manifest map[string]any) error {
 	}
 	if adapter == "advanced-container-v1" && manifestSchema != AdvancedManifestSchema {
 		return errors.New("advanced-container-v1 requires schema cloudless.recipe/v2")
+	}
+	distributed, err := mapField(recipe, "distributed")
+	if err != nil {
+		return err
+	}
+	nodes := numberField(distributed, "nodes")
+	if adapter == "managed-container-v1" && (nodes != 1 || numberField(model, "tensorParallel") != 1 || numberField(model, "pipelineParallel") != 1) {
+		return errors.New("managed-container-v1 requires one local node and one-way parallelism")
+	}
+	if adapter == "advanced-container-v1" && nodes > 1 {
+		container, containerErr := mapField(runtime, "container")
+		if nodes < 2 || nodes > 8 || numberField(model, "tensorParallel") != nodes || numberField(model, "pipelineParallel") != 1 ||
+			textField(recipe, "platform") != "dgx-spark" || textField(distributed, "backend") != "nccl" || containerErr != nil ||
+			textField(container, "ipc") != "host" || container["infiniband"] != true || runtime["buildOnce"] != true || runtime["downloadOnce"] != true {
+			return errors.New("distributed advanced containers require 2-8 nodes, matching tensor parallelism, NCCL, host IPC, and InfiniBand")
+		}
 	}
 	lifecycle, err := mapField(runtime, "lifecycle")
 	if err != nil {

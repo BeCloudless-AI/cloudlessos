@@ -3,7 +3,7 @@ schema: cloudless.recipe/v2
 metadata:
   name: Laguna S 2.1 NVFP4 DFlash DGX Spark
   description: MiaAI-Lab's pinned Laguna S 2.1 NVFP4 and DFlash serving stack with SM121 FlashInfer optimization for DGX Spark.
-  version: 1.0.1
+  version: 1.0.2
   author: MiaLabs
   category: language-model
   license: Proprietary
@@ -44,7 +44,7 @@ recipe:
           pip install --upgrade "cuda-tile==1.5.0" "nccl4py==0.3.1"
         fi
         exec vllm serve poolside/Laguna-S-2.1-NVFP4 \
-          --revision f8fdfcdc4e7b0c474a0102430a8cae0a3a358669 \
+          --revision 07614121b31898586430f189d27a25a0be310843 \
           --served-model-name cloudless \
           --host 0.0.0.0 \
           --port 8890 \
@@ -64,7 +64,7 @@ recipe:
           --speculative-config '{"model":"poolside/Laguna-S-2.1-DFlash-NVFP4","revision":"b3b5921a900b9e0a1e27e50bdaeb480692a6d19b","num_speculative_tokens":7,"method":"dflash"}'
   model:
     id: poolside/Laguna-S-2.1-NVFP4
-    revision: "f8fdfcdc4e7b0c474a0102430a8cae0a3a358669"
+    revision: "07614121b31898586430f189d27a25a0be310843"
     quantization: ""
     dtype: bfloat16
     kvCacheDtype: auto

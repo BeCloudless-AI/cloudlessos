@@ -157,17 +157,29 @@ type CheckResult struct {
 }
 
 type Progress struct {
-	Stage          string `json:"stage"`
-	Message        string `json:"message"`
-	OverallPercent int    `json:"overallPercent"`
-	PhasePercent   int    `json:"phasePercent"`
-	Completed      int    `json:"completed,omitempty"`
-	Total          int    `json:"total,omitempty"`
+	Stage          string              `json:"stage"`
+	Message        string              `json:"message"`
+	OverallPercent int                 `json:"overallPercent"`
+	PhasePercent   int                 `json:"phasePercent"`
+	Completed      int                 `json:"completed,omitempty"`
+	Total          int                 `json:"total,omitempty"`
+	BytesDone      int64               `json:"bytesDone,omitempty"`
+	BytesTotal     int64               `json:"bytesTotal,omitempty"`
+	ElapsedSeconds int64               `json:"elapsedSeconds,omitempty"`
+	ETASeconds     int64               `json:"etaSeconds,omitempty"`
+	BytesPerSecond int64               `json:"bytesPerSecond,omitempty"`
+	StalledSeconds int64               `json:"stalledSeconds,omitempty"`
+	Components     []ProgressComponent `json:"components,omitempty"`
+	UpdatedAt      string              `json:"updatedAt"`
+}
+
+type ProgressComponent struct {
+	Name           string `json:"name"`
+	Status         string `json:"status"`
 	BytesDone      int64  `json:"bytesDone,omitempty"`
 	BytesTotal     int64  `json:"bytesTotal,omitempty"`
-	ElapsedSeconds int64  `json:"elapsedSeconds,omitempty"`
+	BytesPerSecond int64  `json:"bytesPerSecond,omitempty"`
 	ETASeconds     int64  `json:"etaSeconds,omitempty"`
-	UpdatedAt      string `json:"updatedAt"`
 }
 
 type Checkpoint struct {

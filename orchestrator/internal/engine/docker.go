@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"syscall"
 
@@ -524,6 +525,9 @@ func runArgs(spec RunSpec) []string {
 			args = append(args, "--gpus", spec.GPUs)
 		}
 	}
+	for _, device := range sortedNonEmpty(spec.Devices) {
+		args = append(args, "--device", device)
+	}
 	if spec.Network != "" {
 		args = append(args, "--network", spec.Network)
 		if spec.Network != "host" && spec.NetworkAlias != "" {
@@ -574,6 +578,19 @@ func runArgs(spec RunSpec) []string {
 	args = append(args, spec.Image)
 	args = append(args, spec.Args...)
 	return args
+}
+
+// RunArguments returns the validated Docker argv for a managed container.
+// Distributed recipe launchers use the same deterministic renderer when the
+// exact spec must be sent through Cloudless's restricted peer SSH channel.
+func RunArguments(spec RunSpec) ([]string, error) {
+	if err := ValidateRunSpec(spec); err != nil {
+		return nil, err
+	}
+	if err := validateGPURequest(spec.GPUs); err != nil {
+		return nil, err
+	}
+	return runArgs(spec), nil
 }
 
 func transientArgs(spec RunSpec) []string {
@@ -842,6 +859,57 @@ func (d *Docker) Logs(ctx context.Context, name string) (string, error) {
 		return "", fmt.Errorf("logs %s: %v: %s", name, err, strings.TrimSpace(errs))
 	}
 	return out + errs, nil
+}
+
+func parseDockerByteValue(value string) (int64, error) {
+	value = strings.TrimSpace(value)
+	if value == "" || value == "0B" {
+		return 0, nil
+	}
+	index := 0
+	for index < len(value) && (value[index] == '.' || value[index] >= '0' && value[index] <= '9') {
+		index++
+	}
+	if index == 0 {
+		return 0, fmt.Errorf("invalid byte value %q", value)
+	}
+	number, err := strconv.ParseFloat(value[:index], 64)
+	if err != nil {
+		return 0, err
+	}
+	unit := strings.ToUpper(strings.TrimSpace(value[index:]))
+	multipliers := map[string]float64{"B": 1, "KB": 1e3, "MB": 1e6, "GB": 1e9, "TB": 1e12, "KIB": 1 << 10, "MIB": 1 << 20, "GIB": 1 << 30, "TIB": 1 << 40}
+	multiplier, ok := multipliers[unit]
+	if !ok {
+		return 0, fmt.Errorf("invalid byte unit %q", unit)
+	}
+	return int64(number * multiplier), nil
+}
+
+// ContainerIO returns Docker's direct network counters for one managed
+// container. These counters remain useful even when installers redraw or omit
+// their console progress lines.
+func (d *Docker) ContainerIO(ctx context.Context, name string) (ContainerIO, error) {
+	if err := validateManagedName("container", name); err != nil {
+		return ContainerIO{}, err
+	}
+	out, errs, err := d.exec(ctx, "stats", "--no-stream", "--format", "{{.NetIO}}", name)
+	if err != nil {
+		return ContainerIO{}, fmt.Errorf("inspect network IO %s: %v: %s", name, err, strings.TrimSpace(errs))
+	}
+	parts := strings.Split(strings.TrimSpace(out), "/")
+	if len(parts) != 2 {
+		return ContainerIO{}, fmt.Errorf("unexpected network IO for %s", name)
+	}
+	received, err := parseDockerByteValue(parts[0])
+	if err != nil {
+		return ContainerIO{}, err
+	}
+	sent, err := parseDockerByteValue(parts[1])
+	if err != nil {
+		return ContainerIO{}, err
+	}
+	return ContainerIO{ReceivedBytes: received, SentBytes: sent}, nil
 }
 
 func (d *Docker) Find(ctx context.Context, name string) (*Container, error) {

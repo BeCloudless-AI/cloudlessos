@@ -94,3 +94,25 @@ func TestAdvancedContainerDraftStillRequiresPinnedArtifacts(t *testing.T) {
 		t.Fatalf("mutable auxiliary model error = %v", err)
 	}
 }
+
+func TestAdvancedContainerDraftAllowsBoundedDistributedSparkRuntime(t *testing.T) {
+	draft := managedContainerTestDraft()
+	draft.Runtime.Adapter = AdvancedContainerAdapter
+	draft.Engine.EntryPoint = "/bin/bash"
+	draft.Engine.Command = []string{"-lc", "exec vllm serve model --nnodes 2 --node-rank $NODE_RANK"}
+	draft.Engine.Arguments = nil
+	draft.Model.TensorParallel = 2
+	draft.Model.PipelineParallel = 1
+	draft.Distributed.Nodes = 2
+	draft.Distributed.Backend = "nccl"
+	draft.Runtime.BuildOnce = true
+	draft.Runtime.DownloadOnce = true
+	draft.Runtime.Container = ContainerRuntime{IPC: "host", Infiniband: true}
+	if _, err := validateDraft(draft); err != nil {
+		t.Fatalf("validate distributed advanced container: %v", err)
+	}
+	draft.Runtime.Container.Infiniband = false
+	if _, err := validateDraft(draft); err == nil || !strings.Contains(err.Error(), "InfiniBand") {
+		t.Fatalf("missing InfiniBand permission error = %v", err)
+	}
+}

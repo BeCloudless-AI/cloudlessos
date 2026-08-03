@@ -35,6 +35,16 @@ func TestPrepareImportsCacheWithoutDeletingLegacyData(t *testing.T) {
 	if rootInfo.Mode()&os.ModeSetgid == 0 || rootInfo.Mode().Perm() != 0o750 {
 		t.Fatalf("cache root mode = %v, want setgid 750", rootInfo.Mode())
 	}
+	runtimeInfo, err := os.Stat(filepath.Join(root, runtimeCacheName))
+	if err != nil || runtimeInfo.Mode()&os.ModeSticky == 0 || runtimeInfo.Mode().Perm() != 0o777 {
+		t.Fatalf("runtime cache mode = %v, %v; want sticky 777", runtimeInfo, err)
+	}
+	for _, name := range []string{"pip", "uv", "torch-extensions"} {
+		info, statErr := os.Stat(filepath.Join(root, runtimeCacheName, name))
+		if statErr != nil || info.Mode()&os.ModeSticky == 0 || info.Mode().Perm() != 0o777 {
+			t.Fatalf("%s cache mode = %v, %v; want sticky 777", name, info, statErr)
+		}
+	}
 	imported := filepath.Join(root, "hub", "models--org--model", "snapshots", "rev", "model.bin")
 	data, err := os.ReadFile(imported)
 	if err != nil || string(data) != "weights" {

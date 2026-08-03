@@ -1,0 +1,186 @@
+schema: cloudless.recipe/v2
+
+metadata:
+  name: DeepSeek V4 Flash 0731 DSpark 2x DGX Spark
+  description: MiaAI-Lab's pinned two-DGX-Spark DeepSeek V4 Flash 0731 profile with DSpark, NVFP4 DS-MLA KV cache, FlashInfer b12x MoE, and a one-million-token context window.
+  version: 1.0.1
+  author: MiaLabs
+  category: language-model
+  license: MIT
+  tags: [vllm, deepseek-v4, dspark, nvfp4, flashinfer, sm121, dgx-spark, multi-node, coding, reasoning]
+  minimumAcceleratorMemoryGB: 128
+
+recipe:
+  name: DeepSeek V4 Flash 0731 DSpark 2x DGX Spark
+  description: Runs the exact DeepSeek V4 Flash 0731 checkpoint and Anemll DSpark vLLM image across two enrolled DGX Sparks with TP=2 and MiaAI-Lab's validated 1M NVFP4 DS-MLA serving parameters.
+  platform: dgx-spark
+  source:
+    url: ""
+    revision: ""
+    files: {}
+  engine:
+    type: vllm
+    image: ghcr.io/anemll/dspark-vllm-gx10@sha256:a83948492cf13df455170fb42885f5ef4db54fefe0feff0f841ecbff464ac9d8
+    servedModelName: cloudless
+    containerPort: 8890
+    apiPath: /v1
+    proxyHost: host.docker.internal
+    restartPolicy: "no"
+    arguments: []
+    entryPoint: /bin/bash
+    command:
+      - -lc
+      - |-
+        set -euo pipefail
+        export PATH="/usr/local/cuda/bin:/usr/local/bin:${PATH:-}"
+        export CUDA_HOME="${CUDA_HOME:-/usr/local/cuda}"
+        export CUDA_PATH="${CUDA_PATH:-${CUDA_HOME}}"
+        export CUDAToolkit_ROOT="${CUDAToolkit_ROOT:-${CUDA_HOME}}"
+        export LD_LIBRARY_PATH="/usr/local/cuda/lib64:${LD_LIBRARY_PATH:-}"
+
+        ENCODING_SOURCE=/cache/huggingface/hub/models--deepseek-ai--DeepSeek-V4-Flash-0731/snapshots/9e165c30e2704aec5d9d593cce3eebd58bbef1cb/encoding/encoding_dsv4.py
+        test -f "$ENCODING_SOURCE"
+        cp "$ENCODING_SOURCE" /usr/local/lib/python3.12/dist-packages/vllm/tokenizers/deepseek_v4_encoding.py
+        python3 - <<'PY'
+        from pathlib import Path
+        path = Path("/usr/local/lib/python3.12/dist-packages/vllm/tokenizers/deepseek_v4.py")
+        source = path.read_text()
+        old = '''elif reasoning_effort in ("max", "xhigh"):
+                        reasoning_effort = "max"
+                    else:
+                        reasoning_effort = "high"'''
+        new = '''elif reasoning_effort in ("max", "xhigh"):
+                        reasoning_effort = "max"
+                    elif reasoning_effort == "high":
+                        reasoning_effort = "high"
+                    else:
+                        reasoning_effort = "low"'''
+        if new not in source:
+            source = source.replace(old, new)
+        if new not in source:
+            raise SystemExit("DeepSeek V4 reasoning-effort compatibility patch did not apply")
+        path.write_text(source)
+        PY
+
+        SPECULATIVE_CONFIG='{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic"}'
+        DEFAULT_CHAT_TEMPLATE_KWARGS='{"thinking":true,"reasoning_effort":"low"}'
+        exec /usr/local/bin/vllm serve deepseek-ai/DeepSeek-V4-Flash-0731 \
+          --revision 9e165c30e2704aec5d9d593cce3eebd58bbef1cb \
+          --served-model-name cloudless \
+          --host 0.0.0.0 \
+          --port 8890 \
+          --trust-remote-code \
+          --tensor-parallel-size 2 \
+          --pipeline-parallel-size 1 \
+          --kv-cache-dtype nvfp4_ds_mla \
+          --block-size 256 \
+          --max-model-len 1048576 \
+          --max-num-seqs 6 \
+          --max-num-batched-tokens 8192 \
+          --max-cudagraph-capture-size 36 \
+          --gpu-memory-utilization 0.80 \
+          --enable-prefix-caching \
+          --enable-prompt-tokens-details \
+          --async-scheduling \
+          --enable-chunked-prefill \
+          --speculative-config "$SPECULATIVE_CONFIG" \
+          --tokenizer-mode deepseek_v4 \
+          --distributed-executor-backend mp \
+          --moe-backend flashinfer_b12x \
+          --tool-call-parser deepseek_v4 \
+          --enable-auto-tool-choice \
+          --reasoning-parser deepseek_v4 \
+          --reasoning-config '{"reasoning_parser":"deepseek_v4","reasoning_start_str":"<think>","reasoning_end_str":"</think>"}' \
+          --default-chat-template-kwargs "$DEFAULT_CHAT_TEMPLATE_KWARGS" \
+          --generation-config vllm \
+          --enable-flashinfer-autotune \
+          --nnodes 2 \
+          --node-rank "$NODE_RANK" \
+          --master-addr "$MASTER_ADDR" \
+          --master-port "$MASTER_PORT" \
+          ${HEADLESS:+--headless}
+  model:
+    id: deepseek-ai/DeepSeek-V4-Flash-0731
+    revision: "9e165c30e2704aec5d9d593cce3eebd58bbef1cb"
+    quantization: ""
+    dtype: auto
+    kvCacheDtype: nvfp4_ds_mla
+    maxContext: 1048576
+    maxSequences: 6
+    gpuMemoryUtilization: 0.80
+    tensorParallel: 2
+    pipelineParallel: 1
+    trustRemoteCode: true
+    dependencies: []
+  distributed:
+    nodes: 2
+    backend: nccl
+    masterPort: 25000
+    interface: auto
+    hca: auto
+    ibGidIndex: 0
+    workerAlias: cloudless-deepseek-worker
+    selectedNodes: []
+  runtime:
+    adapter: advanced-container-v1
+    buildOnce: true
+    downloadOnce: true
+    workingDir: ""
+    timeoutMinutes: 360
+    prerequisites: []
+    environment:
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+      HF_HUB_DISABLE_XET: "1"
+      VLLM_ALLOW_LONG_MAX_MODEL_LEN: "1"
+      VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: "256"
+      VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS: "0"
+      VLLM_USE_FLASHINFER_SAMPLER: "1"
+      VLLM_USE_BREAKABLE_CUDAGRAPH: "0"
+      VLLM_USE_B12X_MOE: "1"
+      VLLM_B12X_W4A16_FORCE_BLOCKS_PER_SM: "0"
+      VLLM_B12X_W4A16_FORCE_BLOCKS_MAX_M: "16"
+      TORCH_CUDA_ARCH_LIST: 12.1a
+      FLASHINFER_CUDA_ARCH_LIST: 12.1a
+      CUTE_DSL_ARCH: sm_121a
+      FLASHINFER_DISABLE_VERSION_CHECK: "1"
+      FLASHINFER_WORKSPACE_BASE: /cache/huggingface/flashinfer
+      TILELANG_CLEANUP_TEMP_FILES: "1"
+      DG_JIT_USE_NVRTC: "0"
+      DG_JIT_NVCC_COMPILER: /usr/local/cuda/bin/nvcc
+      PYTORCH_CUDA_ALLOC_CONF: expandable_segments:True
+      NCCL_NET: IB
+      NCCL_IB_DISABLE: "0"
+      NCCL_IB_ADDR_FAMILY: AF_INET
+      NCCL_IB_ROCE_VERSION_NUM: "2"
+      NCCL_CROSS_NIC: "1"
+      NCCL_CUMEM_ENABLE: "0"
+      NCCL_IGNORE_CPU_AFFINITY: "1"
+      NCCL_DEBUG: WARN
+      NCCL_NVLS_ENABLE: "0"
+      MTP_NUM_TOKENS: "5"
+      DEFAULT_THINKING: low
+    container:
+      user: "0"
+      readOnly: false
+      ipc: host
+      shmSize: 64g
+      ulimits: [memlock=-1:-1, stack=67108864]
+      capAdd: [IPC_LOCK]
+      capDrop: []
+      tmpfs: []
+      pidsLimit: 8192
+      modelCachePath: /cache/huggingface
+      infiniband: true
+    lifecycle:
+      build: {program: "", args: []}
+      download: {program: "", args: []}
+      start: {program: "", args: []}
+      stop: {program: "", args: []}
+  health:
+    scheme: http
+    host: 127.0.0.1
+    port: 8890
+    path: /v1/models
+    timeoutSeconds: 7200
+    intervalSeconds: 5

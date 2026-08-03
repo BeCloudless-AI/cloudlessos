@@ -12,13 +12,14 @@ func TestEmbeddedWebExplainsManagedRecipeStartupProgress(t *testing.T) {
 	}
 	page := string(content)
 	for _, want := range []string{
-		`'installing-runtime':'starting'`,
-		`'loading-model':'starting'`,
-		`'loading-draft':'starting'`,
-		`'compiling-kernels':'starting'`,
-		`'warming-engine':'starting'`,
+		`'installing-runtime':'preparing-dependencies'`,
+		`'loading-draft':'loading-model'`,
+		`'warming-engine':'compiling-kernels'`,
+		`'downloading-dependencies':'Downloading runtime dependencies'`,
 		`'loading-model':'Loading main model weights'`,
-		`'loading-draft':'Loading DFlash draft weights'`,
+		`recipeProgressComponentsHTML(job)`,
+		`recipeProgressStallHTML(job)`,
+		`data-retry-stalled-recipe`,
 		`job&&job.percent>0?job.percent`,
 		`' checkpoint shards'`,
 		`operationDuration(job.etaSeconds)+' remaining'`,

@@ -30,6 +30,7 @@ type RunSpec struct {
 	Tmpfs        []string          // isolated writable tmpfs mounts
 	PidsLimit    int               // maximum number of container processes (0 = Docker default)
 	ShmSize      string            // private /dev/shm allocation (for example 16g)
+	Devices      []string          // narrowly admitted host devices (currently only /dev/infiniband)
 }
 
 // Container is the orchestrator's view of a container.
@@ -40,6 +41,19 @@ type Container struct {
 	State  string `json:"state"`  // running, exited, created, ...
 	Status string `json:"status"` // human-readable (e.g. "Up 3 minutes")
 	Ports  string `json:"ports"`
+}
+
+// ContainerIO is a monotonic snapshot of traffic attributed to one managed
+// container. Startup observers use it instead of scraping human console output.
+type ContainerIO struct {
+	ReceivedBytes int64 `json:"receivedBytes"`
+	SentBytes     int64 `json:"sentBytes"`
+}
+
+// ContainerIOReader is optional so test and third-party Engine implementations
+// remain source compatible. Docker and the privileged broker implement it.
+type ContainerIOReader interface {
+	ContainerIO(ctx context.Context, name string) (ContainerIO, error)
 }
 
 // ImageInfo is the bounded metadata Cloudless needs from a local image.

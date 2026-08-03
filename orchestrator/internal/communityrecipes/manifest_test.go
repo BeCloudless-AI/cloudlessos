@@ -34,6 +34,7 @@ func TestValidateAdvancedContainerManifest(t *testing.T) {
 	manifest := safeManifest()
 	manifest["schema"] = AdvancedManifestSchema
 	recipe := manifest["recipe"].(map[string]any)
+	recipe["platform"] = "dgx-spark"
 	engine := recipe["engine"].(map[string]any)
 	model := recipe["model"].(map[string]any)
 	runtime := recipe["runtime"].(map[string]any)
@@ -50,5 +51,27 @@ func TestValidateAdvancedContainerManifest(t *testing.T) {
 	manifest["schema"] = ManifestSchema
 	if err := ValidateManagedManifest(manifest); err == nil {
 		t.Fatal("advanced container was accepted under the frozen v1 manifest schema")
+	}
+}
+
+func TestValidateDistributedAdvancedContainerManifest(t *testing.T) {
+	manifest := safeManifest()
+	manifest["schema"] = AdvancedManifestSchema
+	recipe := manifest["recipe"].(map[string]any)
+	recipe["platform"] = "dgx-spark"
+	recipe["engine"].(map[string]any)["image"] = "ghcr.io/cloudless/vllm@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+	recipe["model"].(map[string]any)["tensorParallel"] = 2
+	recipe["distributed"] = map[string]any{"nodes": 2, "backend": "nccl"}
+	runtime := recipe["runtime"].(map[string]any)
+	runtime["adapter"] = "advanced-container-v1"
+	runtime["buildOnce"] = true
+	runtime["downloadOnce"] = true
+	runtime["container"] = map[string]any{"ipc": "host", "infiniband": true}
+	if err := ValidateManagedManifest(manifest); err != nil {
+		t.Fatal(err)
+	}
+	runtime["container"].(map[string]any)["infiniband"] = false
+	if err := ValidateManagedManifest(manifest); err == nil {
+		t.Fatal("distributed container without bounded InfiniBand permission was accepted")
 	}
 }

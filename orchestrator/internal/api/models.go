@@ -95,6 +95,12 @@ func modelCacheComplete(repoDir string) bool {
 	if stat, err := os.Stat(snapshot); err != nil || !stat.IsDir() {
 		return false
 	}
+	// New downloads receive a revision-scoped success marker. Unfinished blobs
+	// from another revision may remain for resume and do not invalidate it.
+	if _, err := os.Stat(filepath.Join(repoDir, ".cloudless-complete", strings.TrimSpace(string(revision)))); err == nil {
+		return true
+	}
+	// Preserve compatibility with caches created before completion markers.
 	incomplete := false
 	_ = filepath.WalkDir(filepath.Join(repoDir, "blobs"), func(path string, d os.DirEntry, err error) error {
 		if err == nil && !d.IsDir() && strings.HasSuffix(path, ".incomplete") {
@@ -103,6 +109,44 @@ func modelCacheComplete(repoDir string) bool {
 		return nil
 	})
 	return !incomplete
+}
+
+func markModelRevisionComplete(root, repo, revision string) error {
+	if root == "" {
+		return errors.New("Cloudless model cache is unavailable")
+	}
+	cacheName, ok := modelCacheName(repo)
+	if !ok {
+		return errors.New("invalid model id")
+	}
+	repoRoot := filepath.Join(root, "hub", cacheName)
+	if revision == "" {
+		resolved, err := os.ReadFile(filepath.Join(repoRoot, "refs", "main"))
+		if err != nil {
+			return fmt.Errorf("resolve downloaded model revision: %w", err)
+		}
+		revision = strings.TrimSpace(string(resolved))
+	}
+	if !immutableHubRevision(strings.ToLower(revision)) {
+		return errors.New("downloaded model did not resolve to an immutable revision")
+	}
+	if stat, err := os.Stat(filepath.Join(repoRoot, "snapshots", revision)); err != nil || !stat.IsDir() {
+		return errors.New("downloaded model snapshot is missing")
+	}
+	refs := filepath.Join(repoRoot, "refs")
+	if err := os.MkdirAll(refs, 0o755); err != nil {
+		return err
+	}
+	// An explicit recipe commit may not create refs/main. Make the successfully
+	// verified revision the cache's current view for scanning and Models export.
+	if err := os.WriteFile(filepath.Join(refs, "main"), []byte(revision+"\n"), 0o644); err != nil {
+		return err
+	}
+	markers := filepath.Join(repoRoot, ".cloudless-complete")
+	if err := os.MkdirAll(markers, 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(markers, revision), []byte("complete\n"), 0o644)
 }
 
 // exposeModelCache is the development fallback for environments without the
@@ -265,6 +309,28 @@ func modelCacheName(repo string) (string, bool) {
 	return "models--" + strings.ReplaceAll(repo, "/", "--"), true
 }
 
+func immutableHubRevision(revision string) bool {
+	if len(revision) != 40 && len(revision) != 64 {
+		return false
+	}
+	for _, char := range revision {
+		if (char < '0' || char > '9') && (char < 'a' || char > 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+func resolvedModelDownloadRevision(repo, requested string) string {
+	if requested = strings.TrimSpace(requested); requested != "" {
+		return requested
+	}
+	if model, ok := models.Get(repo); ok && model.RuntimeImage != "" {
+		return strings.TrimSpace(model.Revision)
+	}
+	return ""
+}
+
 func (s *Server) registerModelJob(jobID string, cancel context.CancelFunc) {
 	s.modelJobsMu.Lock()
 	defer s.modelJobsMu.Unlock()
@@ -274,9 +340,26 @@ func (s *Server) registerModelJob(jobID string, cancel context.CancelFunc) {
 	s.modelJobs[jobID] = cancel
 }
 
+func (s *Server) registerModelDownloadJob(jobID, revision string, cancel context.CancelFunc) {
+	s.registerModelJob(jobID, cancel)
+	s.modelJobsMu.Lock()
+	if s.modelJobRevisions == nil {
+		s.modelJobRevisions = make(map[string]string)
+	}
+	s.modelJobRevisions[jobID] = strings.TrimSpace(revision)
+	s.modelJobsMu.Unlock()
+}
+
+func (s *Server) modelJobRevision(jobID string) string {
+	s.modelJobsMu.Lock()
+	defer s.modelJobsMu.Unlock()
+	return s.modelJobRevisions[jobID]
+}
+
 func (s *Server) unregisterModelJob(jobID string) {
 	s.modelJobsMu.Lock()
 	delete(s.modelJobs, jobID)
+	delete(s.modelJobRevisions, jobID)
 	s.modelJobsMu.Unlock()
 }
 
@@ -295,7 +378,7 @@ func modelDownloadContainerName(repo string) string {
 	return fmt.Sprintf("cloudless-model-download-%x", sum[:8])
 }
 
-func (s *Server) observeModelDownload(job *jobs.Job, repo string) {
+func (s *Server) observeModelDownload(job *jobs.Job, repo, revision string) {
 	job.Observe(func(update jobs.Update) {
 		if update.Done && update.Phase != "error" {
 			if err := s.state.RemoveModelDownload(repo); err != nil {
@@ -304,7 +387,7 @@ func (s *Server) observeModelDownload(job *jobs.Job, repo string) {
 			return
 		}
 		download := state.ModelDownload{
-			ModelID: repo, Phase: update.Phase, Message: update.Message,
+			ModelID: repo, Revision: revision, Phase: update.Phase, Message: update.Message,
 			BytesDone: update.BytesDone, BytesTotal: update.BytesTotal,
 			Started: update.StartedAt, Updated: update.UpdatedAt, Error: update.Error,
 		}
@@ -323,16 +406,17 @@ func (s *Server) startModelDownloadRecovery() {
 			continue
 		}
 		job := s.jobs.Create("model-dl:" + download.ModelID)
-		s.observeModelDownload(job, download.ModelID)
+		s.observeModelDownload(job, download.ModelID, download.Revision)
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Minute)
-		s.registerModelJob(job.ID, cancel)
-		go s.runModelDownload(ctx, cancel, job, download.ModelID, s.huggingFaceToken())
+		s.registerModelDownloadJob(job.ID, download.Revision, cancel)
+		go s.runModelDownload(ctx, cancel, job, download.ModelID, download.Revision, s.huggingFaceToken())
 	}
 }
 
 type modelDownloadView struct {
 	JobID      string `json:"jobId"`
 	ModelID    string `json:"modelId"`
+	Revision   string `json:"revision,omitempty"`
 	Phase      string `json:"phase"`
 	Message    string `json:"message"`
 	BytesDone  int64  `json:"bytesDone"`
@@ -353,7 +437,8 @@ func (s *Server) activeModelDownloads() []modelDownloadView {
 		}
 		out = append(out, modelDownloadView{
 			JobID: snapshot.ID, ModelID: strings.TrimPrefix(snapshot.AppID, "model-dl:"),
-			Phase: snapshot.Phase, Message: snapshot.Message,
+			Revision: s.modelJobRevision(snapshot.ID),
+			Phase:    snapshot.Phase, Message: snapshot.Message,
 			BytesDone: snapshot.BytesDone, BytesTotal: snapshot.BytesTotal,
 			Percent: snapshot.Percent, ETASecs: snapshot.ETASecs,
 			StartedAt: snapshot.StartedAt, UpdatedAt: snapshot.UpdatedAt,
@@ -528,20 +613,31 @@ func (s *Server) modelsList(w http.ResponseWriter, r *http.Request) {
 // so a later launch is instant. Async job.
 func (s *Server) modelDownload(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		ID    string `json:"id"`
-		Token string `json:"token,omitempty"`
+		ID       string `json:"id"`
+		Revision string `json:"revision,omitempty"`
+		Token    string `json:"token,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || strings.TrimSpace(body.ID) == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad request"})
 		return
 	}
 	body.ID = strings.TrimSpace(body.ID)
+	body.Revision = strings.ToLower(strings.TrimSpace(body.Revision))
 	if _, ok := modelCacheName(body.ID); !ok {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid model id"})
 		return
 	}
+	if body.Revision != "" && !immutableHubRevision(body.Revision) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "revision must be an immutable 40- or 64-character commit hash"})
+		return
+	}
+	downloadRevision := resolvedModelDownloadRevision(body.ID, body.Revision)
 	for _, active := range s.activeModelDownloads() {
 		if active.ModelID == body.ID {
+			if active.Revision != downloadRevision {
+				writeJSON(w, http.StatusConflict, map[string]string{"error": "another revision of this model is already downloading; cancel it before starting this one"})
+				return
+			}
 			writeJSON(w, http.StatusAccepted, map[string]string{"jobId": active.JobID})
 			return
 		}
@@ -551,10 +647,10 @@ func (s *Server) modelDownload(w http.ResponseWriter, r *http.Request) {
 		token = s.huggingFaceToken()
 	}
 	job := s.jobs.Create("model-dl:" + body.ID)
-	s.observeModelDownload(job, body.ID)
+	s.observeModelDownload(job, body.ID, downloadRevision)
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Minute)
-	s.registerModelJob(job.ID, cancel)
-	go s.runModelDownload(ctx, cancel, job, body.ID, token)
+	s.registerModelDownloadJob(job.ID, downloadRevision, cancel)
+	go s.runModelDownload(ctx, cancel, job, body.ID, downloadRevision, token)
 	writeJSON(w, http.StatusAccepted, map[string]string{"jobId": job.ID})
 }
 
@@ -675,13 +771,13 @@ func huggingFaceModelRevisionBytes(ctx context.Context, repo, revision, token st
 }
 
 func huggingFaceModelRevisionSize(ctx context.Context, repo, revision, token string) (int64, error) {
-	files, err := huggingFaceModelRevisionFiles(ctx, repo, revision, token)
+	files, err := huggingFaceModelRevisionInventory(ctx, repo, revision, token)
 	if err != nil {
 		return 0, err
 	}
 	var total int64
-	for _, size := range files {
-		total += size
+	for _, file := range files {
+		total += file.Size
 	}
 	if total <= 0 {
 		return 0, errors.New("Hugging Face model metadata did not include file sizes")
@@ -689,7 +785,12 @@ func huggingFaceModelRevisionSize(ctx context.Context, repo, revision, token str
 	return total, nil
 }
 
-func huggingFaceModelRevisionFiles(ctx context.Context, repo, revision, token string) (map[string]int64, error) {
+type huggingFaceRevisionFile struct {
+	Size   int64
+	BlobID string
+}
+
+func huggingFaceModelRevisionInventory(ctx context.Context, repo, revision, token string) (map[string]huggingFaceRevisionFile, error) {
 	endpoint := "https://huggingface.co/api/models/" + repo
 	if revision = strings.TrimSpace(revision); revision != "" {
 		endpoint += "/revision/" + url.PathEscape(revision)
@@ -711,33 +812,49 @@ func huggingFaceModelRevisionFiles(ctx context.Context, repo, revision, token st
 	}
 	var info struct {
 		Siblings []struct {
-			Name string `json:"rfilename"`
-			Size int64  `json:"size"`
-			LFS  *struct {
-				Size int64 `json:"size"`
+			Name   string `json:"rfilename"`
+			Size   int64  `json:"size"`
+			BlobID string `json:"blobId"`
+			LFS    *struct {
+				Size int64  `json:"size"`
+				OID  string `json:"oid"`
 			} `json:"lfs"`
 		} `json:"siblings"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&info); err != nil {
 		return nil, err
 	}
-	files := make(map[string]int64, len(info.Siblings))
+	files := make(map[string]huggingFaceRevisionFile, len(info.Siblings))
 	for _, file := range info.Siblings {
 		name := filepath.ToSlash(filepath.Clean(strings.TrimSpace(file.Name)))
 		if name == "." || strings.HasPrefix(name, "/") || name == ".." || strings.HasPrefix(name, "../") {
 			return nil, errors.New("Hugging Face model metadata contained an unsafe file path")
 		}
 		size := file.Size
+		blobID := strings.TrimSpace(file.BlobID)
 		if file.LFS != nil && file.LFS.Size > 0 {
 			size = file.LFS.Size
+			blobID = strings.TrimSpace(file.LFS.OID)
 		}
 		if size < 0 {
 			return nil, errors.New("Hugging Face model metadata contained an invalid file size")
 		}
-		files[name] = size
+		files[name] = huggingFaceRevisionFile{Size: size, BlobID: blobID}
 	}
 	if len(files) == 0 {
 		return nil, errors.New("Hugging Face model metadata did not include files")
+	}
+	return files, nil
+}
+
+func huggingFaceModelRevisionFiles(ctx context.Context, repo, revision, token string) (map[string]int64, error) {
+	inventory, err := huggingFaceModelRevisionInventory(ctx, repo, revision, token)
+	if err != nil {
+		return nil, err
+	}
+	files := make(map[string]int64, len(inventory))
+	for name, file := range inventory {
+		files[name] = file.Size
 	}
 	return files, nil
 }
@@ -762,6 +879,46 @@ func (s *Server) modelRepoBytes(ctx context.Context, repo, root string) int64 {
 		return directoryBytes(filepath.Join(root, "hub", cacheName))
 	}
 	return 0
+}
+
+// modelRevisionBytes counts only files belonging to the requested immutable
+// snapshot. Cached blobs from another revision cannot inflate its progress.
+func modelRevisionBytes(repo, revision, root string, inventory map[string]huggingFaceRevisionFile) int64 {
+	if root == "" || revision == "" {
+		return 0
+	}
+	cacheName := "models--" + strings.ReplaceAll(repo, "/", "--")
+	repoRoot := filepath.Join(root, "hub", cacheName)
+	snapshotRoot := filepath.Join(repoRoot, "snapshots", revision)
+	if len(inventory) == 0 {
+		return directoryBytes(snapshotRoot)
+	}
+	var total int64
+	for name, expected := range inventory {
+		var counted int64
+		if info, err := os.Stat(filepath.Join(snapshotRoot, filepath.FromSlash(name))); err == nil && info.Mode().IsRegular() {
+			counted = info.Size()
+		} else if expected.BlobID != "" {
+			for _, suffix := range []string{"", ".incomplete"} {
+				if info, err := os.Stat(filepath.Join(repoRoot, "blobs", expected.BlobID+suffix)); err == nil && info.Mode().IsRegular() {
+					counted = info.Size()
+					break
+				}
+			}
+		}
+		if counted > expected.Size {
+			counted = expected.Size
+		}
+		total += counted
+	}
+	return total
+}
+
+func (s *Server) modelDownloadBytes(ctx context.Context, repo, revision, root string, inventory map[string]huggingFaceRevisionFile) int64 {
+	if revision != "" {
+		return modelRevisionBytes(repo, revision, root, inventory)
+	}
+	return s.modelRepoBytes(ctx, repo, root)
 }
 
 func (s *Server) modelRepoIncomplete(ctx context.Context, repo, root string) int {
@@ -794,23 +951,29 @@ func formatDownloadProgress(done, total int64) string {
 
 // runModelDownload fetches a repo into the shared cache while polling its
 // on-disk byte count for real progress.
-func (s *Server) runModelDownload(ctx context.Context, cancel context.CancelFunc, job *jobs.Job, repo, token string) {
+func (s *Server) runModelDownload(ctx context.Context, cancel context.CancelFunc, job *jobs.Job, repo, requestedRevision, token string) {
 	defer cancel()
 	defer s.unregisterModelJob(job.ID)
 	vllm, _ := catalog.Get("vllm")
 	img := s.imageFor(ctx, vllm)
-	revision := ""
+	revision := strings.TrimSpace(requestedRevision)
 	if model, ok := models.Get(repo); ok && model.RuntimeImage != "" {
 		if model.RuntimeBuild == "" {
 			img = model.RuntimeImage
 		}
-		revision = model.Revision
+		if revision == "" {
+			revision = model.Revision
+		}
 	}
 	metadataCtx, metadataCancel := context.WithTimeout(ctx, 12*time.Second)
-	total := huggingFaceModelRevisionBytes(metadataCtx, repo, revision, token)
+	inventory, _ := huggingFaceModelRevisionInventory(metadataCtx, repo, revision, token)
 	metadataCancel()
+	var total int64
+	for _, file := range inventory {
+		total += file.Size
+	}
 	root := s.modelVolumePath(ctx)
-	job.ProgressBytes("downloading", "Preparing "+repo+"…", s.modelRepoBytes(ctx, repo, root), total)
+	job.ProgressBytes("downloading", "Preparing "+repo+"…", s.modelDownloadBytes(ctx, repo, revision, root, inventory), total)
 	py := "import os; from huggingface_hub import snapshot_download; kw={}; revision=os.environ.get('CLOUDLESS_MODEL_REVISION',''); kw.update(revision=revision) if revision else None; snapshot_download(os.environ['CLOUDLESS_MODEL_ID'], **kw)"
 	containerName := modelDownloadContainerName(repo)
 	// A daemon crash may leave the previous helper running. Stop that stable
@@ -868,15 +1031,16 @@ func (s *Server) runModelDownload(ctx context.Context, cancel context.CancelFunc
 				job.Fail(err)
 				return
 			}
-			s.invalidateDownloadedModels()
-			have := s.downloadedModels(context.Background())
-			if root != "" {
-				if err := exposeModelCache(root, have); err != nil {
-					job.Fail(err)
-					return
-				}
+			if err := markModelRevisionComplete(root, repo, revision); err != nil {
+				job.Fail(err)
+				return
 			}
-			done := s.modelRepoBytes(ctx, repo, root)
+			s.invalidateDownloadedModels()
+			// downloadedModels asks the privileged broker to expose the cache on
+			// installed systems. Do not also run the development hard-link path:
+			// /var/lib and the desktop home may be separate protected mounts.
+			_ = s.downloadedModels(context.Background())
+			done := s.modelDownloadBytes(ctx, repo, revision, root, inventory)
 			if total > 0 {
 				done = total
 			}
@@ -884,7 +1048,7 @@ func (s *Server) runModelDownload(ctx context.Context, cancel context.CancelFunc
 			job.Succeed("")
 			return
 		case <-ticker.C:
-			done := s.modelRepoBytes(ctx, repo, root)
+			done := s.modelDownloadBytes(ctx, repo, revision, root, inventory)
 			job.ProgressBytes("downloading", "Downloading "+repo+" · "+formatDownloadProgress(done, total), done, total)
 		case <-ctx.Done():
 			if errors.Is(ctx.Err(), context.Canceled) {

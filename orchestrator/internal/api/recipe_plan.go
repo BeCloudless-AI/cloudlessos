@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/cloudless/orchestrator/internal/engine"
 	"github.com/cloudless/orchestrator/internal/localrecipes"
@@ -68,16 +69,18 @@ func recipeSnapshotComplete(repoRoot, revision string) bool {
 	if err != nil || !info.IsDir() {
 		return false
 	}
-	incomplete := false
-	_ = filepath.WalkDir(repoRoot, func(path string, entry os.DirEntry, walkErr error) error {
-		if walkErr == nil && !entry.IsDir() && strings.HasSuffix(entry.Name(), ".incomplete") {
-			incomplete = true
-			return filepath.SkipAll
+	if _, markerErr := os.Stat(filepath.Join(repoRoot, ".cloudless-complete", revision)); markerErr != nil {
+		incomplete := false
+		_ = filepath.WalkDir(repoRoot, func(path string, entry os.DirEntry, walkErr error) error {
+			if walkErr == nil && !entry.IsDir() && strings.HasSuffix(entry.Name(), ".incomplete") {
+				incomplete = true
+				return filepath.SkipAll
+			}
+			return nil
+		})
+		if incomplete {
+			return false
 		}
-		return nil
-	})
-	if incomplete {
-		return false
 	}
 	hasFile, invalid := false, false
 	_ = filepath.WalkDir(filepath.Join(repoRoot, "snapshots", revision), func(path string, entry os.DirEntry, walkErr error) error {
@@ -169,6 +172,51 @@ func recipeModelVolumeMountpoint(ctx context.Context, runtime engine.Engine, rec
 
 func verifyRecipeModelCache(ctx context.Context, runtime engine.Engine, recipe localrecipes.Recipe) (recipeArtifactManifest, error) {
 	return verifyRecipeModelCacheWithProgress(ctx, runtime, recipe, nil)
+}
+
+// verifyOrCertifyInstalledRecipeModelCache bridges the two Cloudless download
+// contracts. Model Manager records that Hugging Face completed an immutable
+// snapshot; distributed recipes additionally need a content manifest so the
+// exact bytes can be verified and copied to peers. A fresh installation may
+// legitimately have the first marker without the second, so adopt the snapshot
+// in place after comparing it with the immutable Hub inventory.
+func verifyOrCertifyInstalledRecipeModelCache(ctx context.Context, runtime engine.Engine, recipe localrecipes.Recipe, token string, progress func(int64, int64)) (recipeArtifactManifest, error) {
+	var verifyProgress func(int64)
+	if expected, err := inspectRecipeModelManifest(ctx, runtime, recipe); err == nil && progress != nil {
+		var done int64
+		verifyProgress = func(delta int64) {
+			done += delta
+			progress(done, expected.Bytes)
+		}
+	}
+	manifest, verifyErr := verifyRecipeModelCacheWithProgress(ctx, runtime, recipe, verifyProgress)
+	if verifyErr == nil {
+		return manifest, nil
+	}
+	if !recipeModelInstalled(recipe) {
+		return recipeArtifactManifest{}, verifyErr
+	}
+	metadataCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	inventory, err := recipeModelRevisionInventory(metadataCtx, recipe.Model.ID, recipe.Model.Revision, token)
+	cancel()
+	if err != nil {
+		return recipeArtifactManifest{}, fmt.Errorf("verify immutable Hub inventory for installed model: %w", err)
+	}
+	var total int64
+	for _, size := range inventory {
+		total += size
+	}
+	var done int64
+	manifest, err = certifyExistingRecipeModelCache(ctx, runtime, recipe, inventory, func(delta int64) {
+		done += delta
+		if progress != nil {
+			progress(done, total)
+		}
+	})
+	if err != nil {
+		return recipeArtifactManifest{}, fmt.Errorf("certify installed model snapshot: %w", err)
+	}
+	return manifest, nil
 }
 
 func verifyRecipeModelCacheWithProgress(ctx context.Context, runtime engine.Engine, recipe localrecipes.Recipe, progress func(int64)) (recipeArtifactManifest, error) {

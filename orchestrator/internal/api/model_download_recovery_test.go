@@ -25,10 +25,11 @@ func TestModelDownloadObserverJournalsProgressAndKeepsFailure(t *testing.T) {
 	}
 	server := &Server{state: store}
 	job := jobs.NewManager().Create("model-dl:owner/model")
-	server.observeModelDownload(job, "owner/model")
+	revision := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	server.observeModelDownload(job, "owner/model", revision)
 	job.ProgressBytes("downloading", "Transferring verified chunks", 7, 19)
 	got := store.ModelDownloads()
-	if len(got) != 1 || got[0].BytesDone != 7 || got[0].BytesTotal != 19 {
+	if len(got) != 1 || got[0].Revision != revision || got[0].BytesDone != 7 || got[0].BytesTotal != 19 {
 		t.Fatalf("download progress was not journaled: %#v", got)
 	}
 	job.Fail(errors.New("network unavailable"))
@@ -45,7 +46,7 @@ func TestCanceledModelDownloadClearsJournalButKeepsCacheForResume(t *testing.T) 
 	}
 	server := &Server{state: store}
 	job := jobs.NewManager().Create("model-dl:owner/model")
-	server.observeModelDownload(job, "owner/model")
+	server.observeModelDownload(job, "owner/model", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
 	job.ProgressBytes("downloading", "Transferring verified chunks", 7, 19)
 	job.Cancel()
 	if got := store.ModelDownloads(); len(got) != 0 {

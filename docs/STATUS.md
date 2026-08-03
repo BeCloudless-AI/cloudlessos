@@ -144,8 +144,8 @@ Resume in this order:
 - Reliability and accurate progress/error reporting before catalog breadth.
 - One signed cross-architecture pipeline rather than platform branches.
 - Managed defaults plus explicit reversible expert workflows.
-- Expand community recipes beyond the current constrained single-node managed-container policy
-  only after each additional execution path has equally strong validation and rollback behavior.
+- Keep distributed advanced-container community recipes inside the enrolled Spark topology,
+  immutable artifact, bounded InfiniBand-device, validation, ownership, and rollback contracts.
 
 ## Documentation
 

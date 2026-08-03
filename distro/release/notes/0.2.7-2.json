@@ -6,7 +6,9 @@
     "Discover, verify, install, update, roll back, and revoke immutable community recipe revisions through the signed community catalog.",
     "Allow constrained recipes to select their own immutable runtime images for platform-specific optimizations such as SM121 kernels, FlashInfer, and DFlash without granting arbitrary host access.",
     "Ship and document a DGX Spark Laguna S 2.1 NVFP4 and DFlash recipe backed by a digest-pinned patched vLLM runtime.",
+    "Run topology-aware community recipes on the exact requested number of enrolled DGX Sparks, with verified image transfer and model-cache adoption for multi-node launches.",
     "Keep recipe preparation and recovery durable across daemon restarts, clean up orphaned managed containers safely, and preserve downloaded model weights when recovery is possible.",
+    "Stop distributed recipes across every owned Spark and verify that peer containers are absent before another launch, while keeping one-node recipes isolated to one Spark.",
     "Show dependency downloads, checkpoint shard counts, DFlash loading, kernel compilation, warmup progress, percentages, and estimated time during managed recipe startup.",
     "Hide stale unloaded-model controls while a recipe is actively loading and prevent generic health polling from replacing detailed container progress.",
     "Harden kiosk startup, package lifecycle behavior, community trust-root validation, and physical qualification coverage for signed community recipes."

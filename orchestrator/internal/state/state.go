@@ -24,9 +24,11 @@ type Profile struct {
 	Region string `json:"region,omitempty"` // ISO-3166 alpha-2 override, e.g. "FR"; "" = auto-detect
 }
 
-// DisplayPreference is the validated X11 output mode CloudlessOS should restore
-// when its kiosk session starts.
+// DisplayPreference is the validated X11 topology and primary output mode
+// CloudlessOS should restore when its kiosk session starts. Layout is empty for
+// legacy preferences and is normalized by the display policy on use.
 type DisplayPreference struct {
+	Layout string `json:"layout,omitempty"`
 	Output string `json:"output,omitempty"`
 	Width  int    `json:"width,omitempty"`
 	Height int    `json:"height,omitempty"`
@@ -144,6 +146,16 @@ type InferenceNodeProgress struct {
 	ETASecs    int64  `json:"etaSeconds,omitempty"`
 }
 
+// RuntimeRestartOffer remembers the exact inference runtime that CloudlessOS
+// believed was active when the daemon restarted. Automatic records whether
+// this is an informational notice or an explicit restart decision.
+type RuntimeRestartOffer struct {
+	InstanceID string           `json:"instanceId"`
+	Runtime    InferenceRuntime `json:"runtime"`
+	Created    string           `json:"created"`
+	Automatic  bool             `json:"automatic,omitempty"`
+}
+
 type ManagedEngineArtifact struct {
 	EngineID         string `json:"engineId"`
 	Image            string `json:"image"`
@@ -193,29 +205,31 @@ func NormalizeAPIKeyScope(scope string) string {
 
 // State is the persisted state.
 type State struct {
-	FirstSeen              string                           `json:"firstSeen"`                        // RFC3339; when the daemon first initialized this store
-	Onboarded              bool                             `json:"onboarded"`                        // user has completed first-run onboarding
-	FirstLaunchSetup       string                           `json:"firstLaunchSetup,omitempty"`       // pending | install | manual; empty is a legacy installation
-	Engine                 string                           `json:"engine,omitempty"`                 // selected inference engine ("" = default)
-	Model                  string                           `json:"model,omitempty"`                  // selected model ("" = catalog default)
-	EngineUnloaded         bool                             `json:"engineUnloaded,omitempty"`         // selected model stays cached but no inference engine holds accelerator memory
-	ExecutionMode          string                           `json:"executionMode,omitempty"`          // local | cluster; empty is local
-	LocalRecipeID          string                           `json:"localRecipeId,omitempty"`          // reviewed local recipe owning the active engine
-	Pinned                 []string                         `json:"pinned,omitempty"`                 // app ids pinned to the dashboard "fast launch"
-	PinnedSet              bool                             `json:"pinnedSet,omitempty"`              // user has customized pins (else use catalog default)
-	LocalNet               bool                             `json:"localNet"`                         // serve apps on the local network (LAN)
-	LocalNetSet            bool                             `json:"localNetSet,omitempty"`            // user has chosen (else default ON)
-	Profile                Profile                          `json:"profile"`                          // user-controlled profile
-	APIKeys                []APIKey                         `json:"apiKeys,omitempty"`                // Cloudless Proxy credentials
-	Display                DisplayPreference                `json:"display,omitempty"`                // preferred display output and mode
-	InferenceAPI           InferenceContract                `json:"inferenceApi,omitempty"`           // stable client-facing API port and model alias
-	CustomModels           map[string]models.Model          `json:"customModels,omitempty"`           // user-imported Hugging Face repositories
-	ModelPromotion         ModelPromotion                   `json:"modelPromotion,omitempty"`         // verified bootstrap/full-model lifecycle
-	ModelDownloads         map[string]ModelDownload         `json:"modelDownloads,omitempty"`         // resumable Hugging Face cache operations
-	InferenceOperation     InferenceOperation               `json:"inferenceOperation,omitempty"`     // durable engine/model transition
-	ManagedEngineArtifacts map[string]ManagedEngineArtifact `json:"managedEngineArtifacts,omitempty"` // downloaded and activated runtime identity
-	InstalledPacks         []string                         `json:"installedPacks,omitempty"`         // optional capability packs installed by Cloudless
-	CustomEngines          []CustomEngine                   `json:"customEngines,omitempty"`          // user-built inference images
+	FirstSeen               string                           `json:"firstSeen"`                         // RFC3339; when the daemon first initialized this store
+	Onboarded               bool                             `json:"onboarded"`                         // user has completed first-run onboarding
+	FirstLaunchSetup        string                           `json:"firstLaunchSetup,omitempty"`        // pending | install | manual; empty is a legacy installation
+	Engine                  string                           `json:"engine,omitempty"`                  // selected inference engine ("" = default)
+	Model                   string                           `json:"model,omitempty"`                   // selected model ("" = catalog default)
+	EngineUnloaded          bool                             `json:"engineUnloaded,omitempty"`          // selected model stays cached but no inference engine holds accelerator memory
+	AutomaticRuntimeRestart bool                             `json:"automaticRuntimeRestart,omitempty"` // explicitly restart the last model or recipe after CloudlessOS starts
+	ExecutionMode           string                           `json:"executionMode,omitempty"`           // local | cluster; empty is local
+	LocalRecipeID           string                           `json:"localRecipeId,omitempty"`           // reviewed local recipe owning the active engine
+	Pinned                  []string                         `json:"pinned,omitempty"`                  // app ids pinned to the dashboard "fast launch"
+	PinnedSet               bool                             `json:"pinnedSet,omitempty"`               // user has customized pins (else use catalog default)
+	LocalNet                bool                             `json:"localNet"`                          // serve apps on the local network (LAN)
+	LocalNetSet             bool                             `json:"localNetSet,omitempty"`             // user has chosen (else default ON)
+	Profile                 Profile                          `json:"profile"`                           // user-controlled profile
+	APIKeys                 []APIKey                         `json:"apiKeys,omitempty"`                 // Cloudless Proxy credentials
+	Display                 DisplayPreference                `json:"display,omitempty"`                 // preferred display output and mode
+	InferenceAPI            InferenceContract                `json:"inferenceApi,omitempty"`            // stable client-facing API port and model alias
+	CustomModels            map[string]models.Model          `json:"customModels,omitempty"`            // user-imported Hugging Face repositories
+	ModelPromotion          ModelPromotion                   `json:"modelPromotion,omitempty"`          // verified bootstrap/full-model lifecycle
+	ModelDownloads          map[string]ModelDownload         `json:"modelDownloads,omitempty"`          // resumable Hugging Face cache operations
+	InferenceOperation      InferenceOperation               `json:"inferenceOperation,omitempty"`      // durable engine/model transition
+	RuntimeRestartOffer     RuntimeRestartOffer              `json:"runtimeRestartOffer,omitempty"`     // one explicit resume decision after daemon restart
+	ManagedEngineArtifacts  map[string]ManagedEngineArtifact `json:"managedEngineArtifacts,omitempty"`  // downloaded and activated runtime identity
+	InstalledPacks          []string                         `json:"installedPacks,omitempty"`          // optional capability packs installed by Cloudless
+	CustomEngines           []CustomEngine                   `json:"customEngines,omitempty"`           // user-built inference images
 
 	// EngineCmds holds user-edited launch commands, keyed "engineID\x00modelID".
 	// The value is the container command (args after the image) to use when that
@@ -242,6 +256,75 @@ type InferenceRuntime struct {
 
 func (s State) InferenceRuntime() InferenceRuntime {
 	return InferenceRuntime{Engine: s.Engine, Model: s.Model, EngineUnloaded: s.EngineUnloaded, ExecutionMode: s.ExecutionMode, LocalRecipeID: s.LocalRecipeID}
+}
+
+// RuntimeRestartAutomatic reports the explicit opt-in for unattended model or
+// recipe recovery. The zero value is deliberately false.
+func (s *Store) RuntimeRestartAutomatic() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.st.AutomaticRuntimeRestart
+}
+
+// SetRuntimeRestartAutomatic persists the unattended restart preference.
+func (s *Store) SetRuntimeRestartAutomatic(enabled bool) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	previous := s.st.AutomaticRuntimeRestart
+	s.st.AutomaticRuntimeRestart = enabled
+	if err := s.save(); err != nil {
+		s.st.AutomaticRuntimeRestart = previous
+		return err
+	}
+	return nil
+}
+
+// PrepareRuntimeRestartOffer snapshots a previously active runtime once for a
+// new daemon instance. An unloaded runtime was intentionally stopped and must
+// never produce a restart prompt.
+func (s *Store) PrepareRuntimeRestartOffer(instanceID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	instanceID = strings.TrimSpace(instanceID)
+	if instanceID == "" {
+		return nil
+	}
+	if s.st.EngineUnloaded || s.st.InferenceOperation.ID != "" {
+		return nil
+	}
+	runtime := s.st.InferenceRuntime()
+	previousOffer, previousUnloaded := s.st.RuntimeRestartOffer, s.st.EngineUnloaded
+	s.st.RuntimeRestartOffer = RuntimeRestartOffer{
+		InstanceID: instanceID, Runtime: runtime, Created: time.Now().UTC().Format(time.RFC3339),
+		Automatic: s.st.AutomaticRuntimeRestart,
+	}
+	if !s.st.AutomaticRuntimeRestart {
+		// Prevent provisioners and Docker recovery from treating the remembered
+		// runtime as approved. The offer retains the exact launch identity.
+		s.st.EngineUnloaded = true
+	}
+	if err := s.save(); err != nil {
+		s.st.RuntimeRestartOffer, s.st.EngineUnloaded = previousOffer, previousUnloaded
+		return err
+	}
+	return nil
+}
+
+// ClearRuntimeRestartOffer acknowledges only the currently presented offer so
+// a stale browser cannot clear a newer restart decision after another reboot.
+func (s *Store) ClearRuntimeRestartOffer(instanceID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.st.RuntimeRestartOffer.InstanceID == "" || s.st.RuntimeRestartOffer.InstanceID != strings.TrimSpace(instanceID) {
+		return nil
+	}
+	previous := s.st.RuntimeRestartOffer
+	s.st.RuntimeRestartOffer = RuntimeRestartOffer{}
+	if err := s.save(); err != nil {
+		s.st.RuntimeRestartOffer = previous
+		return err
+	}
+	return nil
 }
 
 // CustomEngineList returns a detached snapshot of registered local builds.

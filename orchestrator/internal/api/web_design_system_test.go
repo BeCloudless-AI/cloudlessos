@@ -182,6 +182,46 @@ func TestEmbeddedWebAccountClientOwnsTopBarIdentity(t *testing.T) {
 	}
 }
 
+func TestEmbeddedWebModelManagerPrefersRecipesAndExplainsRawModels(t *testing.T) {
+	content, err := webFS.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	web := string(content)
+	for _, want := range []string{
+		`let mmTab = 'recipes'`,
+		`function openModelManager(tab = 'recipes')`,
+		`<span>Recipes</span></button>`,
+		`mm-tabs mm-primary-tabs`,
+		`<span>Models</span></button>`,
+		`data-model-kind="language"`,
+		`data-model-kind="image"`,
+		`Running a model without a recipe might not give you the full experience.`,
+		`if (advancedInterfaceEnabled()) return '';`,
+		`async function confirmModelsWithoutRecipe(returnFocus)`,
+		`title: 'Continue without a recipe?'`,
+		`confirmLabel: 'Continue without a recipe'`,
+		`cancelLabel: 'Stay with recipes'`,
+		`if (targetSection === 'models' && !(await confirmModelsWithoutRecipe(b))) return;`,
+		`if (!skipConfirmation && !(await confirmModelsWithoutRecipe(document.activeElement))) return;`,
+		`openGuide('models-recipes')`,
+		`if (action === 'models') openModelManager('language');`,
+		`.recipe-scope-tabs { width: 100%;`,
+		`grid-template-columns: repeat(2,minmax(0,1fr))`,
+		`.recipe-scope-tab { width: 100%;`,
+		`.recipe-intro + .recipe-controls, .recipe-intro + .recipe-filter-row { border-top: 0; border-radius: 0 0 16px 16px; }`,
+	} {
+		if !strings.Contains(web, want) {
+			t.Fatalf("embedded Model Manager recipe-first flow is missing %q", want)
+		}
+	}
+	recipes := strings.Index(web, `data-tab="recipes"`)
+	models := strings.Index(web, `data-tab="language"`)
+	if recipes < 0 || models < 0 || recipes > models {
+		t.Fatal("Recipes must be rendered before Models in the primary navigation")
+	}
+}
+
 func TestEmbeddedWebAccountUsesDisplayNameForVisibleIdentity(t *testing.T) {
 	content, err := webFS.ReadFile("web/index.html")
 	if err != nil {

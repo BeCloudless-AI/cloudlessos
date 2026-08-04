@@ -36,7 +36,7 @@ func TestEmbeddedWebIncludesSparkClusterWizard(t *testing.T) {
 			t.Fatalf("embedded cluster UI missing connection failure state %q", want)
 		}
 	}
-	for _, want := range []string{"id=\"home-cluster\"", "function renderHomeCluster", "-Spark compute is ready", "computeReady ? 'Manage'", "host.querySelector('button').onclick = openSparkClusterSurface", "Runs across ${clusterNodes} Sparks", "Use all ${clusterNodes} Sparks", "mode: selectedMode", "memoryAccountingSummary(cluster, true)", "Powered by Hermes Agent", "Active across ${engineNodes} Sparks", "served by your Spark cluster", "Running across ${sparkCount(connectedSpark)} Sparks", "executionMode === 'cluster'"} {
+	for _, want := range []string{"id=\"home-cluster\"", "function renderHomeCluster", "-Spark compute is ready", "computeReady ? 'Manage'", "host.querySelector('button').onclick = openSparkClusterSurface", "Runs across ${clusterNodes} Sparks", "Use all ${clusterNodes} Sparks", "mode: selectedMode", "memoryAccountingSummary(cluster, true)", "Powered by Hermes Agent", "Active across ${engineNodes} Sparks", "served by your Spark cluster", "${runtimeLabel} · ${sparkCount(connectedSpark)} Sparks", "executionMode === 'cluster'"} {
 		if !strings.Contains(html, want) {
 			t.Fatalf("embedded UI missing system-wide cluster experience %q", want)
 		}

@@ -2067,6 +2067,7 @@ func (s *Server) runLocalRecipe(job *jobs.Job, recipe localrecipes.Recipe, opera
 		return
 	}
 	spec := sparkcluster.ProxySpecTarget(recipe.Engine.ProxyHost, recipe.Engine.ContainerPort)
+	spec.RestartPolicy = "no"
 	spec.Image = proxyImage
 	if err := s.recipeBoundary(operationID, recipeBoundaryProxyCreate); err != nil {
 		rollbackFailure(err)

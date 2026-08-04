@@ -99,11 +99,12 @@ func managedContainerRecipeSpec(recipe localrecipes.Recipe, immutableImage, name
 		secrets[hfTokenPath] = engine.HuggingFaceTokenContainerPath
 	}
 	spec := engine.RunSpec{
-		Name:        name,
-		Image:       immutableImage,
-		Ports:       map[int]int{recipe.Engine.ContainerPort: recipe.Engine.ContainerPort},
-		Env:         env,
-		SecretFiles: secrets,
+		Name:          name,
+		Image:         immutableImage,
+		RestartPolicy: "no",
+		Ports:         map[int]int{recipe.Engine.ContainerPort: recipe.Engine.ContainerPort},
+		Env:           env,
+		SecretFiles:   secrets,
 		Labels: map[string]string{
 			"cloudless.recipe.operation": operationID,
 			"cloudless.recipe.id":        recipe.ID,

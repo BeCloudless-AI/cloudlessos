@@ -88,7 +88,7 @@ func TestEmbeddedGuideDeepLinksToRealCloudlessControls(t *testing.T) {
 	}
 	page := string(content)
 	for _, want := range []string{
-		`if (action === 'models') openModelManager();`,
+		`if (action === 'models') openModelManager('language');`,
 		`else if (action === 'recipes') openRecipeLibrary();`,
 		`else if (action === 'api') { setPage = 'api'; openSettings(); }`,
 		`else if (action === 'tailscale') { setPage = 'remote-access'; openSettings(); }`,

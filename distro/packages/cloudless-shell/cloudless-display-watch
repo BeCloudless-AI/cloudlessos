@@ -1,0 +1,32 @@
+#!/bin/sh
+# Keep XRandR topology safe when a connector appears, disappears, or is
+# renamed. The daemon owns policy; this session helper only observes hotplug.
+set -u
+LOG="${XDG_CACHE_HOME:-${HOME:-/home/cloudless}/.cache}/cloudless-display-watch.log"
+mkdir -p "$(dirname "$LOG")"
+exec >>"$LOG" 2>&1
+
+signature() {
+    xrandr --query 2>/dev/null | awk '$2 == "connected" || $2 == "disconnected" { print $1, $2 }'
+}
+
+normalize() {
+    response="$(curl --silent --fail --max-time 10 -X POST \
+        -H 'X-Cloudless-Action: display-normalize' \
+        http://127.0.0.1:8765/api/system/display/normalize 2>/dev/null)" || return 1
+    echo "$(date -Is) display topology normalized: $response"
+    if printf '%s' "$response" | grep -Eq '"changed"[[:space:]]*:[[:space:]]*true'; then
+        # The kiosk wrapper remains alive and immediately relaunches its browser
+        # after X has settled, ensuring the new window is placed on-screen.
+        pkill -f -- '--class(=|[[:space:]])CloudlessKiosk' 2>/dev/null || true
+    fi
+}
+
+last=""
+while :; do
+    current="$(signature)"
+    if [ -n "$current" ] && [ "$current" != "$last" ]; then
+        if normalize; then last="$current"; fi
+    fi
+    sleep 2
+done

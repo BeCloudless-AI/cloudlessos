@@ -30,6 +30,7 @@ var outputNamePattern = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,64}$`)
 
 type Request struct {
 	Action    Action `json:"action"`
+	Layout    string `json:"layout,omitempty"`
 	Output    string `json:"output,omitempty"`
 	Width     int    `json:"width,omitempty"`
 	Height    int    `json:"height,omitempty"`
@@ -45,7 +46,7 @@ type Response struct {
 
 type Executor interface {
 	QueryDisplay(context.Context) (string, error)
-	ApplyDisplay(context.Context, string, int, int) error
+	ApplyDisplay(context.Context, string, string, int, int) error
 	EmitKey(context.Context, string, string) error
 	OpenPlace(context.Context, string) error
 }
@@ -55,10 +56,13 @@ type Authorizer func(net.Conn) error
 func (r Request) Validate() error {
 	switch r.Action {
 	case ActionDisplayQuery:
-		if r.Output != "" || r.Width != 0 || r.Height != 0 || r.KeyAction != "" || r.Value != "" || r.PlaceID != "" {
+		if r.Layout != "" || r.Output != "" || r.Width != 0 || r.Height != 0 || r.KeyAction != "" || r.Value != "" || r.PlaceID != "" {
 			return errors.New("display query does not accept parameters")
 		}
 	case ActionDisplayApply:
+		if r.Layout != "single" && r.Layout != "mirror" && r.Layout != "extend" {
+			return errors.New("display layout is invalid")
+		}
 		if !outputNamePattern.MatchString(r.Output) {
 			return errors.New("display output is invalid")
 		}
@@ -69,14 +73,14 @@ func (r Request) Validate() error {
 			return errors.New("display change contains unrelated parameters")
 		}
 	case ActionInputKey:
-		if r.Output != "" || r.Width != 0 || r.Height != 0 || r.PlaceID != "" {
+		if r.Layout != "" || r.Output != "" || r.Width != 0 || r.Height != 0 || r.PlaceID != "" {
 			return errors.New("input request contains unrelated parameters")
 		}
 		if err := validateKey(r.KeyAction, r.Value); err != nil {
 			return err
 		}
 	case ActionPlaceOpen:
-		if r.Output != "" || r.Width != 0 || r.Height != 0 || r.KeyAction != "" || r.Value != "" {
+		if r.Layout != "" || r.Output != "" || r.Width != 0 || r.Height != 0 || r.KeyAction != "" || r.Value != "" {
 			return errors.New("place request contains unrelated parameters")
 		}
 		if _, err := PlacePath("/home/cloudless", r.PlaceID); err != nil {
@@ -138,8 +142,8 @@ func (c *Client) QueryDisplay(ctx context.Context) (string, error) {
 	return response.Output, err
 }
 
-func (c *Client) ApplyDisplay(ctx context.Context, output string, width, height int) error {
-	_, err := c.call(ctx, Request{Action: ActionDisplayApply, Output: output, Width: width, Height: height})
+func (c *Client) ApplyDisplay(ctx context.Context, layout, output string, width, height int) error {
+	_, err := c.call(ctx, Request{Action: ActionDisplayApply, Layout: layout, Output: output, Width: width, Height: height})
 	return err
 }
 
@@ -238,7 +242,7 @@ func serveConnection(ctx context.Context, connection net.Conn, authorize Authori
 	case ActionDisplayQuery:
 		response.Output, err = executor.QueryDisplay(ctx)
 	case ActionDisplayApply:
-		err = executor.ApplyDisplay(ctx, request.Output, request.Width, request.Height)
+		err = executor.ApplyDisplay(ctx, request.Layout, request.Output, request.Width, request.Height)
 	case ActionInputKey:
 		err = executor.EmitKey(ctx, request.KeyAction, request.Value)
 	case ActionPlaceOpen:

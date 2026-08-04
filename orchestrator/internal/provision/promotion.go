@@ -144,6 +144,7 @@ func PromoteDefault(ctx context.Context, eng engine.Engine, st *state.Store, mf 
 	_ = eng.Remove(ctx, app.ContainerName())
 
 	spec := catalog.EngineSpec(app, target)
+	spec.RestartPolicy = "no"
 	spec.Image = pinnedImage(ctx, mf, app)
 	if pin, ok := mf.ModelPin(ctx, defaultModelPinKey()); ok && pin.Repo == target {
 		spec.Args = append(append([]string{}, spec.Args...), "--revision", pin.Revision)
@@ -236,6 +237,7 @@ func rollbackPromotion(ctx context.Context, eng engine.Engine, st *state.Store, 
 	p.Error = cause.Error()
 	_ = st.SetModelPromotion(p)
 	spec := catalog.EngineSpec(app, bootstrap)
+	spec.RestartPolicy = "no"
 	spec.Image = pinnedImage(ctx, mf, app)
 	_, rollbackErr := eng.Run(ctx, spec)
 	if rollbackErr != nil {

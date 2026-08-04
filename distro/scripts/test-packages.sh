@@ -78,9 +78,26 @@ grep -Fq 'sudo cloudless-repair --repair' \
     "$DISTRO/packages/cloudless-shell/recovery.html"
 grep -Fq '/usr/bin/cloudless-browser-agent' \
     "$DISTRO/packages/cloudless-shell/openbox-autostart"
+grep -Fq '/usr/bin/cloudless-display-watch &' \
+    "$DISTRO/packages/cloudless-shell/openbox-autostart"
+grep -Fq '/api/system/display/normalize' \
+    "$DISTRO/packages/cloudless-shell/cloudless-kiosk"
+grep -Fq 'systemctl restart --no-block lightdm.service' \
+    "$DISTRO/packages/cloudless-shell/postinst"
+grep -Fq 'CLOUDLESS_UPDATE_TRANSACTION' \
+    "$DISTRO/packages/cloudless-shell/postinst"
+grep -Fq 'pkill -f' \
+    "$DISTRO/packages/cloudless-shell/cloudless-display-watch"
+grep -Fq 'nvidia-smi -L' \
+    "$DISTRO/packages/cloudless-shell/cloudless-wait-for-display"
+grep -Fq 'connected_display_ready' \
+    "$DISTRO/packages/cloudless-shell/cloudless-wait-for-display"
+grep -Fq 'ExecStartPre=/usr/lib/cloudless/cloudless-wait-for-display' \
+    "$DISTRO/packages/cloudless-shell/lightdm-wait-display.conf"
 grep -Fq '/run/cloudless-browser/requests' \
     "$DISTRO/packages/cloudless-shell/cloudless-browser.tmpfiles"
 sh -n "$DISTRO/packages/cloudless-shell/cloudless-browser-agent"
+sh -n "$DISTRO/packages/cloudless-shell/cloudless-wait-for-display"
 sh -n "$DISTRO/packages/cloudless-orchestrator/cloudless-install-tailscale"
 bash -n "$DISTRO/packages/cloudless-orchestrator/cloudless-backup"
 tailscale_installer="$DISTRO/packages/cloudless-orchestrator/cloudless-install-tailscale"

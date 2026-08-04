@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cloudless/orchestrator/internal/privileged"
 )
@@ -17,6 +18,14 @@ type fakeCommands struct {
 	serve     string
 	prefs     string
 	calls     []string
+}
+
+type approvalCommands struct{}
+
+func (approvalCommands) LookPath(string) (string, error) { return "/usr/bin/tailscale", nil }
+func (approvalCommands) Run(ctx context.Context, _ string, _ ...string) ([]byte, error) {
+	<-ctx.Done()
+	return []byte("Serve is not enabled. To enable, visit:\nhttps://login.tailscale.com/f/serve?node=example"), ctx.Err()
 }
 
 func (f *fakeCommands) LookPath(string) (string, error) {
@@ -46,6 +55,17 @@ func TestStatusReportsConnectedTailnet(t *testing.T) {
 	status := c.Status(context.Background())
 	if !status.Installed || !status.Connected || !status.ServeEnabled || !status.SSHEnabled || !status.ServesTCP(8766) || status.ServesTCP(9999) || status.DNSName != "cloudless.example.ts.net" || len(status.IPs) != 1 {
 		t.Fatalf("unexpected status: %#v", status)
+	}
+}
+
+func TestServeStatusAcceptsCurrentPrettyPrintedTailscaleJSON(t *testing.T) {
+	data := []byte(`{
+  "TCP": {"443": {"HTTPS": true}, "8766": {"TCPForward": "127.0.0.1:8766"}},
+  "Web": {"spark.tail.ts.net:443": {"Handlers": {"/": {"Proxy": "http://127.0.0.1:8765"}}}}
+}`)
+	dashboard, forwards := parseServeStatus(data)
+	if !dashboard || forwards[8766] != "127.0.0.1:8766" {
+		t.Fatalf("dashboard = %v, forwards = %#v", dashboard, forwards)
 	}
 }
 
@@ -92,6 +112,14 @@ func TestManagedActionsUseConstrainedCommands(t *testing.T) {
 	}
 	if strings.Contains(joined, "serve reset") {
 		t.Fatalf("a scoped Serve toggle reset unrelated routes: %s", joined)
+	}
+}
+
+func TestSetServeReturnsTailnetApprovalWithoutHanging(t *testing.T) {
+	c := &Client{commands: approvalCommands{}, serveTimeout: 10 * time.Millisecond}
+	err := c.SetServe(context.Background(), true)
+	if url := ServeApprovalURL(err); url != "https://login.tailscale.com/f/serve?node=example" {
+		t.Fatalf("approval URL = %q, error = %v", url, err)
 	}
 }
 

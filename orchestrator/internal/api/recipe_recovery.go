@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/cloudless/orchestrator/internal/engine"
 	"github.com/cloudless/orchestrator/internal/jobs"
 	"github.com/cloudless/orchestrator/internal/localrecipes"
 	"github.com/cloudless/orchestrator/internal/recipeops"
@@ -24,6 +25,8 @@ type interruptedRecipeOperation struct {
 }
 
 type recipeRecoveryAction string
+
+var recipeRecoveryEngineProbeInterval = 500 * time.Millisecond
 
 const (
 	recipeRecoveryReconcile   recipeRecoveryAction = "reconcile"
@@ -128,6 +131,18 @@ func (s *Server) recoverRecipeOperation(ctx context.Context, item interruptedRec
 	}
 
 	job := s.recoveryJob(operation)
+	if job != nil {
+		job.Progress("recovering", "Waiting for the container engine before restoring the recipe...", 0, 1)
+	}
+	if err := waitForRecipeRecoveryEngine(ctx, s.eng); err != nil {
+		if job != nil {
+			job.Fail(err)
+		}
+		// Keep the durable operation in recovering. Marking it failed or trying
+		// cleanup while the broker is unavailable destroys the exact runtime
+		// identity that a later daemon restart can still restore safely.
+		return err
+	}
 	action := recipeRecoveryActionFor(operation.Kind, item.originalPhase)
 	if action == recipeRecoveryResumeCheck || action == recipeRecoveryResumeRun {
 		if job != nil {
@@ -246,6 +261,33 @@ func (s *Server) recoverRecipeOperation(ctx context.Context, item interruptedRec
 		return errors.Join(cleanupErr, transitionErr, fmt.Errorf("finalize recipe removal: %w", err))
 	}
 	return errors.Join(cleanupErr, transitionErr)
+}
+
+// waitForRecipeRecoveryEngine closes the systemd Type=simple readiness gap:
+// cloudless-engine.service is considered started when its process exists, but
+// its protected socket is created only after model-cache reconciliation. A
+// cold boot must wait here rather than treating that brief gap as a permanent
+// recipe failure and unloading the remembered runtime.
+func waitForRecipeRecoveryEngine(ctx context.Context, runtime engine.Engine) error {
+	if runtime == nil {
+		return errors.New("container engine is unavailable during recipe recovery")
+	}
+	var lastErr error
+	for {
+		probeCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+		lastErr = runtime.Available(probeCtx)
+		cancel()
+		if lastErr == nil {
+			return nil
+		}
+		timer := time.NewTimer(recipeRecoveryEngineProbeInterval)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return fmt.Errorf("wait for container engine before recipe recovery: %w (last probe: %v)", ctx.Err(), lastErr)
+		case <-timer.C:
+		}
+	}
 }
 
 // reconcileRecipePreparationForResume removes only ephemeral resources owned

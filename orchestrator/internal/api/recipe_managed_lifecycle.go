@@ -458,6 +458,7 @@ func (s *Server) runManagedContainerRecipe(job *jobs.Job, recipe localrecipes.Re
 		proxyTarget = "host.docker.internal"
 	}
 	proxySpec := sparkcluster.ProxySpecTarget(proxyTarget, recipe.Engine.ContainerPort)
+	proxySpec.RestartPolicy = "no"
 	proxySpec.Image = proxyImage
 	proxyID, err := s.eng.Run(ctx, proxySpec)
 	if err != nil {

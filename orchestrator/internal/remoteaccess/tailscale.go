@@ -52,6 +52,25 @@ type Service interface {
 	Install(context.Context) error
 }
 
+// ServeApprovalError means the tailnet administrator must enable Tailscale
+// Serve before the requested route can be installed. URL is safe to return to
+// the local UI because it is an official, short-lived Tailscale approval URL.
+type ServeApprovalError struct {
+	URL string
+}
+
+func (e *ServeApprovalError) Error() string {
+	return "Tailscale Serve must be approved for this tailnet"
+}
+
+func ServeApprovalURL(err error) string {
+	var approval *ServeApprovalError
+	if errors.As(err, &approval) {
+		return approval.URL
+	}
+	return ""
+}
+
 type commandRunner interface {
 	LookPath(string) (string, error)
 	Run(context.Context, string, ...string) ([]byte, error)
@@ -69,8 +88,9 @@ func (execCommands) Run(ctx context.Context, name string, args ...string) ([]byt
 }
 
 type Client struct {
-	commands commandRunner
-	broker   privileged.Client
+	commands     commandRunner
+	broker       privileged.Client
+	serveTimeout time.Duration
 }
 
 func New() *Client {
@@ -163,11 +183,21 @@ func (c *Client) SetSSH(ctx context.Context, enabled bool) error {
 }
 
 func (c *Client) SetServe(ctx context.Context, enabled bool) error {
+	timeout := c.serveTimeout
+	if timeout <= 0 {
+		timeout = 8 * time.Second
+	}
+	serveCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
 	var err error
+	var output []byte
 	if enabled {
-		_, err = c.commands.Run(ctx, "tailscale", "serve", "--bg", "--yes", "--https=443", "http://127.0.0.1:8765")
+		output, err = c.commands.Run(serveCtx, "tailscale", "serve", "--bg", "--yes", "--https=443", "http://127.0.0.1:8765")
 	} else {
-		_, err = c.commands.Run(ctx, "tailscale", "serve", "--yes", "--https=443", "off")
+		output, err = c.commands.Run(serveCtx, "tailscale", "serve", "--yes", "--https=443", "off")
+	}
+	if url := loginURLPattern.FindString(string(output)); url != "" {
+		return &ServeApprovalError{URL: url}
 	}
 	return err
 }
@@ -191,23 +221,28 @@ func parseServeStatus(data []byte) (bool, map[int]string) {
 		TCP map[string]struct {
 			TCPForward string `json:"TCPForward"`
 		} `json:"TCP"`
+		Web map[string]struct {
+			Handlers map[string]struct {
+				Proxy string `json:"Proxy"`
+			} `json:"Handlers"`
+		} `json:"Web"`
 	}
+	dashboard := false
 	if json.Unmarshal(data, &config) == nil {
 		for rawPort, handler := range config.TCP {
 			if port, err := strconv.Atoi(rawPort); err == nil && handler.TCPForward != "" {
 				forwards[port] = handler.TCPForward
 			}
 		}
+		for _, host := range config.Web {
+			for _, handler := range host.Handlers {
+				if strings.TrimSuffix(handler.Proxy, "/") == "http://127.0.0.1:8765" {
+					dashboard = true
+				}
+			}
+		}
 	}
-	// The dashboard can appear under a MagicDNS host key that Cloudless does
-	// not know in advance, so identify only its reviewed loopback target.
-	dashboard := bytesContainsServeTarget(data, "127.0.0.1:8765")
 	return dashboard, forwards
-}
-
-func bytesContainsServeTarget(data []byte, target string) bool {
-	return strings.Contains(string(data), `"Proxy":"http://`+target+`"`) ||
-		strings.Contains(string(data), `"Proxy":"`+target+`"`)
 }
 
 func (c *Client) Install(ctx context.Context) error {

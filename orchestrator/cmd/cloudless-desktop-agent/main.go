@@ -18,6 +18,7 @@ import (
 	"syscall"
 
 	"github.com/cloudless/orchestrator/internal/desktop"
+	"github.com/cloudless/orchestrator/internal/displaylayout"
 	"github.com/cloudless/orchestrator/internal/privileged"
 )
 
@@ -31,10 +32,30 @@ func (sessionExecutor) QueryDisplay(ctx context.Context) (string, error) {
 	return string(output), nil
 }
 
-func (sessionExecutor) ApplyDisplay(ctx context.Context, output string, width, height int) error {
-	command := exec.CommandContext(ctx, "/usr/bin/xrandr", "--output", output, "--mode", fmt.Sprintf("%dx%d", width, height))
+func (sessionExecutor) ApplyDisplay(ctx context.Context, layout, output string, width, height int) error {
+	before, err := exec.CommandContext(ctx, "/usr/bin/xrandr", "--query").Output()
+	if err != nil {
+		return fmt.Errorf("query display before layout: %w", err)
+	}
+	snapshot, err := displaylayout.Parse(string(before))
+	if err != nil {
+		return fmt.Errorf("parse display layout: %w", err)
+	}
+	plan, err := displaylayout.BuildPlan(snapshot, displaylayout.Preference{Layout: layout, Output: output, Width: width, Height: height})
+	if err != nil {
+		return fmt.Errorf("plan display layout: %w", err)
+	}
+	command := exec.CommandContext(ctx, "/usr/bin/xrandr", plan.Args...)
 	if payload, err := command.CombinedOutput(); err != nil {
-		return fmt.Errorf("apply display mode: %w: %s", err, payload)
+		return fmt.Errorf("apply display layout: %w: %s", err, payload)
+	}
+	after, err := exec.CommandContext(ctx, "/usr/bin/xrandr", "--query").Output()
+	if err != nil {
+		return fmt.Errorf("verify display layout: %w", err)
+	}
+	verified, err := displaylayout.Parse(string(after))
+	if err != nil || !displaylayout.Matches(verified, plan.Effective) {
+		return errors.New("display server did not apply the requested safe layout")
 	}
 	return nil
 }

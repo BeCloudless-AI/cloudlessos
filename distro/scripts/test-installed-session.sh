@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
+trap 'status=$?; echo "installed-session command failed at line ${LINENO}: ${BASH_COMMAND} (exit ${status})" >&2' ERR
+
+# Cross-architecture package qualification runs ARM64 binaries through QEMU.
+# Give session daemons enough time to be scheduled there while still failing
+# promptly on a genuinely missing socket, endpoint, or agent action.
+session_wait_attempts="${CLOUDLESS_SESSION_WAIT_ATTEMPTS:-400}"
 
 # This test replaces X11 programs and opens fixed local ports. It must only run
 # inside the disposable package-lifecycle container.
@@ -51,15 +57,23 @@ printf '{"running":false,"minimized":false}\n' >/run/cloudless-browser/status.js
 cat >"$work/xrandr" <<'SH'
 #!/bin/sh
 if [ "${1:-}" = "--query" ]; then
+  mode="$(cat "${CLOUDLESS_XRANDR_MODE:?}")"
   cat <<'EOF'
-Screen 0: minimum 320 x 200, current 1920 x 1080, maximum 16384 x 16384
-DP-0 connected primary 1920x1080+0+0 (normal left inverted right x axis y axis)
-   1920x1080     60.00*+
-   1280x720      60.00
+Screen 0: minimum 320 x 200, maximum 16384 x 16384
 EOF
+  printf 'DP-0 connected primary %s+0+0 (normal left inverted right x axis y axis)\n' "$mode"
+  if [ "$mode" = 1920x1080 ]; then
+    printf '   1920x1080     60.00*+\n   1280x720      60.00\n'
+  else
+    printf '   1920x1080     60.00+\n   1280x720      60.00*\n'
+  fi
   exit 0
 fi
 printf 'xrandr %s\n' "$*" >>"${CLOUDLESS_SESSION_ACTIONS:?}"
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "--mode" ]; then shift; printf '%s\n' "$1" >"${CLOUDLESS_XRANDR_MODE:?}"; break; fi
+  shift
+done
 SH
 cat >"$work/xdotool" <<'SH'
 #!/bin/sh
@@ -69,6 +83,8 @@ chmod 0755 "$work/xrandr" "$work/xdotool"
 install -m 0755 "$work/xrandr" /usr/bin/xrandr
 install -m 0755 "$work/xdotool" /usr/bin/xdotool
 install -o cloudless -g cloudless -m 0660 /dev/null "$work/actions.log"
+printf '1920x1080\n' >"$work/xrandr-mode"
+chown cloudless:cloudless "$work/xrandr-mode"
 
 cat >"$work/chromium" <<'SH'
 #!/bin/sh
@@ -105,7 +121,7 @@ install -m 0666 /dev/null "$work/privileged.log"
 python3 "$work/broker.py" "$work/privileged.sock" "$work/privileged.log" \
   >/tmp/cloudless-session-broker.log 2>&1 &
 broker_pid=$!
-for _ in $(seq 1 100); do
+for _ in $(seq 1 "$session_wait_attempts"); do
   [[ -S "$work/privileged.sock" ]] && break
   sleep 0.05
 done
@@ -153,6 +169,7 @@ PY
 runuser -u cloudless -- env \
   HOME="$work/home" \
   CLOUDLESS_SESSION_ACTIONS="$work/actions.log" \
+  CLOUDLESS_XRANDR_MODE="$work/xrandr-mode" \
   /usr/bin/cloudless-desktop-agent >/tmp/cloudless-session-desktop.log 2>&1 &
 desktop_pid=$!
 
@@ -182,7 +199,7 @@ start_daemon() {
 
 wait_http() {
   local path="$1"
-  for _ in $(seq 1 100); do
+  for _ in $(seq 1 "$session_wait_attempts"); do
     if python3 "$work/request.py" GET "$path" >/dev/null 2>&1; then
       return 0
     fi
@@ -194,7 +211,7 @@ wait_http() {
 
 wait_file_contains() {
   local file="$1" expected="$2"
-  for _ in $(seq 1 100); do
+  for _ in $(seq 1 "$session_wait_attempts"); do
     if grep -Fq -- "$expected" "$file" 2>/dev/null; then
       return 0
     fi
@@ -210,7 +227,17 @@ wait_file_contains() {
   return 1
 }
 
-for _ in $(seq 1 100); do
+wait_file_absent() {
+  local file="$1"
+  for _ in $(seq 1 "$session_wait_attempts"); do
+    [[ ! -e "$file" ]] && return 0
+    sleep 0.05
+  done
+  echo "Timed out waiting for $file to be removed" >&2
+  return 1
+}
+
+for _ in $(seq 1 "$session_wait_attempts"); do
   [[ -S /run/cloudless-desktop/agent.sock ]] && break
   sleep 0.05
 done
@@ -254,14 +281,14 @@ grep -Eq '^terminal-session=[0-9]+$' <<<"$terminal_before"
 display_change="$(python3 "$work/request.py" POST /api/system/display \
   '{"output":"DP-0","width":1280,"height":720}' display)"
 grep -Fq '"confirmationRequired":true' <<<"$display_change"
-wait_file_contains "$work/actions.log" "xrandr --output DP-0 --mode 1280x720"
+wait_file_contains "$work/actions.log" "xrandr --output DP-0 --mode 1280x720 --primary --pos 0x0"
 kill "$daemon_pid"
 wait "$daemon_pid" || true
 daemon_pid=
 start_daemon
 wait_http /api/health
-wait_file_contains "$work/actions.log" "xrandr --output DP-0 --mode 1920x1080"
-[[ ! -e "$work/state/display-change-pending.json" ]]
+wait_file_contains "$work/actions.log" "xrandr --output DP-0 --mode 1920x1080 --primary --pos 0x0"
+wait_file_absent "$work/state/display-change-pending.json"
 
 # Apply the same mode again and explicitly confirm it. The confirmed preference
 # must survive independently from the transient desktop-agent connection.

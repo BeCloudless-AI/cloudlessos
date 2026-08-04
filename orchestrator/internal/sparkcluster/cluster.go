@@ -1897,7 +1897,7 @@ func ProxySpecTarget(host string, port int) engine.RunSpec {
 		host = "host.docker.internal"
 	}
 	spec := engine.RunSpec{
-		Name: "cloudless-cluster-engine-proxy", Image: "alpine/socat:latest",
+		Name: "cloudless-cluster-engine-proxy", Image: "alpine/socat:latest", RestartPolicy: "no",
 		Network: "cloudless", NetworkAlias: "cloudless-ai",
 		ExtraHosts: []string{"host.docker.internal:host-gateway"},
 		Args:       []string{"tcp-listen:8000,fork,reuseaddr", fmt.Sprintf("tcp-connect:%s:%d", host, port)},

@@ -2,15 +2,33 @@ package api
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
+	"time"
 
+	"github.com/cloudless/orchestrator/internal/engine"
 	"github.com/cloudless/orchestrator/internal/jobs"
 	"github.com/cloudless/orchestrator/internal/localrecipes"
 	"github.com/cloudless/orchestrator/internal/recipeops"
 	"github.com/cloudless/orchestrator/internal/state"
 )
+
+type delayedRecipeRecoveryEngine struct {
+	engine.Engine
+	failures int32
+	probes   atomic.Int32
+}
+
+func (e *delayedRecipeRecoveryEngine) Available(context.Context) error {
+	probe := e.probes.Add(1)
+	if probe <= e.failures {
+		return errors.New("broker socket is not ready")
+	}
+	return nil
+}
 
 func TestReconcileInterruptedCheckRemovesOnlyJournaledStagingCheckout(t *testing.T) {
 	dir := t.TempDir()
@@ -105,5 +123,38 @@ func TestRecoveryRefusesStagingPathOutsideStateDirectory(t *testing.T) {
 	}
 	if _, err := os.Stat(outside); err != nil {
 		t.Fatalf("outside directory was changed: %v", err)
+	}
+}
+
+func TestRecipeRecoveryWaitsForContainerBrokerReadiness(t *testing.T) {
+	previous := recipeRecoveryEngineProbeInterval
+	recipeRecoveryEngineProbeInterval = time.Millisecond
+	t.Cleanup(func() { recipeRecoveryEngineProbeInterval = previous })
+
+	runtime := &delayedRecipeRecoveryEngine{failures: 3}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	if err := waitForRecipeRecoveryEngine(ctx, runtime); err != nil {
+		t.Fatal(err)
+	}
+	if got := runtime.probes.Load(); got != 4 {
+		t.Fatalf("availability probes = %d, want 4", got)
+	}
+}
+
+func TestRecipeRecoveryKeepsWaitingUntilItsContextEnds(t *testing.T) {
+	previous := recipeRecoveryEngineProbeInterval
+	recipeRecoveryEngineProbeInterval = time.Millisecond
+	t.Cleanup(func() { recipeRecoveryEngineProbeInterval = previous })
+
+	runtime := &delayedRecipeRecoveryEngine{failures: 1000}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Millisecond)
+	defer cancel()
+	err := waitForRecipeRecoveryEngine(ctx, runtime)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("wait error = %v, want context deadline", err)
+	}
+	if runtime.probes.Load() < 2 {
+		t.Fatalf("availability probes = %d, want retries", runtime.probes.Load())
 	}
 }

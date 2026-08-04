@@ -7,30 +7,31 @@ import "context"
 
 // RunSpec describes how to launch a container for a catalog app.
 type RunSpec struct {
-	Name         string            // container name (orchestrator-managed, "cloudless-" prefix)
-	Image        string            // image ref to run
-	Ports        map[int]int       // hostPort -> containerPort (bound to 127.0.0.1)
-	Env          map[string]string // environment variables
-	Labels       map[string]string // orchestrator-owned lifecycle labels
-	Volumes      map[string]string // hostPath-or-named-volume -> containerPath
-	SecretFiles  map[string]string // protected host file -> fixed read-only container path
-	GPUs         string            // "all", "0", ... or "" for no GPU
-	Network      string            // docker network to join (container-name DNS), or ""
-	NetworkAlias string            // extra DNS alias on the network (e.g. "cloudless-ai")
-	IPC          string            // IPC namespace mode (for example "host" for large inference workers)
-	Ulimits      []string          // Docker ulimit assignments (for example "memlock=-1")
-	ExtraHosts   []string          // host mappings (for example host.docker.internal:host-gateway)
-	EntryPoint   string            // optional container entrypoint override
-	User         string            // optional numeric container user ("0" is permitted for managed maintenance helpers)
-	Args         []string          // extra args appended after the image (container command)
-	ReadOnly     bool              // mount the image root filesystem read-only
-	CapAdd       []string          // Linux capabilities added to the container
-	CapDrop      []string          // Linux capabilities removed from the container
-	SecurityOpts []string          // Docker security options (for example no-new-privileges:true)
-	Tmpfs        []string          // isolated writable tmpfs mounts
-	PidsLimit    int               // maximum number of container processes (0 = Docker default)
-	ShmSize      string            // private /dev/shm allocation (for example 16g)
-	Devices      []string          // narrowly admitted host devices (currently only /dev/infiniband)
+	Name          string            // container name (orchestrator-managed, "cloudless-" prefix)
+	Image         string            // image ref to run
+	RestartPolicy string            // Docker restart policy; empty preserves the app default (unless-stopped)
+	Ports         map[int]int       // hostPort -> containerPort (bound to 127.0.0.1)
+	Env           map[string]string // environment variables
+	Labels        map[string]string // orchestrator-owned lifecycle labels
+	Volumes       map[string]string // hostPath-or-named-volume -> containerPath
+	SecretFiles   map[string]string // protected host file -> fixed read-only container path
+	GPUs          string            // "all", "0", ... or "" for no GPU
+	Network       string            // docker network to join (container-name DNS), or ""
+	NetworkAlias  string            // extra DNS alias on the network (e.g. "cloudless-ai")
+	IPC           string            // IPC namespace mode (for example "host" for large inference workers)
+	Ulimits       []string          // Docker ulimit assignments (for example "memlock=-1")
+	ExtraHosts    []string          // host mappings (for example host.docker.internal:host-gateway)
+	EntryPoint    string            // optional container entrypoint override
+	User          string            // optional numeric container user ("0" is permitted for managed maintenance helpers)
+	Args          []string          // extra args appended after the image (container command)
+	ReadOnly      bool              // mount the image root filesystem read-only
+	CapAdd        []string          // Linux capabilities added to the container
+	CapDrop       []string          // Linux capabilities removed from the container
+	SecurityOpts  []string          // Docker security options (for example no-new-privileges:true)
+	Tmpfs         []string          // isolated writable tmpfs mounts
+	PidsLimit     int               // maximum number of container processes (0 = Docker default)
+	ShmSize       string            // private /dev/shm allocation (for example 16g)
+	Devices       []string          // narrowly admitted host devices (currently only /dev/infiniband)
 }
 
 // Container is the orchestrator's view of a container.

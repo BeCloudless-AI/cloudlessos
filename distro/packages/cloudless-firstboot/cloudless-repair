@@ -64,6 +64,15 @@ if [ "$mode" = repair ]; then
     fi
     deadline=$(( $(date +%s) + 45 ))
     while ! repair_chain_ready && [ "$(date +%s)" -lt "$deadline" ]; do sleep 2; done
+    if ! is_dgx_side_by_side; then
+        if curl --silent --fail --max-time 10 -X POST \
+            -H 'X-Cloudless-Action: display-normalize' \
+            http://127.0.0.1:8765/api/system/display/normalize >/dev/null; then
+            echo "PASS  Safe display topology was restored"
+        else
+            echo "WARN  Display topology could not be normalized yet; kiosk startup will retry"
+        fi
+    fi
 fi
 
 failures=0

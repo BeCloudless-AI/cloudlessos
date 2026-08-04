@@ -69,7 +69,7 @@ type Server struct {
 	virtualKey           func(context.Context, string, string) error
 	virtualKeyMu         sync.Mutex
 	displayQuery         func(context.Context) (displaySnapshot, error)
-	displayApply         func(context.Context, string, int, int) error
+	displayApply         func(context.Context, string, string, int, int) error
 	displayMu            sync.Mutex
 	displayChange        *pendingDisplayChange
 	displayDelay         time.Duration
@@ -121,12 +121,14 @@ type Server struct {
 	remoteAccess      remoteaccess.Service
 	accountBaseURL    string
 	accountHTTPClient *http.Client
+	runtimeInstanceID string
 }
 
 // NewServer constructs a Server backed by the given engine, state store and manifests.
 func NewServer(eng engine.Engine, st *state.Store, mf *manifest.Store, mfModels *manifest.ModelsStore, mfDiff *manifest.DiffusionStore, us *usage.Store, pw *power.Store) *Server {
 	recipeOps, recipeOpsErr := recipeops.Open(st.Dir())
 	privilegedClient := privileged.Client{SocketPath: os.Getenv("CLOUDLESS_PRIVILEGED_SOCKET")}
+	runtimeInstanceID := fmt.Sprintf("%d-%d", os.Getpid(), time.Now().UnixNano())
 	server := &Server{
 		eng: eng, jobs: jobs.NewManager(), state: st, manifest: mf, mfModels: mfModels,
 		mfDiff: mfDiff, usage: us, power: pw,
@@ -139,7 +141,10 @@ func NewServer(eng engine.Engine, st *state.Store, mf *manifest.Store, mfModels 
 		recipes: localrecipes.New(st.Dir()), remoteAccess: remoteaccess.New(),
 		recipeOps: recipeOps, recipeOpsErr: recipeOpsErr,
 		gatewayLimiter: newGatewayRateLimiter(), gatewaySourceLimiter: newGatewayRateLimiterWith(120, 30),
-		gatewayAudit: newGatewayAuditLog(st.Dir()),
+		gatewayAudit: newGatewayAuditLog(st.Dir()), runtimeInstanceID: runtimeInstanceID,
+	}
+	if err := prepareRuntimeRestartOffer(st, runtimeInstanceID); err != nil {
+		log.Printf("runtime restart offer: %v", err)
 	}
 	if recipeOps != nil && recipeOpsErr == nil {
 		if err := recipeOps.Prune(200, 90*24*time.Hour); err != nil {
@@ -150,6 +155,28 @@ func NewServer(eng engine.Engine, st *state.Store, mf *manifest.Store, mfModels 
 	server.startModelDownloadRecovery()
 	server.recoverPendingDisplayChange()
 	return server
+}
+
+// prepareRuntimeRestartOffer distinguishes a daemon-only restart from a device
+// restart. Package upgrades restart cloudlessd while leaving the managed
+// inference endpoint running; presenting a restart offer in that case would
+// incorrectly mark a healthy runtime as unloaded. A cold device restart has no
+// reachable stable endpoint, so it continues through the normal manual or
+// automatic recovery flow.
+func prepareRuntimeRestartOffer(st *state.Store, instanceID string) error {
+	current := st.Get()
+	runtime := current.InferenceRuntime()
+	hasRuntimeIdentity := strings.TrimSpace(runtime.Engine) != "" || strings.TrimSpace(runtime.Model) != "" || strings.TrimSpace(runtime.LocalRecipeID) != ""
+	if !current.EngineUnloaded && current.InferenceOperation.ID == "" && hasRuntimeIdentity {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		err := engineEndpointError(ctx)
+		cancel()
+		if err == nil {
+			log.Printf("runtime restart reconciliation: stable inference endpoint is already healthy; preserving active runtime")
+			return nil
+		}
+	}
+	return st.PrepareRuntimeRestartOffer(instanceID)
 }
 
 // SetGatewayRebind wires the daemon's listener manager into the settings API.
@@ -176,6 +203,9 @@ func (s *Server) imageFor(ctx context.Context, app catalog.App) string {
 // and Update Center replacements therefore use the same reviewed artifact.
 func (s *Server) managedEngineSpec(ctx context.Context, app catalog.App, model string, override []string) engine.RunSpec {
 	spec := catalog.EngineSpecOverride(app, model, override)
+	// Inference recovery is a Cloudless policy decision. Docker must not
+	// independently resurrect a model after the user chooses to keep it off.
+	spec.RestartPolicy = "no"
 	if !customengine.IsCustom(app.ID) && spec.Image == app.Image {
 		spec.Image = s.imageFor(ctx, app)
 	}
@@ -225,6 +255,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/system/tailscale/serve", s.tailscaleServe)
 	mux.HandleFunc("GET /api/system/display", s.displayGet)
 	mux.HandleFunc("POST /api/system/display", s.displaySet)
+	mux.HandleFunc("POST /api/system/display/normalize", s.displayNormalize)
 	mux.HandleFunc("POST /api/system/display/confirm", s.displayConfirm)
 	mux.HandleFunc("POST /api/system/display/revert", s.displayRevert)
 	mux.HandleFunc("GET /api/system/update", s.systemUpdateGet)
@@ -336,6 +367,10 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/engine/launch", s.engineLaunchSet)
 	mux.HandleFunc("DELETE /api/engine/launch", s.engineLaunchClear)
 	mux.HandleFunc("POST /api/engine/restart", s.engineRestart)
+	mux.HandleFunc("GET /api/runtime/restart-offer", s.runtimeRestartOfferGet)
+	mux.HandleFunc("POST /api/runtime/restart-offer/dismiss", s.runtimeRestartOfferDismiss)
+	mux.HandleFunc("GET /api/settings/runtime-restart", s.runtimeRestartSettingGet)
+	mux.HandleFunc("POST /api/settings/runtime-restart", s.runtimeRestartSettingSet)
 	mux.HandleFunc("POST /api/engine/{id}", s.engineSwitch)
 	mux.HandleFunc("GET /api/pins", s.pinsGet)
 	mux.HandleFunc("POST /api/apps/{id}/pin", s.pinToggle)
@@ -513,6 +548,50 @@ func engineEndpointError(ctx context.Context) error {
 
 	if err := engineModelsResponseError(resp.Body); err != nil {
 		return fmt.Errorf("%s %w", url, err)
+	}
+	return nil
+}
+
+// engineToolContractError verifies the request shape used by Hermes. A plain
+// /v1/models probe cannot detect a broken structured-output dependency because
+// vLLM imports its tool parser only when a request contains tools.
+func engineToolContractError(ctx context.Context) error {
+	return engineToolContractErrorAt(ctx, fmt.Sprintf("http://127.0.0.1:%d", recipeStablePort))
+}
+
+func engineToolContractErrorAt(ctx context.Context, endpoint string) error {
+	payload, err := json.Marshal(map[string]any{
+		"model":       localrecipes.CloudlessModelAlias,
+		"messages":    []map[string]string{{"role": "user", "content": "Reply with READY."}},
+		"max_tokens":  1,
+		"temperature": 0,
+		"tools": []map[string]any{{
+			"type": "function",
+			"function": map[string]any{
+				"name":        "cloudless_runtime_probe",
+				"description": "Validates the local tool-calling runtime.",
+				"parameters":  map[string]any{"type": "object", "properties": map[string]any{}},
+			},
+		}},
+		"tool_choice": "auto",
+	})
+	if err != nil {
+		return err
+	}
+	url := strings.TrimRight(endpoint, "/") + "/v1/chat/completions"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, strings.NewReader(string(payload)))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
+		return fmt.Errorf("%s returned HTTP %d: %s", url, resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 	return nil
 }
@@ -1298,6 +1377,15 @@ func (s *Server) applyEngineVerified(job *jobs.Job, target catalog.App, exactIma
 			}
 			job.Progress("verifying", "Verifying the stable Cloudless model and API contract …", -1, -1)
 			waitQualificationPhaseGate(ctx, "verifying")
+			if target.ID == "vllm" && !customProfile {
+				toolCtx, toolCancel := context.WithTimeout(context.Background(), 35*time.Second)
+				toolErr := engineToolContractError(toolCtx)
+				toolCancel()
+				if toolErr != nil {
+					job.Fail(fmt.Errorf("%s failed the Cloudless Agent tool-calling contract: %w", target.Name, toolErr))
+					return
+				}
+			}
 			if verify != nil {
 				verifyCtx, verifyCancel := context.WithTimeout(context.Background(), 15*time.Second)
 				verifyErr := verify(verifyCtx)
@@ -2469,10 +2557,29 @@ func (s *Server) settingsGet(w http.ResponseWriter, r *http.Request) {
 	if model == "" {
 		model = catalog.DefaultModel()
 	}
+	runtimeKind, runtimeID, runtimeName := "", "", ""
+	if !st.EngineUnloaded {
+		if st.LocalRecipeID != "" {
+			runtimeKind, runtimeID, runtimeName = "recipe", st.LocalRecipeID, st.LocalRecipeID
+			if recipe, ok, err := s.recipes.Get(st.LocalRecipeID); err == nil && ok && strings.TrimSpace(recipe.Name) != "" {
+				runtimeName = recipe.Name
+			}
+		} else {
+			runtimeKind, runtimeID, runtimeName = "model", resolveModel(model), resolveModel(model)
+			if selected, ok := models.Get(runtimeID); ok && strings.TrimSpace(selected.Name) != "" {
+				runtimeName = selected.Name
+			} else if custom, ok := st.CustomModels[runtimeID]; ok && strings.TrimSpace(custom.Name) != "" {
+				runtimeName = custom.Name
+			}
+		}
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"model":        model,
 		"defaultModel": catalog.DefaultModel(),
 		"unloaded":     st.EngineUnloaded,
+		"runtimeKind":  runtimeKind,
+		"runtimeId":    runtimeID,
+		"runtimeName":  runtimeName,
 		"executionMode": func() string {
 			if st.ExecutionMode == "cluster" {
 				return "cluster"

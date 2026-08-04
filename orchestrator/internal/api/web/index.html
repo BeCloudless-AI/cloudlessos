@@ -490,6 +490,16 @@
   @media (max-width: 760px) { .uc-grid { grid-template-columns: 1fr; } .uc-hero { align-items: flex-start; flex-wrap: wrap; } .uc-hero .uc-check-button { margin-left: 71px; } .uc-body { padding: 18px 16px 28px; } }
   .hw-card + .hw-card { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
   .set-row { display: flex; align-items: center; gap: 12px; padding: 7px 0; font-size: 13.5px; }
+  .tailnet-control { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 24px; padding: 15px 0; }
+  .tailnet-control + .tailnet-control, .tailnet-serve-ready + .tailnet-control { border-top: 1px solid var(--hair); }
+  .tailnet-control-copy { display: grid; gap: 7px; min-width: 0; }
+  .tailnet-control-copy > b { color: var(--ink); font-size: 13.5px; line-height: 1.25; }
+  .tailnet-control-copy > .fld-help { margin: 0; font-size: 11.5px; line-height: 1.5; }
+  .tailnet-serve-ready { margin: 2px 0 10px; padding: 12px 14px; display: flex; align-items: flex-start; gap: 9px; border: 1px solid color-mix(in srgb, var(--ok) 28%, var(--hair)); border-radius: 11px; color: var(--ink-2); background: color-mix(in srgb, var(--ok) 8%, var(--control)); font-size: 11.5px; line-height: 1.5; }
+  .tailnet-serve-ready .ui-icon { width: 15px; height: 15px; margin-top: 1px; flex: none; color: var(--ok); }
+  .tailnet-serve-url { padding: 0; border: 0; color: var(--blue); background: none; font: inherit; font-weight: 700; text-align: left; overflow-wrap: anywhere; cursor: pointer; }
+  .tailnet-serve-url:hover { text-decoration: underline; }
+  @media (max-width: 620px) { .tailnet-control { gap: 16px; } }
   .srow-label { width: 70px; color: var(--muted); flex: none; }
   .er-pills { display: flex; gap: 8px; }
   .model-edit { display: flex; gap: 8px; flex: 1; }
@@ -1024,6 +1034,19 @@
   .ec-traits li::before { content: "—"; position: absolute; left: 0; color: var(--faint); }
   .ec-foot { margin-top: auto; }
   .ec-active { font-size: 12px; font-weight: 700; color: var(--blue); }
+  .engine-basics-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 13px; }
+  .engine-basics-card { min-width: 0; padding: 17px 18px; border: 1px solid var(--line-2); border-radius: 15px; background: var(--card); }
+  .engine-basics-head { display: flex; align-items: center; gap: 11px; color: var(--ink); font-size: 13px; font-weight: 760; }
+  .engine-basics-icon { width: 34px; height: 34px; flex: none; display: grid; place-items: center; border: 1px solid var(--hair); border-radius: 10px; background: var(--panel-2); color: var(--blue); }
+  .engine-basics-icon .ui-icon { width: 17px; height: 17px; }
+  .engine-basics-card p { margin: 10px 0 0; color: var(--muted); font-size: 11.5px; line-height: 1.6; }
+  .engine-basics-card p strong { color: var(--ink-2); font-weight: 720; }
+  .engine-advanced-note { display: flex; align-items: center; gap: 13px; padding: 15px 16px; border: 1px solid var(--hair); border-radius: 13px; background: var(--panel-2); }
+  .engine-advanced-note > .ui-icon { width: 19px; height: 19px; flex: none; color: var(--blue); }
+  .engine-advanced-note-copy { min-width: 0; flex: 1; }
+  .engine-advanced-note-copy b { display: block; color: var(--ink); font-size: 12.5px; }
+  .engine-advanced-note-copy span { display: block; margin-top: 3px; color: var(--muted); font-size: 11px; line-height: 1.5; }
+  .engine-advanced-note .btn { flex: none; }
 
   /* Inference hub: engine selection and API access */
   .inf-tabs { width: 100%; margin-bottom: 18px; overflow-x: auto; scrollbar-width: none; }
@@ -1469,6 +1492,20 @@
   .api-section-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 13px; }
   .api-section-title { color: var(--ink); font-size: 13.5px; font-weight: 760; letter-spacing: -.15px; }
   .api-section-desc { margin-top: 3px; color: var(--muted); font-size: 11px; line-height: 1.45; }
+  .api-collapsible { padding: 0; overflow: hidden; }
+  .api-collapsible > summary { min-height: 68px; padding: 15px 16px; display: flex; align-items: center; gap: 13px; list-style: none; cursor: pointer; user-select: none; transition: background .16s ease; }
+  .api-collapsible > summary::-webkit-details-marker { display: none; }
+  .api-collapsible > summary:hover { background: color-mix(in srgb, var(--blue-soft) 38%, transparent); }
+  .api-collapsible > summary:focus-visible { outline: 2px solid color-mix(in srgb, var(--blue) 55%, transparent); outline-offset: -3px; }
+  .api-collapsible-copy { min-width: 0; flex: 1; }
+  .api-collapsible-copy .api-section-title, .api-collapsible-copy .api-section-desc { display: block; }
+  .api-collapsible-icon { width: 34px; height: 34px; flex: none; display: grid; place-items: center; border-radius: 10px; color: var(--blue); background: var(--blue-soft); }
+  .api-collapsible-icon .ui-icon { width: 16px; height: 16px; }
+  .api-collapsible-chevron { width: 28px; height: 28px; flex: none; display: grid; place-items: center; color: var(--muted); transition: transform .18s ease, color .18s ease; }
+  .api-collapsible-chevron .ui-icon { width: 14px; height: 14px; }
+  .api-collapsible[open] > summary { border-bottom: 1px solid var(--hair); background: color-mix(in srgb, var(--blue-soft) 24%, transparent); }
+  .api-collapsible[open] .api-collapsible-chevron { color: var(--blue); transform: rotate(90deg); }
+  .api-collapsible-body { padding: 15px 16px 16px; }
   .api-key-generate {
     min-height: 36px; padding: 8px 13px; flex: none; display: inline-flex; align-items: center;
     justify-content: center; gap: 7px; line-height: 1; white-space: nowrap;
@@ -1842,8 +1879,8 @@
   .tile.running .ic:hover .stopx, .stopx:hover { display: grid; }
 
   /* model downloads — shared visual language on Home and in Model Manager */
-  .model-downloads-home, .recipe-jobs-home, .app-operations-home { margin: -8px 0 24px; display: grid; gap: 9px; }
-  .model-downloads-home.hidden, .recipe-jobs-home.hidden, .app-operations-home.hidden { display: none; }
+  .model-downloads-home, .recipe-model-ready-home, .recipe-jobs-home, .app-operations-home { margin: -8px 0 24px; display: grid; gap: 9px; }
+  .model-downloads-home.hidden, .recipe-model-ready-home.hidden, .recipe-jobs-home.hidden, .app-operations-home.hidden { display: none; }
   .model-download-home {
     min-width: 0; padding: 13px 15px; display: grid;
     grid-template-columns: 38px minmax(0, 1fr) auto; align-items: center; gap: 12px;
@@ -1864,6 +1901,10 @@
   .model-download-actions { display: flex; align-items: center; gap: 9px; }
   .recipe-job-home .model-download-icon .ui-icon { animation: mdl-download-pulse 1.2s ease-in-out infinite; }
   .recipe-job-home .model-download-meta { white-space: normal; line-height: 1.45; }
+  .recipe-model-ready-card { border-color: color-mix(in srgb, var(--ok) 34%, var(--hair)); background: linear-gradient(120deg, color-mix(in srgb, var(--ok) 10%, var(--card)), var(--card)); }
+  .recipe-model-ready-card .model-download-icon { color: var(--ok); background: color-mix(in srgb, var(--ok) 12%, var(--card)); }
+  .recipe-model-ready-card .model-download-icon .ui-icon { animation: none; }
+  .recipe-model-ready-card .model-download-meta { white-space: normal; line-height: 1.45; }
   .app-operation-home .model-download-meta { white-space: normal; line-height: 1.45; }
   .app-operation-home.install .model-download-icon .ui-icon { animation: mdl-download-pulse 1.2s ease-in-out infinite; }
   .app-operation-home.remove { border-color: color-mix(in srgb, var(--warn) 28%, var(--hair)); }
@@ -2736,6 +2777,9 @@
   .hero-model-go { width: 24px; height: 24px; flex: none; display: grid; place-items: center; border-radius: 8px; color: var(--muted); background: var(--panel-2); }
   .hero-model-go .ui-icon { width: 12px; height: 12px; }
   .hero-model:hover .hero-model-go { color: var(--blue); background: var(--blue-soft); }
+  .runtime-action-list { display: grid; gap: 7px; }
+  .runtime-action-list .power-option { width: 100%; }
+  .runtime-action-list .power-option-copy { text-align: left; }
   .hero-metrics {
     min-width: 0; min-height: 62px; padding: 0 16px; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
     border: 0; border-left: 1px solid var(--hair); border-radius: 0; color: var(--ink-2); background: transparent;
@@ -2929,6 +2973,17 @@
   .mm-tab .ui-icon { width: 15px; height: 15px; }
   .mm-tab:hover { color: var(--ink); background: color-mix(in srgb, var(--control) 65%, transparent); }
   .mm-tab.on { color: var(--blue); border: 0; background: var(--card-strong); box-shadow: 0 4px 12px -9px rgba(9, 18, 48, .65); }
+  .mm-tabs.mm-primary-tabs { width: 100%; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .mm-primary-tab { width: 100%; justify-content: center; }
+  .mm-model-warning {
+    margin: 0 0 16px; padding: 13px 15px; display: flex; align-items: flex-start; gap: 11px;
+    color: var(--ink-2); background: color-mix(in srgb, var(--amber, #d88a18) 10%, var(--panel-2));
+    border: 1px solid color-mix(in srgb, var(--amber, #d88a18) 32%, var(--hair)); border-radius: 13px;
+  }
+  .mm-model-warning > .ui-icon { width: 18px; height: 18px; flex: none; margin-top: 1px; color: var(--amber, #d88a18); }
+  .mm-model-warning-copy { min-width: 0; display: flex; flex-direction: column; gap: 3px; font-size: 12px; line-height: 1.45; }
+  .mm-model-warning-copy b { color: var(--ink); font-size: 12.5px; }
+  .mm-model-warning-copy .lnk { width: fit-content; margin-top: 2px; font-size: 12px; font-weight: 700; }
   .mm-bar {
     margin: 0 0 12px; padding: 14px; display: grid; grid-template-columns: auto minmax(260px, 420px);
     align-items: center; gap: 16px; border: 1px solid var(--hair); border-radius: 14px;
@@ -2948,6 +3003,10 @@
   .mm-filter-row { min-height: 34px; display: flex; align-items: center; gap: 10px; margin: 0 2px 18px; }
   .mm-filter-label { color: var(--faint); font-size: 9px; font-weight: 750; letter-spacing: .65px; text-transform: uppercase; }
   .mm-filters { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; margin: 0; }
+  .mm-model-kinds { display: flex; align-items: center; gap: 5px; padding-right: 10px; border-right: 1px solid var(--hair); }
+  .mm-kind-chip { min-height: 30px; padding: 6px 11px; border: 1px solid transparent; border-radius: 8px; background: none; color: var(--muted); font: inherit; font-size: 11px; font-weight: 650; cursor: pointer; }
+  .mm-kind-chip:hover { color: var(--ink); background: var(--control); }
+  .mm-kind-chip.on { color: var(--blue); border-color: color-mix(in srgb, var(--blue) 24%, var(--hair)); background: var(--blue-soft); }
   .mm-chip { min-height: 30px; padding: 6px 11px; border-radius: 8px; font-size: 11px; font-weight: 650; }
   .mm-result-count { margin-left: auto; color: var(--muted); font-size: 10.5px; font-variant-numeric: tabular-nums; }
   .mdl-sec {
@@ -3083,8 +3142,8 @@
   .recipe-toolbar { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
   .recipe-toolbar .btn { min-width: 116px; min-height: 40px; padding: 0 13px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; white-space: nowrap; line-height: 1; }
   .recipe-toolbar .btn .ui-icon { width: 15px; height: 15px; flex: none; }
-  .recipe-scope-tabs { margin: 0 0 14px; padding: 5px; display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 5px; border: 1px solid var(--hair); border-radius: 13px; background: var(--panel-2); }
-  .recipe-scope-tab { min-height: 38px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 0; border-radius: 9px; color: var(--muted); background: transparent; font: inherit; font-size: 10px; font-weight: 720; }
+  .recipe-scope-tabs { width: 100%; margin: 0 0 14px; padding: 5px; display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 5px; border: 1px solid var(--hair); border-radius: 13px; background: var(--panel-2); }
+  .recipe-scope-tab { width: 100%; min-height: 38px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 0; border-radius: 9px; color: var(--muted); background: transparent; font: inherit; font-size: 10px; font-weight: 720; }
   .recipe-scope-tab.on { color: var(--ink); background: var(--card); box-shadow: 0 5px 18px -14px rgba(0,0,0,.65); }
   .recipe-scope-tab .ui-icon { width: 14px; height: 14px; }
   .community-recipe-card { padding: 17px; display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 16px; align-items: center; border: 1px solid var(--hair); border-radius: 15px; background: var(--card); }
@@ -3147,6 +3206,7 @@
   .recipe-search input { min-width: 0; width: 100%; border: 0; outline: 0; color: var(--ink); background: transparent; font: inherit; font-size: 10.5px; }
   .recipe-search input::placeholder { color: var(--faint); }
   .recipe-filter-row { margin:0 0 16px; padding:14px; display:grid; grid-template-columns:minmax(260px,1fr) minmax(160px,.36fr) minmax(170px,.38fr) auto; gap:10px; align-items:end; border:1px solid var(--hair); border-radius:14px; background:color-mix(in srgb,var(--panel-2) 64%,transparent); }
+  .recipe-intro + .recipe-controls, .recipe-intro + .recipe-filter-row { border-top: 0; border-radius: 0 0 16px 16px; }
   .community-filter-field { min-width:0; display:grid; gap:6px; }
   .community-filter-field > span { color:var(--faint); font:8.5px/1 'Roboto Mono',ui-monospace,monospace; font-weight:700; letter-spacing:.55px; text-transform:uppercase; }
   .community-filter-field .recipe-search { width:100%; }
@@ -3738,9 +3798,13 @@
     .inf-page-hero { align-items: flex-start; flex-wrap: wrap; padding: 15px; }
     .set-content .inf-page-copy { flex-basis: calc(100% - 62px); }
     .inf-page-hero .inf-state-pill { margin-left: 62px; }
-    .ec-grid, .api-access-grid, .api-service-grid { grid-template-columns: 1fr; }
+    .ec-grid, .engine-basics-grid, .api-access-grid, .api-service-grid { grid-template-columns: 1fr; }
+    .engine-advanced-note { align-items: flex-start; flex-wrap: wrap; }
+    .engine-advanced-note-copy { flex-basis: calc(100% - 34px); }
+    .engine-advanced-note .btn { width: 100%; }
     .ec { min-height: 0; }
     .api-section { padding: 14px; }
+    .api-section.api-collapsible { padding: 0; }
     .api-section-head { align-items: center; }
     .api-endpoint { grid-template-columns: 72px minmax(0, 1fr) 30px; }
     .machine-layout { grid-template-columns: 1fr; }
@@ -3951,6 +4015,7 @@
     <symbol id="ui-general" viewBox="0 0 24 24"><path d="M10 5H3m9 14H3M14 3v4m2 10v4m5-9h-9m9 7h-5m5-14h-7M8 10v4m0-2H3"/></symbol>
     <symbol id="ui-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></symbol>
     <symbol id="ui-key" viewBox="0 0 24 24"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m11.5 11.5 9-9M15 8l3 3m-6-6 3 3"/></symbol>
+    <symbol id="ui-shield" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/></symbol>
     <symbol id="ui-keyboard" viewBox="0 0 24 24"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M6 9h.01M10 9h.01M14 9h.01M18 9h.01M6 13h.01M10 13h.01M14 13h.01M18 13h.01M7 16h10"/></symbol>
     <symbol id="ui-network" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="6" rx="1"/><rect x="2" y="16" width="6" height="6" rx="1"/><rect x="16" y="16" width="6" height="6" rx="1"/><path d="M5 16v-3h14v3M12 8v5"/></symbol>
     <symbol id="ui-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
@@ -4031,8 +4096,8 @@
         <input id="hero-ask-input" placeholder="Ask about your models, apps, or this machine…" autocomplete="off">
         <button class="ask-go" type="submit" title="Ask Cloudless" aria-label="Ask Cloudless"><svg class="ui-icon" aria-hidden="true"><use href="#ui-arrow-right"/></svg></button>
       </form>
-      <div class="hero-context engine-hidden" aria-label="Active model and engine metrics">
-        <button class="hero-model" id="open-models-2" type="button" title="Open the Model Manager">
+      <div class="hero-context engine-hidden" aria-label="Active AI runtime and engine metrics">
+        <button class="hero-model" id="open-models-2" type="button" title="Active runtime actions" aria-haspopup="dialog">
           <span class="hero-model-icon"><svg class="ui-icon" aria-hidden="true"><use href="#ui-models"/></svg><span class="hw-link-dot" id="hw-model-dot"></span></span>
           <span class="hero-model-copy"><small id="hw-model-k">Active model</small><b id="gpu-model">Browse models</b></span>
           <span class="hero-model-go"><svg class="ui-icon" aria-hidden="true"><use href="#ui-arrow-right"/></svg></span>
@@ -4054,6 +4119,7 @@
   <section class="app-operations-home hidden" id="app-operations-home" aria-live="polite"></section>
   <section class="recipe-jobs-home hidden" id="recipe-jobs-home" aria-live="polite"></section>
   <section class="model-downloads-home hidden" id="model-downloads-home" aria-live="polite"></section>
+  <section class="recipe-model-ready-home hidden" id="recipe-model-ready-home" aria-live="polite"></section>
 
   <section class="home-cluster hidden" id="home-cluster" aria-live="polite"></section>
 
@@ -4343,7 +4409,7 @@ const gb = mb => (mb / 1024).toFixed(1);
 let installing = 0, catalogCache = [], packCache = [], gpuBuilt = 0, systemBuilt = '', appsBuilt = '', gpuDetailsOpen = false, appsEntered = false;
 const appOperations = new Map(), appOperationSeen = new Set(), appOperationNotified = new Set();
 let appOperationSignature = '';
-let lastRunning = {}, engineStateCache = null, engineReady = false, engineUnloaded = false, engineActive = '', engineExecutionMode = 'local', engineOperation = 'idle', engineSwitching = false, engineAborting = false, engineLoadJobId = '', activeEngineName = 'the engine';
+let lastRunning = {}, engineStateCache = null, engineReady = false, engineUnloaded = false, engineActive = '', engineExecutionMode = 'local', engineOperation = 'idle', engineSwitching = false, engineAborting = false, engineLoadJobId = '', activeEngineName = 'the engine', activeRuntimeContext = null;
 let pinnedIds = [], lpQuery = '', lpView = '';
 let clusterWizard = { step: 1, peers: [], host: '', username: '', password: '', cable: false, preflight: null, busy: false, error: '', adding: false, existingNodes: 0, operation: null };
 let asstMsgs = [], asstBusy = false, asstController = null, asstStreamQueued = false, asstStreamIndex = -1;
@@ -5382,7 +5448,7 @@ async function applyApplicationUpdates(ids, returnFocus) {
   await refreshAppOperations(); renderUpdateCenter();
 }
 async function applySystemUpdate(returnFocus) {
-  const approved = await openCloudlessDecision({ title: 'Install the CloudlessOS update?', message: 'CloudlessOS will install the signed system packages now.', detail: 'Installed apps and their data remain in place. A restart may be required when the update finishes.', confirmLabel: 'Install update', icon: 'download', returnFocus });
+  const approved = await openCloudlessDecision({ title: 'Install the CloudlessOS update?', message: 'CloudlessOS will install the signed system packages now.', detail: 'Installed apps and their data remain in place. The Cloudless interface refreshes automatically when installation finishes; a full system restart is requested only when required.', confirmLabel: 'Install update', icon: 'download', returnFocus });
   if (!approved) return;
   const result = await api('/api/system/update/apply', { method: 'POST', headers: { 'X-Cloudless-Action': 'update' } }).catch(error => ({ error: error.message }));
   if (result.error) return toast(result.error, true);
@@ -6052,7 +6118,7 @@ function renderGuide() {
 function runGuideAction(action) {
   if (GUIDE_PARTS.some(part => part.id === action)) { guidePart = action; guideQuery = ''; document.getElementById('guide-search').value = ''; renderGuide(); document.getElementById('guide-main').scrollTop = 0; return; }
   closeGuide();
-  if (action === 'models') openModelManager();
+  if (action === 'models') openModelManager('language');
   else if (action === 'recipes') openRecipeLibrary();
   else if (action === 'api') { setPage = 'api'; openSettings(); }
   else if (action === 'tailscale') { setPage = 'remote-access'; openSettings(); }
@@ -6267,6 +6333,7 @@ function finishOnboarding(skipped = false) {
     tour.classList.add('hidden'); tour.classList.remove('out'); tour.setAttribute('aria-hidden', 'true');
     document.documentElement.classList.remove('tour-active');
     if (tourPreviousFocus && tourPreviousFocus.isConnected) tourPreviousFocus.focus({ preventScroll: true });
+    maybeShowRuntimeRestartOffer();
   }, 260);
   if (skipped) toast('Tour skipped — replay it anytime in Settings');
 }
@@ -6389,11 +6456,36 @@ async function renderRemoteAccessPage(c) {
     return;
   }
   const connected = !!status.connected, ip = (status.ips || []).find(value => /^100\./.test(value)) || (status.ips || [])[0] || 'Not assigned';
-  c.innerHTML = `<div class="machine-page"><div class="inf-page-hero"><span class="inf-page-icon">${uiIcon('network')}</span><div class="inf-page-copy"><div class="inf-page-eyebrow">Private networking</div><div class="inf-page-title">Tailscale</div><div class="inf-page-desc">${connected ? 'This CloudlessOS machine is reachable through your encrypted tailnet.' : 'Connect this machine to your tailnet to use CloudlessOS remotely.'}</div></div><span class="inf-state-pill ${connected?'ready':''}">${connected?'CONNECTED':'NOT CONNECTED'}</span></div><section class="machine-card"><div class="machine-card-head"><div><div class="machine-card-title">${connected ? escapeHtml(status.deviceName || 'CloudlessOS') : 'Connect your account'}</div><div class="machine-card-desc">${connected ? escapeHtml(status.dnsName || status.tailnet || 'Secure tailnet connection') : 'Authentication opens in Cloudless Browser and your password never passes through CloudlessOS.'}</div></div></div><div class="machine-facts"><div class="machine-fact"><div class="machine-fact-label">Tailscale IP</div><div class="machine-fact-value">${escapeHtml(ip)}</div></div><div class="machine-fact"><div class="machine-fact-label">Client version</div><div class="machine-fact-value">${escapeHtml(status.version || 'Installed')}</div></div>${connected?`<div class="machine-fact"><div class="machine-fact-label">Tailnet</div><div class="machine-fact-value">${escapeHtml(status.tailnet || 'Connected')}</div></div>`:''}</div><div class="machine-driver-actions">${connected?`<button class="btn control-action" id="tailscale-dashboard">${uiIcon('browser')}<span>Open Tailscale</span></button><button class="btn cluster-danger control-action" id="tailscale-logout">${uiIcon('unlink')}<span>Disconnect account</span></button>`:`<button class="btn primary control-action" id="tailscale-connect">${uiIcon('network')}<span>Connect Tailscale</span></button>`}</div></section>${connected?`<section class="machine-card"><div class="machine-card-head"><div><div class="machine-card-title">CloudlessOS over your tailnet</div><div class="machine-card-desc">These controls remain private to authenticated devices allowed by your Tailscale access policy.</div></div></div><div class="set-row"><span><b>Serve CloudlessOS</b><span class="fld-help">Give this dashboard a private HTTPS address inside your tailnet.</span></span><label class="switch"><input type="checkbox" id="tailscale-serve" ${status.serveEnabled?'checked':''}><span class="track2"></span></label></div><div class="set-row"><span><b>Tailscale SSH</b><span class="fld-help">Allow terminal access according to your tailnet SSH policy.</span></span><label class="switch"><input type="checkbox" id="tailscale-ssh" ${status.sshEnabled?'checked':''}><span class="track2"></span></label></div></section>`:''}</div>`;
+  c.innerHTML = `<div class="machine-page"><div class="inf-page-hero"><span class="inf-page-icon">${uiIcon('network')}</span><div class="inf-page-copy"><div class="inf-page-eyebrow">Private networking</div><div class="inf-page-title">Tailscale</div><div class="inf-page-desc">${connected ? 'This CloudlessOS machine is reachable through your encrypted tailnet.' : 'Connect this machine to your tailnet to use CloudlessOS remotely.'}</div></div><span class="inf-state-pill ${connected?'ready':''}">${connected?'CONNECTED':'NOT CONNECTED'}</span></div><section class="machine-card"><div class="machine-card-head"><div><div class="machine-card-title">${connected ? escapeHtml(status.deviceName || 'CloudlessOS') : 'Connect your account'}</div><div class="machine-card-desc">${connected ? escapeHtml(status.dnsName || status.tailnet || 'Secure tailnet connection') : 'Authentication opens in Cloudless Browser and your password never passes through CloudlessOS.'}</div></div></div><div class="machine-facts"><div class="machine-fact"><div class="machine-fact-label">Tailscale IP</div><div class="machine-fact-value">${escapeHtml(ip)}</div></div><div class="machine-fact"><div class="machine-fact-label">Client version</div><div class="machine-fact-value">${escapeHtml(status.version || 'Installed')}</div></div>${connected?`<div class="machine-fact"><div class="machine-fact-label">Tailnet</div><div class="machine-fact-value">${escapeHtml(status.tailnet || 'Connected')}</div></div>`:''}</div><div class="machine-driver-actions">${connected?`<button class="btn control-action" id="tailscale-dashboard">${uiIcon('browser')}<span>Open Tailscale</span></button><button class="btn cluster-danger control-action" id="tailscale-logout">${uiIcon('unlink')}<span>Disconnect account</span></button>`:`<button class="btn primary control-action" id="tailscale-connect">${uiIcon('network')}<span>Connect Tailscale</span></button>`}</div></section>${connected?`<section class="machine-card"><div class="machine-card-head"><div><div class="machine-card-title">CloudlessOS over your tailnet</div><div class="machine-card-desc">These controls remain private to authenticated devices allowed by your Tailscale access policy.</div></div></div><div class="set-row"><span><b>Serve CloudlessOS</b><span class="fld-help">Give this dashboard a private HTTPS address inside your tailnet.</span></span><label class="switch"><input type="checkbox" id="tailscale-serve" ${status.serveEnabled?'checked':''}><span class="track2"></span></label></div><div class="set-row"><span><b>Tailscale-managed SSH</b><span class="fld-help">Use Tailscale identity and access policies for SSH. When off, regular SSH can still work through this machine's Tailscale IP.</span></span><label class="switch"><input type="checkbox" id="tailscale-ssh" ${status.sshEnabled?'checked':''}><span class="track2"></span></label></div></section>`:''}</div>`;
   const connect=document.getElementById('tailscale-connect'); if(connect)connect.onclick=async()=>{connect.disabled=true;connect.innerHTML='<i class="key-dialog-spinner"></i><span>Preparing sign-in…</span>';const result=await api('/api/system/tailscale/connect',{method:'POST',headers:{'X-Cloudless-Action':'tailscale-connect'}}).catch(error=>({error:error.message}));if(result.error){toast(result.error,true);connect.disabled=false;connect.innerHTML=`${uiIcon('network')}<span>Connect Tailscale</span>`;return;}if(result.authURL){await openSystemBrowser(result.authURL);toast('Finish connecting in Browser');await waitForTailscaleConnection(c,connect);}else{toast('Tailscale connected');await renderRemoteAccessPage(c);}};
+  const tailnetControlToggles=['tailscale-serve','tailscale-ssh'].map(id=>document.getElementById(id)).filter(Boolean);
+  for(const controlToggle of tailnetControlToggles){const row=controlToggle.closest('.set-row');const copy=row&&row.querySelector(':scope > span');if(row)row.classList.add('tailnet-control');if(copy)copy.classList.add('tailnet-control-copy');}
+  const serveURL=status.serveEnabled&&status.dnsName?`https://${String(status.dnsName).replace(/\.+$/,'')}/`:'';
+  if(serveURL){const serveRow=document.getElementById('tailscale-serve')?.closest('.tailnet-control');if(serveRow){const ready=document.createElement('div');ready.className='tailnet-serve-ready';ready.innerHTML=`${uiIcon('check')}<span>Your Cloudless is now accessible through your browser via <button class="tailnet-serve-url" id="tailscale-serve-url" type="button">${escapeHtml(serveURL)}</button>.</span>`;serveRow.insertAdjacentElement('afterend',ready);document.getElementById('tailscale-serve-url').onclick=()=>openSystemBrowser(serveURL);}}
   const dashboard=document.getElementById('tailscale-dashboard'); if(dashboard)dashboard.onclick=()=>openSystemBrowser(status.webURL||'http://100.100.100.100');
   const logout=document.getElementById('tailscale-logout'); if(logout)logout.onclick=async()=>{const approved=await openCloudlessDecision({title:'Disconnect Tailscale?',message:'This machine will stop being reachable through your tailnet.',detail:'CloudlessOS data and local networking are not changed.',confirmLabel:'Disconnect',icon:'unlink',returnFocus:logout});if(!approved)return;await api('/api/system/tailscale/logout',{method:'POST',headers:{'X-Cloudless-Action':'tailscale-logout'}});renderRemoteAccessPage(c);};
-  for(const [id,path] of [['tailscale-serve','serve'],['tailscale-ssh','ssh']]){const toggle=document.getElementById(id);if(toggle)toggle.onchange=async()=>{toggle.disabled=true;const result=await api('/api/system/tailscale/'+path,{method:'POST',headers:{'Content-Type':'application/json','X-Cloudless-Action':'tailscale-'+path},body:JSON.stringify({enabled:toggle.checked})}).catch(error=>({error:error.message}));if(result.error){toast(result.error,true);toggle.checked=!toggle.checked;}else toast(`${path==='serve'?'Private Cloudless access':'Tailscale SSH'} ${toggle.checked?'enabled':'disabled'}`);toggle.disabled=false;};}
+  const serveToggle=document.getElementById('tailscale-serve');
+  if(serveToggle)serveToggle.onchange=async()=>{
+    serveToggle.disabled=true;
+    const enabling=serveToggle.checked;
+    const result=await api('/api/system/tailscale/serve',{method:'POST',headers:{'Content-Type':'application/json','X-Cloudless-Action':'tailscale-serve'},body:JSON.stringify({enabled:enabling})}).catch(error=>({error:error.message}));
+    if(result.activationRequired&&result.authURL){
+      serveToggle.checked=false;
+      await openSystemBrowser(result.authURL);
+      toast('Approve Tailscale Serve in Browser; CloudlessOS will finish automatically');
+      for(let attempt=0;attempt<30;attempt++){
+        await new Promise(resolve=>setTimeout(resolve,3000));
+        const retry=await api('/api/system/tailscale/serve',{method:'POST',headers:{'Content-Type':'application/json','X-Cloudless-Action':'tailscale-serve'},body:JSON.stringify({enabled:true})}).catch(error=>({error:error.message}));
+        if(retry.enabled){toast('Private Cloudless access enabled');await renderRemoteAccessPage(c);return;}
+        if(retry.error){toast(retry.error,true);break;}
+      }
+      toast('Tailscale approval is still pending. Toggle Serve CloudlessOS to retry.',true);
+    }else if(result.error){toast(result.error,true);serveToggle.checked=!enabling;}
+    else {toast(`Private Cloudless access ${enabling?'enabled':'disabled'}`);await renderRemoteAccessPage(c);return;}
+    serveToggle.disabled=false;
+  };
+  const sshToggle=document.getElementById('tailscale-ssh');
+  if(sshToggle)sshToggle.onchange=async()=>{sshToggle.disabled=true;const enabled=sshToggle.checked;const result=await api('/api/system/tailscale/ssh',{method:'POST',headers:{'Content-Type':'application/json','X-Cloudless-Action':'tailscale-ssh'},body:JSON.stringify({enabled})}).catch(error=>({error:error.message}));if(result.error){toast(result.error,true);sshToggle.checked=!enabled;}else toast(`Tailscale SSH ${enabled?'enabled':'disabled'}`);sshToggle.disabled=false;};
 }
 
 function renderDGXDashboardPage(c) {
@@ -7201,7 +7293,7 @@ function openPowerDialog(action) {
   };
   confirmButton.focus();
 }
-function openDisplayResolutionDialog(output, width, height) {
+function openDisplayResolutionDialog(layout, output, width, height) {
   keyDialogBusy = false;
   keyDialogReturnFocus = document.getElementById('display-apply');
   const layer = document.getElementById('key-dialog-layer');
@@ -7234,7 +7326,7 @@ function openDisplayResolutionDialog(output, width, height) {
       const result = await api('/api/system/display', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Cloudless-Action': 'display' },
-        body: JSON.stringify({ output, width, height }),
+        body: JSON.stringify({ layout, output, width, height }),
       });
       keyDialogBusy = false;
       showDisplayKeepDialog(result, output, width, height);
@@ -7476,6 +7568,7 @@ async function renderApiPage(c) {
   const auditEvents = audit.events || [];
   if (engine && Object.keys(engine).length) setActiveEngine(engine);
   const distributed = engine.executionMode === 'cluster';
+  const advanced = advancedInterfaceEnabled();
   const keys = g.keys || [];
   const lanUnavailable = keys.length === 0;
   const tailnet = g.tailnet || {};
@@ -7491,7 +7584,7 @@ async function renderApiPage(c) {
       <div class="inf-page-desc">Connect clients either to raw model inference or to the full Hermes agent. ${distributed ? 'Model requests are automatically served by your Spark cluster.' : 'Requests stay on this machine'} unless you enable network access.</div></div>
       <span class="inf-state-pill ready">${distributed ? 'Cluster' : 'Local'}</span>
     </div>
-    <section class="api-section">
+    ${advanced ? `<section class="api-section" id="api-identity-section">
       <div class="api-section-head"><div><div class="api-section-title">Permanent API identity</div><div class="api-section-desc">Every recipe and inference engine is presented to clients through this same port and model name.</div></div></div>
       <div class="api-access-grid">
         <label class="fld"><span class="fld-label">API port</span><input class="fld-input" id="api-contract-port" type="number" min="1024" max="65535" step="1" value="${escapeAttr(String(g.port))}"><span class="fld-help">Reserved CloudlessOS service ports cannot be selected.</span></label>
@@ -7499,22 +7592,7 @@ async function renderApiPage(c) {
       </div>
       <div class="machine-driver-note">${uiIcon('check')}<span>Guardrail active: recipes and custom engines cannot override this client-facing contract. Their private ports and native model identifiers remain isolated behind the Cloudless gateway.</span></div>
       <div class="api-section-head" style="margin-top:14px"><div></div><button class="btn primary control-action" id="api-contract-save" type="button">${uiIcon('check')}<span>Save API identity</span></button></div>
-    </section>
-    <section class="api-section">
-      <div class="api-section-head"><div><div class="api-section-title">Connect a client</div><div class="api-section-desc">Both endpoints use the OpenAI format but have different capabilities and key permissions.</div></div></div>
-      <div class="api-service-grid">
-        <div class="api-service"><div class="api-service-head"><span class="api-service-icon">${uiIcon('machine')}</span><span class="api-service-name">Model inference</span><span class="api-service-state ready">Ready</span></div><div class="api-endpoints">
-          <div class="api-endpoint"><span class="api-endpoint-label">Base URL</span><code>${escapeHtml(g.localURL)}</code><button class="api-copy" data-copy="${escapeAttr(g.localURL)}" title="Copy model URL" aria-label="Copy model URL">${uiIcon('copy')}</button></div>
-          <div class="api-endpoint"><span class="api-endpoint-label">Model</span><code>${escapeHtml(g.servedName)}</code><button class="api-copy" data-copy="${escapeAttr(g.servedName)}" title="Copy model name" aria-label="Copy model name">${uiIcon('copy')}</button></div>
-        </div></div>
-        <div class="api-service"><div class="api-service-head"><span class="api-service-icon">${uiIcon('assistant')}</span><span class="api-service-name">Cloudless Agent</span><span class="api-service-state ${g.agent && g.agent.ready ? 'ready' : ''}">${g.agent && g.agent.ready ? 'Ready' : 'Starting'}</span></div><div class="api-endpoints">
-          <div class="api-endpoint"><span class="api-endpoint-label">Base URL</span><code>${escapeHtml(agentURL)}</code><button class="api-copy" data-copy="${escapeAttr(agentURL)}" title="Copy agent URL" aria-label="Copy agent URL">${uiIcon('copy')}</button></div>
-          <div class="api-endpoint"><span class="api-endpoint-label">Model</span><code>hermes-agent</code><button class="api-copy" data-copy="hermes-agent" title="Copy agent model" aria-label="Copy agent model">${uiIcon('copy')}</button></div>
-        </div></div>
-      </div>
-      <div class="api-code"><div class="code-box"><pre id="api-curl">${escapeHtml(curl)}</pre></div><button class="api-copy" data-copy-target="api-curl" title="Copy example" aria-label="Copy cURL example">${uiIcon('copy')}</button></div>
-      <div class="api-code"><div class="code-box"><pre id="api-agent-curl">${escapeHtml(agentCurl)}</pre></div><button class="api-copy" data-copy-target="api-agent-curl" title="Copy agent example" aria-label="Copy agent example">${uiIcon('copy')}</button></div>
-    </section>
+    </section>` : ''}
     <section class="api-section">
       <div class="api-section-head"><div><div class="api-section-title">API keys</div><div class="api-section-desc">Each key is limited to model access, agent access, or both.</div></div><button class="btn primary api-key-generate" id="key-gen" type="button">${uiIcon('key')}<span>Generate key</span></button></div>
       <div id="key-list">${keys.length ? keys.map(apiKeyRow).join('') : '<div class="api-keys-empty">No keys yet. Generate one when you are ready to connect a client.</div>'}</div>
@@ -7531,11 +7609,31 @@ async function renderApiPage(c) {
       </div>
       <div class="sec-warn api-warning">${uiIcon('alert')}<span>Anyone with a valid key can use your model and GPU while an access route is enabled. Share keys carefully and revoke unused ones.</span></div>
     </section>
-    <section class="api-section">
-      <div class="api-section-head"><div><div class="api-section-title">Security activity</div><div class="api-section-desc">Authentication failures, rate limits, API requests and network exposure changes are recorded locally. Prompts, responses and key secrets are never logged.</div></div></div>
-      <div class="machine-driver-note">${uiIcon('shield')}<span>Per-key limit: ${g.policy?.requestsPerMinute || 60} requests per minute, with a short burst of ${g.policy?.burst || 15}. Hermes administration and its dashboard are never exposed through this gateway.</span></div>
-      <div id="gateway-audit">${auditEvents.length ? auditEvents.slice(0, 20).map(apiAuditRow).join('') : '<div class="api-keys-empty">No gateway activity recorded yet.</div>'}</div>
-    </section>
+    <details class="api-section api-collapsible" id="api-client-section">
+      <summary><span class="api-collapsible-icon">${uiIcon('browser')}</span><span class="api-collapsible-copy"><span class="api-section-title">Connect a client</span><span class="api-section-desc">URLs, model names and ready-to-copy examples for model and agent clients.</span></span><span class="api-collapsible-chevron">${uiIcon('arrow-right')}</span></summary>
+      <div class="api-collapsible-body">
+        <div class="api-service-grid">
+          <div class="api-service"><div class="api-service-head"><span class="api-service-icon">${uiIcon('machine')}</span><span class="api-service-name">Model inference</span><span class="api-service-state ready">Ready</span></div><div class="api-endpoints">
+            <div class="api-endpoint"><span class="api-endpoint-label">Base URL</span><code>${escapeHtml(g.localURL)}</code><button class="api-copy" data-copy="${escapeAttr(g.localURL)}" title="Copy model URL" aria-label="Copy model URL">${uiIcon('copy')}</button></div>
+            <div class="api-endpoint"><span class="api-endpoint-label">Model</span><code>${escapeHtml(g.servedName)}</code><button class="api-copy" data-copy="${escapeAttr(g.servedName)}" title="Copy model name" aria-label="Copy model name">${uiIcon('copy')}</button></div>
+          </div></div>
+          <div class="api-service"><div class="api-service-head"><span class="api-service-icon">${uiIcon('assistant')}</span><span class="api-service-name">Cloudless Agent</span><span class="api-service-state ${g.agent && g.agent.ready ? 'ready' : ''}">${g.agent && g.agent.ready ? 'Ready' : 'Starting'}</span></div><div class="api-endpoints">
+            <div class="api-endpoint"><span class="api-endpoint-label">Base URL</span><code>${escapeHtml(agentURL)}</code><button class="api-copy" data-copy="${escapeAttr(agentURL)}" title="Copy agent URL" aria-label="Copy agent URL">${uiIcon('copy')}</button></div>
+            <div class="api-endpoint"><span class="api-endpoint-label">Model</span><code>hermes-agent</code><button class="api-copy" data-copy="hermes-agent" title="Copy agent model" aria-label="Copy agent model">${uiIcon('copy')}</button></div>
+          </div></div>
+        </div>
+        <div class="api-code"><div class="code-box"><pre id="api-curl">${escapeHtml(curl)}</pre></div><button class="api-copy" data-copy-target="api-curl" title="Copy example" aria-label="Copy cURL example">${uiIcon('copy')}</button></div>
+        <div class="api-code"><div class="code-box"><pre id="api-agent-curl">${escapeHtml(agentCurl)}</pre></div><button class="api-copy" data-copy-target="api-agent-curl" title="Copy agent example" aria-label="Copy agent example">${uiIcon('copy')}</button></div>
+      </div>
+    </details>
+    <details class="api-section api-collapsible" id="api-security-section">
+      <summary><span class="api-collapsible-icon">${uiIcon('shield')}</span><span class="api-collapsible-copy"><span class="api-section-title">Security activity</span><span class="api-section-desc">Authentication failures, rate limits, API requests and network exposure changes recorded locally.</span></span><span class="api-collapsible-chevron">${uiIcon('arrow-right')}</span></summary>
+      <div class="api-collapsible-body">
+        <div class="machine-driver-note">${uiIcon('shield')}<span>Per-key limit: ${g.policy?.requestsPerMinute || 60} requests per minute, with a short burst of ${g.policy?.burst || 15}. Hermes administration and its dashboard are never exposed through this gateway.</span></div>
+        <div id="gateway-audit">${auditEvents.length ? auditEvents.slice(0, 20).map(apiAuditRow).join('') : '<div class="api-keys-empty">No gateway activity recorded yet.</div>'}</div>
+        <div class="fld-help">Prompts, responses and key secrets are never logged.</div>
+      </div>
+    </details>
   </div>`;
   c.querySelectorAll('[data-copy], [data-copy-target]').forEach(b => b.onclick = () => {
     const value = b.dataset.copyTarget ? (document.getElementById(b.dataset.copyTarget)?.textContent || '') : b.dataset.copy;
@@ -7546,7 +7644,7 @@ async function renderApiPage(c) {
   if (g.tunnel && g.tunnel.enabled && g.tunnel.url) apiTunRender(tout, g.tunnel);
 
   document.getElementById('key-gen').onclick = openKeyDialog;
-  document.getElementById('api-contract-save').onclick = async e => {
+  const contractSave = document.getElementById('api-contract-save'); if (contractSave) contractSave.onclick = async e => {
     const button = e.currentTarget;
     const port = Number(document.getElementById('api-contract-port').value);
     const modelAlias = document.getElementById('api-contract-alias').value.trim();
@@ -7760,6 +7858,34 @@ async function unloadCurrentModel(modelName = 'the active model') {
 }
 async function renderEnginePage(c) {
 	if (!c) return;
+  if (!advancedInterfaceEnabled()) {
+    c.innerHTML = `<div class="inf-page engine-standard-page">
+      <div class="inf-page-hero">
+        <span class="inf-page-icon">${uiIcon('rocket')}</span>
+        <div class="inf-page-copy"><div class="inf-page-eyebrow">Managed automatically</div><div class="inf-page-title">vLLM is the default engine</div>
+        <div class="inf-page-desc">CloudlessOS manages the software that loads your model and answers AI requests. You can use models and recipes without configuring the engine yourself.</div></div>
+        <span class="inf-state-pill ready">Default</span>
+      </div>
+      <div class="engine-basics-grid">
+        <section class="engine-basics-card">
+          <div class="engine-basics-head"><span class="engine-basics-icon">${uiIcon('machine')}</span><span>What is vLLM?</span></div>
+          <p>Think of an inference engine as the <strong>motor that runs an AI model</strong>. vLLM is CloudlessOS's default motor: it loads model files onto the GPU, manages memory, and serves answers efficiently to Chat and API clients.</p>
+        </section>
+        <section class="engine-basics-card">
+          <div class="engine-basics-head"><span class="engine-basics-icon">${uiIcon('recipes')}</span><span>Recipes choose what works best</span></div>
+          <p>A recipe may automatically use <strong>another engine or a specialized runtime</strong> when that is better for its model, hardware, or optimizations. CloudlessOS follows the recipe, so you do not need to switch engines manually.</p>
+        </section>
+      </div>
+      <div class="engine-advanced-note">
+        ${uiIcon('settings')}
+        <span class="engine-advanced-note-copy"><b>Looking for engine controls?</b><span>Enable Advanced interface in Settings → General to choose engines, unload models, or register custom engine builds.</span></span>
+        <button class="btn" id="engine-open-advanced" type="button">Open Advanced interface settings</button>
+      </div>
+    </div>`;
+    const advancedButton = document.getElementById('engine-open-advanced');
+    if (advancedButton) advancedButton.onclick = () => { setPage = 'general'; renderSettings(); };
+    return;
+  }
   c.innerHTML = '<div class="set-hint">Loading…</div>';
 	let engine = engineStateCache;
 	if (!engine) {
@@ -7828,6 +7954,224 @@ async function renderEnginePage(c) {
   const customSave = document.getElementById('custom-engine-save'); if (customSave) customSave.onclick = registerCustomEngine;
 }
 
+const RECIPE_MODEL_DOWNLOAD_INTENTS_KEY = 'cloudless.recipeModelDownloadIntents.v1';
+const RECIPE_MODEL_READY_KEY = 'cloudless.recipeModelReady.v1';
+function loadRecipeModelState(key) {
+  try { const value = JSON.parse(localStorage.getItem(key) || '{}'); return value && typeof value === 'object' && !Array.isArray(value) ? value : {}; }
+  catch { return {}; }
+}
+function saveRecipeModelState(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
+}
+let recipeModelDownloadIntents = loadRecipeModelState(RECIPE_MODEL_DOWNLOAD_INTENTS_KEY);
+let recipeModelReady = loadRecipeModelState(RECIPE_MODEL_READY_KEY);
+Object.values(recipeModelReady).forEach(item => { if (item && typeof item === 'object') item.launching = false; });
+saveRecipeModelState(RECIPE_MODEL_READY_KEY, recipeModelReady);
+function rememberRecipeModelDownload(entry) {
+  if (!entry?.modelId || !entry?.recipeId) return;
+  recipeModelDownloadIntents[entry.modelId] = { ...recipeModelDownloadIntents[entry.modelId], ...entry };
+  saveRecipeModelState(RECIPE_MODEL_DOWNLOAD_INTENTS_KEY, recipeModelDownloadIntents);
+}
+function forgetRecipeModelDownload(modelId) {
+  if (!modelId || !recipeModelDownloadIntents[modelId]) return;
+  delete recipeModelDownloadIntents[modelId];
+  saveRecipeModelState(RECIPE_MODEL_DOWNLOAD_INTENTS_KEY, recipeModelDownloadIntents);
+}
+function forgetRecipeModelReady(recipeId) {
+  if (!recipeId || !recipeModelReady[recipeId]) return;
+  delete recipeModelReady[recipeId];
+  saveRecipeModelState(RECIPE_MODEL_READY_KEY, recipeModelReady);
+  renderRecipeModelReadyHome();
+}
+function renderRecipeModelReadyHome() {
+  const host = document.getElementById('recipe-model-ready-home'); if (!host) return;
+  const ready = Object.values(recipeModelReady);
+  host.classList.toggle('hidden', ready.length === 0);
+  host.innerHTML = ready.map(item => `<article class="model-download-home recipe-model-ready-card" data-ready-recipe="${escapeAttr(item.recipeId)}"><span class="model-download-icon">${item.launching ? '<span class="key-dialog-spinner" aria-hidden="true"></span>' : uiIcon('check')}</span><div class="model-download-copy"><span class="model-download-title">Model downloaded for ${escapeHtml(item.recipeName || 'recipe')}</span><span class="model-download-meta">${item.launching ? 'Checking requirements, then Cloudless will launch the recipe.' : 'The required model is ready. Launching a recipe might take time.'}</span></div><span class="recipe-home-actions"><button class="btn primary" type="button" data-start-downloaded-recipe="${escapeAttr(item.recipeId)}" ${item.launching ? 'disabled' : ''}>${item.launching ? '<span class="key-dialog-spinner" aria-hidden="true"></span><span>Starting</span>' : uiIcon('rocket') + '<span>Start recipe</span>'}</button><button class="model-download-cancel" type="button" data-dismiss-downloaded-recipe="${escapeAttr(item.recipeId)}" title="Dismiss" aria-label="Dismiss model downloaded message" ${item.launching ? 'disabled' : ''}>${uiIcon('close')}</button></span></article>`).join('');
+  host.querySelectorAll('[data-start-downloaded-recipe]').forEach(button => button.onclick = () => startDownloadedRecipe(button.dataset.startDownloadedRecipe, button));
+  host.querySelectorAll('[data-dismiss-downloaded-recipe]').forEach(button => button.onclick = () => forgetRecipeModelReady(button.dataset.dismissDownloadedRecipe));
+}
+async function showRecipeModelDownloadedPrompt(entry) {
+  if (!entry?.recipeId || recipeModelReady[entry.recipeId]?.prompted) return;
+  recipeModelReady[entry.recipeId].prompted = true;
+  saveRecipeModelState(RECIPE_MODEL_READY_KEY, recipeModelReady);
+  const start = await openCloudlessDecision({
+    title: 'Model download complete',
+    message: 'The model for the recipe has been downloaded. Do you want to start the recipe?',
+    detail: 'Launching a recipe might take time.',
+    confirmLabel: 'Yes, start recipe',
+    cancelLabel: 'Not now',
+    icon: 'recipes',
+    returnFocus: document.activeElement,
+  });
+  if (start) startDownloadedRecipe(entry.recipeId, document.activeElement);
+}
+function handleRecipeModelDownloaded(entry) {
+  if (!entry?.recipeId) return;
+  forgetRecipeModelDownload(entry.modelId);
+  if (!recipeModelReady[entry.recipeId]) {
+    recipeModelReady[entry.recipeId] = { ...entry, prompted: false, completedAt: new Date().toISOString() };
+    saveRecipeModelState(RECIPE_MODEL_READY_KEY, recipeModelReady);
+  }
+  renderRecipeModelReadyHome();
+  showRecipeModelDownloadedPrompt(recipeModelReady[entry.recipeId]);
+}
+function waitForRecipeJobCompletion(jobId) {
+  return new Promise((resolve, reject) => {
+    const stream = new EventSource(`/api/jobs/${jobId}/events`); let settled = false;
+    const finish = (error, update) => { if (settled) return; settled = true; stream.close(); error ? reject(error) : resolve(update); };
+    const inspect = update => {
+      if (!update) return;
+      if (update.phase === 'error') finish(new Error(update.error || 'Recipe validation failed.'));
+      else if (update.phase === 'canceled') finish(new Error('Recipe validation was canceled.'));
+      else if (update.done) finish(null, update);
+    };
+    stream.onmessage = event => { try { inspect(JSON.parse(event.data)); } catch (error) { finish(error); } };
+    stream.onerror = async () => { const update = await api(`/api/jobs/${jobId}`).catch(() => null); inspect(update); };
+  });
+}
+async function startDownloadedRecipe(recipeId, trigger) {
+  const ready = recipeModelReady[recipeId];
+  if (!ready || ready.launching) return;
+  ready.launching = true;
+  saveRecipeModelState(RECIPE_MODEL_READY_KEY, recipeModelReady);
+  renderRecipeModelReadyHome();
+  const fail = message => {
+    if (recipeModelReady[recipeId]) recipeModelReady[recipeId].launching = false;
+    saveRecipeModelState(RECIPE_MODEL_READY_KEY, recipeModelReady);
+    renderRecipeModelReadyHome();
+    toast(message || 'Could not start the recipe.', true);
+  };
+  try {
+    let data = await api('/api/recipes');
+    if (data.error) throw new Error(data.error);
+    let recipe = (data.recipes || []).find(item => item.id === recipeId);
+    if (!recipe) throw new Error('The downloaded model is ready, but the recipe is no longer installed.');
+    if (!recipeValidated(recipe, data)) {
+      toast('Checking recipe requirements before launch...');
+      const check = await api('/api/recipes/' + encodeURIComponent(recipeId) + '/check', { method: 'POST' });
+      if (check.error || !check.jobId) throw new Error(check.error || 'Could not start recipe validation.');
+      mmRecipes = null; refreshRecipeJobs();
+      await waitForRecipeJobCompletion(check.jobId);
+      data = await api('/api/recipes');
+      if (data.error) throw new Error(data.error);
+      recipe = (data.recipes || []).find(item => item.id === recipeId);
+      if (!recipe || !recipeValidated(recipe, data)) throw new Error('Recipe validation finished without runnable launch evidence.');
+    }
+    const result = await api('/api/recipes/' + encodeURIComponent(recipeId) + '/run', { method: 'POST' });
+    if (result.error || !result.jobId) throw new Error(result.error || 'Cloudless could not start the recipe.');
+    forgetRecipeModelReady(recipeId);
+    mmRecipes = null;
+    toast('Recipe launch started');
+    refreshRecipeJobs();
+    trackLocalRecipeJob(result.jobId, 'run', recipeId);
+  } catch (error) { fail(error && error.message ? error.message : 'Could not start the recipe.'); }
+}
+async function dismissRuntimeRestartOffer(instanceId) {
+  if (!instanceId) return;
+  await api('/api/runtime/restart-offer/dismiss', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ instanceId }),
+  });
+}
+async function restartRememberedRecipe(offer) {
+  toast('Restarting ' + offer.name + '...');
+  let data = await api('/api/recipes');
+  if (data.error) throw new Error(data.error);
+  let recipe = (data.recipes || []).find(item => item.id === offer.recipeId);
+  if (!recipe) throw new Error(offer.name + ' is no longer installed.');
+  if (data.active === offer.recipeId) {
+    const stopped = await api('/api/recipes/' + encodeURIComponent(offer.recipeId) + '/stop', { method: 'POST' });
+    if (stopped.error || !stopped.jobId) throw new Error(stopped.error || 'Could not stop the previous recipe runtime.');
+    refreshRecipeJobs();
+    await waitForRecipeJobCompletion(stopped.jobId);
+    data = await api('/api/recipes');
+    if (data.error) throw new Error(data.error);
+    recipe = (data.recipes || []).find(item => item.id === offer.recipeId);
+    if (!recipe) throw new Error(offer.name + ' is no longer installed.');
+  }
+  if (!recipeValidated(recipe, data)) {
+    const check = await api('/api/recipes/' + encodeURIComponent(offer.recipeId) + '/check', { method: 'POST' });
+    if (check.error || !check.jobId) throw new Error(check.error || 'Could not validate ' + offer.name + '.');
+    refreshRecipeJobs();
+    await waitForRecipeJobCompletion(check.jobId);
+  }
+  const result = await api('/api/recipes/' + encodeURIComponent(offer.recipeId) + '/run', { method: 'POST' });
+  if (result.error || !result.jobId) throw new Error(result.error || 'Could not restart ' + offer.name + '.');
+  mmRecipes = null;
+  refreshRecipeJobs();
+  trackLocalRecipeJob(result.jobId, 'run', offer.recipeId);
+  toast(offer.name + ' restart started');
+}
+async function declineRememberedRuntime(offer) {
+  await dismissRuntimeRestartOffer(offer.instanceId);
+  if (offer.kind === 'recipe') {
+    const data = await api('/api/recipes');
+    if (data.error) throw new Error(data.error);
+    if (data.active !== offer.recipeId) return;
+    const stopped = await api('/api/recipes/' + encodeURIComponent(offer.recipeId) + '/stop', { method: 'POST' });
+    if (stopped.error || !stopped.jobId) throw new Error(stopped.error || 'Could not keep ' + offer.name + ' stopped.');
+    refreshRecipeJobs();
+    await waitForRecipeJobCompletion(stopped.jobId);
+    toast(offer.name + ' remains stopped');
+    return;
+  }
+  const status = await api('/api/engine');
+  if (status.error || status.unloaded) return;
+  const stopped = await api('/api/engine/unload', { method: 'POST', headers: { 'X-Cloudless-Action': 'model-unload' } });
+  if (stopped.error || !stopped.jobId) throw new Error(stopped.error || 'Could not keep ' + offer.name + ' stopped.');
+  trackEngineJob(stopped.jobId);
+  toast(offer.name + ' is stopping');
+}
+async function restartRememberedRuntime(offer) {
+  await dismissRuntimeRestartOffer(offer.instanceId);
+  if (offer.kind === 'recipe') {
+    await restartRememberedRecipe(offer);
+    return;
+  }
+  engineOperation = 'loading'; engineSwitching = true; engineReady = false;
+  engineStartup = { phase: 'switching', message: 'Restarting ' + offer.name + '...' };
+  applyEngineUI(); engineUIRefresh();
+  const result = await api('/api/engine/restart', { method: 'POST' });
+  if (result.error || !result.jobId) { endSwitch(); throw new Error(result.error || 'Could not restart ' + offer.name + '.'); }
+  trackEngineJob(result.jobId);
+  toast(offer.name + ' restart started');
+}
+async function maybeShowRuntimeRestartOffer() {
+  const offer = await api('/api/runtime/restart-offer').catch(() => null);
+  if (!offer || !offer.pending || !offer.name || !offer.instanceId) return;
+  const kind = offer.kind === 'recipe' ? 'recipe' : 'model';
+  if (offer.automatic) {
+    const openSettingsAfter = await openCloudlessDecision({
+      title: 'Restarting ' + offer.name,
+      message: 'Your device restarted, and Cloudless is now restarting the ' + kind + ' that was running before the restart.',
+      detail: 'Automatic restart is enabled. You can turn it off in Settings → General under Startup.',
+      confirmLabel: 'Open Settings',
+      cancelLabel: 'Got it',
+      icon: kind === 'recipe' ? 'recipes' : 'rocket',
+      returnFocus: document.activeElement,
+    });
+    await dismissRuntimeRestartOffer(offer.instanceId).catch(() => {});
+    if (openSettingsAfter) { setPage = 'general'; openSettings(); }
+    return;
+  }
+  const restart = await openCloudlessDecision({
+    title: 'Restart ' + offer.name + '?',
+    message: 'Cloudless remembers that ' + offer.name + ' was running before Cloudless restarted.',
+    detail: 'Do you want to restart this ' + kind + ' now? Loading it again might take time. You can enable automatic restart in Settings → General under Startup.',
+    confirmLabel: 'Restart ' + offer.name,
+    cancelLabel: 'Not now',
+    icon: kind === 'recipe' ? 'recipes' : 'rocket',
+    returnFocus: document.activeElement,
+  });
+  if (!restart) {
+    try { await declineRememberedRuntime(offer); }
+    catch (error) { toast(error && error.message ? error.message : 'Could not keep ' + offer.name + ' stopped.', true); }
+    return;
+  }
+  try { await restartRememberedRuntime(offer); }
+  catch (error) { toast(error && error.message ? error.message : 'Could not restart ' + offer.name + '.', true); }
+}
 const modelDownloads = new Map();
 const diffusionDownloads = new Map();
 function modelDownloadName(id) {
@@ -7868,7 +8212,7 @@ function renderHomeModelDownloads() {
     return `<article class="model-download-home">
       <span class="model-download-icon">${uiIcon('download')}</span>
       <div class="model-download-copy">
-        <span class="model-download-title">Downloading ${escapeHtml(modelDownloadName(d.modelId))}</span>
+        <span class="model-download-title">Downloading ${escapeHtml(modelDownloadName(d.modelId))}${d.recipeName ? ` for ${escapeHtml(d.recipeName)}` : ''}</span>
         <span class="model-download-meta">${escapeHtml(modelDownloadMeta(d))}</span>
         ${modelDownloadProgressHTML(d)}
       </div>
@@ -7909,7 +8253,10 @@ function patchManagerDownloadProgress(type, downloads) {
   return true;
 }
 function applyModelDownloads(downloads, repaintManager = true) {
-  const next = new Map((downloads || []).filter(d => !d.done).map(d => [d.modelId, { ...d, modelType: 'lm' }]));
+  const next = new Map((downloads || []).filter(d => !d.done).map(d => {
+    const context = modelDownloads.get(d.modelId) || recipeModelDownloadIntents[d.modelId] || {};
+    return [d.modelId, { ...context, ...d, modelType: 'lm' }];
+  }));
   const completed = [...modelDownloads.keys()].some(id => !next.has(id));
   const membershipChanged = [...modelDownloads.keys()].join('\n') !== [...next.keys()].join('\n');
   const before = JSON.stringify([...modelDownloads.entries()]);
@@ -7924,6 +8271,20 @@ function applyModelDownloads(downloads, repaintManager = true) {
     }
     if (!patchManagerDownloadProgress('lm', next)) renderModelManager();
   }
+}
+let recipeModelIntentReconcileRunning = false;
+async function reconcileRecipeModelDownloadIntents() {
+  if (recipeModelIntentReconcileRunning) return;
+  recipeModelIntentReconcileRunning = true;
+  try {
+    for (const intent of Object.values(recipeModelDownloadIntents)) {
+      if (!intent?.modelId || modelDownloads.has(intent.modelId) || !intent.jobId) continue;
+      const job = await api('/api/jobs/' + encodeURIComponent(intent.jobId)).catch(() => null);
+      if (!job || !job.done) continue;
+      if (job.phase === 'error' || job.phase === 'canceled') forgetRecipeModelDownload(intent.modelId);
+      else handleRecipeModelDownloaded(intent);
+    }
+  } finally { recipeModelIntentReconcileRunning = false; }
 }
 function applyDiffusionDownloads(downloads, repaintManager = true) {
   const next = new Map((downloads || []).filter(d => !d.done).map(d => [d.modelId, { ...d, modelType: 'diff' }]));
@@ -7947,6 +8308,7 @@ async function refreshModelDownloads() {
     const [language, image] = await Promise.all([api('/api/models/downloads'), api('/api/diffusion/downloads')]);
     applyModelDownloads(language.downloads || []);
     applyDiffusionDownloads(image.downloads || []);
+    await reconcileRecipeModelDownloadIntents();
   } catch {}
 }
 
@@ -8078,7 +8440,7 @@ function activeModelCard(m, gpu, memoryType) {
     <span class="mm-active-action">Manage ${uiIcon('arrow-right')}</span>
   </button>`;
 }
-function openHFTokenDialog(m) {
+function openHFTokenDialog(m, downloadOptions = {}) {
   keyDialogBusy = false;
   keyDialogReturnFocus = document.activeElement;
   const layer = document.getElementById('key-dialog-layer'), content = document.getElementById('key-dialog-content');
@@ -8099,30 +8461,47 @@ function openHFTokenDialog(m) {
   const submit = () => {
     const token = input.value.trim();
     if (!/^hf_[A-Za-z0-9]+$/.test(token)) { error.textContent = 'Enter a valid Hugging Face token beginning with hf_.'; input.focus(); return; }
-    closeKeyDialog(); downloadModel(m, token);
+    closeKeyDialog(); downloadModel(m, token, downloadOptions);
   };
   confirm.onclick = submit; input.onkeydown = event => { if (event.key === 'Enter') submit(); };
   requestAnimationFrame(() => input.focus());
 }
-function downloadModel(m, token = '') {
-  if (m.gated && !token && !(mmHFAccount && mmHFAccount.valid)) { openHFTokenDialog(m); return; }
-  if (modelDownloads.has(m.id)) return;
-  const revision = mmDownloadModelID === m.id ? mmDownloadRevision : '';
-  modelDownloads.set(m.id, { modelId: m.id, revision, modelType: 'lm', phase: 'pending', message: 'Preparing download', bytesDone: 0, bytesTotal: 0 });
+function downloadModel(m, token = '', options = {}) {
+  if (m.gated && !token && !(mmHFAccount && mmHFAccount.valid)) { openHFTokenDialog(m, options); return Promise.resolve(false); }
+  if (modelDownloads.has(m.id)) {
+    if (options.recipeId) {
+      const context = { recipeId: options.recipeId, recipeName: options.recipeName || 'Recipe', modelId: m.id, modelName: m.name || modelDownloadName(m.id), revision: options.revision || '' };
+      modelDownloads.set(m.id, { ...(modelDownloads.get(m.id) || {}), ...context });
+      rememberRecipeModelDownload(context);
+      renderHomeModelDownloads();
+    }
+    if (options.returnToDesktop) closeModelManager();
+    return Promise.resolve(true);
+  }
+  const revision = options.revision || (mmDownloadModelID === m.id ? mmDownloadRevision : '');
+  const recipeContext = options.recipeId ? { recipeId: options.recipeId, recipeName: options.recipeName || 'Recipe', modelName: m.name || modelDownloadName(m.id) } : {};
+  modelDownloads.set(m.id, { modelId: m.id, revision, ...recipeContext, modelType: 'lm', phase: 'pending', message: 'Preparing download', bytesDone: 0, bytesTotal: 0 });
+  if (options.recipeId) rememberRecipeModelDownload({ ...recipeContext, modelId: m.id, revision });
   repaintModelDownloadSurfaces();
   toast('Downloading ' + m.name + '…');
-  api('/api/models/download', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: m.id, revision, token }) })
+  return api('/api/models/download', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: m.id, revision, token }) })
     .then(r => {
+      if (r.error) throw new Error(r.error);
       if (r.jobId) {
         modelDownloads.set(m.id, { ...(modelDownloads.get(m.id) || {}), jobId: r.jobId, modelId: m.id, modelType: 'lm' });
+        if (options.recipeId) rememberRecipeModelDownload({ ...recipeContext, modelId: m.id, revision, jobId: r.jobId });
         repaintModelDownloadSurfaces();
         trackModelDownload(r.jobId, m);
+        if (options.returnToDesktop) { closeModelManager(); renderHomeModelDownloads(); }
+        return true;
       }
       else throw new Error('No download job');
-    }).catch(() => {
+    }).catch(error => {
       modelDownloads.delete(m.id);
+      if (options.recipeId) forgetRecipeModelDownload(m.id);
       repaintModelDownloadSurfaces();
-      toast('Download failed', true);
+      toast(error && error.message ? error.message : 'Download failed', true);
+      return false;
     });
 }
 async function cancelModelDownload(jobId, modelId, button, modelType = 'lm') {
@@ -8159,25 +8538,29 @@ function trackModelDownload(jobId, m) {
     if (ended) return;
     ended = true;
     es.close();
+    const completed = modelDownloads.get(m.id) || recipeModelDownloadIntents[m.id] || {};
     modelDownloads.delete(m.id);
     renderHomeModelDownloads();
     if (status === 'canceled') toast(m.name + ' download canceled');
     else toast(m.name + (status === 'done' ? ' downloaded to Models' : ' download failed'), status === 'failed');
-    mmLM = null;
+    mmLM = null; mmRecipes = null;
     if (modelsOpen()) renderModelManager();
     refreshActiveModel();
+    if (status === 'done' && completed.recipeId) handleRecipeModelDownloaded(completed);
+    else if (completed.recipeId) forgetRecipeModelDownload(m.id);
   };
   es.onmessage = e => {
     const u = JSON.parse(e.data);
-    modelDownloads.set(m.id, { ...u, jobId, modelId: m.id, modelType: 'lm' });
+    modelDownloads.set(m.id, { ...(modelDownloads.get(m.id) || {}), ...u, jobId, modelId: m.id, modelType: 'lm' });
     repaintModelDownloadSurfaces();
     if (u.phase === 'canceled') return finish('canceled');
     if (u.phase === 'error') return finish('failed');
     if (u.done) finish('done');
   };
-  es.onerror = () => {
-    refreshModelDownloads();
-    if (!ended) finish('failed');
+  es.onerror = async () => {
+    const update = await api(`/api/jobs/${jobId}`).catch(() => null);
+    if (update && update.done) finish(update.phase === 'error' ? 'failed' : update.phase === 'canceled' ? 'canceled' : 'done');
+    else refreshModelDownloads();
   };
 }
 function downloadDiffusion(m) {
@@ -8347,7 +8730,7 @@ function openModelUninstallDialog(m, modelType = 'lm') {
   cancel.focus();
 }
 /* ---- Model Manager (standalone, opened from the dashboard) ---- */
-let mmTab = 'language', mmDetail = null, mmLM = null, mmDiff = null, mmRecipes = null, mmCustomPrefill = '', mmSort = 'recommended', mmHF = false, mmHFQuery = '', mmHFAccount = null;
+let mmTab = 'recipes', mmDetail = null, mmLM = null, mmDiff = null, mmRecipes = null, mmCustomPrefill = '', mmSort = 'recommended', mmHF = false, mmHFQuery = '', mmHFAccount = null;
 let mmDownloadModelID = '', mmDownloadRevision = '';
 let mmFilter = { q: '', fits: false, cluster: false, vision: false, tools: false, downloaded: false };
 let mmRecipeView = { scope: 'local', library: 'supported', q: '', source: 'all', sparks: 'all', status: 'all', sort: 'updated', page: 1, perPage: 6, communityCategory: '', communityPlatform: '', communityTrust: '' };
@@ -8363,8 +8746,26 @@ function anyOverlayOpen() {
   return infOpen || modelsOpen() || myRecipesOpen() || settingsOpen() || launcherOpen() || guideOpen()
     || document.getElementById('asst').classList.contains('full');
 }
-function openModelManager() { mmDetail = null; mmCustomPrefill = ''; mmHF = false; mmDownloadModelID = ''; mmDownloadRevision = ''; document.getElementById('models').classList.remove('hidden'); renderModelManager(); }
-async function openModelManagerFor(id, revision = '') {
+async function confirmModelsWithoutRecipe(returnFocus) {
+  if (advancedInterfaceEnabled()) return true;
+  return openCloudlessDecision({
+    title: 'Continue without a recipe?',
+    message: 'Running a model without a recipe might not give you the full experience.',
+    detail: 'A standalone model provides the AI weights, but it may not include a tested runtime, optimized launch settings, hardware-specific improvements, or workload health checks. Recipes package those pieces together.',
+    confirmLabel: 'Continue without a recipe',
+    cancelLabel: 'Stay with recipes',
+    icon: 'alert',
+    returnFocus,
+  });
+}
+async function openModelManager(tab = 'recipes') {
+  const target = typeof tab === 'string' ? tab : 'recipes';
+  if (target !== 'recipes' && !(await confirmModelsWithoutRecipe(document.activeElement))) return;
+  mmTab = target; mmDetail = null; mmCustomPrefill = ''; mmHF = false; mmDownloadModelID = ''; mmDownloadRevision = '';
+  document.getElementById('models').classList.remove('hidden'); renderModelManager();
+}
+async function openModelManagerFor(id, revision = '', skipConfirmation = false) {
+  if (!skipConfirmation && !(await confirmModelsWithoutRecipe(document.activeElement))) return;
   closeAsst();
   mmDownloadModelID = id || ''; mmDownloadRevision = revision || '';
   mmTab = 'language'; mmDetail = null; mmHF = false; mmFilter = { q: '', fits: false, cluster: false, vision: false, tools: false, downloaded: false };
@@ -8405,14 +8806,28 @@ function renderModelManager() {
   const c = document.getElementById('mm-body'); if (!c) return;
   if (mmDetail) { renderModelDetail(c); return; }
   if (mmHF) { renderHuggingFace(c); return; }
-  c.innerHTML = `<div class="mm-tabs" role="tablist" aria-label="Model type">
-      <button class="mm-tab ${mmTab === 'language' ? 'on' : ''}" data-tab="language" role="tab" aria-selected="${mmTab === 'language'}">${uiIcon('models')}<span>Language models</span></button>
-      <button class="mm-tab ${mmTab === 'image' ? 'on' : ''}" data-tab="image" role="tab" aria-selected="${mmTab === 'image'}">${uiIcon('appearance')}<span>Image models</span></button>
-      <button class="mm-tab ${mmTab === 'recipes' ? 'on' : ''}" data-tab="recipes" role="tab" aria-selected="${mmTab === 'recipes'}">${uiIcon('recipes')}<span>Recipes</span></button>
+  c.innerHTML = `<div class="mm-tabs mm-primary-tabs" role="tablist" aria-label="Model Manager section">
+      <button class="mm-tab mm-primary-tab ${mmTab === 'recipes' ? 'on' : ''}" data-tab="recipes" role="tab" aria-selected="${mmTab === 'recipes'}">${uiIcon('recipes')}<span>Recipes</span></button>
+      <button class="mm-tab mm-primary-tab ${mmTab !== 'recipes' ? 'on' : ''}" data-tab="language" role="tab" aria-selected="${mmTab !== 'recipes'}">${uiIcon('models')}<span>Models</span></button>
     </div><div id="mm-tab-body"><div class="set-hint">Loading…</div></div>`;
-  c.querySelectorAll('.mm-tab').forEach(b => b.onclick = () => { if (mmTab === b.dataset.tab) return; mmTab = b.dataset.tab; mmCommunityDetail = null; mmFilter = { q: '', fits: false, cluster: false, vision: false, tools: false, downloaded: false }; renderModelManager(); });
+  c.querySelectorAll('.mm-tab').forEach(b => b.onclick = async () => {
+    const target = b.dataset.tab;
+    const currentSection = mmTab === 'recipes' ? 'recipes' : 'models';
+    const targetSection = target === 'recipes' ? 'recipes' : 'models';
+    if (currentSection === targetSection) return;
+    if (targetSection === 'models' && !(await confirmModelsWithoutRecipe(b))) return;
+    mmTab = target; mmCommunityDetail = null; mmFilter = { q: '', fits: false, cluster: false, vision: false, tools: false, downloaded: false }; renderModelManager();
+  });
   const body = document.getElementById('mm-tab-body');
   if (mmTab === 'image') renderImageModels(body); else if (mmTab === 'recipes') renderLocalRecipes(body); else renderLanguageModels(body);
+}
+function modelWithoutRecipeWarningHTML() {
+  if (advancedInterfaceEnabled()) return '';
+  return `<aside class="mm-model-warning" role="note">${uiIcon('alert')}<span class="mm-model-warning-copy"><b>Running a model without a recipe might not give you the full experience.</b><span>A model provides the AI weights, but a recipe also supplies a tested runtime, launch settings, hardware optimizations, and health checks.</span><button class="lnk" id="mm-recipes-guide" type="button">What are recipes and when should I use one?</button></span></aside>`;
+}
+function wireModelWithoutRecipeWarning(c) {
+  const guide = c.querySelector('#mm-recipes-guide');
+  if (guide) guide.onclick = () => openGuide('models-recipes');
 }
 async function renderLanguageModels(c) {
   if (mmLM) paintLanguageModels(c, mmLM); // paint cached data instantly — no "Loading…" flash on back
@@ -9052,6 +9467,46 @@ function wireRecipeLibraryHeader(c, data) {
   document.getElementById('recipe-show-supported').onclick = () => { mmRecipeView.library='supported'; mmRecipeView.page=1; paintLocalRecipes(c,data); };
   const draftsButton = document.getElementById('recipe-show-drafts'); if (draftsButton) draftsButton.onclick = () => { mmRecipeView.library='drafts'; mmRecipeView.page=1; paintLocalRecipes(c,data); };
 }
+function openRecipeModelDownloadDialog(recipe, returnFocus) {
+  const model = recipe.model || {};
+  const revision = String(model.revision || '').trim();
+  const revisionLabel = revision ? (revision.length > 20 ? revision.slice(0, 12) + '…' + revision.slice(-8) : revision) : 'the recipe’s reviewed revision';
+  return openCloudlessDecision({
+    title: 'Download the model required by this recipe?',
+    message: `${recipe.name} cannot be validated or run until its model is installed.`,
+    detail: `Cloudless will download ${model.id} at ${revisionLabel}. The download continues in the background, and its live progress will appear on the desktop.`,
+    confirmLabel: 'Agree and download',
+    cancelLabel: 'Not now',
+    icon: 'download',
+    returnFocus,
+  });
+}
+async function installRecipeModel(recipe, button) {
+  const modelID = String(recipe?.model?.id || '').trim();
+  if (!modelID) { toast('This recipe does not specify a model.', true); return; }
+  if (!(await openRecipeModelDownloadDialog(recipe, button))) return;
+  const original = button.innerHTML;
+  button.disabled = true;
+  button.innerHTML = '<span class="key-dialog-spinner" aria-hidden="true"></span><span>Starting download</span>';
+  let model = mmCache['lm:' + modelID] || null;
+  if (!model) {
+    const catalog = mmLM || await api('/api/models').catch(() => null);
+    if (catalog && !catalog.error) {
+      mmLM = catalog;
+      const available = (catalog.yours || []).concat(catalog.highlights || []);
+      available.forEach(item => { mmCache['lm:' + item.id] = item; });
+      model = available.find(item => item.id === modelID) || null;
+    }
+  }
+  model = model || { id: modelID, name: modelID.split('/').pop() || modelID };
+  if (model.gated && !mmHFAccount) {
+    const account = await api('/api/models/huggingface/account').catch(() => null);
+    if (account && !account.error) mmHFAccount = account;
+  }
+  mmCache['lm:' + modelID] = model;
+  const started = await downloadModel(model, '', { returnToDesktop: true, recipeId: recipe.id, recipeName: recipe.name, revision: recipe.model.revision || '' });
+  if (!started && button.isConnected) { button.disabled = false; button.innerHTML = original; }
+}
 function paintLocalRecipes(c, data) {
   if (!advancedInterfaceEnabled() && mmRecipeView.library === 'drafts') mmRecipeView.library = 'supported';
   const recipes = data.recipes || [];
@@ -9089,13 +9544,17 @@ function paintLocalRecipes(c, data) {
   c.querySelectorAll('[data-community-rollback]').forEach(button => button.onclick = async () => { button.disabled=true;const result=await api('/api/community/rollback',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:button.dataset.communityRollback})}).catch(()=>({error:'Could not roll back this recipe.'}));if(result.error){toast(result.error,true);button.disabled=false;return;}toast('Previous signed recipe revision restored');mmRecipes=null;renderLocalRecipes(c); });
   c.querySelectorAll('[data-recipe-install-model]').forEach(button => button.onclick = () => {
     const recipe=recipes.find(item=>item.id===button.dataset.recipeInstallModel);
-    if (recipe && recipe.model && recipe.model.id) openModelManagerFor(recipe.model.id, recipe.model.revision || '');
+    if (recipe && recipe.model && recipe.model.id) installRecipeModel(recipe, button);
   });
   c.querySelectorAll('[data-recipe-run]').forEach(button => button.onclick = async () => {
     button.disabled = true; const id=button.dataset.recipeRun, recipe=recipes.find(item=>item.id===id), plan=data.plans&&data.plans[id]||{};
     if(recipe && !(await openRecipeLaunchDialog(recipe,plan,button))){button.disabled=false;return;}
     const result=await api('/api/recipes/' + encodeURIComponent(id) + '/run',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}).catch(()=>({error:'Could not start this recipe.'}));
-    if(result.error){toast(result.error,true);button.disabled=false;return;} updateRecipeRunCard(id,result.jobId,{phase:'pending',message:'Preparing the recipe…',layersDone:0,layersTotal:10});trackLocalRecipeJob(result.jobId,'run',id);
+    if(result.error){toast(result.error,true);button.disabled=false;return;}
+    updateRecipeRunCard(id,result.jobId,{phase:'pending',message:'Preparing the recipe…',layersDone:0,layersTotal:10});
+    trackLocalRecipeJob(result.jobId,'run',id);
+    closeModelManager();
+    toast('Recipe launch started');
   });
   c.querySelectorAll('[data-recipe-check]').forEach(button => button.onclick = async () => {
     button.disabled = true; const id=button.dataset.recipeCheck, recipe=recipes.find(item=>item.id===id); if(recipe) openRecipeCheckOverlay(recipe,button);
@@ -9164,6 +9623,7 @@ function paintModelList(c, data, kind) {
     : `${uiIcon('machine')}<span class="mm-machine-copy"><span class="mm-machine-label">Hardware</span><span class="mm-machine-value">No GPU detected</span><span class="mm-machine-note">Compatibility estimates are unavailable</span></span>`;
   const chip = (key, label) => `<button class="mm-chip ${mmFilter[key] ? 'on' : ''}" data-f="${key}" aria-pressed="${mmFilter[key]}">${label}</button>`;
   const chips = chip('fits', 'Runs on this GPU') + (lm && cluster.distributedReady ? chip('cluster', `Runs across ${clusterNodes} Sparks`) : '') + chip('downloaded', 'Downloaded') + (lm ? chip('vision', 'Vision') + chip('tools', 'Tool calling') : '');
+  const modelKinds = `<div class="mm-model-kinds" role="group" aria-label="Model category"><button class="mm-kind-chip ${lm ? 'on' : ''}" data-model-kind="language" type="button" aria-pressed="${lm}">Language models</button><button class="mm-kind-chip ${lm ? '' : 'on'}" data-model-kind="image" type="button" aria-pressed="${!lm}">Image models</button></div>`;
   const sort = `<span class="mm-sort-wrap"><label for="mm-sort">Sort</label><select class="mm-sort" id="mm-sort">
     <option value="recommended" ${mmSort === 'recommended' ? 'selected' : ''}>Best match</option>
     <option value="memory-low" ${mmSort === 'memory-low' ? 'selected' : ''}>Lowest memory</option>
@@ -9171,6 +9631,7 @@ function paintModelList(c, data, kind) {
     <option value="name" ${mmSort === 'name' ? 'selected' : ''}>Name</option>
   </select></span>`;
   c.innerHTML = `
+    ${modelWithoutRecipeWarningHTML()}
     <div class="mm-bar">
       <div class="mm-machine">${summary}</div>
       <div class="mm-discovery"><label class="mm-search">${uiIcon('search')}<input id="mm-q" aria-label="Search models" placeholder="Search ${lm ? 'language' : 'image'} models…" value="${escapeAttr(mmFilter.q)}" spellcheck="false"></label>
@@ -9178,12 +9639,14 @@ function paintModelList(c, data, kind) {
     </div>
     <div id="mm-active-slot"></div>
     <div class="mm-filter-row">
+      ${modelKinds}
       <span class="mm-filter-label">Filter</span>
       <div class="mm-filters">${chips}</div>
       <span class="mm-result-count" id="mm-result-count"></span>
       ${sort}
     </div>
     <div id="mm-list"></div>`;
+  wireModelWithoutRecipeWarning(c);
   const cardFn = lm ? modelCard : diffCard;
   const active = lm ? (data.yours || []).find(m => m.active) : null;
   const activeSlot = document.getElementById('mm-active-slot');
@@ -9220,7 +9683,13 @@ function paintModelList(c, data, kind) {
   fill();
   const q = document.getElementById('mm-q');
   if (q) q.oninput = () => { mmFilter.q = q.value; fill(); };
-  c.querySelectorAll('.mm-chip').forEach(ch => ch.onclick = () => {
+  c.querySelectorAll('[data-model-kind]').forEach(button => button.onclick = () => {
+    if (mmTab === button.dataset.modelKind) return;
+    mmTab = button.dataset.modelKind;
+    mmFilter = { q: '', fits: false, cluster: false, vision: false, tools: false, downloaded: false };
+    renderModelManager();
+  });
+  c.querySelectorAll('.mm-chip[data-f]').forEach(ch => ch.onclick = () => {
     mmFilter[ch.dataset.f] = !mmFilter[ch.dataset.f];
     ch.classList.toggle('on');
     ch.setAttribute('aria-pressed', String(mmFilter[ch.dataset.f]));
@@ -9714,18 +10183,28 @@ async function renderDisplayPage(c) {
   const currentHeight = Number(display.height) || browserHeight;
   const outputs = Array.isArray(display.outputs) ? display.outputs : [];
   const configuredOutput = display.configured && display.configured.output;
+  const configuredLayout = (display.configured && display.configured.layout) || display.layout || (outputs.length > 1 ? 'mirror' : 'single');
   const selectedOutput = outputs.find(output => output.name === configuredOutput) || outputs.find(output => output.name === display.output) || outputs[0];
+  const selectableModes = (output, layout) => {
+    if (!output || layout !== 'mirror' || outputs.length < 2) return output ? output.modes : [];
+    return output.modes.filter(mode => outputs.every(candidate => candidate.modes.some(other => other.width === mode.width && other.height === mode.height)));
+  };
   const outputOptions = outputs.map(output => `<option value="${escapeAttr(output.name)}"${selectedOutput && output.name === selectedOutput.name ? ' selected' : ''}>${escapeHtml(output.name)}${output.primary ? ' · Primary' : ''}</option>`).join('');
-  const resolutionOptions = selectedOutput ? selectedOutput.modes.map(mode =>
+  const resolutionOptions = selectedOutput ? selectableModes(selectedOutput, configuredLayout).map(mode =>
     `<option value="${mode.width}x${mode.height}"${mode.width === selectedOutput.width && mode.height === selectedOutput.height ? ' selected' : ''}>${mode.width} × ${mode.height}${mode.preferred ? ' · Recommended' : ''}</option>`
   ).join('') : '';
   const resolutionControls = display.available && selectedOutput ? `
     <div class="display-form">
+      <div class="display-field"><label for="display-layout">Layout</label><select id="display-layout">
+        <option value="single"${configuredLayout === 'single' ? ' selected' : ''}>Single display</option>
+        <option value="mirror"${configuredLayout === 'mirror' ? ' selected' : ''}>Mirror displays (safe default)</option>
+        <option value="extend"${configuredLayout === 'extend' ? ' selected' : ''}>Extend desktop (advanced)</option>
+      </select></div>
       <div class="display-field"><label for="display-output">Display</label><select id="display-output">${outputOptions}</select></div>
       <div class="display-field"><label for="display-resolution">Resolution</label><select id="display-resolution">${resolutionOptions}</select></div>
-      <button class="btn primary display-apply" id="display-apply" type="button">Apply resolution</button>
+      <button class="btn primary display-apply" id="display-apply" type="button">Apply display layout</button>
     </div>
-    <div class="display-unavailable">Only resolutions reported as supported by the connected display can be selected. The choice is restored when CloudlessOS starts.</div>` :
+    <div class="display-unavailable">CloudlessOS mirrors unknown multiple displays by default so the kiosk remains visible. Extended desktop is used only when you explicitly select it here.</div>` :
     `<div class="display-unavailable">Resolution control becomes available in an installed CloudlessOS desktop session. The browser preview can still adjust interface size.</div>`;
   c.innerHTML = `<div class="display-page">
     <div class="inf-page-hero">
@@ -9741,7 +10220,7 @@ async function renderDisplayPage(c) {
       <div class="zoom-grid">${zoomOptions}</div>
     </section>
     <section class="machine-card">
-      <div class="machine-card-head"><div><div class="machine-card-title">Screen resolution</div><div class="machine-card-desc">Choose a mode supported by the connected monitor or television.</div></div></div>
+      <div class="machine-card-head"><div><div class="machine-card-title">Display layout and resolution</div><div class="machine-card-desc">Choose which screen hosts CloudlessOS. Mirror is the safe default for newly detected displays.</div></div></div>
       ${resolutionControls}
     </section>
   </div>`;
@@ -9750,20 +10229,25 @@ async function renderDisplayPage(c) {
     renderDisplayPage(c);
   });
   const outputSelect = document.getElementById('display-output');
+  const layoutSelect = document.getElementById('display-layout');
   const resolutionSelect = document.getElementById('display-resolution');
   const applyButton = document.getElementById('display-apply');
-  if (outputSelect && resolutionSelect && applyButton) {
+  if (layoutSelect && outputSelect && resolutionSelect && applyButton) {
     const renderModes = () => {
       const output = outputs.find(item => item.name === outputSelect.value);
       if (!output) return;
-      resolutionSelect.innerHTML = output.modes.map(mode =>
+      const modes = selectableModes(output, layoutSelect.value);
+      resolutionSelect.innerHTML = modes.map(mode =>
         `<option value="${mode.width}x${mode.height}"${mode.width === output.width && mode.height === output.height ? ' selected' : ''}>${mode.width} × ${mode.height}${mode.preferred ? ' · Recommended' : ''}</option>`
-      ).join('');
+      ).join('') || '<option value="">No shared mirror resolution</option>';
+      applyButton.disabled = modes.length === 0;
     };
     outputSelect.onchange = renderModes;
+    layoutSelect.onchange = renderModes;
+    renderModes();
     applyButton.onclick = () => {
       const [width, height] = resolutionSelect.value.split('x').map(Number);
-      openDisplayResolutionDialog(outputSelect.value, width, height);
+      openDisplayResolutionDialog(layoutSelect.value, outputSelect.value, width, height);
     };
   }
 }
@@ -9880,11 +10364,13 @@ async function renderDoctorPage(c) {
 async function renderGeneralPage(c) {
 	if (!c) return;
   c.innerHTML = '<div class="set-hint">Loading…</div>';
-  let update, bootHealth;
+  let update, bootHealth, runtimeRestart;
   try { update = await api('/api/system/update'); }
   catch { update = { state: 'failed', configured: false, message: 'Could not reach the system update service.' }; }
   try { bootHealth = await api('/api/system/boot-health'); }
   catch { bootHealth = { available: false }; }
+  try { runtimeRestart = await api('/api/settings/runtime-restart'); }
+  catch { runtimeRestart = { enabled: false }; }
 	if (!c.isConnected) return;
   const state = update.state || 'idle';
   const busy = state === 'checking' || state === 'installing';
@@ -9942,6 +10428,15 @@ async function renderGeneralPage(c) {
         <div class="motion-warning">${uiIcon('alert')}<span>Advanced controls can install externally maintained runtimes and expose low-level configuration. Keep this off unless you understand and trust the recipe or command you are using.</span></div>
       </div>
     </div>
+    <div class="set-block"><h3>startup</h3>
+      <div class="motion-control">
+        <div class="motion-control-head">
+          <span class="motion-control-icon">${uiIcon('restart')}</span>
+          <span class="motion-control-copy"><span class="motion-control-title">Automatically restart last recipe/model</span><span class="motion-control-sub">Restart the exact recipe or standalone model that was running before CloudlessOS restarted. Leave this off to be asked first.</span></span>
+          <label class="switch" title="Automatically restart the previous AI runtime"><input type="checkbox" id="automatic-runtime-restart-toggle" ${runtimeRestart.enabled ? 'checked' : ''}><span class="track2"></span></label>
+        </div>
+      </div>
+    </div>
     <div class="set-block"><h3>welcome</h3>
       <div class="set-row"><span>Replay the interactive tutorial</span><span class="row-actions"><button class="btn" id="gen-replay">Replay</button></span></div>
       <div class="fld-help">Walk through the Assistant, Apps, Models, Metrics, hardware, Places, and Settings again.</div>
@@ -9967,6 +10462,18 @@ async function renderGeneralPage(c) {
   const advancedToggle = document.getElementById('advanced-interface-toggle'); if (advancedToggle) advancedToggle.onchange = () => {
     setAdvancedInterfaceEnabled(advancedToggle.checked);
     toast(advancedToggle.checked ? 'Advanced interface enabled' : 'Advanced interface hidden');
+  };
+  const runtimeRestartToggle = document.getElementById('automatic-runtime-restart-toggle'); if (runtimeRestartToggle) runtimeRestartToggle.onchange = async () => {
+    const enabled = runtimeRestartToggle.checked;
+    runtimeRestartToggle.disabled = true;
+    try {
+      const saved = await api('/api/settings/runtime-restart', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled }) });
+      if (saved.error) throw new Error(saved.error);
+      toast(enabled ? 'Automatic runtime restart enabled' : 'Cloudless will ask before restarting AI');
+    } catch {
+      runtimeRestartToggle.checked = !enabled;
+      toast('Could not save the restart setting', true);
+    } finally { runtimeRestartToggle.disabled = false; }
   };
   const channelButton = document.getElementById('sys-update-channel'); if (channelButton) channelButton.onclick = async () => {
     const switchingToBeta = nextChannel === 'beta';
@@ -10337,7 +10844,7 @@ document.addEventListener('click', event => { if (!event.target.closest('.places
 document.addEventListener('keydown', event => { if (event.key === 'Escape' && !document.getElementById('places-quick').classList.contains('hidden')) setPlacesQuick(false); });
 
 /* ---- Model Manager wiring ---- */
-document.getElementById('open-models-2').onclick = openModelManager;
+document.getElementById('open-models-2').onclick = openActiveRuntimeActions;
 document.getElementById('eb-load').onclick = () => {
   if (engineAborting) return;
   if (engineLoadIsAbortable()) abortModelLoad();
@@ -10949,21 +11456,76 @@ function setActiveEngine(e) {
 }
 async function refreshActiveModel() {
   const el = document.getElementById('gpu-model'); if (!el) return;
-  const dot = document.getElementById('hw-model-dot'), k = document.getElementById('hw-model-k');
+  const button = document.getElementById('open-models-2'), dot = document.getElementById('hw-model-dot'), k = document.getElementById('hw-model-k');
+  const iconUse = button?.querySelector('.hero-model-icon use');
   const setK = t => { if (k) k.textContent = t; };
   const setDot = c => { if (dot) dot.className = 'hw-link-dot' + (c ? ' ' + c : ''); };
   try {
     const [s, e] = await Promise.all([api('/api/settings'), api('/api/engine').catch(() => ({}))]);
     setActiveEngine(e);
-    const name = (s.model || '').split('/').pop();
-    const engine = activeEngineName && activeEngineName !== 'the engine' ? activeEngineName : '';
+    const runtimeKind = s.runtimeKind === 'recipe' ? 'recipe' : s.runtimeKind === 'model' ? 'model' : '';
+    const runtimeID = s.runtimeId || '';
+    const name = s.runtimeName || (s.model || '').split('/').pop();
+    const runtimeLabel = runtimeKind === 'recipe' ? 'Active recipe' : 'Active model';
+    activeRuntimeContext = runtimeKind && runtimeID ? { kind: runtimeKind, id: runtimeID, name: name || runtimeID, modelId: s.model || '' } : null;
+    if (iconUse) iconUse.setAttribute('href', runtimeKind === 'recipe' ? '#ui-recipes' : '#ui-models');
+    if (button) button.title = activeRuntimeContext ? `${runtimeKind === 'recipe' ? 'Recipe' : 'Model'} actions for ${activeRuntimeContext.name}` : 'Open the Model Manager';
     if (!name) { el.textContent = 'Browse models'; setK('No model loaded'); setDot(''); return; }
     const unloaded = !!(e && e.unloaded);
     const loading = e && e.ready === false && !unloaded;
     el.textContent = name;
-    setK(unloaded ? 'Downloaded · not loaded' : (loading ? (engineExecutionMode === 'cluster' ? `Loading on ${sparkCount(connectedSpark)} Sparks…` : 'Loading…') : (engineExecutionMode === 'cluster' ? `Running across ${sparkCount(connectedSpark)} Sparks` : (engine ? 'Loaded in ' + engine : 'Active model'))));
+    setK(unloaded ? 'Downloaded · not loaded' : (loading ? (engineExecutionMode === 'cluster' ? `Loading on ${sparkCount(connectedSpark)} Sparks…` : 'Loading…') : (engineExecutionMode === 'cluster' ? `${runtimeLabel} · ${sparkCount(connectedSpark)} Sparks` : runtimeLabel)));
     setDot(unloaded ? '' : (loading ? 'load' : 'on'));
   } catch {}
+}
+
+function openRuntimeManager(runtime, details = false) {
+  closeKeyDialog();
+  if (runtime.kind === 'recipe') {
+    mmTab = 'recipes'; mmDetail = null; mmHF = false; mmCommunityDetail = null;
+    mmRecipeView = { ...mmRecipeView, scope: 'local', library: 'supported', q: details ? runtime.name : '', source: 'all', sparks: 'all', status: 'all', page: 1 };
+    document.getElementById('models').classList.remove('hidden');
+    renderModelManager();
+    return;
+  }
+  if (details) { openModelManagerFor(runtime.id, '', true); return; }
+  mmTab = 'language'; mmDetail = null; mmHF = false; mmFilter = { q: '', fits: false, cluster: false, vision: false, tools: false, downloaded: false };
+  document.getElementById('models').classList.remove('hidden');
+  renderModelManager();
+}
+
+async function stopActiveRuntime(runtime) {
+  closeKeyDialog();
+  if (runtime.kind !== 'recipe') { await unloadCurrentModel(runtime.name); return; }
+  const result = await api('/api/recipes/' + encodeURIComponent(runtime.id) + '/stop', { method: 'POST' }).catch(() => ({ error: 'Could not stop this recipe.' }));
+  if (result.error || !result.jobId) { toast(result.error || 'Could not stop this recipe.', true); return; }
+  activeRuntimeContext = null;
+  toast('Stopping ' + runtime.name);
+  trackLocalRecipeJob(result.jobId, 'stop', runtime.id);
+}
+
+function openActiveRuntimeActions() {
+  const runtime = activeRuntimeContext;
+  if (!runtime) { openModelManager(); return; }
+  const recipe = runtime.kind === 'recipe', layer = document.getElementById('key-dialog-layer'), content = document.getElementById('key-dialog-content');
+  if (!layer.classList.contains('hidden')) closeKeyDialog();
+  keyDialogBusy = false; keyDialogReturnFocus = document.getElementById('open-models-2'); keyDialogReturnFocusID = 'open-models-2';
+  content.innerHTML = `<div class="key-dialog-head">
+      <span class="key-dialog-icon">${uiIcon(recipe ? 'recipes' : 'models')}</span>
+      <div class="key-dialog-heading"><div class="key-dialog-title" id="key-dialog-title">${escapeHtml(runtime.name)}</div><div class="key-dialog-sub">${recipe ? 'This recipe is running.' : 'This standalone model is loaded.'} What would you like to do?</div></div>
+      <button class="key-dialog-close" id="runtime-actions-close" type="button" aria-label="Close runtime actions">${uiIcon('close')}</button>
+    </div><div class="key-dialog-body"><div class="runtime-action-list">
+      <button class="power-option" id="runtime-open-manager" type="button"><span class="power-option-icon">${uiIcon('models')}</span><span class="power-option-copy"><b>Open Model Manager</b><small>Browse installed recipes and models.</small></span></button>
+      <button class="power-option" id="runtime-open-details" type="button"><span class="power-option-icon">${uiIcon(recipe ? 'recipes' : 'search')}</span><span class="power-option-copy"><b>Open ${recipe ? 'recipe' : 'model'} details</b><small>View the exact ${recipe ? 'recipe configuration and runtime status' : 'model information and compatibility'}.</small></span></button>
+      <button class="power-option danger" id="runtime-stop" type="button"><span class="power-option-icon">${uiIcon('stop')}</span><span class="power-option-copy"><b>Stop ${recipe ? 'recipe' : 'model'}</b><small>Release accelerator memory while keeping downloaded files.</small></span></button>
+    </div></div>`;
+  layer.classList.remove('hidden');
+  keyDialogOnClose = null;
+  document.getElementById('runtime-actions-close').onclick = closeKeyDialog;
+  document.getElementById('runtime-open-manager').onclick = () => openRuntimeManager(runtime, false);
+  document.getElementById('runtime-open-details').onclick = () => openRuntimeManager(runtime, true);
+  document.getElementById('runtime-stop').onclick = () => stopActiveRuntime(runtime);
+  document.getElementById('runtime-open-manager').focus();
 }
 
 /* ---- Cloudless Assistant ---- */
@@ -11532,6 +12094,7 @@ initBackground();
 initRenderGovernor();
 initTerminalWindow();
 initVirtualKeyboard();
+renderRecipeModelReadyHome();
 tickClock();
 setTimeout(() => { tickClock(); setInterval(tickClock, 60000); }, 60000 - (Date.now() % 60000));
 let coreDashboardRefreshRunning = false;
@@ -11573,6 +12136,8 @@ async function bootCloudless() {
         renderApps().then(() => showFirstLaunchSetup(o.completed ? null : showOnboarding));
       } else if (!o.completed) {
         renderApps().then(showOnboarding);
+      } else {
+        maybeShowRuntimeRestartOffer();
       }
     };
     showStartupIntro(afterIntro, (o && o.bootID) || '');

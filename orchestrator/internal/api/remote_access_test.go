@@ -20,6 +20,7 @@ type fakeRemoteAccess struct {
 	loggedOut bool
 	ssh       bool
 	serve     bool
+	serveErr  error
 }
 
 func (f *fakeRemoteAccess) Status(context.Context) remoteaccess.Status   { return f.status }
@@ -28,7 +29,20 @@ func (f *fakeRemoteAccess) Logout(context.Context) error                 { f.log
 func (f *fakeRemoteAccess) SetSSH(_ context.Context, enabled bool) error { f.ssh = enabled; return nil }
 func (f *fakeRemoteAccess) SetServe(_ context.Context, enabled bool) error {
 	f.serve = enabled
-	return nil
+	return f.serveErr
+}
+
+func TestTailscaleServeReturnsApprovalURL(t *testing.T) {
+	fake := &fakeRemoteAccess{serveErr: &remoteaccess.ServeApprovalError{URL: "https://login.tailscale.com/f/serve?node=example"}}
+	server := &Server{remoteAccess: fake}
+	request := httptest.NewRequest(http.MethodPost, "/api/system/tailscale/serve", strings.NewReader(`{"enabled":true}`))
+	request.Header.Set("X-Cloudless-Action", "tailscale-serve")
+	response := httptest.NewRecorder()
+	server.tailscaleServe(response, request)
+	if response.Code != http.StatusAccepted || !strings.Contains(response.Body.String(), `"activationRequired":true`) ||
+		!strings.Contains(response.Body.String(), `"authURL":"https://login.tailscale.com/f/serve?node=example"`) {
+		t.Fatalf("approval response = %d %s", response.Code, response.Body.String())
+	}
 }
 func (f *fakeRemoteAccess) SetAPIServe(_ context.Context, enabled bool, _ int) error {
 	f.serve = enabled

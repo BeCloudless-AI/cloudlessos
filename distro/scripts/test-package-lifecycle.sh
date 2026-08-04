@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
+trap 'status=$?; echo "package lifecycle command failed at line ${LINENO}: ${BASH_COMMAND} (exit ${status})" >&2' ERR
 if [[ "${CLOUDLESS_TRACE:-0}" == "1" ]]; then
   set -x
 fi
@@ -159,6 +160,23 @@ PY
   fake_engine_pid=$!
   runuser -u cloudlessd -- python3 /tmp/cloudless-fake-model.py >/tmp/cloudless-fake-model.log 2>&1 &
   fake_model_pid=$!
+  # This scenario models a daemon-only package restart: inference is already
+  # serving before cloudlessd is replaced. Waiting here keeps it distinct from
+  # the cold-boot recovery scenario, where the endpoint is intentionally absent.
+  python3 <<'PY'
+import time
+import urllib.request
+
+deadline = time.time() + 10
+while time.time() < deadline:
+    try:
+        with urllib.request.urlopen("http://127.0.0.1:8000/v1/models", timeout=1) as response:
+            if response.status == 200:
+                raise SystemExit(0)
+    except Exception:
+        time.sleep(0.1)
+raise SystemExit("fake inference endpoint did not become ready")
+PY
   cloudlessd_pid=
   cleanup_continuity() {
     for pid in "$cloudlessd_pid" "$fake_model_pid" "$fake_engine_pid"; do
@@ -404,6 +422,7 @@ PY
   test -s /usr/share/cloudless/physical-validation-matrix.json
   test -x /usr/sbin/cloudless-backup
   test -x /usr/bin/cloudless-kiosk
+  test -x /usr/bin/cloudless-display-watch
   echo "Debian install, upgrade and rollback lifecycle passed."
   exit 0
 fi

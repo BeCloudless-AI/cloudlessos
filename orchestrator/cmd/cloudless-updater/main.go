@@ -78,22 +78,23 @@ type recipeContinuityState struct {
 }
 
 var (
-	updaterConfigured        = osupdate.Configured
-	updaterCandidates        = candidates
-	updaterRun               = run
-	updaterRunEnv            = runEnv
-	updaterCopyDebs          = copyDebs
-	updaterCaptureWorkload   = captureWorkload
-	updaterWaitContinuity    = waitForWorkloadContinuity
-	updaterRollback          = rollback
-	updaterControlPlaneURL   = controlPlaneURL
-	updaterContinuityWindow  = 90 * time.Second
-	updaterRollbackRoot      = "/var/lib/cloudless-updater/rollback"
-	updaterCurrentDir        = "/var/lib/cloudless-updater/current"
-	updaterAPTCacheDir       = "/var/cache/apt/archives"
-	updaterStagedDir         = "/var/lib/cloudless-updater/staged"
-	updaterQualificationRoot = qualificationRoot
-	updaterEffectiveUID      = os.Geteuid
+	updaterConfigured         = osupdate.Configured
+	updaterCandidates         = candidates
+	updaterRun                = run
+	updaterRunEnv             = runEnv
+	updaterCopyDebs           = copyDebs
+	updaterCaptureWorkload    = captureWorkload
+	updaterWaitContinuity     = waitForWorkloadContinuity
+	updaterRollback           = rollback
+	updaterControlPlaneURL    = controlPlaneURL
+	updaterContinuityWindow   = 90 * time.Second
+	updaterRollbackRoot       = "/var/lib/cloudless-updater/rollback"
+	updaterCurrentDir         = "/var/lib/cloudless-updater/current"
+	updaterAPTCacheDir        = "/var/cache/apt/archives"
+	updaterStagedDir          = "/var/lib/cloudless-updater/staged"
+	updaterQualificationRoot  = qualificationRoot
+	updaterEffectiveUID       = os.Geteuid
+	updaterDGXApplianceMarker = "/etc/cloudless/dgx-appliance"
 )
 
 type releaseManifest struct {
@@ -717,13 +718,17 @@ func applyWithMode(expectedVersion, expectedSourceCommit string, forceRollback b
 			errors.New("start a model and a recipe preparation before running the qualification rollback"),
 		)
 	}
-	if _, err := updaterRunEnv(ctx, []string{"DEBIAN_FRONTEND=noninteractive", "NEEDRESTART_MODE=a"}, "apt-get", args...); err != nil {
+	if _, err := updaterRunEnv(ctx, []string{"DEBIAN_FRONTEND=noninteractive", "NEEDRESTART_MODE=a", "CLOUDLESS_UPDATE_TRANSACTION=1"}, "apt-get", args...); err != nil {
 		return failStatus(status, "Package installation failed", err)
 	}
 
 	if err := writeProgress(&status, 86, "Restarting Cloudless services and checking their health…"); err != nil {
 		return err
 	}
+	// cloudlessd and cloudless-engine share a strict typed protocol. Restart the
+	// broker first so the newly installed daemon never talks to the previous
+	// broker schema during a normal update.
+	_, _ = updaterRun(ctx, "systemctl", "try-restart", "cloudless-engine.service")
 	_, _ = updaterRun(ctx, "systemctl", "try-restart", "cloudlessd.service")
 	continuityErr := updaterWaitContinuity(updaterControlPlaneURL, workload, updaterContinuityWindow)
 	if forceRollback && continuityErr == nil {
@@ -743,9 +748,6 @@ func applyWithMode(expectedVersion, expectedSourceCommit string, forceRollback b
 	}
 
 	for _, pkg := range status.Packages {
-		if pkg.Name == "cloudless-shell" {
-			_, _ = updaterRun(ctx, "systemctl", "try-restart", "lightdm.service")
-		}
 		if pkg.Name == "cloudless-branding" || pkg.Name == "cloudless-hardware" {
 			status.RebootRequired = true
 		}
@@ -777,7 +779,29 @@ func applyWithMode(expectedVersion, expectedSourceCommit string, forceRollback b
 		status.Message = "Update installed. Restart CloudlessOS to finish."
 	}
 	status.Progress = 100
-	return osupdate.Write(status)
+	if err := osupdate.Write(status); err != nil {
+		return err
+	}
+	restartKioskAfterUpdate(ctx)
+	return nil
+}
+
+// restartKioskAfterUpdate reloads the UI only after the candidate generation is
+// installed, its workload continuity check passes, and the final update status
+// is durable. The UI is embedded in cloudless-orchestrator, so tying this to a
+// cloudless-shell package upgrade leaves orchestrator-only releases running the
+// old page indefinitely. Side-by-side DGX installations do not own LightDM and
+// must never have their desktop session restarted by Cloudless.
+func restartKioskAfterUpdate(ctx context.Context) {
+	if platform.IsDGXSpark() {
+		if _, err := os.Stat(updaterDGXApplianceMarker); err != nil {
+			return
+		}
+	}
+	if _, err := updaterRun(ctx, "systemctl", "is-active", "--quiet", "lightdm.service"); err != nil {
+		return
+	}
+	_, _ = updaterRun(ctx, "systemctl", "restart", "lightdm.service")
 }
 
 func validateDGXUpdatePlan(ctx context.Context, installArgs []string) error {
@@ -1269,9 +1293,10 @@ func rollback(ctx context.Context, dir string) error {
 		return errors.New("no previous packages were available for rollback")
 	}
 	args := append([]string{"-i"}, debs...)
-	if _, err := run(ctx, "dpkg", args...); err != nil {
+	if _, err := runEnv(ctx, []string{"DEBIAN_FRONTEND=noninteractive", "CLOUDLESS_UPDATE_TRANSACTION=1"}, "dpkg", args...); err != nil {
 		return err
 	}
+	_, _ = run(ctx, "systemctl", "try-restart", "cloudless-engine.service")
 	_, _ = run(ctx, "systemctl", "try-restart", "cloudlessd.service")
 	return nil
 }

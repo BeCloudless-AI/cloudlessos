@@ -32,6 +32,7 @@ func TestUpdateCenterIsFirstClassReconnectableSurface(t *testing.T) {
 		`filter(app => app.hasUpdate || !!activeOperationForApp(app.id))`,
 		`visibleApps.map(updateCenterAppCard)`,
 		`function updateQualificationNote(system = {})`,
+		`The Cloudless interface refreshes automatically when installation finishes`,
 		`Physical hardware qualification is complete for this exact release.`,
 		`Pre-release build — the complete physical hardware matrix is not yet qualified.`,
 	} {

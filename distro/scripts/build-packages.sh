@@ -50,6 +50,8 @@ EOF
 }
 finish_package() {
     local root="$1" package="$2"
+    install -Dm0644 "$ROOT/LICENSE" "$root/usr/share/doc/$package/LICENSE"
+    install -Dm0644 "$ROOT/NOTICE" "$root/usr/share/doc/$package/NOTICE"
     find "$root" -type d -exec chmod 0755 {} +
     dpkg-deb --root-owner-group --build "$root" "$OUT/${package}_${VERSION}_${ARCH}.deb"
 }

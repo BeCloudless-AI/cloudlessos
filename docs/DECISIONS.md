@@ -1373,10 +1373,19 @@ The ordered implementation and release gates are maintained in
 
 ---
 
+## D50 - License CloudlessOS under Apache License 2.0
+
+**Date:** 2026-08-05 · **Status:** Accepted and implemented
+
+**Decision:** Publish CloudlessOS under the Apache License 2.0. The license permits use,
+modification and redistribution, includes an explicit patent grant, preserves copyright and
+attribution requirements, and does not grant rights to CloudlessOS trademarks. Third-party
+components retain their respective licenses and notices.
+
+---
+
 ## Open questions (not yet decided)
 
-- **Open-source CloudlessOS?** Leaning yes (trust/community for a privacy brand, like
-  Pop!_OS). License TBD.
 - **Orchestrator language:** Go vs Python vs Rust.
 - **Web UI framework.**
 - **Catalog scope:** how curated vs how extensible (defensibility = curation + reliability).

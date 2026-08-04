@@ -9,7 +9,10 @@ fi
 for package in "$OUT"/*.deb; do
     echo "==> Checking $(basename "$package")"
     dpkg-deb --info "$package" >/dev/null
-    dpkg-deb --contents "$package" >/dev/null
+    package_contents="$(dpkg-deb --contents "$package")"
+    package_name="$(dpkg-deb -f "$package" Package)"
+    grep -Fq "./usr/share/doc/$package_name/LICENSE" <<<"$package_contents"
+    grep -Fq "./usr/share/doc/$package_name/NOTICE" <<<"$package_contents"
 done
 
 # os-release is parsed as shell-style key/value data by cloud-init and systemd.

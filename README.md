@@ -151,4 +151,5 @@ Important documentation:
 
 ## License
 
-License selection is still pending. Track the decision in [DECISIONS.md](./docs/DECISIONS.md).
+CloudlessOS is licensed under the [Apache License 2.0](./LICENSE). See [NOTICE](./NOTICE)
+for project attribution. Third-party components remain under their respective licenses.

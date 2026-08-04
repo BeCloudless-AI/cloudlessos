@@ -117,7 +117,6 @@ not something inferred from registration tests.
 - Resolve the browser-agent lifecycle timeout and retain one complete seven-group local run.
 - Replace whole-directory peer cache copying with verified resumable content-addressed transfer.
 - Finish threat modeling for terminal, custom images, public API exposure and agent permissions.
-- Decide and publish the project license.
 - Produce end-user installation, recovery, privacy and support policies.
 
 ## Wrap-up and resume point

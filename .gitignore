@@ -30,6 +30,9 @@ npm-debug.log*
 *.test
 *.out
 
+# Local screenshots and UI captures belong in ignored qualification output.
+/*.png
+
 # Models / large artifacts (never commit weights)
 /models/
 *.gguf

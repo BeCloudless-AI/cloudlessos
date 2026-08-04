@@ -45,7 +45,7 @@ behavior and current limitations rather than relying on old release assumptions.
 ### Run the orchestrator from source
 
 ```bash
-git clone https://github.com/samuelcardillo/cloudlessos.git
+git clone https://github.com/BeCloudless-AI/cloudlessos.git
 cd cloudlessos
 
 # Ubuntu/WSL helpers, only when the dependencies are not installed yet

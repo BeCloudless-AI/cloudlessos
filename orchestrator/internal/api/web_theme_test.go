@@ -75,7 +75,7 @@ func TestEmbeddedWebProgressBarsUseThemePalettes(t *testing.T) {
 		".eb-track i",
 		".track > i",
 		".tbar > i",
-		".tour-progress > i",
+		".tour-dots > i",
 		".machine-vram-fill",
 		".machine-driver-progress > span",
 		".cluster-connect-line::after",

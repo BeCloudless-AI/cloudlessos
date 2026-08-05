@@ -53,7 +53,6 @@ func main() {
 			go provisionWhenReady(eng, st, mf)
 		})
 	}
-	srv.SetInitialProvisioner(startInitialProvisioning)
 
 	httpServer := &http.Server{
 		Addr:              addr,

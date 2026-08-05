@@ -1,0 +1,14 @@
+{
+  "title": "Recipe-first onboarding and a clearer guided start",
+  "summary": "CloudlessOS 0.2.7-5 introduces a recipe-first first-launch experience, simplifies the interactive tour, adds permanent contextual guidance, and strengthens kiosk and runtime recovery on DGX Spark.",
+  "changes": [
+    "Start every fresh CloudlessOS installation with no automatic model download or launch, and direct new users to reviewed, hardware-aware recipes in Model Manager.",
+    "Explain recipes in plain language during first launch, recommend the Laguna S 2.1 recipe on DGX Spark, and retain a direct path to the complete offline Cloudless Guide.",
+    "Replace the action-gated tutorial with a concise four-step explanation of the left tool rail and bottom shortcut shelf, using zoom-safe spotlight geometry and stable progress dots.",
+    "Preserve the left tool rail's fixed layout while it is highlighted by the tour and keep the permanent Guide shortcut accessible from the bottom-right corner.",
+    "Show one-time connection guidance after the first successful recipe launch, including the next steps for Hermes Desktop, API keys, Local network access, and Tailscale.",
+    "Keep inference deliberately unloaded after leaving a cluster instead of unexpectedly starting a local runtime.",
+    "Prevent Firefox kiosk crash recovery from entering a rapid restart loop while retaining automatic recovery from isolated browser failures.",
+    "Publish the CloudlessOS source under Apache License 2.0, move public project links to the BeCloudless-AI organization, and remove obsolete repository screenshots and hosted automation configuration."
+  ]
+}

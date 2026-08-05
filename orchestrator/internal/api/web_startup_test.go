@@ -34,16 +34,41 @@ func TestEmbeddedWebRequiresFirstLaunchSetupConsent(t *testing.T) {
 	}
 	page := string(content)
 	for _, want := range []string{
-		"Nothing will be downloaded or started until you choose.",
-		"Download and Install",
-		"I will do it myself",
-		"What are recipes?",
+		"Cloudless is recipe-first",
+		"Cloudless is designed to start with a ready-to-use recipe",
+		"Nothing is downloaded or started from this screen.",
+		"Open Model Manager",
+		"Open Guide",
+		"What is a recipe?",
 		"Recipes, explained simply",
+		`aria-controls="first-setup-recipe-explanation"`,
+		"explanation.classList.toggle('hidden')",
+		"Recommended for this DGX Spark",
+		"Laguna S 2.1",
+		"document.documentElement.dataset.cloudlessPlatform !== 'dgx-spark'",
+		"body: JSON.stringify({ choice: 'manual' })",
+		"openModelManager('recipes')",
+		"openGuide('models-recipes')",
 		"/api/onboarding/setup",
+		"/api/onboarding/complete",
 		"o.setupRequired",
 	} {
 		if !strings.Contains(page, want) {
 			t.Fatalf("embedded first-launch setup is missing %q", want)
+		}
+	}
+	firstSetupStart := strings.Index(page, `<div class="first-setup hidden"`)
+	if firstSetupStart < 0 {
+		t.Fatal("embedded first-launch setup markup could not be isolated")
+	}
+	firstSetupEnd := strings.Index(page[firstSetupStart:], `<section class="virtual-keyboard"`)
+	if firstSetupEnd < 0 {
+		t.Fatal("embedded first-launch setup markup could not be isolated")
+	}
+	firstSetup := page[firstSetupStart : firstSetupStart+firstSetupEnd]
+	for _, forbidden := range []string{"Download and Install", "I will do it myself", "first-setup-install"} {
+		if strings.Contains(firstSetup, forbidden) {
+			t.Fatalf("embedded first-launch setup must not offer automatic installation: found %q", forbidden)
 		}
 	}
 }

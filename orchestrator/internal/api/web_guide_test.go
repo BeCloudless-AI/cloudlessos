@@ -13,6 +13,12 @@ func TestEmbeddedGuideIsPermanentSearchableAndAccessible(t *testing.T) {
 	page := string(content)
 	for _, want := range []string{
 		`id="dock-guide"`,
+		`class="guide-fab" id="guide-fab"`,
+		`aria-label="Open Cloudless Guide"`,
+		`.guide-fab {`,
+		`right: 18px; bottom: 18px; z-index: 39;`,
+		`.guide-fab { right: 16px; bottom: 76px;`,
+		`document.getElementById('guide-fab').onclick = () => openGuide();`,
 		`id="guide" aria-hidden="true"`,
 		`role="dialog" aria-modal="true" aria-labelledby="guide-title"`,
 		`id="guide-search" type="search"`,

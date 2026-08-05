@@ -2002,12 +2002,16 @@
     color: var(--blue); background: var(--blue-soft); font-size: 10.5px; font-weight: 720; line-height: 1.4; }
   .tour-await-dot { width: 7px; height: 7px; flex: none; border-radius: 50%; background: var(--blue); box-shadow: 0 0 0 0 color-mix(in srgb, var(--blue) 38%, transparent); animation: tour-await 1.55s ease-out infinite; }
   @keyframes tour-await { 70%, 100% { box-shadow: 0 0 0 7px transparent; } }
-  .tour-progress { height: 4px; margin-top: 18px; overflow: hidden; border-radius: 99px; background: var(--progress-rail); }
-  .tour-progress > i { display: block; width: var(--tour-progress); height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--progress-start), var(--progress-end)); box-shadow: 0 1px 5px -1px var(--progress-glow); transition: width .28s ease; }
+  .tour-dots { min-height: 10px; margin-top: 18px; display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 6px; }
+  .tour-dots > i { width: 7px; height: 7px; flex: none; border-radius: 50%; background: var(--progress-rail); transition: width .2s ease, height .2s ease, background .2s ease, box-shadow .2s ease; }
+  .tour-dots > i.done { background: color-mix(in srgb, var(--blue) 48%, var(--progress-rail)); }
+  .tour-dots > i.current { width: 9px; height: 9px; background: var(--blue); box-shadow: 0 0 0 3px var(--blue-soft); }
   .tour-actions { margin-top: 14px; display: flex; align-items: center; gap: 8px; }
   .tour-skip { padding-left: 0; color: var(--muted); }
   .tour-spacer { flex: 1; }
-  .tour-target { position: relative; z-index: 101 !important; }
+  /* Only raise an existing target above the tour veil. Changing its positioning
+     here would replace layout-critical fixed positioning on the tool rails. */
+  .tour-target { z-index: 101 !important; }
   .first-setup { position: fixed; inset: 0; z-index: 104; display: grid; place-items: center; padding: 24px; background: color-mix(in srgb, #09101e 66%, transparent); backdrop-filter: blur(18px); }
   .first-setup.hidden { display: none; }
   .first-setup-card { width: min(590px, calc(100vw - 32px)); padding: 30px; border: 1px solid color-mix(in srgb, var(--blue) 24%, var(--hair)); border-radius: 22px; background: var(--card); box-shadow: 0 30px 90px -42px rgba(0,0,0,.72); }
@@ -2712,6 +2716,19 @@
   .dock-item:hover .dock-tip { transform: translateY(-50%) translateX(0); }
   .dock-sep { height: 1px; width: 28px; align-self: auto; margin: 3px 0; }
   .dock-item .run-dot { left: -6px; bottom: auto; top: 50%; transform: translateY(-50%); width: 4px; height: 14px; border-radius: 0 5px 5px 0; }
+  .guide-fab {
+    position: fixed; right: 18px; bottom: 18px; z-index: 39; min-height: 44px; padding: 0 15px;
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    border: 1px solid color-mix(in srgb, var(--blue) 24%, var(--hair)); border-radius: 14px;
+    color: var(--ink-2); background: var(--card-strong); box-shadow: 0 14px 34px -22px rgba(0,0,0,.72);
+    font: inherit; font-size: 11px; font-weight: 750; transition: transform .16s ease, color .16s ease, background .16s ease, box-shadow .16s ease;
+  }
+  .guide-fab:hover, .guide-fab:focus-visible {
+    outline: none; color: var(--blue); background: var(--blue-soft); transform: translateY(-2px);
+    box-shadow: 0 18px 36px -20px color-mix(in srgb, var(--blue) 38%, rgba(0,0,0,.72));
+  }
+  .guide-fab:active { transform: translateY(0) scale(.97); }
+  .guide-fab .ui-icon { width: 18px; height: 18px; }
 
   /* Home */
   main { max-width: 1440px; margin: 0 auto; padding: 108px 48px 72px 116px; }
@@ -3736,6 +3753,8 @@
     .dock-sep { width: 1px; height: 26px; margin: 0 2px; }
     .dock-tip { display: none; }
     .dock-item .run-dot { left: 50%; top: auto; bottom: -5px; width: 12px; height: 3px; transform: translateX(-50%); border-radius: 4px 4px 0 0; }
+    .guide-fab { right: 16px; bottom: 76px; width: 44px; padding: 0; border-radius: 13px; }
+    .guide-fab span { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
     main { padding: 86px 16px 92px; }
     .hero { grid-template-columns: 1fr; }
     .hero-time { display: none; }
@@ -4163,6 +4182,8 @@
   <button class="dock-item" id="dock-settings" aria-label="Settings" title="Settings"><span class="dock-tip">Settings</span><span class="dock-glyph" aria-hidden="true"><svg class="ui-icon"><use href="#ui-settings"/></svg></span></button>
 </nav>
 
+<button class="guide-fab" id="guide-fab" type="button" aria-label="Open Cloudless Guide" title="Open Cloudless Guide"><svg class="ui-icon" aria-hidden="true"><use href="#ui-guide"/></svg><span>Guide</span></button>
+
 <div id="toast"></div>
 
 <!-- full-screen App Launcher -->
@@ -4362,15 +4383,16 @@
   <section class="first-setup-card" role="dialog" aria-modal="true" aria-labelledby="first-setup-title" aria-describedby="first-setup-copy">
     <span class="first-setup-mark"><svg class="ui-icon" aria-hidden="true"><use href="#ui-models"/></svg></span>
     <div class="first-setup-eyebrow">First launch</div>
-    <h2 class="first-setup-title" id="first-setup-title">How would you like to set up your AI?</h2>
-    <p class="first-setup-copy" id="first-setup-copy">Since this is your first time launching Cloudless, do you want Cloudless to download and install its default AI? Or connect your account and start with a ready-to-use recipe instead?</p>
-    <div class="first-setup-note"><svg class="ui-icon" aria-hidden="true"><use href="#ui-check"/></svg><span>Nothing will be downloaded or started until you choose.</span></div>
-    <div class="first-setup-recipes hidden" id="first-setup-recipes" role="status"><b>Recipes, explained simply</b>A recipe is a versioned setup card for an AI workload. It tells Cloudless which container, model, settings, and launch steps belong together, so you can install a known configuration without assembling every piece yourself. You stay in control and can inspect it before running it.</div>
+    <h2 class="first-setup-title" id="first-setup-title">Cloudless is recipe-first</h2>
+    <p class="first-setup-copy" id="first-setup-copy">Cloudless is designed to start with a ready-to-use recipe: a tested configuration that brings together the model, engine, launch settings, and hardware optimizations. Open Model Manager to browse recipes, or use the Guide if you want to explore every option yourself.</p>
+    <div class="first-setup-note"><svg class="ui-icon" aria-hidden="true"><use href="#ui-check"/></svg><span>Nothing is downloaded or started from this screen.</span></div>
+    <div class="first-setup-recipes hidden" id="first-setup-recipe-explanation" role="status"><b>Recipes, explained simply</b>A model is the AI brain. A recipe is the complete setup kit: it chooses a compatible model and engine, applies the right settings for your hardware, and includes the checks Cloudless needs to run it reliably. You can inspect a recipe before installing or running it.</div>
+    <div class="first-setup-recipes hidden" id="first-setup-dgx-recommendation" role="note"><b>Recommended for this DGX Spark</b>Start with the <strong>Laguna S 2.1</strong> recipe in Model Manager. It provides a ready-to-use configuration optimized for DGX Spark.</div>
     <div class="first-setup-error" id="first-setup-error" role="alert"></div>
     <div class="first-setup-actions">
-      <button class="btn primary" id="first-setup-install" type="button"><svg class="ui-icon" aria-hidden="true"><use href="#ui-download"/></svg><span>Download and Install</span></button>
-      <button class="btn" id="first-setup-manual" type="button">I will do it myself</button>
-      <button class="btn link" id="first-setup-explain" type="button" aria-expanded="false" aria-controls="first-setup-recipes">What are recipes?</button>
+      <button class="btn primary" id="first-setup-models" type="button"><svg class="ui-icon" aria-hidden="true"><use href="#ui-models"/></svg><span>Open Model Manager</span></button>
+      <button class="btn" id="first-setup-guide" type="button"><svg class="ui-icon" aria-hidden="true"><use href="#ui-guide"/></svg><span>Open Guide</span></button>
+      <button class="btn link" id="first-setup-explain" type="button" aria-expanded="false" aria-controls="first-setup-recipe-explanation">What is a recipe?</button>
     </div>
   </section>
 </div>
@@ -5852,54 +5874,55 @@ function showStartupIntro(next, bootID = '', force = false) {
   frame.src = `first-launch/index.html?run=${Date.now()}`;
   firstLaunchIntroTimer = setTimeout(finish, 8500);
 }
-let firstSetupAfter = null;
-function showFirstLaunchSetup(next) {
-  firstSetupAfter = next;
+function showFirstLaunchSetup() {
   const setup = document.getElementById('first-setup');
   const explain = document.getElementById('first-setup-explain');
-  const recipes = document.getElementById('first-setup-recipes');
+  const recipeExplanation = document.getElementById('first-setup-recipe-explanation');
+  const recommendation = document.getElementById('first-setup-dgx-recommendation');
   const error = document.getElementById('first-setup-error');
   setup.classList.remove('hidden');
   setup.setAttribute('aria-hidden', 'false');
-  recipes.classList.add('hidden');
+  recipeExplanation.classList.add('hidden');
   explain.setAttribute('aria-expanded', 'false');
-  explain.textContent = 'What are recipes?';
+  explain.textContent = 'What is a recipe?';
+  recommendation.classList.toggle('hidden', document.documentElement.dataset.cloudlessPlatform !== 'dgx-spark');
   error.textContent = '';
-  setTimeout(() => document.getElementById('first-setup-install').focus(), 30);
+  setTimeout(() => document.getElementById('first-setup-models').focus(), 30);
 }
 function hideFirstLaunchSetup() {
   const setup = document.getElementById('first-setup');
   setup.classList.add('hidden');
   setup.setAttribute('aria-hidden', 'true');
-  const next = firstSetupAfter;
-  firstSetupAfter = null;
-  if (next) next();
 }
-async function chooseFirstLaunchSetup(choice) {
-  const install = document.getElementById('first-setup-install');
-  const manual = document.getElementById('first-setup-manual');
+async function leaveFirstLaunchSetup(destination) {
+  const models = document.getElementById('first-setup-models');
+  const guide = document.getElementById('first-setup-guide');
+  const explain = document.getElementById('first-setup-explain');
   const error = document.getElementById('first-setup-error');
-  install.disabled = true; manual.disabled = true; error.textContent = '';
+  models.disabled = true; guide.disabled = true; explain.disabled = true; error.textContent = '';
   try {
     const result = await api('/api/onboarding/setup', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ choice })
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ choice: 'manual' })
     });
     if (!result || result.error) throw new Error(result?.error || 'Cloudless could not save your choice.');
+    const completed = await api('/api/onboarding/complete', { method: 'POST' });
+    if (!completed || completed.error) throw new Error(completed?.error || 'Cloudless could not complete first-launch setup.');
     hideFirstLaunchSetup();
-    toast(choice === 'install' ? 'Default AI installation started' : 'Automatic AI installation skipped');
+    if (destination === 'guide') openGuide('models-recipes');
+    else openModelManager('recipes');
   } catch (setupError) {
     error.textContent = setupError.message || 'Cloudless could not save your choice.';
   } finally {
-    install.disabled = false; manual.disabled = false;
+    models.disabled = false; guide.disabled = false; explain.disabled = false;
   }
 }
-document.getElementById('first-setup-install').onclick = () => chooseFirstLaunchSetup('install');
-document.getElementById('first-setup-manual').onclick = () => chooseFirstLaunchSetup('manual');
+document.getElementById('first-setup-models').onclick = () => leaveFirstLaunchSetup('models');
+document.getElementById('first-setup-guide').onclick = () => leaveFirstLaunchSetup('guide');
 document.getElementById('first-setup-explain').onclick = event => {
-  const recipes = document.getElementById('first-setup-recipes');
-  const open = recipes.classList.toggle('hidden') === false;
+  const explanation = document.getElementById('first-setup-recipe-explanation');
+  const open = explanation.classList.toggle('hidden') === false;
   event.currentTarget.setAttribute('aria-expanded', String(open));
-  event.currentTarget.textContent = open ? 'Hide recipe explanation' : 'What are recipes?';
+  event.currentTarget.textContent = open ? 'Hide recipe explanation' : 'What is a recipe?';
 };
 
 /* ---- Cloudless Guide ------------------------------------------------------
@@ -6126,69 +6149,24 @@ function runGuideAction(action) {
   else if (action === 'tour') showOnboarding();
 }
 const TOUR_STEPS = [
-  { center: true, icon: 'assistant', path: 'Welcome to CloudlessOS', title: 'Everything happens right here',
-    desc: 'This guided tour opens the real parts of CloudlessOS with you. At each action step, click the highlighted control to continue; the following step explains what just opened.',
-    tip: 'You can skip now and replay the tutorial later from Settings → General.' },
-  { action: true, target: '#dock-asst', icon: 'assistant', path: 'Your turn · Assistant', title: 'Open the Cloudless Assistant',
-    desc: 'The Assistant is the fastest place to begin when you know what you want to achieve but not which system tool to use.',
-    await: 'Click the highlighted Assistant icon to continue.' },
-  { surface: 'assistant', target: '#asst', icon: 'assistant', path: 'Assistant · Opened', title: 'Ask in plain language',
-    desc: 'The compact assistant can explain hardware, compare models, and guide you to CloudlessOS features. Expand it for longer conversations, or open Hermes for the full agent dashboard.',
-    tip: 'The large Ask Cloudless bar on Home starts the same assistant.' },
-  { action: true, target: '#dock-launcher', icon: 'apps', path: 'Your turn · Apps', title: 'Open the App Launcher',
-    desc: 'Cloudless apps add chat interfaces, image generation, training, automation, and other capabilities to this machine.',
-    await: 'Click the highlighted Apps icon to continue.' },
-  { surface: 'apps', target: '.lp', icon: 'apps', path: 'Apps · Opened', title: 'Browse, install, and pin applications',
-    desc: 'Search the catalog on the left, inspect an app on the right, then install it from inside CloudlessOS. Pin favorites to place them in “Your apps” on Home.',
-    tip: 'Installed apps remain inside the CloudlessOS window when you open them.' },
-  { action: true, target: '#dock-models', icon: 'models', path: 'Your turn · Models', title: 'Open the Model Manager',
-    desc: 'The Model Manager controls which language or image model powers your local AI.',
-    await: 'Click the highlighted Models icon to continue.' },
-  { surface: 'models', target: '#models .mm', icon: 'models', path: 'Models · Opened', title: 'Choose what powers your AI',
-    desc: 'Browse compatible models, compare what they are best at, check estimated GPU fit, download one, and launch it on the active inference engine.',
-    tip: 'Compatibility includes runtime headroom; it is more useful than download size alone.' },
-  { action: true, target: '#dock-inference', icon: 'metrics', path: 'Your turn · Metrics', title: 'Open Metrics',
-    desc: 'Metrics is where CloudlessOS exposes live inference and GPU behavior instead of hiding it behind the apps.',
-    await: 'Click the highlighted Metrics icon to continue.' },
-  { surface: 'metrics', target: '#inference .mm', icon: 'metrics', path: 'Metrics · Opened', title: 'Inspect activity, usage, and access',
-    desc: 'Switch between live activity, historical usage, power, inference engines, and API access. API-key metrics help identify exactly which client is consuming the model.',
-    tip: 'Engine selection and API access are also mirrored in Settings without duplicating their code.' },
-  { target: '.cards .card:first-child', icon: 'machine', path: 'Home · Hardware', title: 'Know what this machine can handle',
-    desc: 'The Hardware card keeps GPU memory, utilization, temperature, power, and host capacity visible. On DGX Spark, unified memory is shown once with the GPU and the host section shows available storage.',
-    tip: 'Open Machine in Settings for the complete system overview.' },
-  { action: true, target: '#open-places', icon: 'folder', path: 'Your turn · Places', title: 'Open your Places menu',
-    desc: 'Models, generated outputs, projects, and downloads stay one click away in the bottom launch shelf.',
-    await: 'Click the highlighted folder icon to continue.' },
-  { surface: 'places', target: '#places-quick', icon: 'folder', path: 'Places · Opened', title: 'Jump directly to your files',
-    desc: 'Choose Models, Outputs, Workspace, or Downloads to open that folder immediately without leaving the CloudlessOS experience.',
-    tip: 'Apps use these shared folders so your work remains available across tools.' },
-  { action: true, target: '#dock-settings', icon: 'settings', path: 'Your turn · Settings', title: 'Open Settings',
-    desc: 'Settings brings system configuration and the options for installed applications into one predictable place.',
-    await: 'Click the highlighted Settings icon to continue.' },
-  { surface: 'settings', target: '#settings .set', icon: 'settings', path: 'Settings · Opened', title: 'Configure CloudlessOS in one place',
-    desc: 'Use the sidebar for machine information, engines, API access, installed-app options, themes, updates, and profile preferences. Each page keeps the same window size.',
-    tip: 'Replay this tutorial anytime from General → Replay interactive tutorial.' },
+  { center: true, icon: 'assistant', path: 'Welcome to CloudlessOS', title: 'Two menus keep everything within reach',
+    desc: 'This short tour explains the permanent tool menu on the left and the shortcut menu along the bottom. Nothing will open while the tour is running.',
+    tip: 'You can skip now and replay the tutorial later from Settings.' },
+  { target: '#dock', icon: 'apps', path: 'Navigation · Left menu', title: 'Your main tools stay on the left',
+    desc: 'Open Apps, recipes and models, metrics, updates, the browser, Terminal, Assistant, Guide, or Settings from this tool rail. A small indicator shows when a tool is active or needs attention.',
+    tip: 'Hover over an icon to see its name. The highlighted menu stays locked until you press Continue.' },
+  { target: '#home-apps', icon: 'folder', path: 'Navigation · Bottom menu', title: 'Files and app shortcuts stay along the bottom',
+    desc: 'Open Places for models, outputs, workspace files, and downloads. Your pinned apps appear beside it, and All apps opens the complete application catalog.',
+    tip: 'Pin the apps you use most often so they remain available from this shortcut shelf.' },
   { center: true, icon: 'check', path: 'Tour complete', title: 'You are ready to explore',
-    desc: 'Use the dock whenever you need a destination, or simply ask Cloudless when you are unsure where to begin. Everything remains local unless you explicitly enable sharing.',
-    tip: 'You can replay this tutorial at any time from Settings → General.' },
+    desc: 'Use the left menu for Cloudless tools and the bottom menu for files and app shortcuts. Everything remains local unless you explicitly enable sharing.',
+    tip: 'You can replay this tutorial at any time from Settings.' },
 ];
-let tourIndex = 0, tourActive = false, tourTarget = null, tourPreviousFocus = null, tourPositionTimer = 0, tourActionTarget = null, tourActionHandler = null, tourLockedTarget = null;
+let tourIndex = 0, tourActive = false, tourTarget = null, tourPreviousFocus = null, tourPositionTimer = 0, tourLockedTarget = null;
 function closeTourSurfaces() {
   closeLauncher(); closeModelManager(); closeInference(); closeSettings(); closeGuide(); closeAsst();
   setPlacesQuick(false);
   document.getElementById('key-dialog-layer')?.classList.add('hidden');
-}
-function ensureTourSurface(surface) {
-  if (surface === 'assistant' && document.getElementById('asst').classList.contains('hidden')) openAsst();
-  else if (surface === 'apps' && document.getElementById('launcher').classList.contains('hidden')) openLauncher();
-  else if (surface === 'models' && document.getElementById('models').classList.contains('hidden')) openModelManager();
-  else if (surface === 'metrics' && document.getElementById('inference').classList.contains('hidden')) openInference();
-  else if (surface === 'settings' && document.getElementById('settings').classList.contains('hidden')) openSettings();
-  else if (surface === 'places') setPlacesQuick(true);
-}
-function clearTourAction() {
-  if (tourActionTarget && tourActionHandler) tourActionTarget.removeEventListener('click', tourActionHandler);
-  tourActionTarget = null; tourActionHandler = null;
 }
 function clearTourLock() {
   if (!tourLockedTarget) return;
@@ -6204,14 +6182,29 @@ function lockTourTarget(el) {
   el.setAttribute('aria-disabled', 'true');
 }
 function clearTourTarget() {
-  clearTourAction();
   clearTourLock();
   if (tourTarget) tourTarget.classList.remove('tour-target');
   tourTarget = null;
 }
+function tourCoordinateSpace() {
+  const scale = Math.max(.01, Number(document.documentElement.dataset.uiScale) || 1);
+  return { scale, width: innerWidth / scale, height: innerHeight / scale };
+}
+function tourLogicalRect(element, scale = tourCoordinateSpace().scale) {
+  const rect = element.getBoundingClientRect();
+  return {
+    left: rect.left / scale,
+    top: rect.top / scale,
+    right: rect.right / scale,
+    bottom: rect.bottom / scale,
+    width: rect.width / scale,
+    height: rect.height / scale,
+  };
+}
 function positionTourGuards(hole) {
   const guards = Object.fromEntries([...document.querySelectorAll('[data-tour-guard]')].map(el => [el.dataset.tourGuard, el]));
   const topBlocker = document.querySelector('[data-tour-corner="tl"]');
+  const viewport = tourCoordinateSpace();
   const set = (el, left, top, width, height) => Object.assign(el.style, {
     left: `${left}px`, top: `${top}px`,
     width: `${Math.max(0, width)}px`, height: `${Math.max(0, height)}px`
@@ -6226,7 +6219,7 @@ function positionTourGuards(hole) {
   };
   if (!hole) {
     setMask(0, 0, 0, 0);
-    set(topBlocker, 0, 0, innerWidth, innerHeight);
+    set(topBlocker, 0, 0, viewport.width, viewport.height);
     set(guards.left, 0, 0, 0, 0);
     set(guards.right, 0, 0, 0, 0);
     set(guards.bottom, 0, 0, 0, 0);
@@ -6234,10 +6227,10 @@ function positionTourGuards(hole) {
   }
   const { left, top, right, bottom } = hole;
   setMask(left, top, right, bottom);
-  set(topBlocker, 0, 0, innerWidth, top);
+  set(topBlocker, 0, 0, viewport.width, top);
   set(guards.left, 0, top, left, bottom - top);
-  set(guards.right, right, top, innerWidth - right, bottom - top);
-  set(guards.bottom, 0, bottom, innerWidth, innerHeight - bottom);
+  set(guards.right, right, top, viewport.width - right, bottom - top);
+  set(guards.bottom, 0, bottom, viewport.width, viewport.height - bottom);
 }
 function positionTour() {
   if (!tourActive) return;
@@ -6250,7 +6243,7 @@ function positionTour() {
     card.removeAttribute('style');
     return;
   }
-  const r = tourTarget.getBoundingClientRect(), pad = 8, vw = innerWidth, vh = innerHeight;
+  const viewport = tourCoordinateSpace(), r = tourLogicalRect(tourTarget, viewport.scale), pad = 8, vw = viewport.width, vh = viewport.height;
   const left = Math.max(8, r.left - pad), top = Math.max(8, r.top - pad);
   const right = Math.min(vw - 8, r.right + pad), bottom = Math.min(vh - 8, r.bottom + pad);
   positionTourGuards({ left, top, right, bottom });
@@ -6276,38 +6269,27 @@ function renderTourStep(index) {
   tourIndex = Math.max(0, Math.min(TOUR_STEPS.length - 1, index));
   clearTourTarget();
   const step = TOUR_STEPS[tourIndex], card = document.getElementById('tour-card');
-  if (step.surface) ensureTourSurface(step.surface);
-  else closeTourSurfaces();
+  closeTourSurfaces();
   if (!step.center) {
     tourTarget = document.querySelector(step.target);
     if (tourTarget) {
       tourTarget.classList.add('tour-target');
       tourTarget.scrollIntoView({ block: 'center', inline: 'center', behavior: 'auto' });
-      if (step.action) {
-        const actionIndex = tourIndex;
-        tourActionTarget = tourTarget;
-        tourActionHandler = () => {
-          if (!tourActive || tourIndex !== actionIndex) return;
-          clearTourAction();
-          setTimeout(() => renderTourStep(actionIndex + 1), 260);
-        };
-        tourActionTarget.addEventListener('click', tourActionHandler);
-      } else lockTourTarget(tourTarget);
+      lockTourTarget(tourTarget);
     }
   }
   const last = tourIndex === TOUR_STEPS.length - 1;
-  const canContinue = !step.action;
   const continueLabel = last ? 'Start using CloudlessOS' : tourIndex === 0 ? 'Start tour' : 'Continue';
   card.innerHTML = `<div class="tour-head"><span class="tour-path">${escapeHtml(step.path)}</span><span class="tour-count">${tourIndex + 1} of ${TOUR_STEPS.length}</span></div>
     <div class="tour-copy"><span class="tour-icon">${uiIcon(step.icon)}</span><h2 class="tour-title" id="tour-title">${escapeHtml(step.title)}</h2><p class="tour-desc" id="tour-desc">${escapeHtml(step.desc)}</p>${step.tip ? `<div class="tour-tip">${uiIcon('check')}<span>${escapeHtml(step.tip)}</span></div>` : ''}${step.await ? `<div class="tour-await"><span class="tour-await-dot"></span><span>${escapeHtml(step.await)}</span></div>` : ''}</div>
-    <div class="tour-progress" aria-hidden="true"><i style="--tour-progress:${((tourIndex + 1) / TOUR_STEPS.length * 100).toFixed(2)}%"></i></div>
-    <div class="tour-actions">${last ? '' : '<button class="btn link tour-skip" id="tour-skip" type="button">Skip tour</button>'}<span class="tour-spacer"></span>${tourIndex ? '<button class="btn" id="tour-back" type="button">Back</button>' : ''}${canContinue ? `<button class="btn primary" id="tour-continue" type="button">${continueLabel}</button>` : ''}</div>`;
+    <div class="tour-dots" aria-hidden="true">${TOUR_STEPS.map((_, dotIndex) => `<i class="${dotIndex < tourIndex ? 'done' : dotIndex === tourIndex ? 'current' : ''}"></i>`).join('')}</div>
+    <div class="tour-actions">${last ? '' : '<button class="btn link tour-skip" id="tour-skip" type="button">Skip tour</button>'}<span class="tour-spacer"></span>${tourIndex ? '<button class="btn" id="tour-back" type="button">Back</button>' : ''}<button class="btn primary" id="tour-continue" type="button">${continueLabel}</button></div>`;
   card.querySelector('#tour-skip')?.addEventListener('click', () => finishOnboarding(true));
   card.querySelector('#tour-back')?.addEventListener('click', () => renderTourStep(tourIndex - 1));
   const continueButton = card.querySelector('#tour-continue');
   if (continueButton) continueButton.onclick = () => last ? finishOnboarding(false) : renderTourStep(tourIndex + 1);
   queueTourPosition(tourTarget ? 340 : 0);
-  setTimeout(() => (step.action ? tourTarget : continueButton)?.focus({ preventScroll: true }), 30);
+  setTimeout(() => continueButton?.focus({ preventScroll: true }), 30);
 }
 function showOnboarding() {
   if (tourActive) return;
@@ -6342,7 +6324,7 @@ addEventListener('scroll', () => queueTourPosition(), { passive: true });
 document.addEventListener('keydown', e => {
   if (!tourActive || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
   if (e.key === 'Escape') { e.preventDefault(); finishOnboarding(true); }
-  else if (e.key === 'ArrowRight' && !TOUR_STEPS[tourIndex].action) { e.preventDefault(); tourIndex === TOUR_STEPS.length - 1 ? finishOnboarding(false) : renderTourStep(tourIndex + 1); }
+  else if (e.key === 'ArrowRight') { e.preventDefault(); tourIndex === TOUR_STEPS.length - 1 ? finishOnboarding(false) : renderTourStep(tourIndex + 1); }
   else if (e.key === 'ArrowLeft' && tourIndex > 0) { e.preventDefault(); renderTourStep(tourIndex - 1); }
 });
 
@@ -8973,6 +8955,31 @@ function closeMyRecipes(){
   mmRecipeView.scope='local';
   document.getElementById('my-recipes').classList.add('hidden');
 }
+let recipeLaunchGuidanceOpen = false;
+async function maybeShowFirstRecipeLaunchGuidance() {
+  if (recipeLaunchGuidanceOpen) return;
+  const layer = document.getElementById('key-dialog-layer');
+  if (layer && !layer.classList.contains('hidden')) return;
+  const status = await api('/api/guidance/recipe-launch').catch(() => null);
+  if (!status || status.error || !status.show) return;
+  recipeLaunchGuidanceOpen = true;
+  try {
+    const openGuideAfter = await openCloudlessDecision({
+      title: 'Your recipe is ready',
+      message: 'Your AI can now be used inside Cloudless or connected to other tools.',
+      detail: 'Connect Hermes Desktop using Cloudless as its OpenAI-compatible model provider.\nCreate an API key to use this recipe from apps, scripts, or another device.\nThe Guide shows the exact URLs, permissions, Local network, and Tailscale steps.',
+      confirmLabel: 'Open the Guide',
+      cancelLabel: 'I know',
+      icon: 'guide',
+      returnFocus: document.activeElement,
+    });
+    const acknowledged = await api('/api/guidance/recipe-launch', { method: 'POST' }).catch(() => null);
+    if (!acknowledged || acknowledged.error) toast(acknowledged?.error || 'Cloudless could not save this preference.', true);
+    if (openGuideAfter) openGuide('hermes');
+  } finally {
+    recipeLaunchGuidanceOpen = false;
+  }
+}
 function renderHomeRecipeJobs(data){
   const host=document.getElementById('recipe-jobs-home');if(!host)return;
   const jobs=recipeLiveJobs(data);
@@ -9607,8 +9614,24 @@ function paintLocalRecipes(c, data) {
 function trackLocalRecipeJob(jobId, operation = 'run', recipeId = '') {
   const checking = operation === 'check', stream = new EventSource(`/api/jobs/${jobId}/events`); let ended = false;
   const finish = (ok, message, canceled = false, outcome = '') => { if (ended) return; ended = true; stream.close(); if(checking){finishRecipeCheckOverlay(ok,message,outcome);return;} const success=operation==='cleanup'?'Recipe cleanup verified':operation==='stop'?'Recipe stopped':'Recipe ready', failure=operation==='cleanup'?'Cleanup still needs attention — open the recipe for node details.':'Recipe failed — open Failure details for the affected phase, cleanup status, and next action.'; toast(canceled ? 'Recipe launch stopped' : ok ? success : failure, !ok && !canceled); mmRecipes = null; if (modelsOpen() && mmTab === 'recipes') renderModelManager(); refreshActiveModel(); };
-  stream.onmessage = event => { const update = JSON.parse(event.data); if(checking)updateRecipeCheckOverlay(update);else if(recipeId)updateRecipeRunCard(recipeId,jobId,update); if (update.phase === 'error') finish(false, update.error); else if (update.phase === 'canceled') finish(true, '', true); else if (update.done) finish(true,'',false,update.containerId||''); };
-  stream.onerror = async () => { const update = await api(`/api/jobs/${jobId}`).catch(() => null); if (update && update.done) finish(update.phase !== 'error', update.error, false, update.containerId||''); };
+  stream.onmessage = event => {
+    const update = JSON.parse(event.data);
+    if (checking) updateRecipeCheckOverlay(update); else if (recipeId) updateRecipeRunCard(recipeId, jobId, update);
+    if (update.phase === 'error') finish(false, update.error);
+    else if (update.phase === 'canceled') finish(true, '', true);
+    else if (update.done) {
+      finish(true, '', false, update.containerId || '');
+      if (!checking && operation === 'run') maybeShowFirstRecipeLaunchGuidance();
+    }
+  };
+  stream.onerror = async () => {
+    const update = await api(`/api/jobs/${jobId}`).catch(() => null);
+    if (update && update.done) {
+      const ok = update.phase !== 'error';
+      finish(ok, update.error, false, update.containerId || '');
+      if (ok && !checking && operation === 'run') maybeShowFirstRecipeLaunchGuidance();
+    }
+  };
 }
 // Shared list renderer for both tabs: summary + search + filter chips + filtered sections.
 function paintModelList(c, data, kind) {
@@ -10863,6 +10886,7 @@ document.getElementById('dock-browser').onclick = () => openSystemBrowser('https
 document.getElementById('dock-terminal').onclick = toggleTerminalWindow;
 document.getElementById('dock-asst').onclick = () => openAsst();
 document.getElementById('dock-guide').onclick = () => openGuide();
+document.getElementById('guide-fab').onclick = () => openGuide();
 document.getElementById('dock-settings').onclick = openSettings;
 document.getElementById('auth-control').onclick = () => openAuthDialog();
 document.getElementById('auth-menu-profile').onclick = event => { event.currentTarget.blur(); openAuthDialog(); };
@@ -12133,11 +12157,11 @@ async function bootCloudless() {
     const afterIntro = () => {
       if (!o) return;
       if (o.setupRequired) {
-        renderApps().then(() => showFirstLaunchSetup(o.completed ? null : showOnboarding));
+        renderApps().then(showFirstLaunchSetup);
       } else if (!o.completed) {
         renderApps().then(showOnboarding);
       } else {
-        maybeShowRuntimeRestartOffer();
+        maybeShowRuntimeRestartOffer().then(() => setTimeout(maybeShowFirstRecipeLaunchGuidance, 700));
       }
     };
     showStartupIntro(afterIntro, (o && o.bootID) || '');

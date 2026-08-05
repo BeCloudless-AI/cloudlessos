@@ -61,7 +61,6 @@ type Server struct {
 	privilegedAction     func(context.Context, privileged.Action) error
 	privilegedValue      func(context.Context, privileged.Action, string) error
 	gatewayRebind        func(int) error
-	initialProvisioner   func()
 	gatewaySecurityMu    sync.Mutex
 	gatewayLimiter       *gatewayRateLimiter
 	gatewaySourceLimiter *gatewayRateLimiter
@@ -182,10 +181,6 @@ func prepareRuntimeRestartOffer(st *state.Store, instanceID string) error {
 // SetGatewayRebind wires the daemon's listener manager into the settings API.
 // Tests and embedded callers may omit it when they never change the API port.
 func (s *Server) SetGatewayRebind(rebind func(int) error) { s.gatewayRebind = rebind }
-
-// SetInitialProvisioner wires the explicit first-launch install action to the
-// daemon-owned startup provisioner. It is intentionally not invoked by NewServer.
-func (s *Server) SetInitialProvisioner(start func()) { s.initialProvisioner = start }
 
 // imageFor returns the image reference to pull/run for an app: the manifest's
 // validated digest pin ("image@sha256:…") when present, else the catalog's tag.
@@ -351,6 +346,8 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/onboarding", s.onboardingGet)
 	mux.HandleFunc("POST /api/onboarding/setup", s.onboardingSetup)
 	mux.HandleFunc("POST /api/onboarding/complete", s.onboardingComplete)
+	mux.HandleFunc("GET /api/guidance/recipe-launch", s.recipeLaunchGuidanceGet)
+	mux.HandleFunc("POST /api/guidance/recipe-launch", s.recipeLaunchGuidanceAcknowledge)
 	mux.HandleFunc("GET /api/folders", s.folders)
 	mux.HandleFunc("POST /api/folders/{id}/open", s.openFolder)
 	mux.HandleFunc("GET /api/engine", s.engineState)
@@ -1595,8 +1592,9 @@ func (s *Server) onboardingGet(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// onboardingSetup records the user's first-launch provisioning choice. Nothing
-// is downloaded or started while the choice remains pending or becomes manual.
+// onboardingSetup records that the user will choose a recipe or model manually.
+// First launch never authorizes automatic provisioning; explicit Model Manager
+// actions remain the only way to download or start an inference workload.
 func (s *Server) onboardingSetup(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Choice string `json:"choice"`
@@ -1605,25 +1603,17 @@ func (s *Server) onboardingSetup(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid setup choice"})
 		return
 	}
-	if body.Choice != state.FirstLaunchSetupInstall && body.Choice != state.FirstLaunchSetupManual {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "choice must be install or manual"})
-		return
-	}
-	if body.Choice == state.FirstLaunchSetupInstall && s.initialProvisioner == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "initial installer is unavailable"})
+	if body.Choice != state.FirstLaunchSetupManual {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "first launch does not support automatic installation"})
 		return
 	}
 	if err := s.state.SetFirstLaunchSetup(body.Choice); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	if body.Choice == state.FirstLaunchSetupInstall {
-		provision.RecordBootstrapApproved(s.state)
-		s.initialProvisioner()
-	}
 	writeJSON(w, http.StatusAccepted, map[string]any{
 		"choice":  body.Choice,
-		"started": body.Choice == state.FirstLaunchSetupInstall,
+		"started": false,
 	})
 }
 
@@ -1634,6 +1624,22 @@ func (s *Server) onboardingComplete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"completed": true})
+}
+
+func (s *Server) recipeLaunchGuidanceGet(w http.ResponseWriter, r *http.Request) {
+	st := s.state.Get()
+	writeJSON(w, http.StatusOK, map[string]any{
+		"acknowledged": st.RecipeLaunchGuidanceAck,
+		"show":         st.LocalRecipeID != "" && !st.EngineUnloaded && !st.RecipeLaunchGuidanceAck,
+	})
+}
+
+func (s *Server) recipeLaunchGuidanceAcknowledge(w http.ResponseWriter, r *http.Request) {
+	if err := s.state.AcknowledgeRecipeLaunchGuidance(); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"acknowledged": true})
 }
 
 func (s *Server) apps(w http.ResponseWriter, r *http.Request) {

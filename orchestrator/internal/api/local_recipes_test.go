@@ -852,7 +852,7 @@ func TestRecipeCheckUsesStableProgressOverlay(t *testing.T) {
 		`'checking-fabric':7`,
 		`outcome === 'validated-with-warnings'`,
 		`trackLocalRecipeJob(result.jobId, 'check');`,
-		`if(checking)updateRecipeCheckOverlay(update);else if(recipeId)updateRecipeRunCard(recipeId,jobId,update)`,
+		`if (checking) updateRecipeCheckOverlay(update); else if (recipeId) updateRecipeRunCard(recipeId, jobId, update);`,
 		`html.motion-disabled .recipe-check-spinner::before`,
 		`.recipe-check-error.hidden { display: none; }`,
 	} {

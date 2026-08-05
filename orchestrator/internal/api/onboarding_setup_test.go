@@ -10,7 +10,7 @@ import (
 	"github.com/cloudless/orchestrator/internal/state"
 )
 
-func TestOnboardingSetupRequiresExplicitChoiceBeforeProvisioning(t *testing.T) {
+func TestOnboardingSetupRejectsAutomaticProvisioning(t *testing.T) {
 	store, err := state.Open(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -27,21 +27,10 @@ func TestOnboardingSetupRequiresExplicitChoiceBeforeProvisioning(t *testing.T) {
 		t.Fatalf("unexpected fresh onboarding response: %#v", status)
 	}
 
-	missing := httptest.NewRecorder()
-	server.onboardingSetup(missing, httptest.NewRequest(http.MethodPost, "/api/onboarding/setup", bytes.NewBufferString(`{"choice":"install"}`)))
-	if missing.Code != http.StatusServiceUnavailable || !store.FirstLaunchSetupRequired() {
-		t.Fatalf("installer absence must leave consent pending: status=%d choice=%q", missing.Code, store.FirstLaunchSetup())
-	}
-
-	started := 0
-	server.SetInitialProvisioner(func() { started++ })
-	accepted := httptest.NewRecorder()
-	server.onboardingSetup(accepted, httptest.NewRequest(http.MethodPost, "/api/onboarding/setup", bytes.NewBufferString(`{"choice":"install"}`)))
-	if accepted.Code != http.StatusAccepted || started != 1 {
-		t.Fatalf("install choice status=%d starts=%d", accepted.Code, started)
-	}
-	if store.FirstLaunchSetup() != state.FirstLaunchSetupInstall || store.Get().EngineUnloaded {
-		t.Fatal("install choice was not persisted as an active inference setup")
+	rejected := httptest.NewRecorder()
+	server.onboardingSetup(rejected, httptest.NewRequest(http.MethodPost, "/api/onboarding/setup", bytes.NewBufferString(`{"choice":"install"}`)))
+	if rejected.Code != http.StatusBadRequest || !store.FirstLaunchSetupRequired() {
+		t.Fatalf("automatic install must be rejected and leave consent pending: status=%d choice=%q", rejected.Code, store.FirstLaunchSetup())
 	}
 }
 
@@ -50,12 +39,11 @@ func TestOnboardingManualChoiceStartsNothing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	started := 0
-	server := &Server{state: store, initialProvisioner: func() { started++ }}
+	server := &Server{state: store}
 	recorder := httptest.NewRecorder()
 	server.onboardingSetup(recorder, httptest.NewRequest(http.MethodPost, "/api/onboarding/setup", bytes.NewBufferString(`{"choice":"manual"}`)))
-	if recorder.Code != http.StatusAccepted || started != 0 {
-		t.Fatalf("manual choice status=%d starts=%d", recorder.Code, started)
+	if recorder.Code != http.StatusAccepted {
+		t.Fatalf("manual choice status=%d", recorder.Code)
 	}
 	if store.FirstLaunchSetup() != state.FirstLaunchSetupManual || !store.Get().EngineUnloaded {
 		t.Fatal("manual choice must persist without loading inference")

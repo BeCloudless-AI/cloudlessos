@@ -208,6 +208,7 @@ type State struct {
 	FirstSeen               string                           `json:"firstSeen"`                         // RFC3339; when the daemon first initialized this store
 	Onboarded               bool                             `json:"onboarded"`                         // user has completed first-run onboarding
 	FirstLaunchSetup        string                           `json:"firstLaunchSetup,omitempty"`        // pending | install | manual; empty is a legacy installation
+	RecipeLaunchGuidanceAck bool                             `json:"recipeLaunchGuidanceAck,omitempty"` // user acknowledged the one-time post-recipe connection guide
 	Engine                  string                           `json:"engine,omitempty"`                  // selected inference engine ("" = default)
 	Model                   string                           `json:"model,omitempty"`                   // selected model ("" = catalog default)
 	EngineUnloaded          bool                             `json:"engineUnloaded,omitempty"`          // selected model stays cached but no inference engine holds accelerator memory
@@ -470,6 +471,15 @@ func (s *Store) SetOnboarded(v bool) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.st.Onboarded = v
+	return s.save()
+}
+
+// AcknowledgeRecipeLaunchGuidance permanently dismisses the connection help
+// offered after the first successful recipe launch.
+func (s *Store) AcknowledgeRecipeLaunchGuidance() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.st.RecipeLaunchGuidanceAck = true
 	return s.save()
 }
 

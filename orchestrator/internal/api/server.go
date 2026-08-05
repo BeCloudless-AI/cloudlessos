@@ -1155,7 +1155,6 @@ func (s *Server) applyEngineVerified(job *jobs.Job, target catalog.App, exactIma
 	modelID := resolveModel(model)
 	modelRuntime, hasModelRuntime := models.Get(modelID)
 	clusterNodes := 2
-	localFallback := job.AppID == "engine:cluster-disconnect-fallback"
 	distributed := st.ExecutionMode == "cluster" && target.ID == "vllm"
 	timeout := 15 * time.Minute
 	if distributed {
@@ -1247,18 +1246,12 @@ func (s *Server) applyEngineVerified(job *jobs.Job, target catalog.App, exactIma
 			_ = s.eng.Stop(ctx, e.ContainerName())
 		}
 	}
-	if localFallback {
-		job.Progress("switching", "Releasing the distributed model and its memory …", -1, -1)
-	}
 	_ = s.eng.Remove(ctx, target.ContainerName())
 	_ = s.eng.Remove(ctx, "cloudless-cluster-engine-proxy")
 	if !distributed {
 		_ = sparkcluster.StopWorker(ctx)
 	}
 	startMessage := "Starting " + target.Name + " …"
-	if localFallback {
-		startMessage = "Starting " + target.Name + " locally on this Spark …"
-	}
 	job.Progress("switching", startMessage, -1, -1)
 	var runErr error
 	if distributed {
@@ -1340,9 +1333,6 @@ func (s *Server) applyEngineVerified(job *jobs.Job, target catalog.App, exactIma
 	}
 
 	loadingMessage := "Loading model …"
-	if localFallback {
-		loadingMessage = "Loading " + resolveModel(model) + " locally on this Spark …"
-	}
 	job.Progress("loading", loadingMessage, -1, -1)
 	waitQualificationPhaseGate(ctx, "loading")
 	var peerTotal int64

@@ -73,6 +73,20 @@ func localModelAfterClusterDisconnect(st state.State, memoryGB int) (string, boo
 	return fallback, current != fallback
 }
 
+// localUnloadedRuntimeAfterClusterDisconnect returns the independent runtime
+// identity without implicitly starting inference. Disconnecting topology is a
+// network/ownership operation; loading a local model remains an explicit user
+// action after the cluster has been removed.
+func localUnloadedRuntimeAfterClusterDisconnect(st state.State, memoryGB int) (state.InferenceRuntime, bool) {
+	model, changed := localModelAfterClusterDisconnect(st, memoryGB)
+	runtime := st.InferenceRuntime()
+	runtime.Model = model
+	runtime.ExecutionMode = "local"
+	runtime.LocalRecipeID = ""
+	runtime.EngineUnloaded = true
+	return runtime, changed
+}
+
 func (s *Server) sparkClusterStatus(w http.ResponseWriter, r *http.Request) {
 	if !s.requireCapability(w, capabilities.SparkCluster) {
 		return
@@ -279,7 +293,7 @@ func (s *Server) sparkClusterDisconnect(w http.ResponseWriter, r *http.Request) 
 		writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
 		return
 	}
-	job, created := s.jobs.CreateUnique("engine:cluster-disconnect-fallback", "engine:cluster-disconnect")
+	job, created := s.jobs.CreateUnique("engine:cluster-disconnect", "engine:cluster-disconnect")
 	if !created {
 		writeJSON(w, http.StatusAccepted, map[string]any{"jobId": job.ID})
 		return
@@ -335,28 +349,14 @@ func (s *Server) runSparkClusterDisconnect(job *jobs.Job, passwords map[string]s
 	}
 
 	// The private link is gone, so distributed inference must never remain the
-	// persisted target. The same job continues through the local fallback.
+	// persisted target. Keep the selected local identity for a later explicit
+	// load, but never start inference as a side effect of disconnecting topology.
 	st = s.state.Get()
-	fallback, changed := localModelAfterClusterDisconnect(st, totalVRAMGB(ctx))
-	runtime := st.InferenceRuntime()
-	runtime.ExecutionMode = "local"
-	runtime.LocalRecipeID = ""
-	if changed {
-		runtime.Model = fallback
-	}
+	runtime, _ := localUnloadedRuntimeAfterClusterDisconnect(st, totalVRAMGB(ctx))
 	if err := s.state.CommitInferenceRuntime(runtime); err != nil {
-		job.Fail(errors.New("the cluster was disconnected, but local inference state could not be saved"))
+		job.Fail(errors.New("the cluster was disconnected, but the unloaded local inference state could not be saved"))
 		return
 	}
-	engineID := st.Engine
-	if engineID == "" {
-		engineID = catalog.DefaultEngine()
-	}
-	target, ok := catalog.Get(engineID)
-	if !ok || !target.Engine {
-		target, _ = catalog.Get(catalog.DefaultEngine())
-	}
-	job.ProgressOperation("local-fallback", "Starting a compatible model locally on this Spark.", fallback, 78, 2, 3)
-	s.observeInferenceJob(job, "cluster-fallback", target.ID, st.InferenceRuntime())
-	s.applyEngine(job, target)
+	job.ProgressOperation("local-unloaded", "Cluster removed. Cloudless AI will remain unloaded.", runtime.Model, 96, 2, 3)
+	job.Succeed("")
 }

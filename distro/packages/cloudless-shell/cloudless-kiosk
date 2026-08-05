@@ -41,6 +41,33 @@ find_browser() {
     done
     return 1
 }
+
+is_dgx_spark() {
+    [ -r /etc/dgx-release ] ||
+        { [ -r /sys/devices/virtual/dmi/id/product_name ] &&
+          grep -Eqi 'DGX[[:space:]_-]*Spark|GB10' /sys/devices/virtual/dmi/id/product_name; }
+}
+
+# Firefox's crash reporter can restart the browser independently after the
+# original foreground command exits. Do not launch another --no-remote process
+# against that live profile: it exits successfully at once and turns the kiosk
+# supervisor into a three-second relaunch loop.
+firefox_profile_running() {
+    profile="$1"
+    for command_file in /proc/[0-9]*/cmdline; do
+        [ -r "$command_file" ] || continue
+        if tr '\000' '\n' <"$command_file" 2>/dev/null | awk -v profile="$profile" '
+            /(^|\/)firefox$/ { firefox = 1 }
+            previous == "--profile" && $0 == profile { matching_profile = 1 }
+            { previous = $0 }
+            END { exit !(firefox && matching_profile) }
+        '; then
+            return 0
+        fi
+    done
+    return 1
+}
+
 # Snap mounts can finish after LightDM starts on the first boot. Keep retrying
 # instead of leaving users at Openbox's empty black background when Chromium's
 # first launch races its core/base snap activation.
@@ -63,6 +90,12 @@ while :; do
                 /snap/*|*/snap/*) PROFILE_DIR="$HOME/snap/firefox/common/cloudless-kiosk" ;;
                 *) PROFILE_DIR="$XDG_CONFIG_HOME/cloudless-firefox-kiosk" ;;
             esac
+            if firefox_profile_running "$PROFILE_DIR"; then
+                echo "$(date -Is) recovered Firefox already owns the kiosk profile; waiting for it to exit"
+                while firefox_profile_running "$PROFILE_DIR"; do sleep 2; done
+                echo "$(date -Is) recovered Firefox exited; resuming supervised launch"
+                continue
+            fi
             mkdir -p "$PROFILE_DIR/sessionstore-backups"
             cat >"$PROFILE_DIR/user.js" <<'EOF'
 user_pref("browser.sessionstore.resume_from_crash", false);
@@ -78,10 +111,18 @@ EOF
             # generic VirtualBox image conservative. On physical NVIDIA hosts
             # that disables HW_COMPOSITING and makes every translucent panel,
             # scroll and transition run on the CPU. Prefer WebRender whenever
-            # the NVIDIA driver is live, while retaining the old safe path for
-            # VMs and machines without a usable NVIDIA device.
+            # the NVIDIA driver is live on qualified generic hosts, while
+            # retaining the safe path for DGX Spark, VMs, and machines without
+            # a usable NVIDIA display device.
             FIREFOX_HW_ACCEL=0
-            if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi -L >/dev/null 2>&1; then
+            if is_dgx_spark; then
+                # Firefox 153 on DGX OS can enter NVIDIA EGL from its main
+                # process and crash in libnvidia-eglcore when a canvas-heavy
+                # surface such as the terminal is opened. Keep the Spark kiosk
+                # on software WebRender until that driver/browser path is
+                # qualified; inference still uses the GPU normally.
+                echo "$(date -Is) DGX Spark detected; using Firefox software rendering"
+            elif command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi -L >/dev/null 2>&1; then
                 FIREFOX_HW_ACCEL=1
                 cat >>"$PROFILE_DIR/user.js" <<'EOF'
 user_pref("gfx.canvas.accelerated", true);

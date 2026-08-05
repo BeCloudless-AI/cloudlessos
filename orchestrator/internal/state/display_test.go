@@ -8,7 +8,7 @@ func TestDisplayPreferencePersists(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := DisplayPreference{Output: "DP-0", Width: 2560, Height: 1440}
+	want := DisplayPreference{Layout: "single", Output: "DP-0", Width: 2560, Height: 1440}
 	if err := store.SetDisplayPreference(want); err != nil {
 		t.Fatal(err)
 	}

@@ -488,7 +488,17 @@ func (d *Docker) ListImageDigests(ctx context.Context) ([]ImageDigestRef, error)
 // flags (ports/env/volumes) are emitted in sorted order so the command is
 // deterministic — important for the editable command preview in the UI.
 func runArgs(spec RunSpec) []string {
-	args := []string{"run", "-d", "--name", spec.Name, "--restart", "unless-stopped"}
+	restartPolicy := strings.TrimSpace(spec.RestartPolicy)
+	switch restartPolicy {
+	case "no", "on-failure", "unless-stopped":
+	case "":
+		restartPolicy = "unless-stopped"
+	default:
+		// RunSpec values may originate in imported manifests. Never pass an
+		// arbitrary restart-policy value through to the Docker CLI.
+		restartPolicy = "unless-stopped"
+	}
+	args := []string{"run", "-d", "--name", spec.Name, "--restart", restartPolicy}
 	if spec.User != "" {
 		args = append(args, "--user", spec.User)
 	}

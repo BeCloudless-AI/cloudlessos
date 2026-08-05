@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -18,18 +19,27 @@ import (
 )
 
 type Status struct {
-	Installed    bool     `json:"installed"`
-	Connected    bool     `json:"connected"`
-	BackendState string   `json:"backendState,omitempty"`
-	Version      string   `json:"version,omitempty"`
-	DeviceName   string   `json:"deviceName,omitempty"`
-	DNSName      string   `json:"dnsName,omitempty"`
-	Tailnet      string   `json:"tailnet,omitempty"`
-	IPs          []string `json:"ips,omitempty"`
-	ServeEnabled bool     `json:"serveEnabled"`
-	SSHEnabled   bool     `json:"sshEnabled"`
-	WebURL       string   `json:"webURL,omitempty"`
-	Error        string   `json:"error,omitempty"`
+	Installed    bool           `json:"installed"`
+	Connected    bool           `json:"connected"`
+	BackendState string         `json:"backendState,omitempty"`
+	Version      string         `json:"version,omitempty"`
+	DeviceName   string         `json:"deviceName,omitempty"`
+	DNSName      string         `json:"dnsName,omitempty"`
+	Tailnet      string         `json:"tailnet,omitempty"`
+	IPs          []string       `json:"ips,omitempty"`
+	ServeEnabled bool           `json:"serveEnabled"`
+	SSHEnabled   bool           `json:"sshEnabled"`
+	WebURL       string         `json:"webURL,omitempty"`
+	Error        string         `json:"error,omitempty"`
+	TCPForwards  map[int]string `json:"-"`
+}
+
+// ServesTCP reports whether Tailscale Serve owns a private tailnet listener on
+// port and forwards it to the matching loopback port. Other user-managed Serve
+// routes never count as Cloudless API exposure.
+func (s Status) ServesTCP(port int) bool {
+	target := strings.TrimPrefix(s.TCPForwards[port], "tcp://")
+	return target == fmt.Sprintf("127.0.0.1:%d", port) || target == fmt.Sprintf("localhost:%d", port)
 }
 
 type Service interface {
@@ -38,7 +48,27 @@ type Service interface {
 	Logout(context.Context) error
 	SetSSH(context.Context, bool) error
 	SetServe(context.Context, bool) error
+	SetAPIServe(context.Context, bool, int) error
 	Install(context.Context) error
+}
+
+// ServeApprovalError means the tailnet administrator must enable Tailscale
+// Serve before the requested route can be installed. URL is safe to return to
+// the local UI because it is an official, short-lived Tailscale approval URL.
+type ServeApprovalError struct {
+	URL string
+}
+
+func (e *ServeApprovalError) Error() string {
+	return "Tailscale Serve must be approved for this tailnet"
+}
+
+func ServeApprovalURL(err error) string {
+	var approval *ServeApprovalError
+	if errors.As(err, &approval) {
+		return approval.URL
+	}
+	return ""
 }
 
 type commandRunner interface {
@@ -58,8 +88,9 @@ func (execCommands) Run(ctx context.Context, name string, args ...string) ([]byt
 }
 
 type Client struct {
-	commands commandRunner
-	broker   privileged.Client
+	commands     commandRunner
+	broker       privileged.Client
+	serveTimeout time.Duration
 }
 
 func New() *Client {
@@ -106,7 +137,9 @@ func (c *Client) Status(ctx context.Context) Status {
 	result.IPs = raw.TailscaleIPs
 	result.Connected = raw.BackendState == "Running" && raw.Self.Online
 	serve, serveErr := c.commands.Run(ctx, "tailscale", "serve", "status", "--json")
-	result.ServeEnabled = serveErr == nil && len(strings.TrimSpace(string(serve))) > 2 && strings.TrimSpace(string(serve)) != "null"
+	if serveErr == nil {
+		result.ServeEnabled, result.TCPForwards = parseServeStatus(serve)
+	}
 	if prefs, prefsErr := c.commands.Run(ctx, "tailscale", "debug", "prefs"); prefsErr == nil {
 		var rawPrefs struct {
 			RunSSH bool `json:"RunSSH"`
@@ -150,13 +183,66 @@ func (c *Client) SetSSH(ctx context.Context, enabled bool) error {
 }
 
 func (c *Client) SetServe(ctx context.Context, enabled bool) error {
+	timeout := c.serveTimeout
+	if timeout <= 0 {
+		timeout = 8 * time.Second
+	}
+	serveCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
 	var err error
+	var output []byte
 	if enabled {
-		_, err = c.commands.Run(ctx, "tailscale", "serve", "--bg", "--yes", "http://127.0.0.1:8765")
+		output, err = c.commands.Run(serveCtx, "tailscale", "serve", "--bg", "--yes", "--https=443", "http://127.0.0.1:8765")
 	} else {
-		_, err = c.commands.Run(ctx, "tailscale", "serve", "reset")
+		output, err = c.commands.Run(serveCtx, "tailscale", "serve", "--yes", "--https=443", "off")
+	}
+	if url := loginURLPattern.FindString(string(output)); url != "" {
+		return &ServeApprovalError{URL: url}
 	}
 	return err
+}
+
+func (c *Client) SetAPIServe(ctx context.Context, enabled bool, port int) error {
+	if port < 1024 || port > 65535 {
+		return errors.New("invalid Cloudless API port")
+	}
+	flag := fmt.Sprintf("--tcp=%d", port)
+	if enabled {
+		_, err := c.commands.Run(ctx, "tailscale", "serve", "--bg", "--yes", flag, fmt.Sprintf("tcp://127.0.0.1:%d", port))
+		return err
+	}
+	_, err := c.commands.Run(ctx, "tailscale", "serve", "--yes", flag, "off")
+	return err
+}
+
+func parseServeStatus(data []byte) (bool, map[int]string) {
+	forwards := map[int]string{}
+	var config struct {
+		TCP map[string]struct {
+			TCPForward string `json:"TCPForward"`
+		} `json:"TCP"`
+		Web map[string]struct {
+			Handlers map[string]struct {
+				Proxy string `json:"Proxy"`
+			} `json:"Handlers"`
+		} `json:"Web"`
+	}
+	dashboard := false
+	if json.Unmarshal(data, &config) == nil {
+		for rawPort, handler := range config.TCP {
+			if port, err := strconv.Atoi(rawPort); err == nil && handler.TCPForward != "" {
+				forwards[port] = handler.TCPForward
+			}
+		}
+		for _, host := range config.Web {
+			for _, handler := range host.Handlers {
+				if strings.TrimSuffix(handler.Proxy, "/") == "http://127.0.0.1:8765" {
+					dashboard = true
+				}
+			}
+		}
+	}
+	return dashboard, forwards
 }
 
 func (c *Client) Install(ctx context.Context) error {

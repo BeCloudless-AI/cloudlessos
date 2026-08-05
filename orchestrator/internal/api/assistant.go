@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -99,7 +100,8 @@ func (s *Server) assistantChat(w http.ResponseWriter, r *http.Request) {
 		send(map[string]any{"tool": progress})
 	})
 	if err != nil {
-		send(map[string]any{"delta": "\n\n(Sorry — I lost contact with the engine. Try again in a moment.)"})
+		log.Printf("Cloudless Agent request failed: %v", err)
+		send(map[string]any{"delta": "\n\n(Sorry — the inference engine rejected the agent request. Try again in a moment.)"})
 	}
 
 	send(map[string]any{"done": true, "actions": assistant.Suggest(full.String(), lastUser, actx)})

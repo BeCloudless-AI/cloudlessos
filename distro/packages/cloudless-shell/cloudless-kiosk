@@ -23,27 +23,17 @@ while ! curl --silent --fail --max-time 2 http://127.0.0.1:8765/api/health >/dev
 done
 [ "$START_URL" != http://127.0.0.1:8765 ] || echo "$(date -Is) Cloudless API is ready"
 
-# Restore the last display mode selected in CloudlessOS Settings. The API only
-# persists modes reported by xrandr for a connected output, and this final
-# character check keeps shell arguments constrained even if the state file is
-# edited manually.
-DISPLAY_MODE="$(
-    curl --silent --fail --max-time 3 http://127.0.0.1:8765/api/system/display 2>/dev/null |
-    python3 -c 'import json,sys; d=json.load(sys.stdin).get("configured") or {}; o=d.get("output",""); w=int(d.get("width") or 0); h=int(d.get("height") or 0); print(o, f"{w}x{h}" if w and h else "")' 2>/dev/null
-)" || DISPLAY_MODE=""
-if [ -n "$DISPLAY_MODE" ]; then
-    set -- $DISPLAY_MODE
-    case "${1:-}:${2:-}" in
-        *[!A-Za-z0-9_.:-]*|*:*[!0-9x]*) echo "$(date -Is) ignored invalid saved display mode" ;;
-        ?*:[0-9]*x[0-9]*)
-            if xrandr --output "$1" --mode "$2"; then
-                echo "$(date -Is) restored display mode $1 $2"
-            else
-                echo "$(date -Is) could not restore display mode $1 $2"
-            fi
-            ;;
-    esac
-fi
+# Normalize the whole topology before opening a browser. On a fresh install,
+# multiple unknown connectors mirror; a desktop can never silently extend.
+attempt=0
+while ! curl --silent --fail --max-time 10 -X POST \
+    -H 'X-Cloudless-Action: display-normalize' \
+    http://127.0.0.1:8765/api/system/display/normalize >/dev/null 2>&1; do
+    attempt=$((attempt + 1))
+    [ "$attempt" -ge 20 ] && { echo "$(date -Is) display normalization unavailable"; break; }
+    sleep 1
+done
+[ "$attempt" -ge 20 ] || echo "$(date -Is) safe display layout is ready"
 
 find_browser() {
     for candidate in chromium chromium-browser google-chrome-stable firefox; do
@@ -51,6 +41,33 @@ find_browser() {
     done
     return 1
 }
+
+is_dgx_spark() {
+    [ -r /etc/dgx-release ] ||
+        { [ -r /sys/devices/virtual/dmi/id/product_name ] &&
+          grep -Eqi 'DGX[[:space:]_-]*Spark|GB10' /sys/devices/virtual/dmi/id/product_name; }
+}
+
+# Firefox's crash reporter can restart the browser independently after the
+# original foreground command exits. Do not launch another --no-remote process
+# against that live profile: it exits successfully at once and turns the kiosk
+# supervisor into a three-second relaunch loop.
+firefox_profile_running() {
+    profile="$1"
+    for command_file in /proc/[0-9]*/cmdline; do
+        [ -r "$command_file" ] || continue
+        if tr '\000' '\n' <"$command_file" 2>/dev/null | awk -v profile="$profile" '
+            /(^|\/)firefox$/ { firefox = 1 }
+            previous == "--profile" && $0 == profile { matching_profile = 1 }
+            { previous = $0 }
+            END { exit !(firefox && matching_profile) }
+        '; then
+            return 0
+        fi
+    done
+    return 1
+}
+
 # Snap mounts can finish after LightDM starts on the first boot. Keep retrying
 # instead of leaving users at Openbox's empty black background when Chromium's
 # first launch races its core/base snap activation.
@@ -73,6 +90,12 @@ while :; do
                 /snap/*|*/snap/*) PROFILE_DIR="$HOME/snap/firefox/common/cloudless-kiosk" ;;
                 *) PROFILE_DIR="$XDG_CONFIG_HOME/cloudless-firefox-kiosk" ;;
             esac
+            if firefox_profile_running "$PROFILE_DIR"; then
+                echo "$(date -Is) recovered Firefox already owns the kiosk profile; waiting for it to exit"
+                while firefox_profile_running "$PROFILE_DIR"; do sleep 2; done
+                echo "$(date -Is) recovered Firefox exited; resuming supervised launch"
+                continue
+            fi
             mkdir -p "$PROFILE_DIR/sessionstore-backups"
             cat >"$PROFILE_DIR/user.js" <<'EOF'
 user_pref("browser.sessionstore.resume_from_crash", false);
@@ -88,10 +111,18 @@ EOF
             # generic VirtualBox image conservative. On physical NVIDIA hosts
             # that disables HW_COMPOSITING and makes every translucent panel,
             # scroll and transition run on the CPU. Prefer WebRender whenever
-            # the NVIDIA driver is live, while retaining the old safe path for
-            # VMs and machines without a usable NVIDIA device.
+            # the NVIDIA driver is live on qualified generic hosts, while
+            # retaining the safe path for DGX Spark, VMs, and machines without
+            # a usable NVIDIA display device.
             FIREFOX_HW_ACCEL=0
-            if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi -L >/dev/null 2>&1; then
+            if is_dgx_spark; then
+                # Firefox 153 on DGX OS can enter NVIDIA EGL from its main
+                # process and crash in libnvidia-eglcore when a canvas-heavy
+                # surface such as the terminal is opened. Keep the Spark kiosk
+                # on software WebRender until that driver/browser path is
+                # qualified; inference still uses the GPU normally.
+                echo "$(date -Is) DGX Spark detected; using Firefox software rendering"
+            elif command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi -L >/dev/null 2>&1; then
                 FIREFOX_HW_ACCEL=1
                 cat >>"$PROFILE_DIR/user.js" <<'EOF'
 user_pref("gfx.canvas.accelerated", true);

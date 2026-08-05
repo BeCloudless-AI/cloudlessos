@@ -62,6 +62,20 @@ func RecordBootstrapPending(st *state.Store, message string) {
 	_ = st.SetModelPromotion(p)
 }
 
+// RecordBootstrapApproved makes an explicit first-launch install choice
+// resumable even when the daemon was restarted while waiting for that choice.
+// The provisioner can then use the normal bootstrap-to-default lifecycle.
+func RecordBootstrapApproved(st *state.Store) {
+	current := st.Get()
+	bootstrap, target := BootstrapModel(), catalog.DefaultModel()
+	if bootstrap == "" || bootstrap == target || current.Model != "" || current.EngineUnloaded || current.ExecutionMode == "cluster" {
+		return
+	}
+	p := promotionSnapshot(current.ModelPromotion, "approved", bootstrap, target, "", "Ready to install the default Cloudless AI.")
+	p.Rollback = bootstrap
+	_ = st.SetModelPromotion(p)
+}
+
 func promotionSnapshot(previous state.ModelPromotion, phase, bootstrap, target, active, message string) state.ModelPromotion {
 	previous.Phase = phase
 	previous.Bootstrap = bootstrap
@@ -130,6 +144,7 @@ func PromoteDefault(ctx context.Context, eng engine.Engine, st *state.Store, mf 
 	_ = eng.Remove(ctx, app.ContainerName())
 
 	spec := catalog.EngineSpec(app, target)
+	spec.RestartPolicy = "no"
 	spec.Image = pinnedImage(ctx, mf, app)
 	if pin, ok := mf.ModelPin(ctx, defaultModelPinKey()); ok && pin.Repo == target {
 		spec.Args = append(append([]string{}, spec.Args...), "--revision", pin.Revision)
@@ -222,6 +237,7 @@ func rollbackPromotion(ctx context.Context, eng engine.Engine, st *state.Store, 
 	p.Error = cause.Error()
 	_ = st.SetModelPromotion(p)
 	spec := catalog.EngineSpec(app, bootstrap)
+	spec.RestartPolicy = "no"
 	spec.Image = pinnedImage(ctx, mf, app)
 	_, rollbackErr := eng.Run(ctx, spec)
 	if rollbackErr != nil {

@@ -47,6 +47,12 @@ func main() {
 	us := usage.Open(filepath.Join(st.Dir(), "usage.json"))
 	pw := power.Open(filepath.Join(st.Dir(), "power.json"))
 	srv := api.NewServer(eng, st, mf, mfModels, mfDiff, us, pw)
+	var provisionOnce sync.Once
+	startInitialProvisioning := func() {
+		provisionOnce.Do(func() {
+			go provisionWhenReady(eng, st, mf)
+		})
+	}
 
 	httpServer := &http.Server{
 		Addr:              addr,
@@ -125,39 +131,19 @@ func main() {
 		}
 	}()
 
-	// Pre-install the bundled engine and core Cloudless services in the
-	// background. The served model is set via CLOUDLESS_DEFAULT_MODEL (catalog).
+	// Reconcile the bundled engine and core Cloudless services in the background
+	// only after a new installation has explicit permission. Existing installs
+	// keep their normal boot behavior; manual first-launch setup stays inert.
+	// The served model is set via CLOUDLESS_DEFAULT_MODEL (catalog).
 	// Set CLOUDLESS_NO_PROVISION=1 to skip this (e.g. a second daemon on another
 	// port for testing — it won't touch the primary daemon's containers).
 	if os.Getenv("CLOUDLESS_NO_PROVISION") == "" {
-		probeCtx, probeCancel := context.WithTimeout(context.Background(), 8*time.Second)
-		gpus, gpuErr := hardware.GPUs(probeCtx)
-		probeCancel()
-		if gpuErr != nil || len(gpus) == 0 {
-			provision.RecordBootstrapPending(st, "Waiting for an NVIDIA accelerator before starting the bootstrap model.")
-			log.Printf("provisioning skipped: no usable NVIDIA GPU detected (%v)", gpuErr)
+		if st.StartupProvisioningEnabled() {
+			startInitialProvisioning()
+		} else if st.FirstLaunchSetupRequired() {
+			log.Printf("provisioning waiting for first-launch permission")
 		} else {
-			log.Printf("provisioning enabled: %d NVIDIA GPU(s) detected", len(gpus))
-			go func() {
-				waitingLogged := false
-				for {
-					engineCtx, engineCancel := context.WithTimeout(context.Background(), 3*time.Second)
-					err := eng.Available(engineCtx)
-					engineCancel()
-					if err == nil {
-						break
-					}
-					if !waitingLogged {
-						log.Printf("provisioning waiting for Docker: %v", err)
-						waitingLogged = true
-					}
-					time.Sleep(2 * time.Second)
-				}
-				log.Printf("provisioning Docker engine ready")
-				provision.Run(context.Background(), eng, st, mf, func(m string) {
-					log.Printf("[provision] %s", m)
-				})
-			}()
+			log.Printf("provisioning deferred to manual model or recipe selection")
 		}
 	} else {
 		log.Printf("provisioning skipped (CLOUDLESS_NO_PROVISION set)")
@@ -180,6 +166,36 @@ func main() {
 		_ = activeGateway.Shutdown(ctx)
 	}
 	_ = httpServer.Shutdown(ctx)
+}
+
+func provisionWhenReady(eng engine.Engine, st *state.Store, mf *manifest.Store) {
+	probeCtx, probeCancel := context.WithTimeout(context.Background(), 8*time.Second)
+	gpus, gpuErr := hardware.GPUs(probeCtx)
+	probeCancel()
+	if gpuErr != nil || len(gpus) == 0 {
+		provision.RecordBootstrapPending(st, "Waiting for an NVIDIA accelerator before starting the bootstrap model.")
+		log.Printf("provisioning skipped: no usable NVIDIA GPU detected (%v)", gpuErr)
+		return
+	}
+	log.Printf("provisioning enabled: %d NVIDIA GPU(s) detected", len(gpus))
+	waitingLogged := false
+	for {
+		engineCtx, engineCancel := context.WithTimeout(context.Background(), 3*time.Second)
+		err := eng.Available(engineCtx)
+		engineCancel()
+		if err == nil {
+			break
+		}
+		if !waitingLogged {
+			log.Printf("provisioning waiting for Docker: %v", err)
+			waitingLogged = true
+		}
+		time.Sleep(2 * time.Second)
+	}
+	log.Printf("provisioning Docker engine ready")
+	provision.Run(context.Background(), eng, st, mf, func(m string) {
+		log.Printf("[provision] %s", m)
+	})
 }
 
 func envOr(key, def string) string {

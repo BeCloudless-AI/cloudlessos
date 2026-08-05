@@ -112,3 +112,46 @@ func TestClusterDisconnectFallsBackFromClusterOnlyModel(t *testing.T) {
 		t.Fatalf("fallback = %q, changed = %v", model, changed)
 	}
 }
+
+func TestClusterDisconnectAlwaysLeavesInferenceUnloaded(t *testing.T) {
+	t.Setenv("CLOUDLESS_PLATFORM", "dgx-spark")
+	t.Setenv("CLOUDLESS_ARCH", "arm64")
+
+	for _, initial := range []state.State{
+		{
+			Engine: "vllm", Model: "Qwen/Qwen3.6-35B-A3B", ExecutionMode: "cluster",
+			LocalRecipeID: "local-0123456789abcdef", EngineUnloaded: false,
+		},
+		{
+			Engine: "vllm", Model: "Qwen/Qwen3.6-35B-A3B", ExecutionMode: "cluster",
+			EngineUnloaded: true,
+		},
+	} {
+		runtime, changed := localUnloadedRuntimeAfterClusterDisconnect(initial, 120)
+		if changed {
+			t.Fatalf("compatible local model unexpectedly changed: %#v", runtime)
+		}
+		if !runtime.EngineUnloaded || runtime.ExecutionMode != "local" || runtime.LocalRecipeID != "" {
+			t.Fatalf("disconnect runtime = %#v, want local, unloaded, and recipe-free", runtime)
+		}
+		if runtime.Engine != initial.Engine || runtime.Model != initial.Model {
+			t.Fatalf("disconnect discarded compatible selection: %#v", runtime)
+		}
+	}
+}
+
+func TestClusterDisconnectFallbackSelectionRemainsUnloaded(t *testing.T) {
+	t.Setenv("CLOUDLESS_PLATFORM", "dgx-spark")
+	t.Setenv("CLOUDLESS_ARCH", "arm64")
+	initial := state.State{
+		Engine: "vllm", Model: "deepseek-ai/DeepSeek-V4-Flash", ExecutionMode: "cluster",
+		LocalRecipeID: "local-0123456789abcdef",
+	}
+	runtime, changed := localUnloadedRuntimeAfterClusterDisconnect(initial, 120)
+	if !changed || runtime.Model != "Qwen/Qwen3.6-35B-A3B" {
+		t.Fatalf("fallback runtime = %#v, changed = %v", runtime, changed)
+	}
+	if !runtime.EngineUnloaded || runtime.ExecutionMode != "local" || runtime.LocalRecipeID != "" {
+		t.Fatalf("fallback runtime was activated: %#v", runtime)
+	}
+}

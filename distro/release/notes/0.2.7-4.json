@@ -1,0 +1,16 @@
+{
+  "title": "Clearer runtime choices, resilient restarts, and safer Spark displays",
+  "summary": "CloudlessOS 0.2.7-4 makes recipes the guided default, clarifies active model and recipe controls, improves private API and Tailscale setup, and hardens kiosk, display, engine, update, and automatic-runtime recovery on DGX Spark.",
+  "changes": [
+    "Make Recipes the first and default Model Manager view, separate Recipes and Models into full-width choices, move language and image types into filters, and warn standard-interface users before running an unoptimized standalone model.",
+    "Identify the active Desktop runtime as a recipe or model and provide direct actions to open Model Manager, inspect its exact details, or stop it.",
+    "Explain vLLM and recipe-selected engines in the standard interface while keeping permanent API identity and advanced engine controls behind Advanced interface.",
+    "Keep API Access controls synchronized after API-key creation or deletion, default new keys to Model and agent access, show reachable LAN addresses, and organize client instructions and security activity into collapsible sections.",
+    "Clarify Tailscale SSH versus regular SSH over a tailnet, refresh connection state automatically, and expose the exact private HTTPS address created by Tailscale Serve.",
+    "Validate the structured tool-calling contract used by the Cloudless Agent so incompatible default runtimes fail visibly instead of producing a misleading lost-engine response.",
+    "Normalize single-display ownership, recover safely from phantom or disconnected monitors, and keep the Cloudless kiosk on the intended physical output across hotplug, repair, package update, and reboot.",
+    "Restart the kiosk exactly once after a successful appliance update so interface changes appear immediately, while preserving rollback behavior and avoiding desktop disruption in side-by-side DGX installations.",
+    "Persist the exact recipe or model that was running before restart, explain manual and automatic recovery choices, and wait for the protected container broker before automatically restoring a recipe after cold boot.",
+    "Add a DGX Spark SM121 vLLM runtime build, strengthen managed recipe container startup and recovery, and expand regression coverage for runtime identity, remote access, display topology, update continuity, and restart behavior."
+  ]
+}

@@ -176,7 +176,7 @@ do
     exit 1
   fi
 done
-grep -Fq 'SecretFiles  map[string]string' "$ORCHESTRATOR/internal/engine/engine.go"
+grep -Eq 'SecretFiles[[:space:]]+map\[string\]string' "$ORCHESTRATOR/internal/engine/engine.go"
 grep -Fq 'container secret must be owner-only' "$ORCHESTRATOR/internal/engine/policy.go"
 grep -Fq 'admittedReviewedSecretMount' "$ORCHESTRATOR/internal/engine/reviewed_recipe_policy.go"
 grep -Fq 'parts[2] != "ro"' "$ORCHESTRATOR/internal/engine/reviewed_recipe_policy.go"

@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -528,6 +529,108 @@ func TestApplyRollsBackWhenActiveWorkloadIsLost(t *testing.T) {
 	}
 	if strings.Contains(strings.Join(commands, "\n"), "lightdm") {
 		t.Fatal("failed generation restarted the kiosk")
+	}
+}
+
+func TestApplyRestartsKioskAfterOrchestratorOnlyUpdateIsDurable(t *testing.T) {
+	statusPath := filepath.Join(t.TempDir(), "status.json")
+	t.Setenv("CLOUDLESS_UPDATE_STATUS", statusPath)
+	t.Setenv("CLOUDLESS_PLATFORM", "generic")
+
+	originalConfigured := updaterConfigured
+	originalCandidates := updaterCandidates
+	originalRun := updaterRun
+	originalRunEnv := updaterRunEnv
+	originalCopyDebs := updaterCopyDebs
+	originalCapture := updaterCaptureWorkload
+	originalWait := updaterWaitContinuity
+	originalRollback := updaterRollback
+	originalRollbackRoot := updaterRollbackRoot
+	originalContinuityWindow := updaterContinuityWindow
+	t.Cleanup(func() {
+		updaterConfigured = originalConfigured
+		updaterCandidates = originalCandidates
+		updaterRun = originalRun
+		updaterRunEnv = originalRunEnv
+		updaterCopyDebs = originalCopyDebs
+		updaterCaptureWorkload = originalCapture
+		updaterWaitContinuity = originalWait
+		updaterRollback = originalRollback
+		updaterRollbackRoot = originalRollbackRoot
+		updaterContinuityWindow = originalContinuityWindow
+	})
+
+	updaterConfigured = func() bool { return true }
+	updaterCandidates = func(_ context.Context, status osupdate.Status) (osupdate.Status, error) {
+		status.CurrentVersion = "0.2.7-2"
+		status.AvailableVersion = "0.2.7-3"
+		status.AvailableSourceCommit = "89abcdef0123456789abcdef0123456789abcdef"
+		status.Packages = []osupdate.Package{{Name: "cloudless-orchestrator", Installed: "0.2.7-2", Candidate: "0.2.7-3"}}
+		return status, nil
+	}
+	var commands []string
+	updaterRun = func(_ context.Context, name string, args ...string) (string, error) {
+		command := name + " " + strings.Join(args, " ")
+		commands = append(commands, command)
+		if command == "systemctl restart lightdm.service" {
+			status, err := osupdate.Read()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if status.State != "updated" || status.Progress != 100 || status.CurrentVersion != "0.2.7-3" {
+				t.Fatalf("kiosk restarted before final status was durable: %#v", status)
+			}
+		}
+		return "", nil
+	}
+	var installEnvironment []string
+	updaterRunEnv = func(_ context.Context, environment []string, _ string, args ...string) (string, error) {
+		if !slices.Contains(args, "--download-only") {
+			installEnvironment = append([]string(nil), environment...)
+		}
+		return "", nil
+	}
+	updaterCopyDebs = func(_, _ string) error { return nil }
+	updaterCaptureWorkload = func(context.Context, string) (workloadSnapshot, error) { return workloadSnapshot{}, nil }
+	updaterWaitContinuity = func(string, workloadSnapshot, time.Duration) error { return nil }
+	updaterRollback = func(context.Context, string) error { return errors.New("rollback must not run") }
+	updaterRollbackRoot = t.TempDir()
+	updaterContinuityWindow = time.Millisecond
+
+	if err := applyLocked(); err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(commands, "\n")
+	brokerRestart := strings.Index(joined, "systemctl try-restart cloudless-engine.service")
+	daemonRestart := strings.Index(joined, "systemctl try-restart cloudlessd.service")
+	activeCheck := strings.Index(joined, "systemctl is-active --quiet lightdm.service")
+	kioskRestart := strings.Index(joined, "systemctl restart lightdm.service")
+	if brokerRestart < 0 || daemonRestart <= brokerRestart || activeCheck <= daemonRestart || kioskRestart <= activeCheck {
+		t.Fatalf("service restart order is not durable:\n%s", joined)
+	}
+	if !slices.Contains(installEnvironment, "CLOUDLESS_UPDATE_TRANSACTION=1") {
+		t.Fatalf("package install can restart the kiosk early: environment=%#v", installEnvironment)
+	}
+}
+
+func TestRestartKioskSkipsSideBySideDGX(t *testing.T) {
+	t.Setenv("CLOUDLESS_PLATFORM", "dgx-spark")
+	originalRun := updaterRun
+	originalMarker := updaterDGXApplianceMarker
+	t.Cleanup(func() {
+		updaterRun = originalRun
+		updaterDGXApplianceMarker = originalMarker
+	})
+	updaterDGXApplianceMarker = filepath.Join(t.TempDir(), "missing-appliance-marker")
+	var commands []string
+	updaterRun = func(_ context.Context, name string, args ...string) (string, error) {
+		commands = append(commands, name+" "+strings.Join(args, " "))
+		return "", nil
+	}
+
+	restartKioskAfterUpdate(context.Background())
+	if len(commands) != 0 {
+		t.Fatalf("side-by-side DGX desktop was touched: %#v", commands)
 	}
 }
 

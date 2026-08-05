@@ -8,4 +8,5 @@ xset s noblank
 # refreshing, especially over Model Manager's frosted surface.
 /usr/bin/cloudless-desktop-agent &
 /usr/bin/cloudless-browser-agent &
+/usr/bin/cloudless-display-watch &
 /usr/bin/cloudless-kiosk

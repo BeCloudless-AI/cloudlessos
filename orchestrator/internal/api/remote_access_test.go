@@ -20,6 +20,7 @@ type fakeRemoteAccess struct {
 	loggedOut bool
 	ssh       bool
 	serve     bool
+	serveErr  error
 }
 
 func (f *fakeRemoteAccess) Status(context.Context) remoteaccess.Status   { return f.status }
@@ -27,6 +28,23 @@ func (f *fakeRemoteAccess) Connect(context.Context) (string, error)      { retur
 func (f *fakeRemoteAccess) Logout(context.Context) error                 { f.loggedOut = true; return nil }
 func (f *fakeRemoteAccess) SetSSH(_ context.Context, enabled bool) error { f.ssh = enabled; return nil }
 func (f *fakeRemoteAccess) SetServe(_ context.Context, enabled bool) error {
+	f.serve = enabled
+	return f.serveErr
+}
+
+func TestTailscaleServeReturnsApprovalURL(t *testing.T) {
+	fake := &fakeRemoteAccess{serveErr: &remoteaccess.ServeApprovalError{URL: "https://login.tailscale.com/f/serve?node=example"}}
+	server := &Server{remoteAccess: fake}
+	request := httptest.NewRequest(http.MethodPost, "/api/system/tailscale/serve", strings.NewReader(`{"enabled":true}`))
+	request.Header.Set("X-Cloudless-Action", "tailscale-serve")
+	response := httptest.NewRecorder()
+	server.tailscaleServe(response, request)
+	if response.Code != http.StatusAccepted || !strings.Contains(response.Body.String(), `"activationRequired":true`) ||
+		!strings.Contains(response.Body.String(), `"authURL":"https://login.tailscale.com/f/serve?node=example"`) {
+		t.Fatalf("approval response = %d %s", response.Code, response.Body.String())
+	}
+}
+func (f *fakeRemoteAccess) SetAPIServe(_ context.Context, enabled bool, _ int) error {
 	f.serve = enabled
 	return nil
 }
@@ -79,6 +97,36 @@ func TestTailscaleRoutesKeepCredentialsOutsideCloudless(t *testing.T) {
 	}
 	if strings.Contains(response.Body.String(), fake.authURL) {
 		t.Fatalf("Tailscale authorization URL leaked into the audit: %s", response.Body.String())
+	}
+}
+
+func TestTailnetGatewayRequiresKeyAndReturnsPrivateURLs(t *testing.T) {
+	fake := &fakeRemoteAccess{status: remoteaccess.Status{
+		Installed: true, Connected: true, IPs: []string{"100.85.167.72"},
+	}}
+	store, err := state.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := &Server{remoteAccess: fake, state: store}
+	routes := server.Routes()
+
+	request := httptest.NewRequest(http.MethodPost, "/api/gateway/tailnet", strings.NewReader(`{"enable":true}`))
+	request.Header.Set("X-Cloudless-Action", "gateway-tailnet")
+	response := httptest.NewRecorder()
+	routes.ServeHTTP(response, request)
+	if response.Code != http.StatusConflict || fake.serve {
+		t.Fatalf("Tailnet exposure without key = %d, enabled=%v", response.Code, fake.serve)
+	}
+	if _, _, err := store.AddAPIKey("Tailnet client", state.APIKeyScopeBoth); err != nil {
+		t.Fatal(err)
+	}
+	request = httptest.NewRequest(http.MethodPost, "/api/gateway/tailnet", strings.NewReader(`{"enable":true}`))
+	request.Header.Set("X-Cloudless-Action", "gateway-tailnet")
+	response = httptest.NewRecorder()
+	routes.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || !fake.serve || !strings.Contains(response.Body.String(), `"url":"http://100.85.167.72:8766/v1"`) || !strings.Contains(response.Body.String(), `"agentURL":"http://100.85.167.72:8766/agent/v1"`) {
+		t.Fatalf("Tailnet exposure response = %d %s, enabled=%v", response.Code, response.Body.String(), fake.serve)
 	}
 }
 

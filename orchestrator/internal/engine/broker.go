@@ -18,18 +18,22 @@ const (
 )
 
 type brokerRequest struct {
-	Action      string                   `json:"action"`
-	Name        string                   `json:"name,omitempty"`
-	Other       string                   `json:"other,omitempty"`
-	Key         string                   `json:"key,omitempty"`
-	Value       string                   `json:"value,omitempty"`
-	Image       string                   `json:"image,omitempty"`
-	ContextDir  string                   `json:"contextDir,omitempty"`
-	Destination string                   `json:"destination,omitempty"`
-	Args        []string                 `json:"args,omitempty"`
-	Lines       int                      `json:"lines,omitempty"`
-	Spec        RunSpec                  `json:"spec,omitempty"`
-	Recipe      ReviewedRecipeDockerSpec `json:"recipe,omitempty"`
+	Action      string   `json:"action"`
+	Name        string   `json:"name,omitempty"`
+	Other       string   `json:"other,omitempty"`
+	Key         string   `json:"key,omitempty"`
+	Value       string   `json:"value,omitempty"`
+	Image       string   `json:"image,omitempty"`
+	ContextDir  string   `json:"contextDir,omitempty"`
+	Destination string   `json:"destination,omitempty"`
+	Args        []string `json:"args,omitempty"`
+	Lines       int      `json:"lines,omitempty"`
+	// Keep Spec absent from non-run requests. A value-typed struct is never
+	// omitted by encoding/json, which made every cleanup/query request inherit
+	// newly added RunSpec fields and break against an older broker during an
+	// update. Only container.run actions need this protocol payload.
+	Spec   *RunSpec                 `json:"spec,omitempty"`
+	Recipe ReviewedRecipeDockerSpec `json:"recipe,omitempty"`
 }
 
 type brokerResponse struct {
@@ -212,11 +216,11 @@ func (c *BrokerClient) ListImageDigests(ctx context.Context) ([]ImageDigestRef, 
 	return response.Images, err
 }
 func (c *BrokerClient) Run(ctx context.Context, spec RunSpec) (string, error) {
-	response, err := c.call(ctx, brokerRequest{Action: "container.run", Spec: spec}, nil)
+	response, err := c.call(ctx, brokerRequest{Action: "container.run", Spec: &spec}, nil)
 	return response.Output, err
 }
 func (c *BrokerClient) RunTransient(ctx context.Context, spec RunSpec) (string, error) {
-	response, err := c.call(ctx, brokerRequest{Action: "container.run-transient", Spec: spec}, nil)
+	response, err := c.call(ctx, brokerRequest{Action: "container.run-transient", Spec: &spec}, nil)
 	return response.Output, err
 }
 func (c *BrokerClient) Stop(ctx context.Context, name string) error {
@@ -402,9 +406,17 @@ func executeBrokerAction(
 	case "image.list-digests":
 		response.Images, err = runtime.ListImageDigests(ctx)
 	case "container.run":
-		response.Output, err = runtime.Run(ctx, request.Spec)
+		if request.Spec == nil {
+			err = errors.New("container run specification is required")
+		} else {
+			response.Output, err = runtime.Run(ctx, *request.Spec)
+		}
 	case "container.run-transient":
-		response.Output, err = runtime.RunTransient(ctx, request.Spec)
+		if request.Spec == nil {
+			err = errors.New("transient container run specification is required")
+		} else {
+			response.Output, err = runtime.RunTransient(ctx, *request.Spec)
+		}
 	case "container.stop":
 		err = runtime.Stop(ctx, request.Name)
 	case "container.remove":

@@ -70,8 +70,8 @@ func testDisplayServer(t *testing.T, delay time.Duration) (*Server, *displayAppl
 				Modes: []displayMode{{Width: 1920, Height: 1080, Current: true}, {Width: 2560, Height: 1440}},
 			}}}, nil
 		},
-		displayApply: func(_ context.Context, output string, width, height int) error {
-			applied.add(state.DisplayPreference{Output: output, Width: width, Height: height})
+		displayApply: func(_ context.Context, layout, output string, width, height int) error {
+			applied.add(state.DisplayPreference{Layout: layout, Output: output, Width: width, Height: height})
 			return nil
 		},
 	}
@@ -134,8 +134,8 @@ func TestPendingDisplayChangeRollsBackAfterDaemonRestart(t *testing.T) {
 	recovered := &displayApplications{}
 	restarted := &Server{
 		state: server.state, displayRecoveryDelay: time.Millisecond,
-		displayApply: func(_ context.Context, output string, width, height int) error {
-			recovered.add(state.DisplayPreference{Output: output, Width: width, Height: height})
+		displayApply: func(_ context.Context, layout, output string, width, height int) error {
+			recovered.add(state.DisplayPreference{Layout: layout, Output: output, Width: width, Height: height})
 			return nil
 		},
 	}
@@ -176,5 +176,74 @@ func TestDisplaySetRequiresConfirmationHeader(t *testing.T) {
 	s.displaySet(rec, req)
 	if rec.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusForbidden)
+	}
+}
+
+func TestDisplayNormalizeMirrorsUnknownMultipleOutputs(t *testing.T) {
+	store, err := state.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	applied := &displayApplications{}
+	server := &Server{
+		state: store,
+		displayQuery: func(context.Context) (displaySnapshot, error) {
+			return parseXrandr(`USB-C-2 connected primary 3840x2160+3840+0
+   3840x2160 60.00*+
+HDMI-0 connected 3840x2160+0+0
+   3840x2160 60.00*+
+`)
+		},
+		displayApply: func(_ context.Context, layout, output string, width, height int) error {
+			applied.add(state.DisplayPreference{Layout: layout, Output: output, Width: width, Height: height})
+			return nil
+		},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/system/display/normalize", nil)
+	req.Header.Set("X-Cloudless-Action", "display-normalize")
+	rec := httptest.NewRecorder()
+	server.displayNormalize(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("normalize status = %d: %s", rec.Code, rec.Body.String())
+	}
+	applications := applied.snapshot()
+	if len(applications) != 1 || applications[0].Layout != "mirror" || applications[0].Width != 3840 {
+		t.Fatalf("normalization applications = %+v", applications)
+	}
+}
+
+func TestDisplayNormalizeDoesNotExtendWhenSavedOutputIsMissing(t *testing.T) {
+	store, err := state.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetDisplayPreference(state.DisplayPreference{Layout: "single", Output: "DP-OLD", Width: 1920, Height: 1080}); err != nil {
+		t.Fatal(err)
+	}
+	applied := &displayApplications{}
+	server := &Server{
+		state: store,
+		displayQuery: func(context.Context) (displaySnapshot, error) {
+			return parseXrandr(`DP-1 connected primary 1920x1080+0+0
+   1920x1080 60.00*+
+HDMI-1 connected 1920x1080+1920+0
+   1920x1080 60.00*+
+`)
+		},
+		displayApply: func(_ context.Context, layout, output string, width, height int) error {
+			applied.add(state.DisplayPreference{Layout: layout, Output: output, Width: width, Height: height})
+			return nil
+		},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/system/display/normalize", nil)
+	req.Header.Set("X-Cloudless-Action", "display-normalize")
+	rec := httptest.NewRecorder()
+	server.displayNormalize(rec, req)
+	applications := applied.snapshot()
+	if rec.Code != http.StatusOK || len(applications) != 1 || applications[0].Layout != "mirror" {
+		t.Fatalf("missing-output normalization = %d %+v: %s", rec.Code, applications, rec.Body.String())
+	}
+	if got := store.DisplayPreference(); got.Output != "DP-OLD" {
+		t.Fatalf("fallback overwrote saved preference: %+v", got)
 	}
 }

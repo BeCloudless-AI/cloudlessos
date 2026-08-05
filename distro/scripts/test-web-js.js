@@ -98,4 +98,44 @@ const invalid = zoomContext(1920, 1080, "not-a-scale");
 assertEqual(invalid.root.dataset.uiZoomPreference, "auto", "invalid saved scale fallback");
 assertEqual(invalid.root.dataset.uiScale, "1", "invalid saved scale automatic sizing");
 
+// Tour targets are measured by getBoundingClientRect() in already-zoomed
+// screen pixels. The spotlight, guards, and card live inside the zoomed root,
+// so their geometry must be converted back to logical page coordinates before
+// CSS zoom is applied a second time.
+const tourGeometryStart = mainPage.indexOf("function tourCoordinateSpace()");
+const tourGeometryEnd = mainPage.indexOf("function positionTourGuards(hole)", tourGeometryStart);
+if (tourGeometryStart < 0 || tourGeometryEnd < 0) {
+  throw new Error("Cloudless tour coordinate conversion could not be isolated");
+}
+const tourGeometry = mainPage.slice(tourGeometryStart, tourGeometryEnd);
+const tourContext = {
+  innerWidth: 1920,
+  innerHeight: 1080,
+  document: { documentElement: { dataset: { uiScale: "1.5" } } },
+};
+vm.createContext(tourContext);
+new vm.Script(tourGeometry, { filename: `${mainPagePath}-tour-geometry.js` }).runInContext(tourContext);
+const tourViewport = tourContext.tourCoordinateSpace();
+assertEqual(tourViewport.scale, 1.5, "tour scale at 150%");
+assertEqual(tourViewport.width, 1280, "tour logical viewport width at 150%");
+assertEqual(tourViewport.height, 720, "tour logical viewport height at 150%");
+const logicalRect = tourContext.tourLogicalRect({
+  getBoundingClientRect() { return { left: 300, top: 150, right: 900, bottom: 450, width: 600, height: 300 }; },
+}, tourViewport.scale);
+assertEqual(logicalRect.left, 200, "tour target left conversion at 150%");
+assertEqual(logicalRect.top, 100, "tour target top conversion at 150%");
+assertEqual(logicalRect.width, 400, "tour target width conversion at 150%");
+assertEqual(logicalRect.height, 200, "tour target height conversion at 150%");
+tourContext.document.documentElement.dataset.uiScale = "0.8";
+const compactTourViewport = tourContext.tourCoordinateSpace();
+assertEqual(compactTourViewport.width, 2400, "tour logical viewport width at 80%");
+assertEqual(compactTourViewport.height, 1350, "tour logical viewport height at 80%");
+const compactLogicalRect = tourContext.tourLogicalRect({
+  getBoundingClientRect() { return { left: 160, top: 80, right: 480, bottom: 240, width: 320, height: 160 }; },
+}, compactTourViewport.scale);
+assertEqual(compactLogicalRect.left, 200, "tour target left conversion at 80%");
+assertEqual(compactLogicalRect.top, 100, "tour target top conversion at 80%");
+assertEqual(compactLogicalRect.width, 400, "tour target width conversion at 80%");
+assertEqual(compactLogicalRect.height, 200, "tour target height conversion at 80%");
+
 console.log(`Validated ${scripts.length} inline Cloudless interface scripts and responsive UI scaling`);

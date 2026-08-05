@@ -143,6 +143,21 @@ func TestRunArgsIncludesClusterHostGateway(t *testing.T) {
 	}
 }
 
+func TestRunArgsSupportsCloudlessOwnedRestartPolicy(t *testing.T) {
+	defaults := strings.Join(runArgs(RunSpec{Name: "app", Image: "app"}), " ")
+	if !strings.Contains(defaults, "--restart unless-stopped") {
+		t.Fatalf("default app restart policy changed: %q", defaults)
+	}
+	inference := strings.Join(runArgs(RunSpec{Name: "model", Image: "vllm", RestartPolicy: "no"}), " ")
+	if !strings.Contains(inference, "--restart no") {
+		t.Fatalf("explicit inference restart policy missing: %q", inference)
+	}
+	untrusted := strings.Join(runArgs(RunSpec{Name: "bad", Image: "app", RestartPolicy: "always --privileged"}), " ")
+	if strings.Contains(untrusted, "always") || !strings.Contains(untrusted, "--restart unless-stopped") {
+		t.Fatalf("untrusted restart policy passed through: %q", untrusted)
+	}
+}
+
 func TestRunArgsSupportsEntrypointOverride(t *testing.T) {
 	args := strings.Join(runArgs(RunSpec{Name: "ray", Image: "vllm", EntryPoint: "/bin/bash", Args: []string{"-lc", "ray start"}}), " ")
 	if !strings.Contains(args, "--entrypoint /bin/bash vllm -lc ray start") {

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -47,6 +48,16 @@ func TestBrokerClientStreamsTypedEngineEvents(t *testing.T) {
 	}
 	if !reflect.DeepEqual(lines, []string{"layer-a: Pulling fs layer", "layer-a: Pull complete"}) {
 		t.Fatalf("streamed lines = %#v", lines)
+	}
+}
+
+func TestBrokerNonRunRequestOmitsRunSpecForRollingCompatibility(t *testing.T) {
+	payload, err := json.Marshal(brokerRequest{Action: "container.remove", Name: "cloudless-recipe-test"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(payload), `"spec"`) || strings.Contains(string(payload), `"restartPolicy"`) {
+		t.Fatalf("non-run request leaked RunSpec protocol fields: %s", payload)
 	}
 }
 

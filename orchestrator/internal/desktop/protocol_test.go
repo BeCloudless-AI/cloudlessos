@@ -21,10 +21,10 @@ type fakeExecutor struct {
 func (f *fakeExecutor) QueryDisplay(context.Context) (string, error) {
 	return "DP-1 connected primary 1920x1080\n", nil
 }
-func (f *fakeExecutor) ApplyDisplay(_ context.Context, output string, width, height int) error {
+func (f *fakeExecutor) ApplyDisplay(_ context.Context, layout, output string, width, height int) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.applied = output + ":1920x1080"
+	f.applied = layout + ":" + output + ":1920x1080"
 	if width != 1920 || height != 1080 {
 		return errors.New("unexpected dimensions")
 	}
@@ -59,7 +59,7 @@ func TestDesktopProtocolIsTypedAndRoundTrips(t *testing.T) {
 	if output, err := client.QueryDisplay(requestCtx); err != nil || !strings.Contains(output, "DP-1 connected") {
 		t.Fatalf("query = %q, %v", output, err)
 	}
-	if err := client.ApplyDisplay(requestCtx, "DP-1", 1920, 1080); err != nil {
+	if err := client.ApplyDisplay(requestCtx, "single", "DP-1", 1920, 1080); err != nil {
 		t.Fatal(err)
 	}
 	if err := client.EmitKey(requestCtx, "text", "@"); err != nil {
@@ -68,7 +68,7 @@ func TestDesktopProtocolIsTypedAndRoundTrips(t *testing.T) {
 	if err := client.OpenPlace(requestCtx, "models"); err != nil {
 		t.Fatal(err)
 	}
-	if executor.applied != "DP-1:1920x1080" || executor.key != "text:@" || executor.place != "models" {
+	if executor.applied != "single:DP-1:1920x1080" || executor.key != "text:@" || executor.place != "models" {
 		t.Fatalf("executor = %+v", executor)
 	}
 }

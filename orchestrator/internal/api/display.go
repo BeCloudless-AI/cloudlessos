@@ -10,13 +10,10 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"regexp"
-	"sort"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/cloudless/orchestrator/internal/desktop"
+	"github.com/cloudless/orchestrator/internal/displaylayout"
 	"github.com/cloudless/orchestrator/internal/state"
 )
 
@@ -32,6 +29,8 @@ type displayOutput struct {
 	Primary bool          `json:"primary,omitempty"`
 	Width   int           `json:"width,omitempty"`
 	Height  int           `json:"height,omitempty"`
+	X       int           `json:"x,omitempty"`
+	Y       int           `json:"y,omitempty"`
 	Modes   []displayMode `json:"modes"`
 }
 
@@ -40,6 +39,7 @@ type displaySnapshot struct {
 	Output     string                  `json:"output,omitempty"`
 	Width      int                     `json:"width,omitempty"`
 	Height     int                     `json:"height,omitempty"`
+	Layout     string                  `json:"layout,omitempty"`
 	Outputs    []displayOutput         `json:"outputs,omitempty"`
 	Configured state.DisplayPreference `json:"configured,omitempty"`
 	Error      string                  `json:"error,omitempty"`
@@ -55,8 +55,6 @@ type pendingDisplayChange struct {
 	RollbackAttempts int                     `json:"-"`
 }
 
-var resolutionPattern = regexp.MustCompile(`^([0-9]+)x([0-9]+)$`)
-
 func queryDisplays(ctx context.Context) (displaySnapshot, error) {
 	data, err := desktop.NewClient().QueryDisplay(ctx)
 	if err != nil {
@@ -66,85 +64,24 @@ func queryDisplays(ctx context.Context) (displaySnapshot, error) {
 }
 
 func parseXrandr(raw string) (displaySnapshot, error) {
-	var snapshot displaySnapshot
-	var active *displayOutput
-	seenModes := map[string]map[string]int{}
-	for _, line := range strings.Split(raw, "\n") {
-		if line == "" {
-			continue
-		}
-		if line[0] != ' ' && line[0] != '\t' {
-			fields := strings.Fields(line)
-			active = nil
-			if len(fields) < 2 || fields[1] != "connected" {
-				continue
-			}
-			output := displayOutput{Name: fields[0], Modes: []displayMode{}}
-			for _, field := range fields[2:] {
-				if field == "primary" {
-					output.Primary = true
-				}
-				if strings.Contains(field, "+") {
-					if match := resolutionPattern.FindStringSubmatch(strings.SplitN(field, "+", 2)[0]); match != nil {
-						output.Width, _ = strconv.Atoi(match[1])
-						output.Height, _ = strconv.Atoi(match[2])
-					}
-				}
-			}
-			snapshot.Outputs = append(snapshot.Outputs, output)
-			active = &snapshot.Outputs[len(snapshot.Outputs)-1]
-			seenModes[output.Name] = map[string]int{}
-			continue
-		}
-		if active == nil {
-			continue
-		}
-		fields := strings.Fields(line)
-		if len(fields) < 2 {
-			continue
-		}
-		match := resolutionPattern.FindStringSubmatch(fields[0])
-		if match == nil {
-			continue
-		}
-		width, _ := strconv.Atoi(match[1])
-		height, _ := strconv.Atoi(match[2])
-		key := fmt.Sprintf("%dx%d", width, height)
-		mode := displayMode{Width: width, Height: height}
-		for _, rate := range fields[1:] {
-			mode.Current = mode.Current || strings.Contains(rate, "*")
-			mode.Preferred = mode.Preferred || strings.Contains(rate, "+")
-		}
-		if index, ok := seenModes[active.Name][key]; ok {
-			active.Modes[index].Current = active.Modes[index].Current || mode.Current
-			active.Modes[index].Preferred = active.Modes[index].Preferred || mode.Preferred
-			continue
-		}
-		seenModes[active.Name][key] = len(active.Modes)
-		active.Modes = append(active.Modes, mode)
+	parsed, err := displaylayout.Parse(raw)
+	if err != nil {
+		return displaySnapshot{}, err
 	}
-	if len(snapshot.Outputs) == 0 {
-		return snapshot, errors.New("no connected display was detected")
-	}
-	sort.SliceStable(snapshot.Outputs, func(i, j int) bool {
-		return snapshot.Outputs[i].Primary && !snapshot.Outputs[j].Primary
-	})
-	selected := &snapshot.Outputs[0]
-	for i := range snapshot.Outputs {
-		if snapshot.Outputs[i].Primary {
-			selected = &snapshot.Outputs[i]
-			break
+	pref := displaylayout.DetectPreference(parsed)
+	snapshot := displaySnapshot{Available: true, Output: pref.Output, Width: pref.Width, Height: pref.Height, Layout: pref.Layout}
+	for _, output := range parsed.Outputs {
+		dst := displayOutput{Name: output.Name, Primary: output.Primary, Width: output.Width, Height: output.Height, X: output.X, Y: output.Y}
+		for _, mode := range output.Modes {
+			dst.Modes = append(dst.Modes, displayMode{Width: mode.Width, Height: mode.Height, Current: mode.Current, Preferred: mode.Preferred})
 		}
+		snapshot.Outputs = append(snapshot.Outputs, dst)
 	}
-	snapshot.Available = true
-	snapshot.Output = selected.Name
-	snapshot.Width = selected.Width
-	snapshot.Height = selected.Height
 	return snapshot, nil
 }
 
-func applyDisplayMode(ctx context.Context, output string, width, height int) error {
-	if err := desktop.NewClient().ApplyDisplay(ctx, output, width, height); err != nil {
+func applyDisplayMode(ctx context.Context, layout, output string, width, height int) error {
+	if err := desktop.NewClient().ApplyDisplay(ctx, layout, output, width, height); err != nil {
 		return fmt.Errorf("could not change display mode: %w", err)
 	}
 	return nil
@@ -157,11 +94,31 @@ func (s *Server) queryDisplay(ctx context.Context) (displaySnapshot, error) {
 	return queryDisplays(ctx)
 }
 
-func (s *Server) applyDisplay(ctx context.Context, output string, width, height int) error {
+func (s *Server) applyDisplay(ctx context.Context, layout, output string, width, height int) error {
 	if s.displayApply != nil {
-		return s.displayApply(ctx, output, width, height)
+		return s.displayApply(ctx, layout, output, width, height)
 	}
-	return applyDisplayMode(ctx, output, width, height)
+	return applyDisplayMode(ctx, layout, output, width, height)
+}
+
+func layoutSnapshot(snapshot displaySnapshot) displaylayout.Snapshot {
+	result := displaylayout.Snapshot{}
+	for _, output := range snapshot.Outputs {
+		dst := displaylayout.Output{Name: output.Name, Primary: output.Primary, Width: output.Width, Height: output.Height, X: output.X, Y: output.Y}
+		for _, mode := range output.Modes {
+			dst.Modes = append(dst.Modes, displaylayout.Mode{Width: mode.Width, Height: mode.Height, Current: mode.Current, Preferred: mode.Preferred})
+		}
+		result.Outputs = append(result.Outputs, dst)
+	}
+	return result
+}
+
+func layoutPreference(pref state.DisplayPreference) displaylayout.Preference {
+	return displaylayout.Preference{Layout: pref.Layout, Output: pref.Output, Width: pref.Width, Height: pref.Height}
+}
+
+func statePreference(pref displaylayout.Preference) state.DisplayPreference {
+	return state.DisplayPreference{Layout: pref.Layout, Output: pref.Output, Width: pref.Width, Height: pref.Height}
 }
 
 func displayChangeToken() (string, error) {
@@ -229,10 +186,16 @@ func (s *Server) recoverPendingDisplayChange() {
 		return
 	}
 	var change pendingDisplayChange
-	if json.Unmarshal(data, &change) != nil || change.Schema != "cloudless.display-change.v1" ||
+	if json.Unmarshal(data, &change) != nil || (change.Schema != "cloudless.display-change.v1" && change.Schema != "cloudless.display-change.v2") ||
 		change.Token == "" || change.Previous.Output == "" || change.Previous.Width <= 0 || change.Previous.Height <= 0 {
 		fmt.Printf("Cloudless found an invalid pending display recovery record\n")
 		return
+	}
+	if change.Previous.Layout == "" {
+		change.Previous.Layout = displaylayout.LayoutSingle
+	}
+	if change.Selected.Layout == "" {
+		change.Selected.Layout = displaylayout.LayoutSingle
 	}
 	s.displayMu.Lock()
 	if s.displayChange != nil {
@@ -264,7 +227,7 @@ func (s *Server) rollbackDisplay(token string) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	if err := s.applyDisplay(ctx, change.Previous.Output, change.Previous.Width, change.Previous.Height); err != nil {
+	if err := s.applyDisplay(ctx, change.Previous.Layout, change.Previous.Output, change.Previous.Width, change.Previous.Height); err != nil {
 		change.RollbackAttempts++
 		if change.RollbackAttempts < 30 {
 			change.Timer = time.AfterFunc(2*time.Second, func() {
@@ -312,25 +275,27 @@ func (s *Server) displaySet(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
 		return
 	}
-	valid := false
-	var previous state.DisplayPreference
-	for _, output := range snapshot.Outputs {
-		if output.Name != request.Output {
-			continue
-		}
-		previous = state.DisplayPreference{Output: output.Name, Width: output.Width, Height: output.Height}
-		for _, mode := range output.Modes {
-			if mode.Width == request.Width && mode.Height == request.Height {
-				valid = true
-				break
-			}
-		}
+	if request.Layout == "" {
+		request.Layout = displaylayout.LayoutSingle
 	}
-	if !valid {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "that resolution is not supported by the selected display"})
+	if !displaylayout.ValidLayout(request.Layout) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "that display layout is not supported"})
 		return
 	}
-	if previous.Width <= 0 || previous.Height <= 0 {
+	parsed := layoutSnapshot(snapshot)
+	previous := statePreference(displaylayout.DetectPreference(parsed))
+	plan, err := displaylayout.BuildPlan(parsed, layoutPreference(request))
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	if plan.Effective.Layout != request.Layout || plan.Effective.Output != request.Output ||
+		plan.Effective.Width != request.Width || plan.Effective.Height != request.Height {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "that layout or resolution is not supported by the connected displays"})
+		return
+	}
+	request = statePreference(plan.Effective)
+	if previous.Width <= 0 || previous.Height <= 0 || previous.Output == "" {
 		writeJSON(w, http.StatusConflict, map[string]string{"error": "the current display mode cannot be restored safely"})
 		return
 	}
@@ -350,7 +315,7 @@ func (s *Server) displaySet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	change := &pendingDisplayChange{
-		Schema: "cloudless.display-change.v1", Token: token, Selected: request, Previous: previous,
+		Schema: "cloudless.display-change.v2", Token: token, Selected: request, Previous: previous,
 		ExpiresAt: time.Now().Add(delay).UTC(),
 	}
 	if err := s.persistPendingDisplay(change); err != nil {
@@ -358,7 +323,7 @@ func (s *Server) displaySet(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "could not create a durable display rollback"})
 		return
 	}
-	if err := s.applyDisplay(ctx, request.Output, request.Width, request.Height); err != nil {
+	if err := s.applyDisplay(ctx, request.Layout, request.Output, request.Width, request.Height); err != nil {
 		_ = s.clearPendingDisplay()
 		s.displayMu.Unlock()
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -374,6 +339,48 @@ func (s *Server) displaySet(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"applied": true, "confirmationRequired": true, "token": token,
 		"confirmSeconds": int(delay.Round(time.Second) / time.Second), "configured": request,
+	})
+}
+
+// displayNormalize is called by kiosk startup, connector hotplug handling, and
+// repair. It enforces the saved topology, or the safe default (mirror for
+// multiple unknown outputs, single for one) before the browser is shown.
+func (s *Server) displayNormalize(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("X-Cloudless-Action") != "display-normalize" {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "display normalization header required"})
+		return
+	}
+	s.displayMu.Lock()
+	defer s.displayMu.Unlock()
+	if s.displayChange != nil {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "a display change is awaiting confirmation"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
+	defer cancel()
+	snapshot, err := s.queryDisplay(ctx)
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": err.Error()})
+		return
+	}
+	requested := state.DisplayPreference{}
+	if s.state != nil {
+		requested = s.state.DisplayPreference()
+	}
+	plan, err := displaylayout.BuildPlan(layoutSnapshot(snapshot), layoutPreference(requested))
+	if err != nil {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": err.Error()})
+		return
+	}
+	if plan.WasChanged {
+		if err := s.applyDisplay(ctx, plan.Effective.Layout, plan.Effective.Output, plan.Effective.Width, plan.Effective.Height); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+			return
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"normalized": true, "changed": plan.WasChanged, "configured": statePreference(plan.Effective),
+		"fallback": plan.Fallback, "reason": plan.Reason,
 	})
 }
 

@@ -715,7 +715,46 @@ func TestRecipeUIUsesRecipesIconAndCloudlessSourceViewer(t *testing.T) {
 		`id="recipe-show-drafts"`,
 		`trust.executionAllowed === true`,
 		`data-recipe-install-model`,
-		`openModelManagerFor(recipe.model.id, recipe.model.revision || '')`,
+		`function openRecipeModelDownloadDialog(recipe, returnFocus)`,
+		`title: 'Download the model required by this recipe?'`,
+		`confirmLabel: 'Agree and download'`,
+		`cancelLabel: 'Not now'`,
+		`function installRecipeModel(recipe, button)`,
+		`installRecipeModel(recipe, button)`,
+		`downloadModel(model, '', { returnToDesktop: true, recipeId: recipe.id, recipeName: recipe.name, revision: recipe.model.revision || '' })`,
+		`id="recipe-model-ready-home"`,
+		`cloudless.recipeModelDownloadIntents.v1`,
+		`cloudless.recipeModelReady.v1`,
+		`The model for the recipe has been downloaded. Do you want to start the recipe?`,
+		`Launching a recipe might take time.`,
+		`confirmLabel: 'Yes, start recipe'`,
+		`function startDownloadedRecipe(recipeId, trigger)`,
+		`waitForRecipeJobCompletion(check.jobId)`,
+		`/check', { method: 'POST' }`,
+		`/run', { method: 'POST' }`,
+		`trackLocalRecipeJob(result.jobId, 'run', recipeId)`,
+		`trackLocalRecipeJob(result.jobId,'run',id);`,
+		`closeModelManager();`,
+		`document.getElementById('open-models-2').onclick = openActiveRuntimeActions;`,
+		`function openActiveRuntimeActions()`,
+		`Open Model Manager`,
+		`Open ${recipe ? 'recipe' : 'model'} details`,
+		`Stop ${recipe ? 'recipe' : 'model'}`,
+		`const runtimeLabel = runtimeKind === 'recipe' ? 'Active recipe' : 'Active model';`,
+		`/api/runtime/restart-offer`,
+		`/api/settings/runtime-restart`,
+		`Automatically restart last recipe/model`,
+		`Cloudless remembers that ' + offer.name + ' was running before Cloudless restarted.`,
+		`Your device restarted, and Cloudless is now restarting the ' + kind`,
+		`Automatic restart is enabled. You can turn it off in Settings → General under Startup.`,
+		`You can enable automatic restart in Settings → General under Startup.`,
+		`confirmLabel: 'Restart ' + offer.name`,
+		`async function restartRememberedRecipe(offer)`,
+		`async function declineRememberedRuntime(offer)`,
+		`/api/engine/restart`,
+		`await waitForRecipeJobCompletion(stopped.jobId)`,
+		`if (options.returnToDesktop) { closeModelManager(); renderHomeModelDownloads(); }`,
+		`d.recipeName ? `,
 		`JSON.stringify({ id: m.id, revision, token })`,
 		`recipeModelInstalled(recipe, data)`,
 		`recipeValidated(recipe, data)`,
@@ -745,6 +784,9 @@ func TestRecipeUIUsesRecipesIconAndCloudlessSourceViewer(t *testing.T) {
 	}
 	if strings.Contains(page, `placeholder="https://github.com/owner/repository"`) {
 		t.Fatal("recipe import still asks users to type the fixed GitHub prefix")
+	}
+	if strings.Contains(page, `openModelManagerFor(recipe.model.id, recipe.model.revision || '')`) {
+		t.Fatal("recipe model installation still detours through the standalone Models catalog")
 	}
 	for _, removed := range []string{`<span>Prefill from GitHub</span>`, `id="recipe-import-toggle"`, `id="recipe-create"`, `data-recipe-edit=`, `data-recipe-publish=`} {
 		if strings.Contains(page, removed) {
@@ -810,7 +852,7 @@ func TestRecipeCheckUsesStableProgressOverlay(t *testing.T) {
 		`'checking-fabric':7`,
 		`outcome === 'validated-with-warnings'`,
 		`trackLocalRecipeJob(result.jobId, 'check');`,
-		`if(checking)updateRecipeCheckOverlay(update);else if(recipeId)updateRecipeRunCard(recipeId,jobId,update)`,
+		`if (checking) updateRecipeCheckOverlay(update); else if (recipeId) updateRecipeRunCard(recipeId, jobId, update);`,
 		`html.motion-disabled .recipe-check-spinner::before`,
 		`.recipe-check-error.hidden { display: none; }`,
 	} {

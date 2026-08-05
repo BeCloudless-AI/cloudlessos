@@ -16,9 +16,14 @@ func TestEmbeddedWebIncludesSparkClusterWizard(t *testing.T) {
 			t.Fatalf("embedded UI missing %q", want)
 		}
 	}
-	for _, want := range []string{"Disconnect and switch to local", "Stop distributed AI", "Remove private fabric", "Start local AI", "cluster-disconnect-eta", "formatRemaining", "engineExecutionMode = 'local'"} {
+	for _, want := range []string{"Disconnect and return to local", "Stop distributed AI", "Remove private fabric", "Leave AI unloaded", "Cloudless AI remains unloaded", "cluster-disconnect-eta", "formatRemaining", "engineExecutionMode = 'local'", "engineUnloaded = true"} {
 		if !strings.Contains(html, want) {
-			t.Fatalf("embedded cluster UI missing safe local fallback progress %q", want)
+			t.Fatalf("embedded cluster UI missing safe unloaded disconnect progress %q", want)
+		}
+	}
+	for _, obsolete := range []string{"Start local AI", "Starting local AI on this Spark", "Cluster disconnected · local AI ready"} {
+		if strings.Contains(html, obsolete) {
+			t.Fatalf("embedded cluster UI still promises an automatic local restart %q", obsolete)
 		}
 	}
 	for _, want := range []string{"Compute subset:", "data-cluster-node", "Save selection", "function openSparkAddressUpdate", "Update Spark address", "X-Cloudless-Action':'spark-cluster-rebind'", "storage free", "physicalLink"} {
@@ -36,7 +41,7 @@ func TestEmbeddedWebIncludesSparkClusterWizard(t *testing.T) {
 			t.Fatalf("embedded cluster UI missing connection failure state %q", want)
 		}
 	}
-	for _, want := range []string{"id=\"home-cluster\"", "function renderHomeCluster", "-Spark compute is ready", "computeReady ? 'Manage'", "host.querySelector('button').onclick = openSparkClusterSurface", "Runs across ${clusterNodes} Sparks", "Use all ${clusterNodes} Sparks", "mode: selectedMode", "memoryAccountingSummary(cluster, true)", "Powered by Hermes Agent", "Active across ${engineNodes} Sparks", "served by your Spark cluster", "Running across ${sparkCount(connectedSpark)} Sparks", "executionMode === 'cluster'"} {
+	for _, want := range []string{"id=\"home-cluster\"", "function renderHomeCluster", "-Spark compute is ready", "computeReady ? 'Manage'", "host.querySelector('button').onclick = openSparkClusterSurface", "Runs across ${clusterNodes} Sparks", "Use all ${clusterNodes} Sparks", "mode: selectedMode", "memoryAccountingSummary(cluster, true)", "Powered by Hermes Agent", "Active across ${engineNodes} Sparks", "served by your Spark cluster", "${runtimeLabel} · ${sparkCount(connectedSpark)} Sparks", "executionMode === 'cluster'"} {
 		if !strings.Contains(html, want) {
 			t.Fatalf("embedded UI missing system-wide cluster experience %q", want)
 		}

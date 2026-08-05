@@ -193,6 +193,7 @@ func provisionEngine(ctx context.Context, eng engine.Engine, st *state.Store, mf
 					spec = sparkcluster.CoordinatorSpec(spec)
 					_ = eng.Remove(ctx, "cloudless-cluster-engine-proxy")
 				}
+				spec.RestartPolicy = "no"
 				if _, err := eng.Run(ctx, spec); err != nil {
 					if clusterMode {
 						_ = sparkcluster.StopWorker(ctx)

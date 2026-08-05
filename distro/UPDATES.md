@@ -14,8 +14,12 @@ so replacing the interface cannot terminate the active package transaction.
 
 Before an install, the worker preserves the currently installed Cloudless `.deb` files.
 It downloads and verifies the complete next package generation through APT, installs it,
-restarts affected services, and checks `/api/health`. A failed health check reinstalls the
-preserved generation. Branding and hardware updates request a reboot.
+restarts affected services, and checks `/api/health`. After the candidate passes and the
+final status is saved, appliance installations synchronously restart the kiosk once so
+even orchestrator-only UI updates become visible immediately. Package maintainer scripts
+defer their own kiosk restart while the Update Center transaction is active. A failed
+health check reinstalls the preserved generation. Branding and hardware updates request a
+reboot. Side-by-side DGX installations never have their desktop session restarted.
 
 The installer seeds `/var/lib/cloudless-updater/current` with its package generation,
 which makes rollback available from the first OTA update onward.

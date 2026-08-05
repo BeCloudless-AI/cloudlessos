@@ -1,0 +1,50 @@
+#!/bin/sh
+# DGX Spark can reach graphical.target a few seconds before the NVIDIA DRM
+# device and its connectors are usable. Starting X in that window makes
+# LightDM abandon autologin and leave the Ubuntu greeter on screen.
+set -u
+
+is_dgx_spark() {
+    for source in \
+        /etc/dgx-release \
+        /proc/device-tree/model \
+        /sys/firmware/devicetree/base/model \
+        /sys/devices/virtual/dmi/id/product_name
+    do
+        if [ -r "$source" ] && tr '\0' '\n' < "$source" 2>/dev/null |
+            grep -Eqi 'DGX[[:space:]_-]*Spark|GB10'; then
+            return 0
+        fi
+    done
+    return 1
+}
+
+connected_display_ready() {
+    for status in /sys/class/drm/*/status; do
+        [ -r "$status" ] || continue
+        grep -qx connected "$status" && return 0
+    done
+    return 1
+}
+
+is_dgx_spark || exit 0
+
+# Let udev finish the work it already knows about, then wait for both the
+# compute driver and a physical DRM connector. The timeout is deliberately
+# bounded so a disconnected/headless Spark can still reach its greeter.
+command -v udevadm >/dev/null 2>&1 && udevadm settle --timeout=10 || true
+deadline=$(( $(date +%s) + 20 ))
+while [ "$(date +%s)" -lt "$deadline" ]; do
+    driver_ready=false
+    if ! command -v nvidia-smi >/dev/null 2>&1 || nvidia-smi -L >/dev/null 2>&1; then
+        driver_ready=true
+    fi
+    if [ "$driver_ready" = true ] && connected_display_ready; then
+        echo "Cloudless display hardware is ready."
+        exit 0
+    fi
+    sleep 1
+done
+
+echo "Cloudless display readiness timed out; allowing LightDM to continue." >&2
+exit 0

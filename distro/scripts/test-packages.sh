@@ -51,6 +51,12 @@ grep -Fq 'gfx.webrender.software", true' \
     "$DISTRO/packages/cloudless-shell/cloudless-kiosk"
 grep -Fq 'LIBGL_ALWAYS_SOFTWARE=1 MOZ_WEBRENDER=0' \
     "$DISTRO/packages/cloudless-shell/cloudless-kiosk"
+grep -Fq 'DGX Spark detected; using Firefox software rendering' \
+    "$DISTRO/packages/cloudless-shell/cloudless-kiosk"
+grep -Fq 'firefox_profile_running "$PROFILE_DIR"' \
+    "$DISTRO/packages/cloudless-shell/cloudless-kiosk"
+grep -Fq 'recovered Firefox already owns the kiosk profile' \
+    "$DISTRO/packages/cloudless-shell/cloudless-kiosk"
 grep -Fq -- '--no-remote --profile "$PROFILE_DIR"' \
     "$DISTRO/packages/cloudless-shell/cloudless-kiosk"
 grep -Fq '$HOME/snap/chromium/common/cloudless-web-browser' \
@@ -81,9 +87,26 @@ grep -Fq 'sudo cloudless-repair --repair' \
     "$DISTRO/packages/cloudless-shell/recovery.html"
 grep -Fq '/usr/bin/cloudless-browser-agent' \
     "$DISTRO/packages/cloudless-shell/openbox-autostart"
+grep -Fq '/usr/bin/cloudless-display-watch &' \
+    "$DISTRO/packages/cloudless-shell/openbox-autostart"
+grep -Fq '/api/system/display/normalize' \
+    "$DISTRO/packages/cloudless-shell/cloudless-kiosk"
+grep -Fq 'systemctl restart --no-block lightdm.service' \
+    "$DISTRO/packages/cloudless-shell/postinst"
+grep -Fq 'CLOUDLESS_UPDATE_TRANSACTION' \
+    "$DISTRO/packages/cloudless-shell/postinst"
+grep -Fq 'pkill -f' \
+    "$DISTRO/packages/cloudless-shell/cloudless-display-watch"
+grep -Fq 'nvidia-smi -L' \
+    "$DISTRO/packages/cloudless-shell/cloudless-wait-for-display"
+grep -Fq 'connected_display_ready' \
+    "$DISTRO/packages/cloudless-shell/cloudless-wait-for-display"
+grep -Fq 'ExecStartPre=/usr/lib/cloudless/cloudless-wait-for-display' \
+    "$DISTRO/packages/cloudless-shell/lightdm-wait-display.conf"
 grep -Fq '/run/cloudless-browser/requests' \
     "$DISTRO/packages/cloudless-shell/cloudless-browser.tmpfiles"
 sh -n "$DISTRO/packages/cloudless-shell/cloudless-browser-agent"
+sh -n "$DISTRO/packages/cloudless-shell/cloudless-wait-for-display"
 sh -n "$DISTRO/packages/cloudless-orchestrator/cloudless-install-tailscale"
 bash -n "$DISTRO/packages/cloudless-orchestrator/cloudless-backup"
 tailscale_installer="$DISTRO/packages/cloudless-orchestrator/cloudless-install-tailscale"
@@ -226,6 +249,7 @@ bash "$DISTRO/scripts/test-boot-audit.sh"
 bash "$DISTRO/scripts/test-qualification-contract.sh"
 bash "$DISTRO/scripts/test-service-hardening.sh"
 bash "$DISTRO/scripts/test-browser-agent.sh"
+bash "$DISTRO/scripts/test-kiosk.sh"
 bash -n "$DISTRO/scripts/test-installed-session.sh"
 while IFS= read -r script; do bash -n "$script"; done < <(find "$DISTRO/scripts" "$DISTRO/packages" -type f \( -name '*.sh' -o -name postinst -o -name prerm -o -name cloudless-kiosk -o -name cloudless-dgx-desktop-mode -o -name cloudless-diagnostics -o -name cloudless-repair -o -name cloudless-boot-audit -o -name cloudless-graphical-recovery -o -name cloudless-hardware-install -o -name cloudless-validate \))
 echo "Package validation passed"

@@ -61,6 +61,7 @@ func (s *Server) restartActiveRecipeAfterBoot(ctx context.Context, job *jobs.Job
 		return err
 	}
 	spec := sparkcluster.ProxySpecTarget(recipe.Engine.ProxyHost, recipe.Engine.ContainerPort)
+	spec.RestartPolicy = "no"
 	spec.Image = proxyImage
 	proxyID, err := s.eng.Run(ctx, spec)
 	if err != nil {
@@ -193,6 +194,7 @@ func (s *Server) restartManagedContainerRecipeAfterBoot(ctx context.Context, job
 		proxyTarget = "host.docker.internal"
 	}
 	spec := sparkcluster.ProxySpecTarget(proxyTarget, recipe.Engine.ContainerPort)
+	spec.RestartPolicy = "no"
 	spec.Image = proxyImage
 	proxyID, err := s.eng.Run(ctx, spec)
 	if err != nil {

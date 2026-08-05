@@ -47,3 +47,12 @@ fi
 ln -sfn /lib/systemd/system/graphical.target /etc/systemd/system/default.target
 systemctl set-default graphical.target >/dev/null 2>&1 || true
 systemctl enable lightdm.service >/dev/null 2>&1 || true
+
+# A direct package upgrade must refresh the running graphical session. During an
+# Update Center transaction the updater suppresses this early restart and owns
+# one synchronous restart after the complete generation passes its continuity
+# check and its final status is durable. First installs in a chroot and
+# side-by-side DGX installations do not enter this path.
+if [ "${CLOUDLESS_UPDATE_TRANSACTION:-0}" != 1 ] && systemctl is-active --quiet lightdm.service; then
+    systemctl restart --no-block lightdm.service >/dev/null 2>&1 || true
+fi

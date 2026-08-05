@@ -6,6 +6,8 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/cloudless/orchestrator/internal/remoteaccess"
 )
 
 func readJSON(r *http.Request, target any) error {
@@ -128,6 +130,13 @@ func (s *Server) tailscaleServe(w http.ResponseWriter, r *http.Request) {
 	}
 	s.auditMutation(r, "remote-access", "tailscale-serve", target, "started", "", http.StatusOK)
 	if err := s.remoteAccess.SetServe(r.Context(), input.Enabled); err != nil {
+		if approvalURL := remoteaccess.ServeApprovalURL(err); input.Enabled && approvalURL != "" {
+			s.auditMutation(r, "remote-access", "tailscale-serve", target, "approval-required", "tailnet administrator approval required", http.StatusAccepted)
+			writeJSON(w, http.StatusAccepted, map[string]any{
+				"enabled": false, "activationRequired": true, "authURL": approvalURL,
+			})
+			return
+		}
 		s.auditMutation(r, "remote-access", "tailscale-serve", target, "failed", err.Error(), http.StatusBadGateway)
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return

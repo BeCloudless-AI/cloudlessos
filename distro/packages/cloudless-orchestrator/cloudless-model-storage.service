@@ -1,0 +1,27 @@
+[Unit]
+Description=CloudlessOS shared NFS model storage
+Wants=network-online.target nfs-server.service
+After=network-online.target nfs-server.service
+Before=cloudless-engine.service cloudlessd.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/cloudless/cloudless-model-storage mount
+ExecStop=/usr/lib/cloudless/cloudless-model-storage unmount
+TimeoutStartSec=45
+TimeoutStopSec=45
+User=root
+Group=root
+UMask=0077
+NoNewPrivileges=true
+CapabilityBoundingSet=CAP_SYS_ADMIN CAP_DAC_OVERRIDE
+AmbientCapabilities=CAP_SYS_ADMIN CAP_DAC_OVERRIDE
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

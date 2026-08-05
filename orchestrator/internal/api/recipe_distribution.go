@@ -604,7 +604,11 @@ func verifyRecipePeerModelSnapshots(ctx context.Context, job *jobs.Job, recipe l
 	return digests, nil
 }
 
-func distributeRecipeModel(ctx context.Context, runtime engine.Engine, job *jobs.Job, recipe localrecipes.Recipe, dir string, env map[string]string, peers []recipePeer, verified recipeArtifactManifest) (map[string]string, error) {
+func distributeRecipeModel(ctx context.Context, runtime engine.Engine, job *jobs.Job, recipe localrecipes.Recipe, dir string, env map[string]string, peers []recipePeer, verified recipeArtifactManifest, shared bool) (map[string]string, error) {
+	if shared {
+		job.Progress("verifying-peer-model", "Shared NFS storage is active; verifying the model on every Spark without copying weights.", -1, -1)
+		return verifyRecipePeerModelSnapshots(ctx, job, recipe, dir, env, peers, verified)
+	}
 	peerDigests := make(map[string]string, len(peers))
 	cacheName, ok := modelCacheName(recipe.Model.ID)
 	if !ok {

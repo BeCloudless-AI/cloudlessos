@@ -32,6 +32,7 @@ import (
 	"github.com/cloudless/orchestrator/internal/manifest"
 	"github.com/cloudless/orchestrator/internal/modelcache"
 	"github.com/cloudless/orchestrator/internal/models"
+	"github.com/cloudless/orchestrator/internal/modelstorage"
 	"github.com/cloudless/orchestrator/internal/places"
 	"github.com/cloudless/orchestrator/internal/power"
 	"github.com/cloudless/orchestrator/internal/privileged"
@@ -107,6 +108,21 @@ type Server struct {
 	recipeOps      *recipeops.Store
 	recipeOpsErr   error
 	recipeFailures recipeFailureInjector
+	// recipeRunPreflight is an internal-only seam for deterministic admission
+	// tests. Production leaves it nil and recomputes the current machine and
+	// cluster identity before any recipe preparation is allowed to begin.
+	recipeRunPreflight      func(context.Context, localrecipes.Recipe, recipeops.Operation) error
+	modelStorageRoot        string
+	modelStorageManagedRoot string
+	modelStorageReadyPath   string
+	modelStorageHostApply   func(context.Context, modelstorage.Config) error
+	modelStorageHostLocal   func(context.Context) error
+	modelStorageHostVerify  func(context.Context, modelstorage.Config) error
+	modelStoragePeersApply  func(context.Context, modelstorage.Config) ([]sparkcluster.ModelStorageNodeStatus, error)
+	modelStoragePeersLocal  func(context.Context) ([]sparkcluster.ModelStorageNodeStatus, error)
+	modelStoragePeersVerify func(context.Context, modelstorage.Config) ([]sparkcluster.ModelStorageNodeStatus, error)
+	modelStorageRefresh     func(context.Context) error
+	modelStorageManagedNFS  func() (string, error)
 	// recipeRevalidate is an internal-only seam for the lifecycle failure
 	// matrix. Production servers leave it nil and always execute the complete
 	// hardware/topology/content revalidation.
@@ -298,6 +314,9 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/settings", s.settingsGet)
 	mux.HandleFunc("POST /api/settings/model", s.settingsModel)
 	mux.HandleFunc("POST /api/settings/inference-contract", s.inferenceContractSet)
+	mux.HandleFunc("GET /api/settings/model-storage", s.modelStorageGet)
+	mux.HandleFunc("POST /api/settings/model-storage/nfs", s.modelStorageNFSSet)
+	mux.HandleFunc("POST /api/settings/model-storage/local", s.modelStorageLocalSet)
 	mux.HandleFunc("GET /api/models", s.modelsList)
 	mux.HandleFunc("GET /api/models/huggingface/search", s.huggingFaceSearch)
 	mux.HandleFunc("POST /api/models/huggingface/import", s.huggingFaceImport)

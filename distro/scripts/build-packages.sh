@@ -25,6 +25,8 @@ echo "==> Building cloudlessd $VERSION for linux/$ARCH"
 ( cd "$ROOT/orchestrator"; CGO_ENABLED=0 GOOS=linux GOARCH="$ARCH" go build \
     -ldflags="-s -w" -o "$WORK/cloudless-privileged" ./cmd/cloudless-privileged )
 ( cd "$ROOT/orchestrator"; CGO_ENABLED=0 GOOS=linux GOARCH="$ARCH" go build \
+    -ldflags="-s -w" -o "$WORK/cloudless-model-storage" ./cmd/cloudless-model-storage )
+( cd "$ROOT/orchestrator"; CGO_ENABLED=0 GOOS=linux GOARCH="$ARCH" go build \
     -ldflags="-s -w" -o "$WORK/cloudless-engine" ./cmd/cloudless-engine )
 ( cd "$ROOT/orchestrator"; CGO_ENABLED=0 GOOS=linux GOARCH="$ARCH" go build \
     -ldflags="-s -w" -o "$WORK/cloudless-docker" ./cmd/cloudless-docker )
@@ -57,10 +59,11 @@ finish_package() {
 }
 
 PKG="$WORK/cloudless-orchestrator"
-ORCHESTRATOR_DEPS="docker.io | docker-ce, ca-certificates, git, gnupg, gpgv, python3, util-linux, openssh-client, sshpass, avahi-utils, netplan.io, iputils-ping"
+ORCHESTRATOR_DEPS="docker.io | docker-ce, ca-certificates, git, gnupg, gpgv, python3, util-linux, nfs-common, nfs-kernel-server, openssh-client, sshpass, avahi-utils, netplan.io, iputils-ping"
 make_control "$PKG" cloudless-orchestrator "CloudlessOS local AI orchestrator" "$ORCHESTRATOR_DEPS"
 install -Dm0755 "$WORK/cloudlessd" "$PKG/usr/lib/cloudless/cloudlessd"
 install -Dm0755 "$WORK/cloudless-privileged" "$PKG/usr/lib/cloudless/cloudless-privileged"
+install -Dm0755 "$WORK/cloudless-model-storage" "$PKG/usr/lib/cloudless/cloudless-model-storage"
 install -Dm0755 "$WORK/cloudless-engine" "$PKG/usr/lib/cloudless/cloudless-engine"
 install -Dm0755 "$WORK/cloudless-docker" "$PKG/usr/lib/cloudless/cloudless-docker"
 install -Dm0755 "$WORK/cloudless" "$PKG/usr/bin/cloudless"
@@ -70,6 +73,7 @@ install -Dm0644 "$DISTRO/release/keys/community-keys.json" \
     "$PKG/usr/share/cloudless/community-keys.json"
 install -Dm0644 "$DISTRO/packages/cloudless-orchestrator/cloudlessd.service" "$PKG/lib/systemd/system/cloudlessd.service"
 install -Dm0644 "$DISTRO/packages/cloudless-orchestrator/cloudless-privileged.service" "$PKG/lib/systemd/system/cloudless-privileged.service"
+install -Dm0644 "$DISTRO/packages/cloudless-orchestrator/cloudless-model-storage.service" "$PKG/lib/systemd/system/cloudless-model-storage.service"
 install -Dm0644 "$DISTRO/packages/cloudless-orchestrator/cloudless-engine.service" "$PKG/lib/systemd/system/cloudless-engine.service"
 install -Dm0755 "$DISTRO/packages/cloudless-orchestrator/cloudless-install-tailscale" "$PKG/usr/lib/cloudless/cloudless-install-tailscale"
 install -Dm0755 "$DISTRO/packages/cloudless-orchestrator/cloudless-backup" "$PKG/usr/sbin/cloudless-backup"

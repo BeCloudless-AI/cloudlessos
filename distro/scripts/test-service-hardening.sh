@@ -13,6 +13,7 @@ units=(
   distro/packages/cloudless-hardware/cloudless-hardware.service
   distro/packages/cloudless-orchestrator/cloudless-tailscale-install.service
   distro/packages/cloudless-orchestrator/cloudless-privileged.service
+  distro/packages/cloudless-orchestrator/cloudless-model-storage.service
   distro/packages/cloudless-orchestrator/cloudless-engine.service
   distro/packages/cloudless-orchestrator/cloudlessd.service
   distro/packages/cloudless-updater/cloudless-nvidia-apply.service
@@ -42,6 +43,23 @@ grep -Fq '/var/lib/cloudless/models-cache' "$broker"
 grep -Fq -- '-/home/cloudless/Cloudless/Models' "$broker"
 grep -Fqx 'PrivateDevices=yes' "$broker"
 grep -Fqx 'ExecStart=/usr/lib/cloudless/cloudless-privileged' "$broker"
+
+# This narrowly scoped root helper is intentionally not placed in a private
+# mount namespace: its sole purpose is to make the validated NFS mount visible
+# to cloudlessd, the engine broker and containers. It receives only the mount
+# capability and fixed, typed arguments from a root-owned configuration file.
+model_storage="$ROOT/distro/packages/cloudless-orchestrator/cloudless-model-storage.service"
+grep -Fqx 'User=root' "$model_storage"
+grep -Fqx 'CapabilityBoundingSet=CAP_SYS_ADMIN CAP_DAC_OVERRIDE' "$model_storage"
+grep -Fqx 'AmbientCapabilities=CAP_SYS_ADMIN CAP_DAC_OVERRIDE' "$model_storage"
+grep -Fqx 'ExecStart=/usr/lib/cloudless/cloudless-model-storage mount' "$model_storage"
+grep -Fqx 'ExecStop=/usr/lib/cloudless/cloudless-model-storage unmount' "$model_storage"
+grep -Fqx 'Wants=network-online.target nfs-server.service' "$model_storage"
+grep -Fqx 'After=network-online.target nfs-server.service' "$model_storage"
+if grep -Eq '^(PrivateMounts|ProtectSystem|ProtectHome|PrivateTmp)=' "$model_storage"; then
+  echo "cloudless-model-storage must mount in the host namespace" >&2
+  exit 1
+fi
 
 daemon="$ROOT/distro/packages/cloudless-orchestrator/cloudlessd.service"
 grep -Fqx 'StateDirectoryMode=0751' "$daemon" || {

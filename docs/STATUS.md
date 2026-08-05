@@ -77,7 +77,11 @@ The current gateway identity and recipe lifecycle are documented in
 - Recipe work continues when Model Manager is closed and remains abortable from the desktop.
 - A private recipe health check is not activation; the locked stable endpoint must also return the
   required OpenAI response and internal `cloudless` model identity.
-- Multi-Spark `buildOnce` and `downloadOnce` copy coordinator artifacts to peers over SSH.
+- Multi-Spark `buildOnce` and `downloadOnce` copy coordinator artifacts to peers over SSH by
+  default. Model weights can instead use the coordinator Spark's automatically managed NFSv4.2
+  hub, or an Advanced Interface custom NFSv4.1/4.2 export. The shared hub is bound into the
+  standard cache on every worker; runtime images and node-specific CUDA/JIT caches remain local
+  and are distributed or prepared normally.
 - Coordinator-to-peer transfer uses a per-file content manifest, durable staging and atomic
   promotion. Verified peer files are retained and interrupted transfers resume missing or invalid
   content instead of recopying the complete repository.

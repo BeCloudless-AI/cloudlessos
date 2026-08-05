@@ -14,6 +14,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/cloudless/orchestrator/internal/modelstorage"
 )
 
 const (
@@ -39,6 +41,9 @@ const (
 	ActionRecipeContainerRemove Action = "recipe.container.remove"
 	ActionModelUninstall        Action = "model.uninstall"
 	ActionModelViewsReconcile   Action = "model.views.reconcile"
+	ActionModelStorageNFSApply  Action = "model.storage.nfs.apply"
+	ActionModelStorageLocal     Action = "model.storage.local"
+	ActionModelStorageRefresh   Action = "model.storage.services.refresh"
 )
 
 func (a Action) Valid() bool {
@@ -49,7 +54,8 @@ func (a Action) Valid() bool {
 		ActionTailscaleInstaller, ActionTimezoneSet,
 		ActionClusterNetworkApply, ActionClusterNetworkRemove,
 		ActionRecipeRuntimeRepair, ActionRecipeContainerRemove,
-		ActionModelUninstall, ActionModelViewsReconcile:
+		ActionModelUninstall, ActionModelViewsReconcile,
+		ActionModelStorageNFSApply, ActionModelStorageLocal, ActionModelStorageRefresh:
 		return true
 	default:
 		return false
@@ -211,6 +217,9 @@ func validateRequest(req request) error {
 			return errors.New("invalid model id")
 		}
 		return nil
+	case ActionModelStorageNFSApply:
+		_, err := ParseModelStorageValue(req.Value)
+		return err
 	}
 	if req.Value != "" {
 		return errors.New("action does not accept a value")
@@ -219,6 +228,27 @@ func validateRequest(req request) error {
 		return errors.New("invalid action")
 	}
 	return nil
+}
+
+func ParseModelStorageValue(value string) (modelstorage.Config, error) {
+	var config modelstorage.Config
+	decoder := json.NewDecoder(strings.NewReader(value))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&config); err != nil {
+		return modelstorage.Config{}, errors.New("invalid model storage configuration")
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
+		return modelstorage.Config{}, errors.New("invalid model storage configuration")
+	}
+	config = config.Normalized()
+	if config.Mode != modelstorage.ModeNFS {
+		return modelstorage.Config{}, errors.New("privileged model storage configuration must use NFS")
+	}
+	if err := config.Validate(); err != nil {
+		return modelstorage.Config{}, err
+	}
+	return config, nil
 }
 
 var clusterInterfaceName = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,31}$`)

@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 	"testing"
@@ -72,6 +74,104 @@ func TestWorkerHelperUsesOfficialRayTopology(t *testing.T) {
 	for _, want := range []string{"--network host", "--device nvidia.com/gpu=all", "ray[default]>=2.9", "ray start --block", "NCCL_SOCKET_IFNAME", "--num-gpus=1", "model-progress", "remove-container", "docker rm -f", "*.incomplete", "Model loading took"} {
 		if !strings.Contains(workerScript, want) {
 			t.Fatalf("worker helper missing %q", want)
+		}
+	}
+}
+
+func TestWorkerHelperIsValidPOSIXShell(t *testing.T) {
+	command := exec.Command("sh", "-n")
+	command.Stdin = strings.NewReader(workerScript)
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("worker helper shell syntax is invalid: %s: %v", strings.TrimSpace(string(output)), err)
+	}
+}
+
+func TestWorkerHelperOwnsPersistentNFSLifecycle(t *testing.T) {
+	for _, want := range []string{"nfs-boot", "nfs-apply", "nfs-local", "nfs-status", "mount.nfs4", "Type=nfs4", "rw,hard,nosuid,nodev,noatime", ".cloudless-shared-storage-v1", "/var/lib/cloudless/shared-model-storage", "/var/lib/cloudless/models-cache/hub", "Options=bind"} {
+		if !strings.Contains(workerScript, want) {
+			t.Fatalf("worker helper is missing NFS contract %q", want)
+		}
+	}
+}
+
+func TestWorkerNFSSetupDoesNotTreatSuccessfulPreparationAsFailure(t *testing.T) {
+	if strings.Contains(workerScript, `if ! systemctl enable --now "$nfs_unit" || {`) {
+		t.Fatal("NFS setup uses an OR condition that rolls back after a successful preparation step")
+	}
+	for _, want := range []string{`setup_failed=0`, `if ! systemctl enable "$boot_unit"`, `elif ! systemctl start "$nfs_unit"`, `elif [ "$layout" = external ]`, `elif ! systemctl start "$hub_unit"`} {
+		if !strings.Contains(workerScript, want) {
+			t.Fatalf("NFS setup is missing staged failure handling %q", want)
+		}
+	}
+}
+
+func TestWorkerNFSBootWaitsForFabricAndRetriesFailures(t *testing.T) {
+	for _, expected := range []string{
+		"cloudless-cluster-model-storage.service",
+		`ip route get "$server"`,
+		`systemctl reset-failed "$nfs_unit" "$hub_unit"`,
+		"Restart=on-failure",
+		"RestartSec=5",
+		"TimeoutStartSec=120",
+		`systemctl disable --now "$boot_unit"`,
+	} {
+		if !strings.Contains(workerScript, expected) {
+			t.Fatalf("worker NFS boot recovery is missing %q", expected)
+		}
+	}
+	if strings.Index(workerScript, `ip route get "$server"`) > strings.Index(workerScript, `systemctl start "$nfs_unit"`) {
+		t.Fatal("worker starts NFS before the private fabric route is ready")
+	}
+}
+
+func TestClusterEnrollmentKeepsWorkerSSHAvailableAfterReboot(t *testing.T) {
+	source, err := os.ReadFile("cluster.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	command := string(source)
+	if !strings.Contains(command, "systemctl enable ssh.service") || !strings.Contains(command, "systemctl enable sshd.service") {
+		t.Fatal("cluster enrollment does not persist the worker SSH service")
+	}
+}
+
+func TestWorkerUpgradeSelfHealsSSHPersistence(t *testing.T) {
+	for _, expected := range []string{
+		"ensure-ssh)",
+		"systemctl enable ssh.service",
+		"systemctl enable sshd.service",
+		"OpenSSH server service is not installed",
+	} {
+		if !strings.Contains(workerScript, expected) {
+			t.Fatalf("worker helper is missing SSH persistence behavior %q", expected)
+		}
+	}
+
+	source, err := os.ReadFile("cluster.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(source), `workerPath+" ensure-ssh"`) {
+		t.Fatal("worker helper upgrades do not enforce SSH persistence")
+	}
+}
+
+func TestStorageRemovalCannotDiscardWorkerUpgradeFailure(t *testing.T) {
+	source, err := os.ReadFile("model_storage.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(source)
+	if strings.Contains(text, "if err := upgradeStorageWorker") {
+		t.Fatal("worker upgrade error is shadowed during local-storage restoration")
+	}
+	for _, expected := range []string{
+		"peerErr := upgradeStorageWorker(ctx, node)",
+		"status.Error = cleanStoragePeerError(peerErr)",
+		"errors.Join(result, fmt.Errorf(\"restore local model storage on %s: %w\", node.Name, peerErr))",
+	} {
+		if !strings.Contains(text, expected) {
+			t.Fatalf("storage removal does not preserve worker failure evidence %q", expected)
 		}
 	}
 }

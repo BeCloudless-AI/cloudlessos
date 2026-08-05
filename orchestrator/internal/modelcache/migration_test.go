@@ -1,10 +1,13 @@
 package modelcache
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/cloudless/orchestrator/internal/modelstorage"
 )
 
 func TestPrepareImportsCacheWithoutDeletingLegacyData(t *testing.T) {
@@ -142,5 +145,107 @@ func TestPrepareEmptyCacheIsIdempotent(t *testing.T) {
 	}
 	if err := Prepare(root, "", -1, -1); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestPreparePreservesRootSquashedSharedExportOwnership(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, "shared")
+	source := filepath.Join(parent, "legacy")
+	if err := os.MkdirAll(root, 0o777); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(root, 0o777); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, modelstorage.MarkerName), []byte("cloudless-nfs-v1 test\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(source, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "must-stay-local"), []byte("local"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := Prepare(root, source, 1234, 1234); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(root)
+	if err != nil || info.Mode().Perm() != 0o777 {
+		t.Fatalf("shared export root was modified: %v, %v", info, err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "must-stay-local")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("legacy local cache was imported into shared storage: %v", err)
+	}
+}
+
+func TestPrepareSplitSharedHubPreservesLocalMigrationAndRuntimeCaches(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, "managed")
+	shared := filepath.Join(parent, "shared")
+	source := filepath.Join(parent, "legacy")
+	for _, path := range []string{root, shared, source} {
+		if err := os.MkdirAll(path, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	markerPath := filepath.Join(root, markerName)
+	markerPayload := []byte(`{"schema":1,"source":"legacy-before-nfs"}` + "\n")
+	if err := os.WriteFile(markerPath, markerPayload, 0o640); err != nil {
+		t.Fatal(err)
+	}
+	sharedMarker := filepath.Join(shared, modelstorage.MarkerName)
+	if err := os.WriteFile(sharedMarker, []byte("cloudless-nfs-v1 test\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(sharedMarker, filepath.Join(root, modelstorage.MarkerName)); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "must-not-import"), []byte("legacy"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := Prepare(root, source, -1, -1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(root, runtimeCacheName, "pip")); err != nil {
+		t.Fatalf("local runtime cache was not prepared: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "must-not-import")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("legacy data was imported while split NFS was active: %v", err)
+	}
+	if data, err := os.ReadFile(markerPath); err != nil || string(data) != string(markerPayload) {
+		t.Fatalf("local migration evidence changed: %q, %v", data, err)
+	}
+}
+
+func TestPrepareIgnoresLegacyCompilerCaches(t *testing.T) {
+	parent := t.TempDir()
+	source := filepath.Join(parent, "legacy")
+	root := filepath.Join(parent, "managed")
+	for _, base := range []string{source, root} {
+		if err := os.MkdirAll(filepath.Join(base, "flashinfer"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(source, "flashinfer", ".ninja_deps"), []byte("old"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "flashinfer", ".ninja_deps"), []byte("new"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(source, "hub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "hub", "weights"), []byte("model"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := Prepare(root, source, -1, -1); err != nil {
+		t.Fatal(err)
+	}
+	if data, err := os.ReadFile(filepath.Join(root, "flashinfer", ".ninja_deps")); err != nil || string(data) != "new" {
+		t.Fatalf("local compiler cache changed: %q, %v", data, err)
+	}
+	if data, err := os.ReadFile(filepath.Join(root, "hub", "weights")); err != nil || string(data) != "model" {
+		t.Fatalf("model weights were not imported: %q, %v", data, err)
 	}
 }

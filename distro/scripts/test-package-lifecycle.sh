@@ -417,6 +417,7 @@ PY
   trap - EXIT
   test -x /usr/lib/cloudless/cloudlessd
   test -x /usr/lib/cloudless/cloudless-engine
+  test -x /usr/lib/cloudless/cloudless-model-storage
   test -x /usr/bin/cloudless-desktop-agent
   test -x /usr/bin/cloudless-qualify
   test -s /usr/share/cloudless/physical-validation-matrix.json

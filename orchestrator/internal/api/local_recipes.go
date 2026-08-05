@@ -30,6 +30,7 @@ import (
 	"github.com/cloudless/orchestrator/internal/jobs"
 	"github.com/cloudless/orchestrator/internal/localrecipes"
 	"github.com/cloudless/orchestrator/internal/modelcache"
+	"github.com/cloudless/orchestrator/internal/modelstorage"
 	"github.com/cloudless/orchestrator/internal/privileged"
 	"github.com/cloudless/orchestrator/internal/provision"
 	"github.com/cloudless/orchestrator/internal/recipeops"
@@ -84,14 +85,15 @@ func (s *Server) localRecipesList(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"recipes": recipes, "active": active, "jobs": s.jobs.List("recipe:"),
-		"defaults":   localrecipes.NewManagedDraft(),
-		"contract":   s.inferenceContract(),
-		"cluster":    s.cachedClusterCompute(r.Context(), totalVRAMGB(r.Context())),
-		"plans":      plans,
-		"revisions":  revisions,
-		"operations": operations,
-		"failures":   recipeFailureViews(operations),
-		"trust":      recipeTrustViews(recipes, operations),
+		"defaults":     localrecipes.NewManagedDraft(),
+		"contract":     s.inferenceContract(),
+		"modelStorage": s.state.ModelStorageConfig(),
+		"cluster":      s.cachedClusterCompute(r.Context(), totalVRAMGB(r.Context())),
+		"plans":        plans,
+		"revisions":    revisions,
+		"operations":   operations,
+		"failures":     recipeFailureViews(operations),
+		"trust":        recipeTrustViews(recipes, operations),
 	})
 }
 
@@ -497,6 +499,18 @@ func (s *Server) localRecipeRun(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	admissionCtx, cancelAdmission := context.WithTimeout(r.Context(), 30*time.Second)
+	admissionErr := s.validateRecipeRunPreflight(admissionCtx, operation.RecipeSnapshot, operation)
+	cancelAdmission()
+	if admissionErr != nil {
+		if transitionErr := s.transitionRecipeOperation(operation.ID, recipeops.PhaseFailed, admissionErr); transitionErr != nil {
+			admissionErr = errors.Join(admissionErr, transitionErr)
+		}
+		writeJSON(w, http.StatusPreconditionFailed, map[string]string{
+			"error": admissionErr.Error(), "action": "check",
+		})
 		return
 	}
 	job := s.jobs.Create("recipe:" + recipe.ID)
@@ -1418,6 +1432,17 @@ func recipeModelArtifactKey(recipe localrecipes.Recipe) string {
 var recipeModelRevisionInventory = huggingFaceModelRevisionFiles
 
 func (s *Server) runRecipeModelDownload(ctx context.Context, job *jobs.Job, operationID string, recipe, policyRecipe localrecipes.Recipe, dir string, env map[string]string, token string) (recipeArtifactManifest, error) {
+	_, err := recipeCacheVolume(recipe)
+	if err != nil {
+		return recipeArtifactManifest{}, err
+	}
+	// The shared-storage marker and cross-Spark lock live at the canonical
+	// cache root even when a reviewed recipe selects a child cache directory.
+	release, err := modelstorage.AcquireMutationLock(ctx, modelcache.Root())
+	if err != nil {
+		return recipeArtifactManifest{}, err
+	}
+	defer release()
 	localNode := localRecipeNodeName()
 	if expected, inspectErr := inspectRecipeModelManifest(ctx, s.eng, recipe); inspectErr == nil {
 		started, lastUpdate := time.Now(), time.Time{}
@@ -1732,6 +1757,16 @@ func (s *Server) runLocalRecipe(job *jobs.Job, recipe localrecipes.Recipe, opera
 		s.finishRecipeOperation(job, operationID, errors.New("recipe operation ownership disappeared before preparation"))
 		return
 	}
+	// API-admitted and recovered production runs always carry preflight
+	// evidence. A few boundary-injection tests intentionally construct an
+	// otherwise impossible bare operation so they can exercise later cleanup.
+	if operation.Preflight != nil {
+		job.Progress("revalidating", "Confirming the checked machine and Spark cluster are unchanged...", 0, 8)
+		if err := s.validateRecipeRunPreflight(ctx, recipe, operation); err != nil {
+			s.finishRecipeOperation(job, operationID, err)
+			return
+		}
+	}
 	if recipe.Runtime.Lifecycle.Build.Program == "" {
 		if operation.Preflight == nil || operation.Preflight.ImageDigest == "" {
 			s.finishRecipeOperation(job, operationID, errors.New("checked registry image has no immutable digest; run Check again"))
@@ -1967,12 +2002,21 @@ func (s *Server) runLocalRecipe(job *jobs.Job, recipe localrecipes.Recipe, opera
 	step++
 	peerModelDigests := make(map[string]string)
 	if recipe.Distributed.Nodes > 1 && recipe.Runtime.DownloadOnce {
-		job.Progress("syncing-model", "Preparing to send the model over the Spark fabric...", step, totalSteps)
+		sharedStorage, storageErr := s.sharedModelStorageForRecipe(ctx, recipe)
+		if storageErr != nil {
+			s.finishRecipeOperation(job, operationID, storageErr)
+			return
+		}
+		if sharedStorage {
+			job.Progress("verifying-peer-model", "Shared NFS storage is active; verifying weights on every Spark without copying them...", step, totalSteps)
+		} else {
+			job.Progress("syncing-model", "Preparing to send the model over the Spark fabric...", step, totalSteps)
+		}
 		if err := s.recipeBoundary(operationID, recipeBoundaryModelTransfer); err != nil {
 			s.finishRecipeOperation(job, operationID, err)
 			return
 		}
-		peerModelDigests, err = distributeRecipeModel(ctx, s.eng, job, recipe, workdir, env, peers, modelManifest)
+		peerModelDigests, err = distributeRecipeModel(ctx, s.eng, job, recipe, workdir, env, peers, modelManifest, sharedStorage)
 		if err != nil {
 			s.finishRecipeOperation(job, operationID, err)
 			return
@@ -2215,6 +2259,10 @@ func (s *Server) checkLocalRecipe(job *jobs.Job, recipe localrecipes.Recipe, ope
 	cluster, err = selectRecipeCluster(recipe, cluster)
 	if err != nil {
 		s.failRecipeCheck(job, operationID, "topology", "Requested Spark placement is unavailable", err)
+		return
+	}
+	if _, err := s.sharedModelStorageForRecipe(ctx, recipe); err != nil {
+		s.failRecipeCheck(job, operationID, "storage", "Shared NFS model storage is unavailable", err)
 		return
 	}
 	if err := s.recordRecipeCheck(operationID, "topology", recipeops.CheckPass, "Requested cluster topology is available", "", map[string]string{

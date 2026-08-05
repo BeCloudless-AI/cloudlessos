@@ -15,6 +15,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/cloudless/orchestrator/internal/modelstorage"
 )
 
 const (
@@ -22,6 +24,27 @@ const (
 	markerName       = ".cloudless-model-cache-v1.json"
 	runtimeCacheName = ".cloudless-runtime"
 )
+
+var legacyRuntimeRoots = map[string]struct{}{
+	".agent_harnesses.json": {},
+	".cache":                {},
+	".cloudless-complete":   {},
+	".cloudless-runtime":    {},
+	".humming":              {},
+	".locks":                {},
+	".nv":                   {},
+	".tilelang":             {},
+	".triton":               {},
+	"b12x":                  {},
+	"deepgemm-cache":        {},
+	"flashinfer":            {},
+	"tilelang":              {},
+	"torch_extensions":      {},
+	"torchinductor-cache":   {},
+	"triton-cache":          {},
+	"vllm":                  {},
+	"vllm-cache":            {},
+}
 
 // Root returns the configured host cache location. Packaged services set the
 // same value explicitly; the fallback keeps local tests and developer runs
@@ -62,7 +85,18 @@ func Prepare(root, source string, uid, gid int) error {
 			return fmt.Errorf("inspect legacy model cache: %w", err)
 		}
 	}
-	if err := ensureDirectory(root, os.ModeSetgid|0o750, uid, gid); err != nil {
+	shared := modelstorage.Shared(root)
+	splitShared := shared && sharedMarkerIsSymlink(root)
+	if shared && !splitShared {
+		// A normal NFS export uses root_squash. The host root process can use a
+		// writable export but cannot chmod or chown the server-owned export root.
+		// The mount helper already proved the shared root is writable and placed
+		// its identity marker there, so preserve its server-managed ownership.
+		if err := requireRealDirectory(root); err != nil {
+			return fmt.Errorf("inspect shared model cache root: %w", err)
+		}
+		source, uid, gid = "", -1, -1
+	} else if err := ensureDirectory(root, os.ModeSetgid|0o750, uid, gid); err != nil {
 		return fmt.Errorf("prepare model cache root: %w", err)
 	}
 	// Recipe containers may deliberately run under different numeric users.
@@ -76,6 +110,13 @@ func Prepare(root, source string, uid, gid int) error {
 		if err := ensureDirectory(filepath.Join(root, runtimeCacheName, name), os.ModeSticky|0o777, uid, gid); err != nil {
 			return fmt.Errorf("prepare %s dependency cache: %w", name, err)
 		}
+	}
+	if splitShared {
+		// In split mode only root/hub is NFS-backed. The cache root, migration
+		// marker, and compiler/runtime caches remain local. Do not rewrite the
+		// local migration marker while NFS is active or the next switch back to
+		// local storage would unnecessarily re-import the legacy Docker volume.
+		return nil
 	}
 	markerPath := filepath.Join(root, markerName)
 	if marker, err := readMarker(markerPath); err == nil && marker.Schema == 1 && marker.Source == source {
@@ -111,6 +152,12 @@ func importTree(source, destination string, uid, gid int) error {
 		if relative == "." {
 			return nil
 		}
+		if legacyRuntimePath(relative) {
+			if entry.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
 		target := filepath.Join(destination, relative)
 		info, err := entry.Info()
 		if err != nil {
@@ -127,6 +174,20 @@ func importTree(source, destination string, uid, gid int) error {
 			return fmt.Errorf("unsupported cache entry %s (%s)", relative, info.Mode().Type())
 		}
 	})
+}
+
+func sharedMarkerIsSymlink(root string) bool {
+	info, err := os.Lstat(filepath.Join(root, modelstorage.MarkerName))
+	return err == nil && info.Mode()&os.ModeSymlink != 0
+}
+
+func legacyRuntimePath(relative string) bool {
+	first := relative
+	if index := strings.IndexRune(relative, filepath.Separator); index >= 0 {
+		first = relative[:index]
+	}
+	_, skip := legacyRuntimeRoots[first]
+	return skip
 }
 
 func importSymlink(sourceRoot, source, destination string, uid, gid int) error {
@@ -249,6 +310,9 @@ func equalFiles(left, right string) (bool, error) {
 	rightInfo, err := os.Stat(right)
 	if err != nil {
 		return false, err
+	}
+	if os.SameFile(leftInfo, rightInfo) {
+		return true, nil
 	}
 	if leftInfo.Size() != rightInfo.Size() {
 		return false, nil

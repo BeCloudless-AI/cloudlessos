@@ -1,0 +1,14 @@
+{
+  "title": "Shared model storage for multi-Spark recipes",
+  "summary": "CloudlessOS 0.2.7-6 adds managed and custom NFS model storage for DGX Spark clusters, avoiding redundant model-weight copies while preserving safe local runtime caches, strict verification, and automatic recovery.",
+  "changes": [
+    "Add a guided Shared NFS model storage option that turns the coordinator Spark into a private NFSv4.2 model hub without requiring users to enter a server address or export path.",
+    "Offer Advanced Interface support for operator-managed NFSv4.1 and NFSv4.2 exports, with bounded inputs and a responsive setup modal across desktop and narrow displays.",
+    "Keep CUDA, DeepGEMM, FlashInfer, torch-extension, container-image, and other node-specific runtime caches local while sharing only Hugging Face model weights.",
+    "Verify that every enrolled Spark sees the same writable cluster marker before enabling shared storage or launching a recipe, and fail closed instead of silently reverting to unsafe copying.",
+    "Serialize shared-cache downloads, promotion, deletion, and garbage collection to prevent concurrent mutation of the same model files.",
+    "Make NFS and worker SSH configuration survive service restarts and machine reboots, including retrying worker mounts until the private Spark fabric route is available.",
+    "Roll every node back to its previous storage mode when setup fails, preserve hidden local model caches, and cleanly remove generated mount state when returning to local storage.",
+    "Refresh stale recipe validation when machine, cluster, or storage facts change so future launches re-check the environment before starting."
+  ]
+}

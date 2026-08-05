@@ -12,7 +12,14 @@ adduser cloudlessd cloudless >/dev/null 2>&1 || true
 # group/mode, and the desktop is never added to cloudless-control.
 install -d -m 0751 -o cloudlessd -g cloudless-control /var/lib/cloudless
 install -d -m 0750 -o cloudlessd -g cloudless-control /var/lib/cloudless/builds
-install -d -m 2750 -o cloudlessd -g cloudless /var/lib/cloudless/models-cache
+if [ -f /var/lib/cloudless/models-cache/.cloudless-shared-storage-v1 ]; then
+    # Standard NFS exports use root_squash. Preserve server-managed ownership
+    # during upgrades instead of making dpkg fail on an otherwise writable
+    # shared cache root.
+    test -d /var/lib/cloudless/models-cache && test -w /var/lib/cloudless/models-cache
+else
+    install -d -m 2750 -o cloudlessd -g cloudless /var/lib/cloudless/models-cache
+fi
 
 # Releases which ran cloudlessd as root created managed application credentials
 # below this directory as root:root 0700.  After the daemon privilege split that
@@ -53,6 +60,16 @@ systemctl daemon-reload >/dev/null 2>&1 || true
 systemctl enable cloudless-privileged.service >/dev/null 2>&1 || true
 systemctl enable cloudless-engine.service >/dev/null 2>&1 || true
 systemctl enable cloudlessd.service >/dev/null 2>&1 || true
+if [ -s /etc/cloudless/model-storage.json ]; then
+    systemctl enable cloudless-model-storage.service >/dev/null 2>&1 || true
+else
+    # A failed custom-NFS attempt from an older release may have already
+    # removed its config while leaving systemd's historical failed flag set.
+    # Local storage is healthy in that state; clear the stale unit evidence so
+    # Doctor and system status reflect the current configuration after upgrade.
+    systemctl disable --now cloudless-model-storage.service >/dev/null 2>&1 || true
+    systemctl reset-failed cloudless-model-storage.service >/dev/null 2>&1 || true
+fi
 # Install the official Tailscale client on the next normal boot, outside dpkg's
 # lock. It remains logged out and shares nothing until the user opts in.
 systemctl enable cloudless-tailscale-install.service >/dev/null 2>&1 || true

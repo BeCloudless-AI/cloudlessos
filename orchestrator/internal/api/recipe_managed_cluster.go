@@ -111,7 +111,7 @@ func launchManagedRecipePeer(ctx context.Context, recipe localrecipes.Recipe, to
 	return recipeCommandOutput(recipeSSHCommand(ctx, topology.Workdir, topology.Env, peer, append([]string{"docker"}, args...)...))
 }
 
-func prepareManagedRecipePeers(ctx context.Context, runtime engine.Engine, job *jobs.Job, recipe localrecipes.Recipe, topology managedRecipeTopology, token, executionImage string) error {
+func (s *Server) prepareManagedRecipePeers(ctx context.Context, runtime engine.Engine, job *jobs.Job, recipe localrecipes.Recipe, topology managedRecipeTopology, token, executionImage string) error {
 	if len(topology.Peers) == 0 {
 		return nil
 	}
@@ -137,8 +137,12 @@ func prepareManagedRecipePeers(ctx context.Context, runtime engine.Engine, job *
 	if err := distributeRecipeImage(ctx, runtime, job, executionRecipe, topology.Workdir, topology.Env, topology.Peers); err != nil {
 		return err
 	}
+	sharedStorage, err := s.sharedModelStorageForRecipe(ctx, recipe)
+	if err != nil {
+		return err
+	}
 	for index, modelRecipe := range models {
-		if _, err := distributeRecipeModel(ctx, runtime, job, modelRecipe, topology.Workdir, topology.Env, topology.Peers, manifests[index]); err != nil {
+		if _, err := distributeRecipeModel(ctx, runtime, job, modelRecipe, topology.Workdir, topology.Env, topology.Peers, manifests[index], sharedStorage); err != nil {
 			return err
 		}
 	}

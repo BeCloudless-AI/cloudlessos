@@ -1226,6 +1226,11 @@
   .cluster-selection-panel b, .cluster-selection-panel small { display: block; }
   .cluster-selection-panel b { color: var(--ink); font-size: 11px; }
   .cluster-selection-panel small { margin-top: 3px; color: var(--muted); font-size: 9.5px; line-height: 1.4; }
+  .cluster-storage-panel { align-items: flex-start; padding: 15px; }
+  .cluster-storage-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; }
+  .cluster-selection-panel .cluster-storage-heading b { font-size: 11.5px; }
+  .cluster-storage-heading .inf-state-pill { min-height: 22px; padding: 4px 8px; font-size: 8px; }
+  .cluster-storage-switch { margin-top: 2px; }
   .cluster-discovery { display: grid; grid-template-columns: minmax(220px, .82fr) minmax(260px, 1.18fr); gap: 16px; }
   .cluster-discovery-stage { position: relative; min-height: 224px; padding: 16px; display: grid; place-items: center; border: 1px solid color-mix(in srgb, var(--blue) 19%, var(--hair)); border-radius: 16px; background: radial-gradient(circle at 50% 45%, color-mix(in srgb, var(--blue) 8%, transparent), transparent 58%), var(--panel-2); overflow: hidden; isolation: isolate; }
   .cluster-discovery-stage::after { content: ''; position: absolute; inset: auto 18px 14px; height: 1px; background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--blue) 24%, var(--hair)), transparent); }
@@ -1386,7 +1391,7 @@
   .cluster-danger { color: var(--warn) !important; }
   .cluster-status-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
   .cluster-status-grid .machine-fact { min-height: 58px; }
-  @media (max-width: 720px) { .cluster-fields, .cluster-status-grid, .cluster-cable-tips, .cluster-discovery, .cluster-next-list, .cluster-connect-stages { grid-template-columns: 1fr; } .cluster-nodes { grid-template-columns: 1fr; } .cluster-link { min-height: 30px; transform: rotate(90deg); } .cluster-cable-visual { grid-template-columns: 86px minmax(64px, 1fr) 86px; gap: 7px; } .cluster-time { display: none; } }
+  @media (max-width: 720px) { .cluster-fields, .cluster-storage-fields, .cluster-status-grid, .cluster-cable-tips, .cluster-discovery, .cluster-next-list, .cluster-connect-stages { grid-template-columns: 1fr; } .cluster-nodes { grid-template-columns: 1fr; } .cluster-link { min-height: 30px; transform: rotate(90deg); } .cluster-cable-visual { grid-template-columns: 86px minmax(64px, 1fr) 86px; gap: 7px; } .cluster-time { display: none; } }
   @keyframes clusterCableFlowVertical { 0% { top: -8px; opacity: 0; } 15%, 85% { opacity: 1; } 100% { top: calc(100% - 3px); opacity: 0; } }
   @media (max-width: 480px) {
     .cluster-page { gap: 14px; }
@@ -1552,6 +1557,42 @@
   .key-dialog-input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-soft); background: var(--card-strong); }
   .key-dialog-help { margin-top: 7px; color: var(--faint); font-size: 10.5px; }
   .key-dialog-error { min-height: 18px; margin-top: 7px; color: var(--err); font-size: 11px; }
+  .key-dialog.nfs-storage-dialog { width: min(680px, 100%); }
+  .nfs-storage-dialog #key-dialog-content, .nfs-storage-dialog .key-dialog-body,
+  .nfs-storage-dialog .cluster-storage-custom { min-width: 0; max-width: 100%; }
+  .nfs-storage-dialog .key-dialog-head { padding: 22px 22px 0; }
+  .nfs-storage-dialog .key-dialog-body { padding: 22px; display: grid; gap: 16px; }
+  .cluster-storage-warning {
+    padding: 13px 14px; display: grid; grid-template-columns: 18px minmax(0, 1fr); align-items: start; gap: 10px;
+    border: 1px solid color-mix(in srgb, var(--warn) 28%, var(--hair)); border-radius: 12px;
+    color: var(--ink-2); background: color-mix(in srgb, var(--warn) 7%, var(--panel-2)); font-size: 10.5px; line-height: 1.55;
+  }
+  .cluster-storage-warning > .ui-icon { width: 16px; height: 16px; margin-top: 1px; color: var(--warn); }
+  .cluster-storage-warning b { display: block; margin-bottom: 2px; color: var(--ink); font-size: 11px; }
+  .cluster-storage-fields { width: 100%; min-width: 0; max-width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(108px, .58fr); align-items: end; gap: 12px; overflow: hidden; }
+  .cluster-storage-field { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+  .cluster-storage-field > .fld-label { color: var(--muted); font-size: 9px; font-weight: 740; letter-spacing: .38px; text-transform: uppercase; }
+  .cluster-storage-field > .fld-input {
+    display: block; width: 100%; min-width: 0; max-width: 100%; min-height: 42px; box-sizing: border-box; padding: 9px 11px; border: 1px solid var(--line-2); border-radius: 10px;
+    outline: none; color: var(--ink); background: var(--control); font: inherit; font-size: 11.5px; transition: border-color .15s, box-shadow .15s, background .15s;
+  }
+  .cluster-storage-field > .fld-input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px var(--blue-soft); background: var(--card-strong); }
+  .cluster-storage-field > .fld-input[aria-invalid="true"] { border-color: var(--err); box-shadow: 0 0 0 3px color-mix(in srgb, var(--err) 10%, transparent); }
+  .cluster-storage-summary {
+    min-height: 42px; padding: 11px 12px; display: grid; grid-template-columns: 16px minmax(0, 1fr); align-items: start; gap: 9px;
+    border: 1px solid var(--hair); border-radius: 11px; color: var(--muted); background: var(--panel-2); font-size: 10px; line-height: 1.5;
+  }
+  .cluster-storage-summary > .ui-icon { width: 15px; height: 15px; margin-top: 1px; color: var(--blue); }
+  .cluster-storage-summary.error { color: var(--err); border-color: color-mix(in srgb, var(--err) 28%, var(--hair)); background: color-mix(in srgb, var(--err) 7%, var(--panel-2)); }
+  .cluster-storage-summary.error > .ui-icon { color: var(--err); }
+  .cluster-storage-custom { padding: 0 13px 13px; overflow: hidden; border: 1px solid var(--hair); border-radius: 12px; background: var(--panel-2); }
+  .cluster-storage-custom summary { padding: 12px 0 0; color: var(--muted); font-size: 10px; font-weight: 720; cursor: pointer; }
+  .cluster-storage-custom[open] summary { padding-bottom: 12px; color: var(--ink); }
+  .nfs-storage-dialog .key-dialog-actions { margin-top: 0; }
+  @media (max-width: 720px) {
+    .key-dialog.nfs-storage-dialog { width: min(520px, 100%); }
+    .cluster-storage-fields { grid-template-columns: 1fr; align-items: stretch; }
+  }
   .uninstall-summary {
     padding: 13px 14px; border: 1px solid var(--hair); border-radius: 12px;
     background: var(--panel-2); color: var(--ink-2); font-size: 11.5px; line-height: 1.55;
@@ -4408,7 +4449,16 @@
 
 <script src="vendor/three.min.js"></script>
 <script>
-const api = (p, o) => fetch(p, o).then(r => r.json());
+const api = async (path, options) => {
+  const response = await fetch(path, options);
+  const payload = await response.json();
+  if (!response.ok) {
+    const failure = new Error(payload?.error || `Cloudless request failed (${response.status})`);
+    failure.status = response.status;
+    throw failure;
+  }
+  return payload;
+};
 const GLYPH = { 'open-webui': '💬', comfyui: '🎨', 'ai-toolkit': '🎛️', unsloth: '🦥', openclaw: '🦞', hermes: '🪽' };
 const TILE_BG = {
   'open-webui': 'linear-gradient(135deg,#74b4ff,#4f8bff)',
@@ -6581,7 +6631,9 @@ function clusterHealthLayers(health = {}) {
 async function renderSparkClusterPage(c) {
 	if (!c) return;
   c.innerHTML = `<div class="cluster-page">${clusterHero('Checking')}<section class="machine-card" aria-busy="true"><div class="cluster-busy-panel" role="status"><i>${uiIcon('reload')}</i><span><b>Checking your Spark</b><span>Reading the high-speed connection and current cluster setup…</span></span></div></section></div>`;
-  let status; try { status = await api('/api/system/spark-cluster'); } catch { status = { error: 'CloudlessOS could not inspect Spark clustering.' }; }
+	let status, modelStorage;
+	try { [status, modelStorage] = await Promise.all([api('/api/system/spark-cluster'), api('/api/settings/model-storage').catch(error => ({error:error.message || 'Model storage status is unavailable.'}))]); }
+	catch { status = { error: 'CloudlessOS could not inspect Spark clustering.' }; modelStorage = {error:'Model storage status is unavailable.'}; }
 	if (!c.isConnected) return;
   if (status.error) { c.innerHTML = `<div class="cluster-page">${clusterHero('Unavailable')}<section class="machine-card"><div class="cluster-readiness-summary attention"><span class="cluster-readiness-symbol">${uiIcon('alert')}</span><span class="cluster-readiness-copy"><b>Cluster information is unavailable</b><span>${escapeHtml(status.error)}</span></span></div><div class="cluster-actions"><button class="btn primary" id="cluster-status-retry">${uiIcon('reload')}Try again</button></div></section></div>`; c.querySelector('#cluster-status-retry').onclick = () => renderSparkClusterPage(c); return; }
   const operation = status.operation || {};
@@ -6594,7 +6646,7 @@ async function renderSparkClusterPage(c) {
     c.querySelector('#cluster-operation-recover').onclick = () => { clusterWizard = {step:1,peers:[],host:operation.peerHost || '',username:'',password:'',cable:false,preflight:null,busy:false,error:'',adding:false,existingNodes:0,operation:null}; renderSparkClusterWizard(c); };
     return;
   }
-  if (status.configured) { renderSparkClusterStatus(c, status); return; }
+  if (status.configured) { renderSparkClusterStatus(c, status, modelStorage); return; }
   renderSparkClusterWizard(c);
 }
 function renderSparkClusterWizard(c) {
@@ -6663,7 +6715,18 @@ function bindSparkClusterWizard(c) {
     events.onerror = () => finish('The progress connection closed. Reopen Spark Cluster to see the durable operation state.');
   };
 }
-function renderSparkClusterStatus(c, status) {
+function clusterModelStorageCard(storage) {
+  storage = storage || {config:{mode:'local'},ready:true};
+  const config = storage.config || {mode:'local'}, nfs = config.mode === 'nfs';
+  const ready = !nfs || storage.ready === true;
+  const nodeSummary = nfs && Array.isArray(storage.nodes) ? ` Â· ${storage.nodes.filter(node => node.ready).length + 1} Spark${storage.nodes.length ? 's' : ''} verified` : '';
+  const detail = nfs
+    ? `${escapeHtml(config.server || '')}:${escapeHtml(config.export || '')} Â· NFSv${escapeHtml(config.version || '4.2')}${nodeSummary}`
+    : 'Each Spark keeps a verified local copy on its own NVMe storage.';
+  const displayDetail = nfs && config.managed ? `Hosted by this coordinator Spark · NFSv${escapeHtml(config.version || '4.2')}${nodeSummary}` : detail;
+  return `<div class="cluster-selection-panel cluster-storage-panel"><span><span class="cluster-storage-heading"><b>Shared NFS model storage</b><span class="inf-state-pill ${ready ? 'ready' : ''}">${nfs ? (ready ? 'SHARED' : 'ATTENTION') : 'LOCAL'}</span></span><small>${displayDetail}</small>${storage.error ? `<small class="txt-danger">${escapeHtml(storage.error)}</small>` : ''}<small>${nfs ? 'Recipes verify the same writable model hub on every Spark and skip weight transfer.' : 'Turn this on and Cloudless will use this coordinator as the shared model hub.'}</small></span><label class="switch cluster-storage-switch" title="${nfs ? 'Return to local model storage' : 'Set up shared model storage'}"><input type="checkbox" id="cluster-nfs-toggle" ${nfs ? 'checked' : ''}><span class="track2"></span></label></div>`;
+}
+function renderSparkClusterStatus(c, status, modelStorage) {
   const healthy = Boolean(status.healthy);
   const operation = status.operation || {};
   const operationActive = operation.id && operation.phase !== 'completed' && operation.phase !== 'error';
@@ -6687,11 +6750,14 @@ function renderSparkClusterStatus(c, status) {
     return `<div class="cluster-peer cluster-node-card ${node.selected === false ? 'standby' : ''}"><input class="cluster-node-select" data-cluster-node="${escapeAttr(identity)}" type="checkbox" aria-label="Use ${escapeAttr(node.name || node.host || `Spark ${index + 2}`)} for distributed compute" ${node.selected === false ? '' : 'checked'} ${node.healthy && node.workerReady ? '' : 'disabled'}>${uiIcon('machine')}<span class="cluster-peer-copy"><b>${escapeHtml(node.name || node.host || `Spark ${index + 2}`)}</b><span>Worker ${index + 1} · ${escapeHtml((node.ips || []).join(' · ') || node.host || 'Private address unavailable')}</span>${stats}</span>${addressFailed ? `<button class="btn" data-cluster-rebind="${escapeAttr(identity)}">Update address</button>` : ''}<span class="inf-state-pill ${node.healthy ? 'ready' : ''}">${node.selected === false ? 'STANDBY' : (node.healthy ? 'SELECTED' : 'CHECK')}</span></div>`;
   }).join('')}</div>`;
   const selectionPanel = workers.length > 1 ? `<div class="cluster-selection-panel"><span><b>Compute subset: ${selectedCount} of ${nodeCount} Sparks</b><small>Choose exactly which healthy workers managed models use. Unselected Sparks remain connected as standby nodes.</small></span><button class="btn primary" id="cluster-save-selection">Save selection</button></div>` : '';
+  const storagePanel = clusterModelStorageCard(modelStorage);
   const canAdd = nodeCount < 8;
-  c.innerHTML = `<div class="cluster-page">${clusterHero(healthy ? `${nodeCount} nodes ready` : 'Needs attention', healthy)}<section class="machine-card"><div class="cluster-connected-hero ${healthy ? '' : 'attention'}"><span class="cluster-connected-copy"><b>${healthy ? `Your ${nodeCount}-Spark cluster is connected` : 'One cluster layer needs attention'}</b><span>${healthy ? 'Every enrolled Spark is reachable and ready for distributed workloads.' : 'Cable, normal network, secure login, private fabric, and AI worker health are checked separately below.'}</span></span><span class="cluster-health-orb">${uiIcon(healthy ? 'check' : 'alert')}</span></div>${clusterHealthLayers(status.health)}${nodeCards}${selectionPanel}${!healthy ? clusterChecks(status.checks) : ''}<div class="cluster-status-grid"><div class="machine-fact"><div class="machine-fact-label">Topology</div><div class="machine-fact-value">${status.topology === 'direct' ? 'Direct cable' : 'Managed RoCE switch'}</div></div><div class="machine-fact"><div class="machine-fact-label">Cluster size</div><div class="machine-fact-value">${nodeCount} of 8 Sparks</div></div><div class="machine-fact"><div class="machine-fact-label">Active compute</div><div class="machine-fact-value">${selectedCount} Sparks selected</div></div></div><div class="machine-driver-note">${uiIcon('alert')}<span>Cluster memory is aggregate, not one shared-memory computer. Distributed models are partitioned across the selected nodes.</span></div>${healthy ? `<details class="cluster-advanced"><summary>Technical details and connection checks</summary><div class="cluster-advanced-body">${clusterChecks(status.checks)}</div></details>` : ''}<div class="cluster-actions">${canAdd ? `<button class="btn primary" id="cluster-add">${uiIcon('plus')}Add another Spark</button>` : ''}<button class="btn" id="cluster-refresh">${uiIcon('reload')}<span>${healthy ? 'Check all nodes' : 'Run health check'}</span></button><button class="btn cluster-danger" id="cluster-disconnect">${uiIcon('trash')}Disconnect cluster</button></div></section></div>`;
+  c.innerHTML = `<div class="cluster-page">${clusterHero(healthy ? `${nodeCount} nodes ready` : 'Needs attention', healthy)}<section class="machine-card"><div class="cluster-connected-hero ${healthy ? '' : 'attention'}"><span class="cluster-connected-copy"><b>${healthy ? `Your ${nodeCount}-Spark cluster is connected` : 'One cluster layer needs attention'}</b><span>${healthy ? 'Every enrolled Spark is reachable and ready for distributed workloads.' : 'Cable, normal network, secure login, private fabric, and AI worker health are checked separately below.'}</span></span><span class="cluster-health-orb">${uiIcon(healthy ? 'check' : 'alert')}</span></div>${clusterHealthLayers(status.health)}${nodeCards}${selectionPanel}${storagePanel}${!healthy ? clusterChecks(status.checks) : ''}<div class="cluster-status-grid"><div class="machine-fact"><div class="machine-fact-label">Topology</div><div class="machine-fact-value">${status.topology === 'direct' ? 'Direct cable' : 'Managed RoCE switch'}</div></div><div class="machine-fact"><div class="machine-fact-label">Cluster size</div><div class="machine-fact-value">${nodeCount} of 8 Sparks</div></div><div class="machine-fact"><div class="machine-fact-label">Active compute</div><div class="machine-fact-value">${selectedCount} Sparks selected</div></div></div><div class="machine-driver-note">${uiIcon('alert')}<span>Cluster memory is aggregate, not one shared-memory computer. Distributed models are partitioned across the selected nodes.</span></div>${healthy ? `<details class="cluster-advanced"><summary>Technical details and connection checks</summary><div class="cluster-advanced-body">${clusterChecks(status.checks)}</div></details>` : ''}<div class="cluster-actions">${canAdd ? `<button class="btn primary" id="cluster-add">${uiIcon('plus')}Add another Spark</button>` : ''}<button class="btn" id="cluster-refresh">${uiIcon('reload')}<span>${healthy ? 'Check all nodes' : 'Run health check'}</span></button><button class="btn cluster-danger" id="cluster-disconnect">${uiIcon('trash')}Disconnect cluster</button></div></section></div>`;
   if (operationBanner) c.querySelector('.machine-card')?.insertAdjacentHTML('afterbegin', operationBanner);
   document.getElementById('cluster-refresh').onclick = () => renderSparkClusterPage(c);
   document.getElementById('cluster-disconnect').onclick = () => openSparkClusterDisconnect(c, status);
+  const nfsToggle = document.getElementById('cluster-nfs-toggle');
+  if (nfsToggle) nfsToggle.onchange = () => nfsToggle.checked ? openClusterNFSStorage(c, status) : openClusterLocalStorage(c, status, modelStorage);
   const saveSelection = document.getElementById('cluster-save-selection');
   if (saveSelection) saveSelection.onclick = async () => {
     const all = [...c.querySelectorAll('[data-cluster-node]')], selected = all.filter(input => input.checked).map(input => input.dataset.clusterNode);
@@ -6714,6 +6780,77 @@ function renderSparkClusterStatus(c, status) {
     };
   });
   const add = document.getElementById('cluster-add'); if (add) add.onclick = () => { clusterWizard = {step:1,peers:[],host:'',username:'',password:'',cable:false,preflight:null,busy:false,error:'',adding:true,existingNodes:nodeCount}; renderSparkClusterWizard(c); };
+}
+async function waitForModelStorageRefresh(c, successMessage) {
+  await new Promise(resolve => setTimeout(resolve, 3000));
+  for (let attempt = 0; attempt < 24; attempt++) {
+    try {
+      const response = await fetch('/api/health', {cache:'no-store'});
+      if (response.ok) {
+        await renderSparkClusterPage(c);
+        toast(successMessage);
+        return;
+      }
+    } catch {}
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+  renderSparkClusterPage(c);
+  toast('Cloudless is still refreshing its storage view');
+}
+function openClusterNFSStorage(c, status) {
+  const layer = document.getElementById('key-dialog-layer'), dialog = document.getElementById('key-dialog'), content = document.getElementById('key-dialog-content');
+  const cancel = () => { closeKeyDialog(); renderSparkClusterPage(c); };
+  const advanced = advancedInterfaceEnabled();
+  const customFields = advanced ? `<details class="cluster-storage-custom" id="cluster-nfs-custom"><summary>Use a different NFS server</summary><div class="cluster-storage-fields"><label class="cluster-storage-field" for="cluster-nfs-server"><span class="fld-label">NFS server</span><input class="fld-input" id="cluster-nfs-server" placeholder="nas.example.com or 10.0.0.8" autocomplete="off" spellcheck="false"></label><label class="cluster-storage-field" for="cluster-nfs-export"><span class="fld-label">Export path</span><input class="fld-input" id="cluster-nfs-export" placeholder="/cloudless/models" autocomplete="off" spellcheck="false"></label><label class="cluster-storage-field" for="cluster-nfs-version"><span class="fld-label">NFS version</span><select class="fld-input" id="cluster-nfs-version"><option value="4.2">NFSv4.2</option><option value="4.1">NFSv4.1</option></select></label></div><div class="key-dialog-help">Custom exports must provide consistent UID/GID mapping, equivalent ACLs, or fabric-restricted <code>no_root_squash</code>.</div></details>` : '';
+  dialog.classList.add('nfs-storage-dialog');
+  content.innerHTML = `<div class="key-dialog-head"><span class="key-dialog-icon">${uiIcon('network')}</span><div class="key-dialog-heading"><div class="key-dialog-title" id="key-dialog-title">Share model weights from this Spark</div><div class="key-dialog-sub">Cloudless will make this coordinator the private model-weight hub for the cluster. No server address or folder setup is required.</div></div><button class="key-dialog-close" id="cluster-nfs-close">${uiIcon('close')}</button></div><div class="key-dialog-body"><div class="cluster-storage-warning">${uiIcon('alert')}<span><b>Unload Cloudless AI before changing storage.</b>Cloudless will share only the Hugging Face model hub over the private Spark fabric. CUDA, DeepGEMM, FlashInfer and other compiled caches stay local to each Spark.</span></div><div class="cluster-storage-summary" id="cluster-nfs-error">${uiIcon('check')}<span><b>Recommended setup:</b> this coordinator keeps the model weights on its NVMe and every worker reads those same files through NFSv4.2. Existing worker-local weights remain safe and return if you switch back.</span></div>${customFields}<div class="key-dialog-actions"><button class="btn" id="cluster-nfs-cancel">Cancel</button><button class="btn primary" id="cluster-nfs-save">${uiIcon('download')}<span>Set up and verify</span></button></div></div>`;
+  layer.classList.remove('hidden');
+  document.getElementById('cluster-nfs-close').onclick = cancel;
+  document.getElementById('cluster-nfs-cancel').onclick = cancel;
+  document.getElementById('cluster-nfs-save').onclick = async event => {
+    const button = event.currentTarget, error = document.getElementById('cluster-nfs-error');
+    const custom = advanced && document.getElementById('cluster-nfs-custom')?.open;
+    const serverInput = document.getElementById('cluster-nfs-server'), exportInput = document.getElementById('cluster-nfs-export');
+    const request = custom ? {managed:false,server:serverInput.value.trim(),export:exportInput.value.trim(),version:document.getElementById('cluster-nfs-version').value} : {managed:true};
+    if (custom) {
+      serverInput.setAttribute('aria-invalid', String(!request.server)); exportInput.setAttribute('aria-invalid', String(!request.export));
+      if (!request.server || !request.export) { error.classList.add('error'); error.innerHTML = `${uiIcon('alert')}<span>Enter both the NFS server and its absolute export path.</span>`; return; }
+    }
+    button.disabled = true; document.getElementById('cluster-nfs-cancel').disabled = true;
+    button.innerHTML = `<span class="key-dialog-spinner" aria-hidden="true"></span><span>Verifying every Sparkâ€¦</span>`;
+    error.classList.remove('error'); error.innerHTML = `${uiIcon('reload')}<span>Mounting the export and proving that every Spark sees the same writable storage. This may take up to two minutes.</span>`;
+    try {
+      await api('/api/settings/model-storage/nfs', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(request)});
+      closeKeyDialog(); toast('Refreshing Cloudless storage servicesÃ¢â‚¬Â¦'); await waitForModelStorageRefresh(c, 'Shared NFS model storage is ready');
+    } catch (failure) {
+      button.disabled = false; document.getElementById('cluster-nfs-cancel').disabled = false;
+      button.innerHTML = `${uiIcon('download')}<span>Set up and verify</span>`;
+      error.classList.add('error'); error.innerHTML = `${uiIcon('alert')}<span>${escapeHtml(failure.message || 'Cloudless could not verify the shared NFS export.')}</span>`;
+    }
+  };
+  ['cluster-nfs-server', 'cluster-nfs-export'].forEach(id => { const input = document.getElementById(id); if (input) input.oninput = event => event.currentTarget.removeAttribute('aria-invalid'); });
+  setTimeout(() => document.getElementById('cluster-nfs-save')?.focus(), 0);
+}
+function openClusterLocalStorage(c, status, modelStorage) {
+  const layer = document.getElementById('key-dialog-layer'), content = document.getElementById('key-dialog-content');
+  const config = modelStorage?.config || {};
+  const cancel = () => { closeKeyDialog(); renderSparkClusterPage(c); };
+  content.innerHTML = `<div class="key-dialog-head"><div class="key-dialog-heading"><div class="key-dialog-title" id="key-dialog-title">Return to local model storage?</div><div class="key-dialog-sub">Cloudless will unmount ${escapeHtml(config.server || 'the NFS server')}:${escapeHtml(config.export || '')} on every Spark.</div></div><button class="key-dialog-close" id="cluster-local-close">${uiIcon('close')}</button></div><div class="key-dialog-body"><div class="machine-driver-note">${uiIcon('alert')}<span><b>Unload Cloudless AI first.</b><br>Weights previously stored on each Spark's NVMe will become visible again. Future multi-Spark recipes will copy any missing weights over the private fabric.</span></div><div class="key-dialog-help" id="cluster-local-error">No files on the NFS export will be deleted.</div><div class="key-dialog-actions"><button class="btn" id="cluster-local-cancel">Cancel</button><button class="btn primary" id="cluster-local-confirm">Return to local storage</button></div></div>`;
+  layer.classList.remove('hidden');
+  document.getElementById('cluster-local-close').onclick = cancel;
+  document.getElementById('cluster-local-cancel').onclick = cancel;
+  document.getElementById('cluster-local-confirm').onclick = async event => {
+    const button = event.currentTarget, error = document.getElementById('cluster-local-error');
+    button.disabled = true; document.getElementById('cluster-local-cancel').disabled = true;
+    button.innerHTML = `<span class="key-dialog-spinner" aria-hidden="true"></span><span>Restoring local storageâ€¦</span>`;
+    try {
+      await api('/api/settings/model-storage/local', {method:'POST'});
+      closeKeyDialog(); toast('Refreshing Cloudless storage servicesÃ¢â‚¬Â¦'); await waitForModelStorageRefresh(c, 'Local NVMe model storage restored');
+    } catch (failure) {
+      button.disabled = false; document.getElementById('cluster-local-cancel').disabled = false;
+      button.textContent = 'Return to local storage'; error.textContent = failure.message || 'Cloudless could not restore local model storage.';
+    }
+  };
 }
 function openSparkAddressUpdate(c, status, node) {
   const layer = document.getElementById('key-dialog-layer'), content = document.getElementById('key-dialog-content');
@@ -6897,7 +7034,7 @@ function closeKeyDialog() {
   layer.classList.add('hidden');
   document.getElementById('auth-control')?.setAttribute('aria-expanded', 'false');
   document.getElementById('key-dialog-content').innerHTML = '';
-  document.getElementById('key-dialog').classList.remove('recipe-import-dialog', 'recipe-launch-dialog', 'auth-dialog');
+  document.getElementById('key-dialog').classList.remove('recipe-import-dialog', 'recipe-launch-dialog', 'auth-dialog', 'nfs-storage-dialog');
   let focusTarget = keyDialogReturnFocus;
   if ((!focusTarget || !document.contains(focusTarget)) && keyDialogReturnFocusID) focusTarget = document.getElementById(keyDialogReturnFocusID);
   if (focusTarget && document.contains(focusTarget)) focusTarget.focus();
@@ -8012,6 +8149,24 @@ function waitForRecipeJobCompletion(jobId) {
     stream.onerror = async () => { const update = await api(`/api/jobs/${jobId}`).catch(() => null); inspect(update); };
   });
 }
+async function requestRecipeRun(recipeId) {
+  const endpoint = '/api/recipes/' + encodeURIComponent(recipeId);
+  let result = await api(endpoint + '/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(() => ({error:'Could not start this recipe.'}));
+  if (!result.error || result.action !== 'check') return result;
+  toast('This machine or Spark cluster changed. Checking the recipe again before launch...');
+  const check = await api(endpoint + '/check', { method: 'POST' }).catch(() => ({error:'Could not refresh recipe validation.'}));
+  if (check.error || !check.jobId) return {error:check.error || 'Could not refresh recipe validation.'};
+  mmRecipes = null;
+  refreshRecipeJobs();
+  trackLocalRecipeJob(check.jobId, 'check', recipeId);
+  try {
+    await waitForRecipeJobCompletion(check.jobId);
+  } catch (error) {
+    return {error:error && error.message ? error.message : 'Recipe validation failed.'};
+  }
+  mmRecipes = null;
+  return api(endpoint + '/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(() => ({error:'Could not start this recipe.'}));
+}
 async function startDownloadedRecipe(recipeId, trigger) {
   const ready = recipeModelReady[recipeId];
   if (!ready || ready.launching) return;
@@ -8040,7 +8195,7 @@ async function startDownloadedRecipe(recipeId, trigger) {
       recipe = (data.recipes || []).find(item => item.id === recipeId);
       if (!recipe || !recipeValidated(recipe, data)) throw new Error('Recipe validation finished without runnable launch evidence.');
     }
-    const result = await api('/api/recipes/' + encodeURIComponent(recipeId) + '/run', { method: 'POST' });
+    const result = await requestRecipeRun(recipeId);
     if (result.error || !result.jobId) throw new Error(result.error || 'Cloudless could not start the recipe.');
     forgetRecipeModelReady(recipeId);
     mmRecipes = null;
@@ -8078,7 +8233,7 @@ async function restartRememberedRecipe(offer) {
     refreshRecipeJobs();
     await waitForRecipeJobCompletion(check.jobId);
   }
-  const result = await api('/api/recipes/' + encodeURIComponent(offer.recipeId) + '/run', { method: 'POST' });
+  const result = await requestRecipeRun(offer.recipeId);
   if (result.error || !result.jobId) throw new Error(result.error || 'Could not restart ' + offer.name + '.');
   mmRecipes = null;
   refreshRecipeJobs();
@@ -8873,12 +9028,12 @@ const RECIPE_RUN_STAGES = [
   ['downloading-dependencies','Dependencies'], ['downloading','Model'], ['loading-model','Load'], ['compiling-kernels','Optimize'], ['health','Health'],
 ];
 function recipeRunStageIndex(phase) {
-  const aliases = {'syncing-source':'syncing-image','syncing-model':'syncing-image','installing-runtime':'preparing-dependencies','installing-dependencies':'preparing-dependencies','initializing-engine':'loading-model','loading-draft':'loading-model','warming-engine':'compiling-kernels',starting:'loading-model',connecting:'health',ready:'health',running:'health',pending:'source'};
+  const aliases = {'syncing-source':'syncing-image','syncing-model':'syncing-image','verifying-peer-model':'syncing-image','installing-runtime':'preparing-dependencies','installing-dependencies':'preparing-dependencies','initializing-engine':'loading-model','loading-draft':'loading-model','warming-engine':'compiling-kernels',starting:'loading-model',connecting:'health',ready:'health',running:'health',pending:'source'};
   const normalized = aliases[phase] || phase;
   return Math.max(0,RECIPE_RUN_STAGES.findIndex(stage => stage[0] === normalized));
 }
 function recipeRunPhaseLabel(phase) {
-  return ({pending:'Preparing recipe',source:'Verifying recipe',building:'Preparing custom runtime','syncing-source':'Copying recipe setup','syncing-image':'Transferring runtime to peers',downloading:'Downloading model weights','syncing-model':'Transferring model to peers',stopping:'Switching inference engines',starting:'Starting inference','preparing-dependencies':'Resolving runtime dependencies','downloading-dependencies':'Downloading runtime dependencies','installing-dependencies':'Installing runtime dependencies','installing-runtime':'Installing runtime dependencies','initializing-engine':'Initializing inference engine','loading-model':'Loading main model weights','loading-draft':'Loading draft model weights','compiling-kernels':'Optimizing GPU kernels','warming-engine':'Warming the inference engine',health:'Checking engine readiness',connecting:'Connecting Cloudless',ready:'Recipe ready',running:'Recipe ready',canceled:'Launch canceled',error:'Launch failed'})[phase] || 'Preparing recipe';
+  return ({pending:'Preparing recipe',source:'Verifying recipe',building:'Preparing custom runtime','syncing-source':'Copying recipe setup','syncing-image':'Transferring runtime to peers',downloading:'Downloading model weights','syncing-model':'Transferring model to peers','verifying-peer-model':'Verifying shared model storage',stopping:'Switching inference engines',starting:'Starting inference','preparing-dependencies':'Resolving runtime dependencies','downloading-dependencies':'Downloading runtime dependencies','installing-dependencies':'Installing runtime dependencies','installing-runtime':'Installing runtime dependencies','initializing-engine':'Initializing inference engine','loading-model':'Loading main model weights','loading-draft':'Loading draft model weights','compiling-kernels':'Optimizing GPU kernels','warming-engine':'Warming the inference engine',health:'Checking engine readiness',connecting:'Connecting Cloudless',ready:'Recipe ready',running:'Recipe ready',canceled:'Launch canceled',error:'Launch failed'})[phase] || 'Preparing recipe';
 }
 function recipeProgressParts(job) {
   const overall=Number(job&&job.overallPercent!=null?job.overallPercent:job&&job.percent>0?job.percent:NaN);
@@ -8914,6 +9069,7 @@ function recipeProgressRoute(phase) {
   if (phase === 'syncing-source') return 'Primary Spark → peer Spark. Copying only the small recipe setup over the direct Spark connection.';
   if (phase === 'syncing-image') return 'Primary Spark → peer Spark. The completed inference runtime is now using the direct high-speed Spark connection.';
   if (phase === 'syncing-model') return 'Primary Spark → peer Spark. The completed model cache is now using the direct high-speed Spark connection.';
+  if (phase === 'verifying-peer-model') return 'Shared NFS cache to every Spark. Cloudless is verifying identical weights without copying them between machines.';
   return '';
 }
 function recipeProgressRouteHTML(phase) {
@@ -8937,7 +9093,7 @@ function wireRecipeProgressRecovery(progress,recipeId){
   const abort=progress.querySelector('[data-abort-stalled-recipe]');
   if(abort)abort.onclick=async()=>{abort.disabled=true;const result=await api('/api/recipes/'+encodeURIComponent(recipeId)+'/abort',{method:'POST'}).catch(()=>({error:'Could not abort this recipe.'}));if(result.error){toast(result.error,true);abort.disabled=false;}else toast('Stopping recipe launch');};
   const retry=progress.querySelector('[data-retry-stalled-recipe]');
-  if(retry)retry.onclick=async()=>{retry.disabled=true;retry.innerHTML='<span class="key-dialog-spinner" aria-hidden="true"></span><span>Restarting…</span>';let result=await api('/api/recipes/'+encodeURIComponent(recipeId)+'/abort',{method:'POST'}).catch(()=>({error:'Could not stop the stalled launch.'}));if(result.error){toast(result.error,true);retry.disabled=false;retry.textContent='Retry';return;}for(let attempt=0;attempt<30;attempt++){await new Promise(resolve=>setTimeout(resolve,1000));const data=await api('/api/recipes').catch(()=>null);if(data&&!recipeJob(data,recipeId)){result=await api('/api/recipes/'+encodeURIComponent(recipeId)+'/run',{method:'POST'}).catch(()=>({error:'Could not retry this recipe.'}));if(result.error){toast(result.error,true);}else{toast('Recipe launch restarted; cached files were kept.');trackLocalRecipeJob(result.jobId,'run',recipeId);}return;}}toast('Cloudless is still stopping the previous launch. Try Retry again in a moment.',true);retry.disabled=false;retry.textContent='Retry';};
+  if(retry)retry.onclick=async()=>{retry.disabled=true;retry.innerHTML='<span class="key-dialog-spinner" aria-hidden="true"></span><span>Restarting…</span>';let result=await api('/api/recipes/'+encodeURIComponent(recipeId)+'/abort',{method:'POST'}).catch(()=>({error:'Could not stop the stalled launch.'}));if(result.error){toast(result.error,true);retry.disabled=false;retry.textContent='Retry';return;}for(let attempt=0;attempt<30;attempt++){await new Promise(resolve=>setTimeout(resolve,1000));const data=await api('/api/recipes').catch(()=>null);if(data&&!recipeJob(data,recipeId)){result=await requestRecipeRun(recipeId);if(result.error){toast(result.error,true);}else{toast('Recipe launch restarted; cached files were kept.');trackLocalRecipeJob(result.jobId,'run',recipeId);}return;}}toast('Cloudless is still stopping the previous launch. Try Retry again in a moment.',true);retry.disabled=false;retry.textContent='Retry';};
 }
 let recipeHomeSignature='';
 function recipeRunID(job){const match=/^recipe:([^:]+)(?::(?:check|stop|recovery|cleanup))?$/.exec(String(job&&job.appId||''));return match?match[1]:'';}
@@ -9169,6 +9325,7 @@ function openRecipeLaunchDialog(recipe, plan, trigger) {
   const custom = !!plan.requiresCustomRuntime, runtimeReady = !!plan.runtimeReady, modelReady = !!plan.modelReady;
   const runtimeSize = Number(plan.runtimeBytes || plan.runtimeEstimateBytes || 0);
   const nodes = Math.max(1,Number(plan.nodes || recipe.distributed && recipe.distributed.nodes || 1));
+  const sharedNFS = nodes > 1 && mmRecipes?.modelStorage?.mode === 'nfs';
   const runtimeStatus = runtimeReady ? 'Already prepared' : custom ? 'One-time preparation required' : 'Will be checked';
   const runtimeDetail = runtimeReady ? modelDownloadSize(plan.runtimeBytes) + ' cached locally' : runtimeSize ? 'Up to approximately ' + modelDownloadSize(runtimeSize) + ' to download' : 'Size will appear as soon as Docker reports it';
   const modelStatus = modelReady ? 'Weights already cached' : 'Weights need to be downloaded';
@@ -9178,8 +9335,8 @@ function openRecipeLaunchDialog(recipe, plan, trigger) {
   dialog.classList.add('recipe-launch-dialog');
   content.innerHTML='<div class="key-dialog-head"><span class="key-dialog-icon">'+uiIcon(custom?'warning':'rocket')+'</span><div class="key-dialog-heading"><div class="key-dialog-title" id="key-dialog-title">Review recipe launch</div><div class="key-dialog-sub">Cloudless will prepare the exact runtime and model required by '+escapeHtml(recipe.name||'this recipe')+'.</div></div><button class="key-dialog-close" id="recipe-launch-close" type="button" aria-label="Close">'+uiIcon('close')+'</button></div><div class="key-dialog-body">'+
     (custom?'<div class="recipe-launch-warning">'+uiIcon('warning')+'<div><b>Specialized inference runtime required</b>'+escapeHtml(plan.runtimeReason||'This recipe cannot safely use the standard Cloudless inference engine.')+'</div></div>':'')+
-    '<div class="recipe-launch-grid"><div class="recipe-launch-fact"><span>Inference runtime</span><b>'+escapeHtml(runtimeStatus)+'</b><small>'+escapeHtml(runtimeDetail)+'</small></div><div class="recipe-launch-fact"><span>Model weights</span><b>'+escapeHtml(modelStatus)+'</b><small>'+escapeHtml(plan.modelId||recipe.model&&recipe.model.id||'Configured model')+'</small></div><div class="recipe-launch-fact"><span>Cluster work</span><b>'+nodes+' Spark'+(nodes===1?'':'s')+'</b><small>'+(nodes>1?'Prepared once here, then copied over the direct Spark link':'Prepared on this machine')+'</small></div><div class="recipe-launch-fact"><span>Cloudless connection</span><b>'+escapeHtml((mmRecipes&&mmRecipes.contract&&mmRecipes.contract.modelAlias)||'cloudless')+' · port '+escapeHtml(String((mmRecipes&&mmRecipes.contract&&mmRecipes.contract.port)||8766))+'</b><small>Every recipe is published through the API identity configured in Settings.</small></div></div>'+
-    '<div class="recipe-launch-flow"><b>What will happen</b><ol><li>Verify the pinned recipe source and configuration.</li>'+(custom&&!runtimeReady?'<li>Download and prepare the specialized runtime once on this Spark.</li>':'<li>Reuse the exact cached inference runtime.</li>')+(nodes>1?'<li>Copy missing runtime files to the other Spark over the private link.</li>':'')+(modelReady?'<li>Reuse the cached model weights.</li>':'<li>Download the model weights once and show byte progress and an ETA.</li>')+(nodes>1?'<li>Copy missing model weights to the other Spark.</li>':'')+'<li>Start inference, verify readiness, and connect it to Cloudless.</li></ol></div><p class="recipe-launch-cache-note">Completed runtime images and model weights remain cached. Normal future launches should not repeat these downloads.</p><div class="key-dialog-actions"><button class="btn" id="recipe-launch-cancel" type="button">Cancel</button><button class="btn primary" id="recipe-launch-confirm" type="button">'+uiIcon('rocket')+'<span>'+escapeHtml(confirmLabel)+'</span></button></div></div>';
+    '<div class="recipe-launch-grid"><div class="recipe-launch-fact"><span>Inference runtime</span><b>'+escapeHtml(runtimeStatus)+'</b><small>'+escapeHtml(runtimeDetail)+'</small></div><div class="recipe-launch-fact"><span>Model weights</span><b>'+escapeHtml(modelStatus)+'</b><small>'+escapeHtml(plan.modelId||recipe.model&&recipe.model.id||'Configured model')+'</small></div><div class="recipe-launch-fact"><span>Cluster work</span><b>'+nodes+' Spark'+(nodes===1?'':'s')+'</b><small>'+(nodes>1?(sharedNFS?'Shared NFS weights verified on every Spark; no peer copy':'Prepared once here, then copied over the direct Spark link'):'Prepared on this machine')+'</small></div><div class="recipe-launch-fact"><span>Cloudless connection</span><b>'+escapeHtml((mmRecipes&&mmRecipes.contract&&mmRecipes.contract.modelAlias)||'cloudless')+' · port '+escapeHtml(String((mmRecipes&&mmRecipes.contract&&mmRecipes.contract.port)||8766))+'</b><small>Every recipe is published through the API identity configured in Settings.</small></div></div>'+
+    '<div class="recipe-launch-flow"><b>What will happen</b><ol><li>Verify the pinned recipe source and configuration.</li>'+(custom&&!runtimeReady?'<li>Download and prepare the specialized runtime once on this Spark.</li>':'<li>Reuse the exact cached inference runtime.</li>')+(nodes>1?'<li>Copy missing runtime files to the other Spark over the private link.</li>':'')+(modelReady?'<li>Reuse the cached model weights.</li>':'<li>Download the model weights once and show byte progress and an ETA.</li>')+(nodes>1?(sharedNFS?'<li>Verify the same shared NFS weights from every Spark without copying them.</li>':'<li>Copy missing model weights to the other Spark.</li>'):'')+'<li>Start inference, verify readiness, and connect it to Cloudless.</li></ol></div><p class="recipe-launch-cache-note">Completed runtime images and model weights remain cached. Normal future launches should not repeat these downloads.</p><div class="key-dialog-actions"><button class="btn" id="recipe-launch-cancel" type="button">Cancel</button><button class="btn primary" id="recipe-launch-confirm" type="button">'+uiIcon('rocket')+'<span>'+escapeHtml(confirmLabel)+'</span></button></div></div>';
   layer.classList.remove('hidden');
   return new Promise(resolve=>{let settled=false;const finish=accepted=>{if(settled)return;settled=true;keyDialogOnClose=null;closeKeyDialog();resolve(accepted);};keyDialogOnClose=()=>{if(settled)return;settled=true;resolve(false);};document.getElementById('recipe-launch-close').onclick=closeKeyDialog;document.getElementById('recipe-launch-cancel').onclick=closeKeyDialog;document.getElementById('recipe-launch-confirm').onclick=()=>finish(true);document.getElementById('recipe-launch-cancel').focus();});
 }
@@ -9556,7 +9713,7 @@ function paintLocalRecipes(c, data) {
   c.querySelectorAll('[data-recipe-run]').forEach(button => button.onclick = async () => {
     button.disabled = true; const id=button.dataset.recipeRun, recipe=recipes.find(item=>item.id===id), plan=data.plans&&data.plans[id]||{};
     if(recipe && !(await openRecipeLaunchDialog(recipe,plan,button))){button.disabled=false;return;}
-    const result=await api('/api/recipes/' + encodeURIComponent(id) + '/run',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}).catch(()=>({error:'Could not start this recipe.'}));
+    const result=await requestRecipeRun(id);
     if(result.error){toast(result.error,true);button.disabled=false;return;}
     updateRecipeRunCard(id,result.jobId,{phase:'pending',message:'Preparing the recipe…',layersDone:0,layersTotal:10});
     trackLocalRecipeJob(result.jobId,'run',id);

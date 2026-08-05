@@ -39,7 +39,10 @@ for required in \
   ActionClusterNetworkApply \
   ActionClusterNetworkRemove \
   ActionModelUninstall \
-  ActionModelViewsReconcile
+  ActionModelViewsReconcile \
+  ActionModelStorageNFSApply \
+  ActionModelStorageLocal \
+  ActionModelStorageRefresh
 do
   grep -Fq "$required" "$protocol"
   grep -Fq "$required" "$broker"
@@ -58,6 +61,8 @@ grep -Fq 'cloudless-privileged.service' "$build"
 grep -Fq 'cloudless-privileged"' "$build"
 grep -Fq 'cloudless-engine.service' "$build"
 grep -Fq 'cloudless-engine"' "$build"
+grep -Fq 'cloudless-model-storage.service' "$build"
+grep -Fq 'cloudless-model-storage"' "$build"
 grep -Fq 'cloudless-docker"' "$build"
 grep -Fq 'engine.ServeBroker' "$ORCHESTRATOR/cmd/cloudless-engine/main.go"
 grep -Fq 'privileged.AuthorizePeer' "$ORCHESTRATOR/cmd/cloudless-engine/main.go"
@@ -119,6 +124,20 @@ grep -Fq 'CLOUDLESS_MODEL_CACHE=/var/lib/cloudless/models-cache' "$daemon_servic
 grep -Fq 'ReadWritePaths=/run/cloudless /var/lib/cloudless' "$engine_service"
 grep -Fq '/var/lib/cloudless/models-cache:/root/.cache/huggingface' "$cluster"
 grep -Fq 'install -d -m 2750 -o cloudlessd -g cloudless /var/lib/cloudless/models-cache' "$postinst"
+model_storage_helper="$ORCHESTRATOR/cmd/cloudless-model-storage/main.go"
+model_storage_service="$ROOT/distro/packages/cloudless-orchestrator/cloudless-model-storage.service"
+grep -Fq 'decoder.DisallowUnknownFields()' "$model_storage_helper"
+grep -Fq '"/usr/bin/mount", "-t", "nfs4"' "$model_storage_helper"
+grep -Fq '"rw,hard,nosuid,nodev,noatime,_netdev,vers="' "$model_storage_helper"
+grep -Fq '10.100.0.0/24' "$model_storage_helper"
+grep -Fq '10.100.1.0/24' "$model_storage_helper"
+grep -Fq '"/usr/sbin/exportfs", "-ra"' "$model_storage_helper"
+grep -Fq 'modelstorage.ManagedExport' "$model_storage_helper"
+grep -Fqx 'CapabilityBoundingSet=CAP_SYS_ADMIN CAP_DAC_OVERRIDE' "$model_storage_service"
+grep -Fqx 'AmbientCapabilities=CAP_SYS_ADMIN CAP_DAC_OVERRIDE' "$model_storage_service"
+grep -Fqx 'ExecStart=/usr/lib/cloudless/cloudless-model-storage mount' "$model_storage_service"
+grep -Fq '"/usr/bin/systemd-run", "--unit=cloudless-model-storage-refresh"' \
+  "$ORCHESTRATOR/cmd/cloudless-privileged/main.go"
 if grep -Eq 'usermod .*cloudless-control.* cloudless([[:space:]]|$)' "$postinst"; then
   echo "The desktop account must never receive control-broker authority." >&2
   exit 1

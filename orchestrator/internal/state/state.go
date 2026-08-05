@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cloudless/orchestrator/internal/models"
+	"github.com/cloudless/orchestrator/internal/modelstorage"
 )
 
 // Profile is the user-controlled profile for this CloudlessOS install.
@@ -231,11 +232,34 @@ type State struct {
 	ManagedEngineArtifacts  map[string]ManagedEngineArtifact `json:"managedEngineArtifacts,omitempty"`  // downloaded and activated runtime identity
 	InstalledPacks          []string                         `json:"installedPacks,omitempty"`          // optional capability packs installed by Cloudless
 	CustomEngines           []CustomEngine                   `json:"customEngines,omitempty"`           // user-built inference images
+	ModelStorage            modelstorage.Config              `json:"modelStorage,omitempty"`            // local cache or validated shared NFS export
 
 	// EngineCmds holds user-edited launch commands, keyed "engineID\x00modelID".
 	// The value is the container command (args after the image) to use when that
 	// model is launched on that engine, overriding the catalog default.
 	EngineCmds map[string][]string `json:"engineCmds,omitempty"`
+}
+
+func (s *Store) ModelStorageConfig() modelstorage.Config {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.st.ModelStorage.Normalized()
+}
+
+func (s *Store) SetModelStorageConfig(config modelstorage.Config) error {
+	config = config.Normalized()
+	if err := config.Validate(); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	previous := s.st.ModelStorage
+	s.st.ModelStorage = config
+	if err := s.save(); err != nil {
+		s.st.ModelStorage = previous
+		return err
+	}
+	return nil
 }
 
 const (

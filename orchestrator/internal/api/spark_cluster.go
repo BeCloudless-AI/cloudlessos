@@ -15,6 +15,7 @@ import (
 	"github.com/cloudless/orchestrator/internal/localrecipes"
 	"github.com/cloudless/orchestrator/internal/modelfit"
 	"github.com/cloudless/orchestrator/internal/models"
+	"github.com/cloudless/orchestrator/internal/modelstorage"
 	"github.com/cloudless/orchestrator/internal/platform"
 	"github.com/cloudless/orchestrator/internal/recipeops"
 	"github.com/cloudless/orchestrator/internal/sparkcluster"
@@ -143,6 +144,12 @@ func (s *Server) sparkClusterCreate(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "cluster confirmation header required"})
 		return
 	}
+	if s.state.ModelStorageConfig().Mode == modelstorage.ModeNFS {
+		if err := s.requireIdleModelStorage(); err != nil {
+			writeJSON(w, http.StatusConflict, map[string]string{"error": "shared NFS storage is active: " + err.Error()})
+			return
+		}
+	}
 	r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
 	var request sparkcluster.CreateRequest
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
@@ -164,6 +171,17 @@ func (s *Server) sparkClusterCreate(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			job.Fail(err)
 			return
+		}
+		if config := s.state.ModelStorageConfig(); config.Mode == modelstorage.ModeNFS {
+			job.ProgressOperation("storage", "Mounting and verifying the shared NFS model cache on every Spark...", request.Host, 94, 0, 1)
+			if _, err := s.applyModelStoragePeers(ctx, config); err != nil {
+				job.Fail(fmt.Errorf("Spark joined, but shared NFS model storage needs attention: %w", err))
+				return
+			}
+			if _, err := s.verifyModelStoragePeers(ctx, config); err != nil {
+				job.Fail(fmt.Errorf("Spark joined, but could not verify shared NFS model storage: %w", err))
+				return
+			}
 		}
 		job.Succeed("")
 	}()
@@ -287,6 +305,10 @@ func (s *Server) sparkClusterDisconnect(w http.ResponseWriter, r *http.Request) 
 			"error":       "A model lifecycle operation is still running. Abort it and wait for verified cleanup before disconnecting the Spark cluster.",
 			"operationId": operation.ID,
 		})
+		return
+	}
+	if s.state.ModelStorageConfig().Mode == modelstorage.ModeNFS {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "return Model storage to Local before disconnecting the Spark cluster"})
 		return
 	}
 	if err := sparkcluster.ValidateDisconnectAccess(ctx, request.Passwords); err != nil {

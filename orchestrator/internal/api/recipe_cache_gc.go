@@ -13,6 +13,7 @@ import (
 
 	"github.com/cloudless/orchestrator/internal/localrecipes"
 	"github.com/cloudless/orchestrator/internal/modelcache"
+	"github.com/cloudless/orchestrator/internal/modelstorage"
 	"github.com/cloudless/orchestrator/internal/recipeops"
 )
 
@@ -159,6 +160,14 @@ func (s *Server) recipeCacheGarbageCollect(ctx context.Context, apply bool) (rec
 	if !apply {
 		return report, nil
 	}
+	release := func() {}
+	if cacheRoot != "" {
+		release, err = modelstorage.AcquireMutationLock(ctx, cacheRoot)
+		if err != nil {
+			return recipeGCReport{}, err
+		}
+	}
+	defer release()
 	currentAvailable := available
 	for _, candidate := range candidates {
 		if pressure && currentAvailable >= recipeGCMinimumFreeBytes {

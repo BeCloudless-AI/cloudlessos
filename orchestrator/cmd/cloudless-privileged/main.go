@@ -135,6 +135,15 @@ func execute(ctx context.Context, action privileged.Action, value string) error 
 			return err
 		}
 		return nil
+	case privileged.ActionModelStorageNFSApply:
+		return applyNFSModelStorage(ctx, value)
+	case privileged.ActionModelStorageLocal:
+		return useLocalModelStorage(ctx)
+	case privileged.ActionModelStorageRefresh:
+		// The long-running services use hardened mount namespaces. Schedule a
+		// delayed restart so their next namespace includes the newly mounted or
+		// restored cache, while still allowing this broker request to reply.
+		return exec.CommandContext(ctx, "/usr/bin/systemd-run", "--unit=cloudless-model-storage-refresh", "--collect", "--on-active=2s", "/usr/bin/systemctl", "restart", "cloudless-engine.service", "cloudless-privileged.service", "cloudlessd.service").Run()
 	default:
 		return fmt.Errorf("unsupported action %q", action)
 	}

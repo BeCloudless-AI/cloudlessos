@@ -43,6 +43,10 @@ func (s *Server) checkManagedContainerRecipe(job *jobs.Job, recipe localrecipes.
 		fail("sandbox", "The requested Spark topology is unavailable", err)
 		return
 	}
+	if _, err := s.sharedModelStorageForRecipe(ctx, recipe); err != nil {
+		fail("storage", "Shared NFS model storage is unavailable", err)
+		return
+	}
 	containerSpec, err := managedContainerRecipeSpec(recipe, recipe.Engine.Image, "cloudless-recipe-check", operationID, "")
 	if err == nil {
 		err = engine.ValidateRunSpec(containerSpec)
@@ -254,6 +258,11 @@ func (s *Server) runManagedContainerRecipe(job *jobs.Job, recipe localrecipes.Re
 		s.finishRecipeOperation(job, operationID, recipeops.ErrPreflightRequired)
 		return
 	}
+	job.Progress("revalidating", "Confirming the checked machine and Spark cluster are unchanged...", 0, 6)
+	if err := s.validateRecipeRunPreflight(ctx, recipe, operation); err != nil {
+		s.finishRecipeOperation(job, operationID, err)
+		return
+	}
 	runtimeName, err := recipeops.RuntimeName(operation)
 	if err != nil {
 		s.finishRecipeOperation(job, operationID, err)
@@ -339,7 +348,7 @@ func (s *Server) runManagedContainerRecipe(job *jobs.Job, recipe localrecipes.Re
 	if len(topology.Peers) != 0 {
 		job.Progress("syncing-cluster", "Copying the pinned runtime and verified model to the selected Spark...", 1, 6)
 		hfToken, _ := s.state.HuggingFaceToken()
-		if err := prepareManagedRecipePeers(ctx, s.eng, job, recipe, topology, hfToken, executionImage); err != nil {
+		if err := s.prepareManagedRecipePeers(ctx, s.eng, job, recipe, topology, hfToken, executionImage); err != nil {
 			s.finishRecipeOperation(job, operationID, err)
 			return
 		}

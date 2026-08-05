@@ -75,12 +75,157 @@ case "$action" in
     fi
     printf '%s %s %s\n' "${bytes:-0}" "${incomplete:-0}" "$loaded"
     ;;
+  nfs-boot)
+    server=$(printf %s "$2" | base64 -d)
+    case "$server" in ""|.*|*..*|*[!A-Za-z0-9.-]*) echo "invalid NFS server" >&2; exit 2 ;; esac
+    nfs_unit='var-lib-cloudless-shared\x2dmodel\x2dstorage.mount'
+    hub_unit='var-lib-cloudless-models\x2dcache-hub.mount'
+    route_ready=0
+    for attempt in $(seq 1 30); do
+      if ip route get "$server" >/dev/null 2>&1; then route_ready=1; break; fi
+      sleep 2
+    done
+    [ "$route_ready" = 1 ] || { echo "private route to NFS server is not ready" >&2; exit 4; }
+    systemctl reset-failed "$nfs_unit" "$hub_unit" >/dev/null 2>&1 || true
+    systemctl start "$nfs_unit"
+    systemctl start "$hub_unit"
+    ;;
+  nfs-apply)
+    server_argument=$2
+    server=$(printf %s "$2" | base64 -d)
+    export_path=$(printf %s "$3" | base64 -d)
+    version=$(printf %s "$4" | base64 -d)
+		layout=${5:-external}
+    case "$server" in ""|.*|*..*|*[!A-Za-z0-9.-]*) echo "invalid NFS server" >&2; exit 2 ;; esac
+    case "$export_path" in /*) ;; *) echo "invalid NFS export" >&2; exit 2 ;; esac
+    case "$export_path" in /|*..*|*[!A-Za-z0-9_./-]*) echo "invalid NFS export" >&2; exit 2 ;; esac
+    case "$version" in 4.1|4.2) ;; *) echo "invalid NFS version" >&2; exit 2 ;; esac
+		case "$layout" in managed|external) ;; *) echo "invalid NFS layout" >&2; exit 2 ;; esac
+    command -v mount.nfs4 >/dev/null 2>&1 || { echo "nfs-common is not installed" >&2; exit 3; }
+    nfs_unit='var-lib-cloudless-shared\x2dmodel\x2dstorage.mount'
+    hub_unit='var-lib-cloudless-models\x2dcache-hub.mount'
+    legacy_unit='var-lib-cloudless-models\x2dcache.mount'
+    boot_unit='cloudless-cluster-model-storage.service'
+    nfs_path="/etc/systemd/system/$nfs_unit"
+    hub_path="/etc/systemd/system/$hub_unit"
+    boot_path="/etc/systemd/system/$boot_unit"
+    marker_link=/var/lib/cloudless/models-cache/.cloudless-shared-storage-v1
+		marker_target=../shared-model-storage/.cloudless-shared-storage-v1
+		hub_source=/var/lib/cloudless/shared-model-storage/hub
+		if [ "$layout" = managed ]; then hub_source=/var/lib/cloudless/shared-model-storage; fi
+    if [ -e "$marker_link" ] && [ ! -L "$marker_link" ]; then echo 'shared marker path is not a symlink' >&2; exit 6; fi
+    install -d -m 0770 /var/lib/cloudless/shared-model-storage /var/lib/cloudless/models-cache /var/lib/cloudless/models-cache/hub
+    backup=$(mktemp -d)
+    had_nfs=0
+    had_hub=0
+    had_boot=0
+    if [ -f "$hub_path" ]; then cp "$hub_path" "$backup/hub"; had_hub=1; fi
+    if [ -f "$nfs_path" ]; then cp "$nfs_path" "$backup/nfs"; had_nfs=1; fi
+    if [ -f "$boot_path" ]; then cp "$boot_path" "$backup/boot"; had_boot=1; fi
+    systemctl disable --now "$boot_unit" >/dev/null 2>&1 || true
+    systemctl disable --now "$hub_unit" >/dev/null 2>&1 || true
+    systemctl disable --now "$nfs_unit" >/dev/null 2>&1 || true
+    systemctl disable --now "$legacy_unit" >/dev/null 2>&1 || true
+    rm -f "/etc/systemd/system/$legacy_unit"
+    nfs_temporary=$(mktemp /etc/systemd/system/.cloudless-model-storage-XXXXXX)
+    {
+      printf '%s\n' '[Unit]' 'Description=Cloudless shared NFS model cache' 'Wants=network-online.target' 'After=network-online.target' 'Before=cloudless-engine.service' '' '[Mount]'
+      printf 'What=%s:%s\n' "$server" "$export_path"
+      printf '%s\n' 'Where=/var/lib/cloudless/shared-model-storage' 'Type=nfs4'
+      printf 'Options=rw,hard,nosuid,nodev,noatime,_netdev,vers=%s,timeo=600,retrans=2\n' "$version"
+      printf '%s\n' 'TimeoutSec=30' '' '[Install]' 'WantedBy=multi-user.target'
+    } >"$nfs_temporary"
+    chmod 0644 "$nfs_temporary"
+    mv -f "$nfs_temporary" "$nfs_path"
+    hub_temporary=$(mktemp /etc/systemd/system/.cloudless-model-hub-XXXXXX)
+    {
+      printf '%s\n' '[Unit]' 'Description=Cloudless shared model-weight hub' "Requires=$nfs_unit" "After=$nfs_unit" 'Before=cloudless-engine.service' '' '[Mount]'
+			printf 'What=%s\n' "$hub_source"
+			printf '%s\n' 'Where=/var/lib/cloudless/models-cache/hub' 'Type=none' 'Options=bind' 'TimeoutSec=30' '' '[Install]' 'WantedBy=multi-user.target'
+    } >"$hub_temporary"
+    chmod 0644 "$hub_temporary"
+    mv -f "$hub_temporary" "$hub_path"
+    boot_temporary=$(mktemp /etc/systemd/system/.cloudless-model-storage-boot-XXXXXX)
+    {
+      printf '%s\n' '[Unit]' 'Description=Restore Cloudless shared model storage after the private Spark fabric is ready' 'Wants=network-online.target' 'After=network-online.target' 'Before=cloudless-engine.service' '' '[Service]' 'Type=oneshot'
+      printf 'ExecStart=%s nfs-boot %s\n' /usr/lib/cloudless/cloudless-cluster-worker "$server_argument"
+      printf '%s\n' 'TimeoutStartSec=120' 'RemainAfterExit=yes' 'Restart=on-failure' 'RestartSec=5' '' '[Install]' 'WantedBy=multi-user.target'
+    } >"$boot_temporary"
+    chmod 0644 "$boot_temporary"
+    mv -f "$boot_temporary" "$boot_path"
+    systemctl daemon-reload
+		setup_failed=0
+		if ! systemctl enable "$boot_unit"; then
+			setup_failed=1
+		elif ! systemctl start "$nfs_unit"; then
+			setup_failed=1
+		elif [ "$layout" = external ] && ! install -d -m 0770 /var/lib/cloudless/shared-model-storage/hub; then
+			setup_failed=1
+		elif ! systemctl start "$hub_unit"; then
+			setup_failed=1
+		fi
+		if [ "$setup_failed" = 1 ]; then
+      systemctl disable --now "$boot_unit" >/dev/null 2>&1 || true
+      systemctl disable --now "$hub_unit" >/dev/null 2>&1 || true
+      systemctl disable --now "$nfs_unit" >/dev/null 2>&1 || true
+      if [ "$had_nfs" = 1 ]; then cp "$backup/nfs" "$nfs_path"; else rm -f "$nfs_path"; fi
+      if [ "$had_hub" = 1 ]; then cp "$backup/hub" "$hub_path"; else rm -f "$hub_path"; fi
+      if [ "$had_boot" = 1 ]; then cp "$backup/boot" "$boot_path"; else rm -f "$boot_path"; fi
+      systemctl daemon-reload
+      if [ "$had_boot" = 1 ]; then
+        systemctl enable --now "$boot_unit" >/dev/null 2>&1 || true
+      else
+        if [ "$had_nfs" = 1 ]; then systemctl enable --now "$nfs_unit" >/dev/null 2>&1 || true; fi
+        if [ "$had_hub" = 1 ]; then systemctl enable --now "$hub_unit" >/dev/null 2>&1 || true; fi
+      fi
+      rm -rf "$backup"
+      exit 1
+    fi
+    ln -sfn "$marker_target" "$marker_link"
+    rm -rf "$backup"
+    ;;
+  nfs-local)
+    nfs_unit='var-lib-cloudless-shared\x2dmodel\x2dstorage.mount'
+    hub_unit='var-lib-cloudless-models\x2dcache-hub.mount'
+    legacy_unit='var-lib-cloudless-models\x2dcache.mount'
+    boot_unit='cloudless-cluster-model-storage.service'
+    systemctl disable --now "$boot_unit" >/dev/null 2>&1 || true
+    systemctl disable --now "$hub_unit" >/dev/null 2>&1 || true
+    systemctl disable --now "$nfs_unit" >/dev/null 2>&1 || true
+    systemctl disable --now "$legacy_unit" >/dev/null 2>&1 || true
+    rm -f "/etc/systemd/system/$boot_unit" "/etc/systemd/system/$hub_unit" "/etc/systemd/system/$nfs_unit" "/etc/systemd/system/$legacy_unit"
+    marker_link=/var/lib/cloudless/models-cache/.cloudless-shared-storage-v1
+    if [ -L "$marker_link" ]; then rm -f "$marker_link"; fi
+    systemctl daemon-reload
+    ;;
+  nfs-status)
+    server=$(printf %s "$2" | base64 -d)
+    export_path=$(printf %s "$3" | base64 -d)
+    marker=$(printf %s "$4" | base64 -d)
+    actual=$(findmnt -n --first-only -o SOURCE,FSTYPE --mountpoint /var/lib/cloudless/shared-model-storage 2>/dev/null || true)
+    [ "$actual" = "$server:$export_path nfs4" ] || [ "$actual" = "$server:$export_path nfs" ] || { echo "unexpected mount: $actual" >&2; exit 4; }
+    hub_type=$(findmnt -n --first-only -o FSTYPE --mountpoint /var/lib/cloudless/models-cache/hub 2>/dev/null || true)
+    [ "$hub_type" = nfs4 ] || [ "$hub_type" = nfs ] || { echo "model-weight hub is not NFS: $hub_type" >&2; exit 4; }
+    [ "$(cat /var/lib/cloudless/shared-model-storage/.cloudless-shared-storage-v1 2>/dev/null || true)" = "$marker" ] || { echo "shared marker does not match" >&2; exit 5; }
+    [ -L /var/lib/cloudless/models-cache/.cloudless-shared-storage-v1 ] || { echo 'shared marker link is missing' >&2; exit 5; }
+    echo ok
+    ;;
   remove-container)
     name=$(printf %s "$2" | base64 -d)
     case "$name" in
       ""|.*|*..*|*[!A-Za-z0-9_.-]*) echo "invalid container name" >&2; exit 2 ;;
     esac
     docker rm -f "$name" >/dev/null 2>&1 || true
+    ;;
+  ensure-ssh)
+    if systemctl list-unit-files ssh.service --no-legend 2>/dev/null | grep -q '^ssh.service'; then
+      systemctl enable ssh.service >/dev/null
+    elif systemctl list-unit-files sshd.service --no-legend 2>/dev/null | grep -q '^sshd.service'; then
+      systemctl enable sshd.service >/dev/null
+    else
+      echo 'OpenSSH server service is not installed' >&2
+      exit 3
+    fi
     ;;
   upgrade)
     payload=$(printf %s "$2" | base64 -d)
@@ -90,7 +235,7 @@ case "$action" in
     mv -f "$tmp" /usr/lib/cloudless/cloudless-cluster-worker
     ;;
   *)
-    echo "usage: cloudless-cluster-worker start IMAGE_B64 HEAD_IP_B64 WORKER_IP_B64 IFACE_B64 | stop | status | model-progress MODEL_B64 | remove-container NAME_B64 | upgrade SCRIPT_B64" >&2
+        echo "usage: cloudless-cluster-worker start IMAGE_B64 HEAD_IP_B64 WORKER_IP_B64 IFACE_B64 | stop | status | model-progress MODEL_B64 | nfs-boot SERVER_B64 | nfs-apply SERVER_B64 EXPORT_B64 VERSION_B64 managed_OR_external | nfs-local | nfs-status SERVER_B64 EXPORT_B64 MARKER_B64 | remove-container NAME_B64 | ensure-ssh | upgrade SCRIPT_B64" >&2
     exit 2
     ;;
 esac
@@ -111,6 +256,23 @@ var (
 	telemetryErr      error
 	telemetryAt       time.Time
 )
+
+// upgradeWorkerHelper atomically refreshes the narrowly-scoped worker helper,
+// then makes SSH persistence part of every successful worker upgrade. This
+// self-heals clusters enrolled by versions that installed a key while sshd was
+// running but did not enable the service for the next boot.
+func upgradeWorkerHelper(ctx context.Context, node Node, payload string) error {
+	if strings.TrimSpace(payload) == "" {
+		payload = base64.StdEncoding.EncodeToString([]byte(workerScript))
+	}
+	if _, err := remote(ctx, node.Host, node.Username, "", fmt.Sprintf("sudo -n %s upgrade %s", workerPath, payload), nil); err != nil {
+		return err
+	}
+	if _, err := remote(ctx, node.Host, node.Username, "", "sudo -n "+workerPath+" ensure-ssh", nil); err != nil {
+		return fmt.Errorf("persist worker SSH service: %w", err)
+	}
+	return nil
+}
 
 type PeerTelemetry struct {
 	Connected             bool           `json:"connected"`
@@ -991,7 +1153,7 @@ func CreateWithProgress(ctx context.Context, request CreateRequest, report Progr
 	remoteKey := base64.StdEncoding.EncodeToString([]byte(publicKey + "\n"))
 	remoteWorker := base64.StdEncoding.EncodeToString([]byte(workerScript))
 	remoteSudoers := base64.StdEncoding.EncodeToString([]byte(fmt.Sprintf("%s ALL=(root) NOPASSWD: %s *\n", request.Username, workerPath)))
-	remoteCommand := fmt.Sprintf(`sudo -S -p '' sh -c 'set -eu; printf %%s "$1" | base64 -d > %s; chmod 600 %s; home=$(getent passwd "$2" | cut -d: -f6); test -n "$home"; install -d -m 700 -o "$2" "$home/.ssh"; touch "$home/.ssh/authorized_keys"; chown "$2" "$home/.ssh/authorized_keys"; chmod 600 "$home/.ssh/authorized_keys"; key=$(printf %%s "$3" | base64 -d); grep -qxF "$key" "$home/.ssh/authorized_keys" || printf "%%s\\n" "$key" >> "$home/.ssh/authorized_keys"; install -d -m 755 /usr/lib/cloudless; printf %%s "$4" | base64 -d > %s; chown root:root %s; chmod 755 %s; printf %%s "$5" | base64 -d > %s; chown root:root %s; chmod 440 %s; visudo -cf %s >/dev/null; netplan generate; netplan apply' sh %s %s %s %s %s`, configPath, configPath, workerPath, workerPath, workerPath, sudoersPath, sudoersPath, sudoersPath, sudoersPath, remoteConfig, request.Username, remoteKey, remoteWorker, remoteSudoers)
+	remoteCommand := fmt.Sprintf(`sudo -S -p '' sh -c 'set -eu; printf %%s "$1" | base64 -d > %s; chmod 600 %s; home=$(getent passwd "$2" | cut -d: -f6); test -n "$home"; install -d -m 700 -o "$2" "$home/.ssh"; touch "$home/.ssh/authorized_keys"; chown "$2" "$home/.ssh/authorized_keys"; chmod 600 "$home/.ssh/authorized_keys"; key=$(printf %%s "$3" | base64 -d); grep -qxF "$key" "$home/.ssh/authorized_keys" || printf "%%s\\n" "$key" >> "$home/.ssh/authorized_keys"; systemctl enable ssh.service >/dev/null 2>&1 || systemctl enable sshd.service >/dev/null 2>&1; install -d -m 755 /usr/lib/cloudless; printf %%s "$4" | base64 -d > %s; chown root:root %s; chmod 755 %s; printf %%s "$5" | base64 -d > %s; chown root:root %s; chmod 440 %s; visudo -cf %s >/dev/null; netplan generate; netplan apply' sh %s %s %s %s %s`, configPath, configPath, workerPath, workerPath, workerPath, sudoersPath, sudoersPath, sudoersPath, sudoersPath, remoteConfig, request.Username, remoteKey, remoteWorker, remoteSudoers)
 	mutationStarted = true
 	progress("peer-network", "Configuring the private fabric on "+preflight.PeerName+".", 38)
 	if _, err := remote(ctx, request.Host, request.Username, request.Password, remoteCommand, []byte(request.Password+"\n")); err != nil {
@@ -1638,8 +1800,7 @@ func StartWorker(ctx context.Context, image, model string) error {
 		wg.Add(1)
 		go func(node Node) {
 			defer wg.Done()
-			upgrade := fmt.Sprintf("sudo -n %s upgrade %s", workerPath, upgrade64)
-			if _, err := remote(ctx, node.Host, node.Username, "", upgrade, nil); err != nil {
+			if err := upgradeWorkerHelper(ctx, node, upgrade64); err != nil {
 				errs <- fmt.Errorf("update distributed worker on %s: reconnect this Spark once (%w)", node.Name, err)
 				return
 			}
@@ -1709,7 +1870,7 @@ func RemoveContainers(ctx context.Context, names []string) error {
 		wg.Add(1)
 		go func(node Node) {
 			defer wg.Done()
-			if _, err := remote(ctx, node.Host, node.Username, "", fmt.Sprintf("sudo -n %s upgrade %s", workerPath, upgrade64), nil); err != nil {
+			if err := upgradeWorkerHelper(ctx, node, upgrade64); err != nil {
 				errs <- fmt.Errorf("update cleanup helper on %s: %w", node.Name, err)
 				return
 			}

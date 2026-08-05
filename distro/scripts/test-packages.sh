@@ -143,6 +143,8 @@ dpkg-deb -f "$orchestrator_deb" Depends | grep -Eq '(^|, )gpgv(,|$)'
 dpkg-deb -f "$orchestrator_deb" Depends | grep -Eq '(^|, )gnupg(,|$)'
 dpkg-deb -f "$orchestrator_deb" Depends | grep -Eq '(^|, )python3(,|$)'
 dpkg-deb -f "$orchestrator_deb" Depends | grep -Eq '(^|, )util-linux(,|$)'
+dpkg-deb -f "$orchestrator_deb" Depends | grep -Eq '(^|, )nfs-common(,|$)'
+dpkg-deb -f "$orchestrator_deb" Depends | grep -Eq '(^|, )nfs-kernel-server(,|$)'
 dpkg-deb -f "$shell_deb" Depends | grep -Eq '(^|, )xdotool(,|$)'
 dpkg-deb -c "$orchestrator_deb" |
     grep -F './usr/share/cloudless/cloudless-archive-keyring.pgp' >/dev/null
@@ -151,11 +153,13 @@ dpkg-deb -c "$orchestrator_deb" |
 dpkg-deb -c "$orchestrator_deb" | grep -F './usr/lib/cloudless/cloudless-install-tailscale' >/dev/null
 dpkg-deb -c "$orchestrator_deb" | grep -F './usr/lib/cloudless/cloudless-privileged' >/dev/null
 dpkg-deb -c "$orchestrator_deb" | grep -F './usr/lib/cloudless/cloudless-engine' >/dev/null
+dpkg-deb -c "$orchestrator_deb" | grep -F './usr/lib/cloudless/cloudless-model-storage' >/dev/null
 dpkg-deb -c "$orchestrator_deb" | grep -F './usr/lib/cloudless/cloudless-docker' >/dev/null
 dpkg-deb -c "$orchestrator_deb" | grep -F './usr/sbin/cloudless-backup' >/dev/null
 dpkg-deb -c "$orchestrator_deb" | grep -F './lib/systemd/system/cloudless-tailscale-install.service' >/dev/null
 dpkg-deb -c "$orchestrator_deb" | grep -F './lib/systemd/system/cloudless-privileged.service' >/dev/null
 dpkg-deb -c "$orchestrator_deb" | grep -F './lib/systemd/system/cloudless-engine.service' >/dev/null
+dpkg-deb -c "$orchestrator_deb" | grep -F './lib/systemd/system/cloudless-model-storage.service' >/dev/null
 dpkg-deb -c "$shell_deb" | grep -F './usr/bin/cloudless-browser-agent' >/dev/null
 dpkg-deb -c "$shell_deb" | grep -F './usr/bin/cloudless-desktop-agent' >/dev/null
 dpkg-deb -c "$shell_deb" | grep -F './usr/lib/tmpfiles.d/cloudless-browser.conf' >/dev/null
@@ -213,6 +217,13 @@ if grep -Fq '/run/docker.sock' "$DISTRO/packages/cloudless-orchestrator/cloudles
     exit 1
 fi
 grep -Fq 'CacheDirectory=cloudless' "$DISTRO/packages/cloudless-orchestrator/cloudlessd.service"
+grep -Fq '.cloudless-shared-storage-v1' "$DISTRO/packages/cloudless-orchestrator/postinst"
+grep -Fq 'systemctl disable --now cloudless-model-storage.service' \
+    "$DISTRO/packages/cloudless-orchestrator/postinst"
+grep -Fq 'systemctl reset-failed cloudless-model-storage.service' \
+    "$DISTRO/packages/cloudless-orchestrator/postinst"
+grep -Fq 'test -d /var/lib/cloudless/models-cache && test -w /var/lib/cloudless/models-cache' \
+    "$DISTRO/packages/cloudless-orchestrator/postinst"
 for netplan_runtime_path in /etc/netplan /run/systemd/system /run/systemd/network /run/NetworkManager/conf.d /run/NetworkManager/system-connections /run/udev; do
     if grep -Fq "$netplan_runtime_path" "$DISTRO/packages/cloudless-orchestrator/cloudlessd.service"; then
         echo "cloudlessd must not retain delegated Netplan write access: $netplan_runtime_path" >&2

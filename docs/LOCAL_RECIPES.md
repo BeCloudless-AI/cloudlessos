@@ -47,7 +47,8 @@ containers. `advanced-container-v1` supports immutable custom engine images that
 in-container command, architecture-specific environment, auxiliary pinned models, writable-root
 mode, IPC, ulimits, declared Linux capabilities, and bounded NCCL launch across enrolled DGX
 Sparks. Distributed advanced containers receive per-node rank and fabric identity from Cloudless,
-while Cloudless copies the pinned image and verified model cache before launch. Both adapters deny host commands, arbitrary
+while Cloudless distributes the pinned image and either copies or verifies the shared model cache
+before launch. Both adapters deny host commands, arbitrary
 host mounts, and the Docker socket and bind only the private inference port. Recipes that require
 host source scripts still need an exact signed compatibility profile. A passing validation never
 changes local code into a reviewed profile.
@@ -80,7 +81,7 @@ A typical distributed launch performs these phases:
 2. reuse or prepare the runtime on the coordinator;
 3. distribute missing runtime data to peer Sparks;
 4. reuse or download model weights on the coordinator;
-5. distribute missing model data to peer Sparks;
+5. distribute missing model data to peer Sparks, or verify their shared NFS view;
 6. start the runtime on every required node;
 7. wait for the OpenAI-compatible health check;
 8. create the stable Cloudless route;
@@ -150,6 +151,32 @@ by path, type, size and SHA-256, keeps verified peer files, and retransmits only
 content. Interrupted transfers resume from durable staging and are promoted only after the complete
 snapshot matches the coordinator's cryptographic manifest.
 
+The cluster settings can optionally place model weights on shared NFS storage. By default Cloudless
+makes the coordinator Spark the NFSv4.2 host, exports its Hugging Face hub only to the private
+`10.100.0.0/24` and `10.100.1.0/24` fabrics, and mounts it on every worker. No NFS address or path
+is requested. Advanced Interface can instead select an operator-managed NFSv4.1 or NFSv4.2 export.
+Containers do not change: Cloudless binds the shared Hugging Face `hub` over the standard cache's
+`hub` directory, so every
+recipe still sees the same container path. CUDA, DeepGEMM, FlashInfer, torch-extension and other
+runtime/JIT caches remain node-local to prevent cross-Spark compilation races. Enabling the option
+requires idle inference, validates the export on every enrolled node, writes and verifies an export-specific
+marker, and rolls back if any node disagrees. New peers are mounted and verified before they can be
+used. Recipe launch fails closed if the mount or marker later becomes inconsistent; it never falls
+back to copying into an unverified shared path. Cache download, promotion, deletion and garbage
+collection take a shared NFS lock to prevent two Sparks from mutating the same cache concurrently.
+
+For the built-in option, Cloudless owns the coordinator export and restricts it to the Spark fabric.
+For an Advanced Interface custom server, its access policy remains the operator's responsibility.
+The export must be read/write from every Spark and should be restricted to the cluster network. Cloudless accepts only
+fixed NFSv4 mount options and stores no NFS credentials. Reviewed containers can run as root or
+other numeric users, so the NFS server must map those clients to a consistent read/write identity,
+grant equivalent ACL access, or use `no_root_squash` on an export restricted to the Spark fabric.
+Ordinary `root_squash` is supported for Cloudless metadata when the export permissions also allow
+the recipe container identities to access model-weight files. Switching storage briefly
+refreshes the hardened Cloudless service namespaces so they all see the new mount. Switching back
+to local storage unmounts the export on every node. Local weights were only hidden by the mount and become visible again; they
+are not merged with or deleted from the NFS export.
+
 Model downloads also use a stable model-and-revision staging volume. Hugging Face partial chunks
 survive navigation, abort and daemon restart. A completed download is copied into a promotion tree,
 verified again, and atomically exchanged with the active cache; the last complete cache is retained
@@ -197,6 +224,11 @@ card or reopen **Model Manager -> Recipes** to inspect or abort it.
 The peer failed the exact snapshot-and-directory-size cache check described above. This commonly
 follows an aborted or failed transfer. Let the current copy complete, or abort it knowing that the
 next launch may need to replace the partial peer cache again.
+
+When shared NFS storage is enabled, copying is not expected. Open **Settings -> DGX Spark -> Spark
+cluster** and inspect Shared model storage. Cloudless refuses the launch if any peer is not on the
+exact configured export or cannot read the cluster marker. Restore the mount or switch the cluster
+back to local storage before retrying.
 
 ### The runtime exits with status 1
 

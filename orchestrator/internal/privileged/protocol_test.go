@@ -159,6 +159,28 @@ func TestModelUninstallAcceptsOnlyCanonicalRepositoryIDs(t *testing.T) {
 	}
 }
 
+func TestModelStorageAcceptsOnlyValidatedNFSConfiguration(t *testing.T) {
+	valid := `{"mode":"nfs","server":"nas.example.com","export":"/cloudless/models","version":"4.2","markerId":"0123456789abcdef0123456789abcdef"}`
+	if err := validateRequest(request{Action: ActionModelStorageNFSApply, Value: valid}); err != nil {
+		t.Fatal(err)
+	}
+	for _, value := range []string{
+		`{"mode":"nfs","server":"nas;reboot","export":"/models","version":"4.2","markerId":"0123456789abcdef0123456789abcdef"}`,
+		`{"mode":"nfs","server":"nas","export":"/models/../etc","version":"4.2","markerId":"0123456789abcdef0123456789abcdef"}`,
+		`{"mode":"nfs","server":"nas","export":"/models","version":"3","markerId":"0123456789abcdef0123456789abcdef"}`,
+	} {
+		if validateRequest(request{Action: ActionModelStorageNFSApply, Value: value}) == nil {
+			t.Fatalf("unsafe NFS configuration was accepted: %s", value)
+		}
+	}
+	if err := validateRequest(request{Action: ActionModelStorageLocal}); err != nil {
+		t.Fatalf("local storage action was rejected: %v", err)
+	}
+	if err := validateRequest(request{Action: ActionModelStorageRefresh}); err != nil {
+		t.Fatalf("model-storage service refresh was rejected: %v", err)
+	}
+}
+
 func TestClusterNetworkRequiresTwoSafeInterfacesAndBoundedIndex(t *testing.T) {
 	for _, value := range []string{"1|enp1s0f0|enp1s0f1", "8|enP2p1s0f1np1|enP2p1s0f1np2"} {
 		if err := validateRequest(request{Action: ActionClusterNetworkApply, Value: value}); err != nil {

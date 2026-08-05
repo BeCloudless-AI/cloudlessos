@@ -184,10 +184,21 @@ active-model state, and the stable Cloudless API gateway. No external recipe
 runtime is installed or required.
 
 Recipe preparation continues in the background when Model Manager is closed. For multi-Spark
-recipes, `buildOnce` and `downloadOnce` prepare data on the coordinator and copy missing runtime or
-model data to peers over the private SSH link. A per-file content manifest retains verified files,
-resumes missing/invalid content in durable staging and promotes the snapshot only after its complete
-cryptographic manifest matches. See
+recipes, `buildOnce` prepares runtime data on the coordinator and copies missing runtime files to
+peers over the private SSH link. Model weights use the same resumable copy path by default. An
+operator can instead enable **Shared model storage (NFS)** on the Spark-cluster settings screen.
+The default flow makes the coordinator Spark the NFSv4.2 host automatically, exports only its
+Hugging Face `hub` to the two private `10.100.x.0/24` fabrics, and mounts that hub on every worker.
+No server address or export path is requested. Advanced Interface exposes an optional custom
+NFSv4.1/4.2 server and export. Cloudless verifies a cluster marker from every node and then reuses
+the weights without copying them. CUDA, DeepGEMM, FlashInfer and other compiled runtime caches
+remain local to each Spark.
+Existing local cache data is hidden while NFS is enabled and becomes visible again after switching
+back to local storage; Cloudless does not delete it. Cloudless configures the built-in export with
+fabric-restricted access. Advanced custom exports must map recipe-container identities consistently
+or grant equivalent access. A per-file content manifest retains verified
+files, resumes missing/invalid content in durable staging and promotes the snapshot only after its
+complete cryptographic manifest matches. See
 [`../docs/LOCAL_RECIPES.md`](../docs/LOCAL_RECIPES.md) for the lifecycle and current limitations.
 
 The private engine identity remains `cloudless-ai:8000` with model name `cloudless`. API clients

@@ -22,6 +22,7 @@ import (
 	"github.com/cloudless/orchestrator/internal/modelcache"
 	"github.com/cloudless/orchestrator/internal/modelfit"
 	"github.com/cloudless/orchestrator/internal/models"
+	"github.com/cloudless/orchestrator/internal/modelstorage"
 	"github.com/cloudless/orchestrator/internal/places"
 	"github.com/cloudless/orchestrator/internal/platform"
 	"github.com/cloudless/orchestrator/internal/privileged"
@@ -705,6 +706,11 @@ func (s *Server) removeModelCache(ctx context.Context, repo string) error {
 	if root == "" {
 		return errors.New("Cloudless model cache is unavailable")
 	}
+	release, err := modelstorage.AcquireMutationLock(ctx, root)
+	if err != nil {
+		return err
+	}
+	defer release()
 	if s.privilegedValue != nil {
 		if err := s.runPrivilegedValue(ctx, privileged.ActionModelUninstall, repo); err != nil {
 			return err
@@ -973,6 +979,12 @@ func (s *Server) runModelDownload(ctx context.Context, cancel context.CancelFunc
 		total += file.Size
 	}
 	root := s.modelVolumePath(ctx)
+	release, lockErr := modelstorage.AcquireMutationLock(ctx, root)
+	if lockErr != nil {
+		job.Fail(lockErr)
+		return
+	}
+	defer release()
 	job.ProgressBytes("downloading", "Preparing "+repo+"…", s.modelDownloadBytes(ctx, repo, revision, root, inventory), total)
 	py := "import os; from huggingface_hub import snapshot_download; kw={}; revision=os.environ.get('CLOUDLESS_MODEL_REVISION',''); kw.update(revision=revision) if revision else None; snapshot_download(os.environ['CLOUDLESS_MODEL_ID'], **kw)"
 	containerName := modelDownloadContainerName(repo)

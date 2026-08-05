@@ -64,6 +64,7 @@ source_job() {
     bash "$ROOT/distro/scripts/test-preinstall.sh"
     bash "$ROOT/distro/scripts/test-configure-release-env.sh"
     bash "$ROOT/distro/scripts/test-release-env.sh"
+    bash "$ROOT/distro/scripts/test-release-container-platforms.sh"
     bash "$ROOT/distro/scripts/test-release-preflight.sh"
     bash "$ROOT/distro/scripts/test-release-isolation.sh"
     bash "$ROOT/distro/scripts/test-protected-signing.sh"

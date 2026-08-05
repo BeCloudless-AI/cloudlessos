@@ -104,6 +104,9 @@ echo "  targets: amd64 + arm64"
 read -r -p "Run every gate, sign, publish, and verify this release? [y/N] " answer
 case "$answer" in y|Y|yes|YES) ;; *) echo "Cancelled."; exit 0 ;; esac
 
+echo "==> Verifying Docker execution for every release architecture"
+bash "$ROOT/distro/scripts/verify-release-container-platforms.sh"
+
 docker image inspect cloudless-release-builder >/dev/null 2>&1 || \
     docker build -t cloudless-release-builder \
         -f "$ROOT/distro/docker/release-builder/Dockerfile" "$ROOT"

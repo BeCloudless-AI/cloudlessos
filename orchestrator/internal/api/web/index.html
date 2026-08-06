@@ -3327,9 +3327,10 @@
   .recipe-card.insufficient-cluster:hover { border-color: color-mix(in srgb,var(--faint) 32%,var(--line)); box-shadow: none; }
   .recipe-card.insufficient-cluster .recipe-icon,
   .recipe-card.insufficient-cluster .recipe-copy,
-  .recipe-card.insufficient-cluster .recipe-actions .btn:not([data-recipe-edit]):not([data-recipe-delete]) {
+  .recipe-card.insufficient-cluster .recipe-actions .btn:not([data-recipe-edit]):not([data-recipe-delete]):not([data-recipe-details]) {
     opacity: .43; filter: grayscale(1) saturate(0);
   }
+  .recipe-card.insufficient-cluster .recipe-actions [data-recipe-details],
   .recipe-card.insufficient-cluster .recipe-actions [data-recipe-edit],
   .recipe-card.insufficient-cluster .recipe-actions [data-recipe-delete] { opacity: 1; filter: none; }
   .recipe-preflight { margin-top: 12px; overflow: hidden; border: 1px solid var(--hair); border-radius: 11px; background: color-mix(in srgb,var(--panel-2) 74%,transparent); }
@@ -9502,7 +9503,8 @@ function recipeCard(recipe, data) {
   const state = cleaning ? 'Cleaning' : cleanup ? 'Cleanup required' : tombstoned ? 'Removal pending' : active ? 'Running' : job ? 'Working' : !executionAllowed ? 'Draft only' : !modelInstalled ? 'Model not installed' : !topologyReady ? 'Needs ' + nodes + ' Sparks' : !validated ? 'Not validated' : failure ? 'Last run failed' : ready ? 'Ready' : 'Needs attention';
   const checkAction = canCheck && validated ? '<button class="btn" type="button" data-recipe-check="' + escapeAttr(recipe.id) + '">' + uiIcon('search') + '<span>Validate again</span></button>' : '';
   const rollbackAction = recipe.communityRollback?.length ? '<button class="btn" type="button" data-community-rollback="' + escapeAttr(recipe.id) + '"' + (tombstoned || active || job || cleanup ? ' disabled' : '') + '>' + uiIcon('reload') + '<span>Roll back</span></button>' : '';
-  const secondaryActions = checkAction + rollbackAction + '<button class="btn recipe-remove" type="button" data-recipe-delete="' + escapeAttr(recipe.id) + '"' + (tombstoned || active || job || cleanup ? ' disabled' : '') + '>' + uiIcon('trash') + '<span>Remove</span></button>';
+  const detailsAction = '<button class="btn" type="button" data-recipe-details="' + escapeAttr(recipe.id) + '">' + uiIcon('search') + '<span>Details</span></button>';
+  const secondaryActions = detailsAction + checkAction + rollbackAction + '<button class="btn recipe-remove" type="button" data-recipe-delete="' + escapeAttr(recipe.id) + '"' + (tombstoned || active || job || cleanup ? ' disabled' : '') + '>' + uiIcon('trash') + '<span>Remove</span></button>';
   const sourceLabel = recipe.origin === 'community' ? 'Community recipe' : recipe.origin === 'catalog' ? 'Imported recipe' : recipe.origin === 'github' ? 'GitHub import' : 'Local recipe';
   return '<article class="recipe-card' + (active || job ? ' is-active' : !ready ? ' needs-attention' : '') + (needsMoreSparks ? ' insufficient-cluster' : '') + '" data-recipe-id="' + escapeAttr(recipe.id) + '"><div class="recipe-main"><span class="recipe-icon">' + uiIcon('recipes') + '</span><div class="recipe-copy">' +
     '<div class="recipe-eyebrow"><span>' + sourceLabel + ' · ' + escapeHtml(trust.supportLevel || 'experimental') + '</span><span>' + escapeHtml(recipeUpdatedLabel(recipe)) + '</span></div>' +
@@ -9771,6 +9773,20 @@ function paintLocalRecipes(c, data) {
   document.getElementById('recipe-per-page')?.addEventListener('change', event => { mmRecipeView.perPage=Number(event.currentTarget.value)||6;mmRecipeView.page=1;paintLocalRecipes(c,data); });
   c.querySelectorAll('[data-recipe-page]').forEach(button => button.onclick=()=>{const page=Number(button.dataset.recipePage);if(page>=1&&page<=pages&&page!==mmRecipeView.page){mmRecipeView.page=page;paintLocalRecipes(c,data);c.closest('.mm-body')?.scrollTo({top:0,behavior:'smooth'});}});
   c.querySelectorAll('[data-recipe-source]').forEach(button => button.onclick = () => { const card=button.closest('[data-recipe-id]'); if(card) openAppSurface('Recipe source','/api/recipes/' + encodeURIComponent(card.dataset.recipeId) + '/source','📖'); });
+  c.querySelectorAll('[data-recipe-details]').forEach(button => button.onclick = () => {
+    const recipe = (data.recipes || []).find(item => item.id === button.dataset.recipeDetails);
+    if (!recipe) return;
+    if (recipe.community?.slug) {
+      mmRecipeView = { ...mmRecipeView, scope: 'discover', page: 1 };
+      mmCommunityDetail = recipe.community.slug;
+      renderModelManager();
+      return;
+    }
+    const card = button.closest('[data-recipe-id]');
+    card?.querySelectorAll('details').forEach(detail => { detail.open = true; });
+    card?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    toast('Expanded local recipe configuration and validation details');
+  });
   c.querySelectorAll('[data-community-rollback]').forEach(button => button.onclick = async () => { button.disabled=true;const result=await api('/api/community/rollback',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:button.dataset.communityRollback})}).catch(()=>({error:'Could not roll back this recipe.'}));if(result.error){toast(result.error,true);button.disabled=false;return;}toast('Previous signed recipe revision restored');mmRecipes=null;renderLocalRecipes(c); });
   c.querySelectorAll('[data-recipe-install-model]').forEach(button => button.onclick = () => {
     const recipe=recipes.find(item=>item.id===button.dataset.recipeInstallModel);

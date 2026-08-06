@@ -353,6 +353,17 @@ func TestEmbeddedWebCommunityRecipesInstallAndShowDetailsInline(t *testing.T) {
 		`class="community-detail-title"`,
 		`function communityRatingHTML(`,
 		`function wireCommunityRating(`,
+		`function communityMutationKey(`,
+		`'Idempotency-Key':communityMutationKey()`,
+		`activity.viewerRating=Number(viewerRatingPayload.rating||0)`,
+		`data-saved-rating="'+saved+'"`,
+		`result.activity?.averageRating`,
+		`data-community-rating-count`,
+		`function communityHeaderActionsHTML(`,
+		`function communityCommentsHTML(`,
+		`class="community-comment-rating"`,
+		`item.author_rating`,
+		`community-detail-title .community-social-actions`,
 		`aria-label="Rate this recipe"`,
 		`Rated '+rating+' out of 5`,
 		`id="community-install"`,
@@ -372,6 +383,12 @@ func TestEmbeddedWebCommunityRecipesInstallAndShowDetailsInline(t *testing.T) {
 			t.Fatalf("community recipe details still contain obsolete rating control %q", obsolete)
 		}
 	}
+	if strings.Contains(web, `<div class="community-activity"`) {
+		t.Fatal("community activity must be summarized in the recipe header, not repeated in its own card")
+	}
+	if strings.Contains(web, `Ratings, testing notes, comments, and reporting stay with this published recipe.`) {
+		t.Fatal("community comments must not repeat a redundant section heading and description")
+	}
 }
 
 func TestEmbeddedWebExplainsAndConfirmsKnownRecipeVulnerabilities(t *testing.T) {
@@ -388,9 +405,21 @@ func TestEmbeddedWebExplainsAndConfirmsKnownRecipeVulnerabilities(t *testing.T) 
 		`Local-only use lowers risk; it does not make it zero.`,
 		`id="recipe-vulnerability-ack"`,
 		`confirm.disabled=!ack.checked`,
+		`<details class="recipe-vulnerability-panel">`,
+		`if(launch)return '<div class="recipe-vulnerability-panel" role="note">`,
+		`function openRecipeVulnerabilityInfo(`,
+		`class="recipe-vulnerability-summary-icon"`,
+		`class="btn recipe-vulnerability-explain"`,
+		`<symbol id="ui-warning"`,
+		`<symbol id="ui-info"`,
+		`They are not vulnerabilities in the AI model.`,
+		`c.querySelector('.recipe-vulnerability-explain')`,
 	} {
 		if !strings.Contains(web, want) {
 			t.Fatalf("recipe vulnerability UX is missing %q", want)
 		}
+	}
+	if strings.Contains(web, `risk.findings.slice(`) {
+		t.Fatal("recipe vulnerability details must not silently truncate the scanner findings")
 	}
 }

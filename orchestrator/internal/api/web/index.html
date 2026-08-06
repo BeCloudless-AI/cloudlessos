@@ -7269,14 +7269,20 @@ function openAuthDialog(mode = 'signin') {
   const error = document.getElementById('auth-error'), success = document.getElementById('auth-success');
   content.querySelectorAll('[data-auth-provider]').forEach(button => button.onclick = async () => {
     const provider = button.dataset.authProvider;
+    const providerWindow = window.open('', 'cloudless-account-provider', 'popup,width=560,height=760');
+    if (!providerWindow) {
+      error.textContent = 'Your browser blocked the secure provider window. Allow pop-ups for this CloudlessOS address and try again.';
+      return;
+    }
     content.querySelectorAll('[data-auth-provider]').forEach(item => item.disabled = true);
     button.innerHTML = '<span class="key-dialog-spinner" aria-hidden="true"></span><span>Connecting&hellip;</span>';
     error.textContent = ''; success.textContent = 'Finish signing in in the secure provider window.';
     try {
       const redirectTo = location.origin + '/auth/callback';
       const result = await authRequest('/oauth/' + encodeURIComponent(provider) + '?redirectTo=' + encodeURIComponent(redirectTo));
-      location.assign(result.url);
+      providerWindow.location.replace(result.url);
     } catch (authError) {
+      providerWindow.close();
       openAuthDialog(mode);
       document.getElementById('auth-error').textContent = authError.message;
     }
@@ -7320,11 +7326,22 @@ async function consumeAuthCallback() {
   const accessToken = fragment.get('access_token'), refreshToken = fragment.get('refresh_token');
   if (!accessToken || !refreshToken) { history.replaceState(null, document.title, '/'); return true; }
   const expiresIn = Number(fragment.get('expires_in') || 0);
-  authSession = { user: null, session: { access_token: accessToken, refresh_token: refreshToken, token_type: fragment.get('token_type') || 'bearer', expires_in: expiresIn, expires_at: Math.floor(Date.now() / 1000) + expiresIn } };
-  try { localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(authSession)); } catch {}
+  const session = { access_token: accessToken, refresh_token: refreshToken, token_type: fragment.get('token_type') || 'bearer', expires_in: expiresIn, expires_at: Math.floor(Date.now() / 1000) + expiresIn };
   history.replaceState(null, document.title, '/');
-  const user = await restoreAuthSession();
-  if (user) toast(`Signed in as ${user.username || user.email}`);
+  try {
+    const current = await authRequest('/me', {}, session.access_token);
+    saveAuthSession({ user: current.user, session });
+    if (window.opener && window.opener !== window) {
+      window.opener.postMessage({ type: 'cloudless-account-signed-in' }, location.origin);
+      setTimeout(() => window.close(), 250);
+    } else {
+      toast(`Signed in as ${current.user.username || current.user.email}`);
+    }
+  } catch (error) {
+    saveAuthSession(null);
+    openAuthDialog('signin');
+    document.getElementById('auth-error').textContent = `The provider signed you in, but Cloudless could not load your account: ${error.message}`;
+  }
   return true;
 }
 async function syncAuthFromStorage(message = '') {
@@ -7333,6 +7350,10 @@ async function syncAuthFromStorage(message = '') {
   if (user) { closeKeyDialog(); if (message) toast(message); }
 }
 window.addEventListener('storage', event => { if (event.key === AUTH_SESSION_KEY) syncAuthFromStorage('Signed in to Cloudless'); });
+window.addEventListener('message', event => {
+  if (event.origin !== location.origin || event.data?.type !== 'cloudless-account-signed-in') return;
+  syncAuthFromStorage('Signed in to Cloudless');
+});
 function openCloudlessDecision(options = {}) {
   const layer = document.getElementById('key-dialog-layer');
   if (!layer.classList.contains('hidden')) closeKeyDialog();

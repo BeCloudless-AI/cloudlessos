@@ -188,8 +188,13 @@ func TestEmbeddedWebAccountClientOwnsTopBarIdentity(t *testing.T) {
 		`await authenticatedAuthRequest('/picture'`,
 		`location.origin + '/auth/callback'`,
 		`function consumeAuthCallback()`,
-		`localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(authSession))`,
+		`localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(value))`,
 		`localStorage.removeItem(AUTH_SESSION_KEY)`,
+		`window.open('', 'cloudless-account-provider'`,
+		`providerWindow.location.replace(result.url)`,
+		`window.opener.postMessage({ type: 'cloudless-account-signed-in' }, location.origin)`,
+		`event.origin !== location.origin`,
+		`The provider signed you in, but Cloudless could not load your account:`,
 	} {
 		if !strings.Contains(web, want) {
 			t.Fatalf("embedded account client is missing %q", want)

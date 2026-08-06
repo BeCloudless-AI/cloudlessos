@@ -12,6 +12,14 @@ func TestEmbeddedWebKeepsMessagesInsideCloudlessGUI(t *testing.T) {
 		t.Fatal(err)
 	}
 	page := string(content)
+	// OAuth is the sole intentional new browser context: it keeps the
+	// Cloudless dashboard in place while the identity provider owns its own
+	// navigation and returns through the same-origin callback. All application
+	// messages and confirmations must still remain inside the Cloudless GUI.
+	pageWithoutOAuthPopup := strings.Replace(page, `window.open('', 'cloudless-account-provider', 'popup,width=560,height=760')`, "", 1)
+	if pageWithoutOAuthPopup == page {
+		t.Fatal("embedded UI is missing the constrained OAuth provider window")
+	}
 
 	for name, pattern := range map[string]string{
 		"native JavaScript dialog":  `(?i)(?:^|[^[:alnum:]_$])(?:window\.)?(?:alert|confirm|prompt)\s*\(`,
@@ -20,7 +28,7 @@ func TestEmbeddedWebKeepsMessagesInsideCloudlessGUI(t *testing.T) {
 		"unload prompt":             `(?i)(?:onbeforeunload|beforeunload["'])`,
 		"browser validation bubble": `(?i)(?:setCustomValidity|reportValidity|<(?:input|select|textarea)[^>]*\srequired(?:\s|=|>))`,
 	} {
-		if match := regexp.MustCompile(pattern).FindString(page); match != "" {
+		if match := regexp.MustCompile(pattern).FindString(pageWithoutOAuthPopup); match != "" {
 			t.Fatalf("embedded UI contains %s %q; messages must use Cloudless GUI", name, match)
 		}
 	}

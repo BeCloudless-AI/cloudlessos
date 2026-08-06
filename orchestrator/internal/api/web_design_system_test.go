@@ -350,6 +350,11 @@ func TestEmbeddedWebCommunityRecipesInstallAndShowDetailsInline(t *testing.T) {
 		`mmCommunityDetail = recipe.community.slug`,
 		`Expanded local recipe configuration and validation details`,
 		`class="community-detail"`,
+		`class="community-detail-title"`,
+		`function communityRatingHTML(`,
+		`function wireCommunityRating(`,
+		`aria-label="Rate this recipe"`,
+		`Rated '+rating+' out of 5`,
 		`id="community-install"`,
 		`Follow its preparation steps, then choose Run recipe.`,
 		`.community-report.hidden { display:none; }`,
@@ -361,6 +366,11 @@ func TestEmbeddedWebCommunityRecipesInstallAndShowDetailsInline(t *testing.T) {
 	}
 	if strings.Contains(web, `function openCommunityRecipeDetail(slug){keyDialogReturnFocus=`) {
 		t.Fatal("community recipe details must render inside the Model Manager, not in a nested dialog")
+	}
+	for _, obsolete := range []string{`id="community-star"`, `id="community-rating"`, `Star recipe`, `Choose a rating`} {
+		if strings.Contains(web, obsolete) {
+			t.Fatalf("community recipe details still contain obsolete rating control %q", obsolete)
+		}
 	}
 }
 

@@ -956,7 +956,7 @@ func TestRecipeManagerSeparatesLocalAndCommunityLibraries(t *testing.T) {
 		`Run recipes installed on this machine. Find signed community recipes in Discover.`,
 		`function communitySocialHTML(activity, commentsHTML)`,
 		`class="community-filter-field search"`,
-		`for="community-rating"`,
+		`aria-label="Rate this recipe"`,
 		`for="community-comment"`,
 		`for="community-report-category"`,
 		`paintLocalRecipes(c, mmRecipes)`,

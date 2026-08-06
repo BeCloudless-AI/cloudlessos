@@ -122,7 +122,8 @@ func (s *Server) communityRecipeInstall(w http.ResponseWriter, r *http.Request) 
 		Recipe struct {
 			Slug string `json:"slug"`
 		} `json:"recipe"`
-		Release json.RawMessage `json:"release"`
+		Release    json.RawMessage                   `json:"release"`
+		Validation *localrecipes.CommunityValidation `json:"validation"`
 	}
 	if err := s.fetchCommunityJSON(r, "/v1/recipes/"+input.Slug+"/revisions/"+input.Version, &remote); err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
@@ -189,6 +190,7 @@ func (s *Server) communityRecipeInstall(w http.ResponseWriter, r *http.Request) 
 	installed, err := s.recipes.InstallCommunity(draft, localrecipes.CommunityProvenance{
 		RecipeID: release.RecipeID, RevisionID: release.RevisionID, Slug: input.Slug,
 		Version: release.Version, Digest: release.ManifestDigest, SigningKeyID: release.SigningKeyID,
+		Validation: remote.Validation,
 	})
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})

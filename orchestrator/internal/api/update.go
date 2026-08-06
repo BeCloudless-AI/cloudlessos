@@ -515,7 +515,7 @@ func (s *Server) managedEngineUsesBaseImage(app catalog.App) bool {
 func (s *Server) pullManagedEngine(ctx context.Context, job *jobs.Job, app catalog.App, image string) error {
 	layers := map[string]*dockerPullLayer{}
 	job.ProgressOperation("pulling", "Checking the managed "+app.Name+" image", app.Name, 5, 0, 1)
-	return s.eng.PullStream(ctx, image, func(line string) {
+	return pullImageStreamResilient(ctx, s.eng, image, func(line string) {
 		id, status, ok := splitStatus(line)
 		switch {
 		case ok && strings.HasPrefix(status, "Pulling fs layer"):
@@ -539,6 +539,9 @@ func (s *Server) pullManagedEngine(ctx context.Context, job *jobs.Job, app catal
 			}
 		case strings.HasPrefix(line, "Status:"):
 			job.ProgressOperation("pulling", line, app.Name, 78, 0, 1)
+			return
+		case strings.HasPrefix(line, "Cloudless:"):
+			job.ProgressOperation("pulling", line, app.Name, 10, 0, 1)
 			return
 		default:
 			return

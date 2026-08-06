@@ -71,6 +71,8 @@ func TestRunSpecPolicyRejectsHostAuthority(t *testing.T) {
 		{"unmanaged network", func(s *RunSpec) { s.Network = "host-services" }, "namespace"},
 		{"host alias", func(s *RunSpec) { s.ExtraHosts = []string{"metadata:169.254.169.254"} }, "not allowed"},
 		{"security override", func(s *RunSpec) { s.SecurityOpts = []string{"apparmor=unconfined"} }, "not allowed"},
+		{"invalid memory", func(s *RunSpec) { s.Memory = "unlimited" }, "memory limit"},
+		{"swap without memory", func(s *RunSpec) { s.MemorySwap = "100g" }, "requires a memory limit"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

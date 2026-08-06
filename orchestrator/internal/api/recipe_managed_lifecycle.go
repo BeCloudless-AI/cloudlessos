@@ -318,11 +318,55 @@ func (s *Server) runManagedContainerRecipe(job *jobs.Job, recipe localrecipes.Re
 		}
 	}
 	registryImage := recipe.Engine.Image
-	job.Progress("pulling-image", "Pulling the exact runtime image verified by Check...", 0, 6)
-	if err := s.eng.PullStream(ctx, registryImage, func(line string) {
-		job.Progress("pulling-image", line, 0, 6)
+	expectedImageBytes := recipePreflightImageCompressedBytes(operation)
+	job.Progress("pulling-image", "Pulling the exact runtime image verified by Check...", 0, 0)
+	layers := map[string]*dockerPullLayer{}
+	if err := pullImageStreamResilient(ctx, s.eng, registryImage, func(line string) {
+		id, status, ok := splitStatus(line)
+		switch {
+		case ok && strings.HasPrefix(status, "Pulling fs layer"):
+			if layers[id] == nil {
+				layers[id] = &dockerPullLayer{}
+			}
+		case ok && (status == "Pull complete" || status == "Already exists"):
+			if layers[id] == nil {
+				layers[id] = &dockerPullLayer{}
+			}
+			layers[id].complete = true
+			if layers[id].total > 0 {
+				layers[id].done = layers[id].total
+			}
+		case ok && strings.HasPrefix(status, "Downloading"):
+			if doneBytes, totalBytes, parsed := parseDockerLayerProgress(status); parsed {
+				if layers[id] == nil {
+					layers[id] = &dockerPullLayer{}
+				}
+				layers[id].done, layers[id].total = doneBytes, totalBytes
+			}
+		case strings.HasPrefix(line, "Cloudless:"):
+			job.Progress("pulling-image", line, -1, -1)
+			return
+		case ok:
+			// Surface Docker's verification, extraction, and retry states instead
+			// of leaving the last byte update frozen on screen.
+			job.Progress("pulling-image", status, -1, -1)
+		default:
+			job.Progress("pulling-image", line, -1, -1)
+		}
+		done, total, bytesDone, bytesTotal := dockerPullTotals(layers)
+		if expectedImageBytes > bytesTotal {
+			bytesTotal = expectedImageBytes
+		}
+		message := fmt.Sprintf("Downloading runtime image layers — %d of %d complete", done, total)
+		if ok && (strings.Contains(status, "Retrying") || strings.HasPrefix(status, "Verifying") || strings.HasPrefix(status, "Extracting") || strings.HasPrefix(status, "Waiting")) {
+			message = status
+		}
+		job.ProgressDetail("pulling-image", message, done, total)
+		if bytesTotal > 0 {
+			job.ProgressBytesDetail("pulling-image", message, bytesDone, bytesTotal)
+		}
 	}); err != nil {
-		s.finishRecipeOperation(job, operationID, err)
+		s.finishRecipeOperation(job, operationID, fmt.Errorf("download recipe runtime image: %w", err))
 		return
 	}
 	preparedImage, err := s.eng.InspectImage(ctx, registryImage)
@@ -442,8 +486,9 @@ func (s *Server) runManagedContainerRecipe(job *jobs.Job, recipe localrecipes.Re
 		rollback(err)
 		return
 	}
-	job.ProgressOperation("initializing-engine", "The container is running. Reading its startup progress while the model becomes ready…", "vLLM", 50, 0, 0)
-	stopStartupProgress := observeRecipeContainerStartup(ctx, s.eng, job, runtimeName, 3*time.Second)
+	engineName := recipeContainerEngineName(recipe.Engine.Type)
+	job.ProgressOperation("initializing-engine", "The container is running. Reading its startup progress while the model becomes ready…", engineName, 50, 0, 0)
+	stopStartupProgress := observeRecipeContainerStartup(ctx, s.eng, job, runtimeName, recipe.Engine.Type, 3*time.Second)
 	healthErr := waitRecipeHealthWithoutUpdates(ctx, job, recipe)
 	stopStartupProgress()
 	if healthErr != nil {
@@ -504,6 +549,22 @@ func (s *Server) runManagedContainerRecipe(job *jobs.Job, recipe localrecipes.Re
 	job.Progress("ready", "Recipe is running through the normal Cloudless API.", 6, 6)
 	job.Succeed(localrecipes.CloudlessModelAlias)
 	s.pruneRecipeOperations()
+}
+
+func recipePreflightImageCompressedBytes(operation recipeops.Operation) int64 {
+	if operation.Preflight == nil {
+		return 0
+	}
+	for _, check := range operation.Preflight.Checks {
+		if check.ID != "image" {
+			continue
+		}
+		bytes, err := strconv.ParseInt(check.Values["compressedBytes"], 10, 64)
+		if err == nil && bytes > 0 {
+			return bytes
+		}
+	}
+	return 0
 }
 
 func (s *Server) stopManagedContainerRecipe(job *jobs.Job, recipe localrecipes.Recipe, operationID string) {

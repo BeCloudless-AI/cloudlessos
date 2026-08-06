@@ -1,10 +1,55 @@
 package api
 
 import (
+	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/cloudless/orchestrator/internal/engine"
+	"github.com/cloudless/orchestrator/internal/jobs"
 )
+
+type progressExportEngine struct{ engine.Engine }
+
+func (progressExportEngine) ExportImage(ctx context.Context, _ string, destination string) error {
+	partial := destination + ".partial"
+	for _, size := range []int{25, 75} {
+		if err := os.WriteFile(partial, make([]byte, size), 0o600); err != nil {
+			return err
+		}
+		select {
+		case <-time.After(15 * time.Millisecond):
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	return os.Rename(partial, destination)
+}
+
+func TestExportRecipeImageReportsArchiveBytes(t *testing.T) {
+	previous := recipeImageExportProgressInterval
+	recipeImageExportProgressInterval = 5 * time.Millisecond
+	t.Cleanup(func() { recipeImageExportProgressInterval = previous })
+	job := jobs.NewManager().Create("recipe:test")
+	var sawIntermediate bool
+	job.Observe(func(update jobs.Update) {
+		if update.Phase == "exporting-image" && update.BytesDone > 0 && update.BytesDone < update.BytesTotal {
+			sawIntermediate = true
+		}
+	})
+	archive := filepath.Join(t.TempDir(), "cloudless-image-test.tar")
+	if err := exportRecipeImageWithProgress(context.Background(), progressExportEngine{}, job, "cloudless/runtime:test", archive, 100); err != nil {
+		t.Fatal(err)
+	}
+	got := job.Snapshot()
+	if !sawIntermediate || got.BytesDone != 100 || got.BytesTotal != 100 || got.Phase != "exporting-image" {
+		t.Fatalf("export progress = %#v, sawIntermediate=%v", got, sawIntermediate)
+	}
+}
 
 func TestReconcileLoadedRecipeImageRestoresMissingTransferReference(t *testing.T) {
 	const expected = "sha256:3430d6614a8e2925f34d059af6caf05aff42387326db4d05639a60f10f2654d8"

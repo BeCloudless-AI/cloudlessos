@@ -201,6 +201,13 @@ func recipeHostPermissions(recipe localrecipes.Recipe) []string {
 			if container.IPC != "" {
 				permissions = append(permissions, "Use container IPC mode "+container.IPC)
 			}
+			if container.Memory != "" {
+				limit := "Limit container memory to " + container.Memory
+				if container.MemorySwap != "" {
+					limit += " with memory+swap capped at " + container.MemorySwap
+				}
+				permissions = append(permissions, limit)
+			}
 			for _, capability := range container.CapAdd {
 				permissions = append(permissions, "Add Linux capability "+capability)
 			}

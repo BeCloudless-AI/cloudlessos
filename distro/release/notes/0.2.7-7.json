@@ -1,0 +1,14 @@
+{
+  "title": "Reliable community recipe launches and transparent runtime risk",
+  "summary": "CloudlessOS 0.2.7-7 makes large community-recipe launches recoverable and understandable, adds explicit vulnerability disclosure and moderator overrides, and broadens the constrained container contract to SGLang.",
+  "changes": [
+    "Stream structured Docker layer and byte progress for recipe, app, and managed-engine image downloads, retry interrupted registry transfers within bounded limits, and preserve actionable failure details.",
+    "Report runtime-image packaging and cluster transfer progress instead of leaving large multi-Spark preparation phases indeterminate.",
+    "Recover interrupted advanced and managed container recipes through their correct lifecycle so daemon restarts do not rebind an already prepared image through the generic model path.",
+    "Explain post-weight startup work including engine initialization, TileLang and GPU-kernel compilation, KV-cache preparation, FlashInfer autotuning, DeepGEMM warmup, and final health verification.",
+    "Display retained HIGH and CRITICAL image findings in Discover and installed-recipe views, explain practical exposure in plain language, and require explicit acknowledgement before launching an affected recipe.",
+    "Add an audited moderator-only --force publication path for exact revisions whose fixable CRITICAL image findings were reviewed, without bypassing signatures, immutable inputs, scanner availability, manifest policy, or other validation failures.",
+    "Support constrained command-free SGLang community containers alongside vLLM and add validated memory and memory-swap ceilings for signed advanced containers.",
+    "Add pinned Ling 3.0 Flash SGLang and DeepSeek V4 Flash SparkInfer community recipe examples and improve structured CLI validation errors."
+  ]
+}

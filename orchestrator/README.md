@@ -96,7 +96,7 @@ in [`../docs/LOCAL_RECIPES.md`](../docs/LOCAL_RECIPES.md).
 
 Execution is admitted independently from editing. An exact `source-scripts-v1` profile must match
 one authenticated in the installed package. `managed-container-v1` provides the constrained,
-command-free policy; `advanced-container-v1` admits a signed immutable image with its declared
+command-free vLLM/SGLang policy; `advanced-container-v1` admits a signed immutable image with its declared
 in-container command, auxiliary models, environment, and permissions. Neither container adapter
 may invoke host commands or mount arbitrary host paths. Other definitions appear as Drafts and
 cannot execute. Check and Run also reject an incomplete/missing exact model snapshot. The UI calls the

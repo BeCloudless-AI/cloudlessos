@@ -2,12 +2,67 @@ package engine
 
 import (
 	"context"
+	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 )
+
+func TestPullStreamUsesStructuredDockerByteProgress(t *testing.T) {
+	socket := filepath.Join(t.TempDir(), "docker.sock")
+	listener, err := net.Listen("unix", socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/images/create" {
+			t.Errorf("request = %s %s", r.Method, r.URL.Path)
+		}
+		if got := r.URL.Query().Get("fromImage"); got != "cloudless/runtime" {
+			t.Errorf("fromImage = %q", got)
+		}
+		if got := r.URL.Query().Get("tag"); got != "test" {
+			t.Errorf("tag = %q", got)
+		}
+		if got := r.Header.Get("X-Registry-Auth"); got != "e30=" {
+			t.Errorf("registry auth = %q", got)
+		}
+		_, _ = w.Write([]byte("{\"status\":\"Downloading\",\"id\":\"layer123\",\"progressDetail\":{\"current\":25,\"total\":100}}\n"))
+		_, _ = w.Write([]byte("{\"status\":\"Pull complete\",\"id\":\"layer123\"}\n"))
+	})}
+	go func() { _ = server.Serve(listener) }()
+	t.Cleanup(func() { _ = server.Shutdown(context.Background()) })
+	t.Setenv("DOCKER_HOST", "unix://"+socket)
+
+	var lines []string
+	err = (&Docker{bin: filepath.Join(t.TempDir(), "must-not-run")}).PullStream(context.Background(), "cloudless/runtime:test", func(line string) {
+		lines = append(lines, line)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"layer123: Downloading 25B/100B", "layer123: Pull complete"}
+	if !reflect.DeepEqual(lines, want) {
+		t.Fatalf("progress lines = %#v, want %#v", lines, want)
+	}
+}
+
+func TestDockerPullQueryPreservesRegistryPortsAndDigests(t *testing.T) {
+	for image, want := range map[string][2]string{
+		"alpine/socat:latest":                                     {"alpine/socat", "latest"},
+		"registry.test:5000/team/runtime:v1":                      {"registry.test:5000/team/runtime", "v1"},
+		"ghcr.io/team/runtime@sha256:abcdef":                      {"ghcr.io/team/runtime", "sha256:abcdef"},
+		"registry.test:5000/team/runtime@sha256:0123456789abcdef": {"registry.test:5000/team/runtime", "sha256:0123456789abcdef"},
+	} {
+		query := dockerPullQuery(image)
+		if got := [2]string{query.Get("fromImage"), query.Get("tag")}; got != want {
+			t.Errorf("dockerPullQuery(%q) = %#v, want %#v", image, got, want)
+		}
+	}
+}
 
 func TestTypedRuntimeQueriesRejectUnmanagedAuthority(t *testing.T) {
 	docker := &Docker{bin: filepath.Join(t.TempDir(), "must-not-run")}
@@ -45,6 +100,29 @@ printf '%s\n' '[{"Id":"sha256:abc","Architecture":"arm64","Size":4096,"Config":{
 	if info.ID != "sha256:abc" || info.Architecture != "arm64" || info.Size != 4096 ||
 		!reflect.DeepEqual(info.EntryPoint, []string{"vllm", "serve"}) {
 		t.Fatalf("image metadata = %#v", info)
+	}
+}
+
+func TestPullStreamReturnsBoundedDockerFailureDetail(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("DOCKER_HOST", "unix://"+filepath.Join(dir, "missing-docker.sock"))
+	binary := filepath.Join(dir, "docker")
+	script := `#!/bin/sh
+printf '%s\n' '58aacae73b54: Download failed, retrying (1/5): unexpected EOF'
+exit 1
+`
+	if err := os.WriteFile(binary, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	var lines []string
+	err := (&Docker{bin: binary}).PullStream(context.Background(), "cloudless/runtime:test", func(line string) {
+		lines = append(lines, line)
+	})
+	if err == nil || !strings.Contains(err.Error(), "unexpected EOF") {
+		t.Fatalf("pull error = %v", err)
+	}
+	if len(lines) != 1 || !strings.Contains(lines[0], "unexpected EOF") {
+		t.Fatalf("streamed lines = %#v", lines)
 	}
 }
 
@@ -266,10 +344,10 @@ func TestRunArgsSupportsConstrainedRecipeSandbox(t *testing.T) {
 		Name: "cloudless-recipe", Image: "runtime@sha256:abc", ReadOnly: true,
 		CapDrop: []string{"NET_RAW", "ALL"}, SecurityOpts: []string{"no-new-privileges:true"},
 		Tmpfs:     []string{"/run:rw,nosuid,size=64m", "/tmp:rw,nosuid,size=16g"},
-		PidsLimit: 8192, ShmSize: "16g",
+		PidsLimit: 8192, ShmSize: "16g", Memory: "100g", MemorySwap: "100g",
 	}), " ")
 	for _, required := range []string{
-		"--read-only", "--pids-limit 8192", "--shm-size 16g",
+		"--read-only", "--pids-limit 8192", "--shm-size 16g", "--memory 100g", "--memory-swap 100g",
 		"--cap-drop ALL", "--cap-drop NET_RAW",
 		"--security-opt no-new-privileges:true",
 		"--tmpfs /run:rw,nosuid,size=64m", "--tmpfs /tmp:rw,nosuid,size=16g",

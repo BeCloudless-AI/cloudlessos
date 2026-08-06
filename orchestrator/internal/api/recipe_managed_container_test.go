@@ -99,7 +99,7 @@ func managedContainerRecipeForTest() localrecipes.Recipe {
 		Distributed: localrecipes.Distributed{Nodes: 1, MasterPort: 25000, WorkerAlias: "worker"},
 		Runtime: localrecipes.Runtime{
 			Adapter: localrecipes.ManagedContainerAdapter, WorkingDir: ".", TimeoutMinutes: 120,
-			Environment: map[string]string{"HF_CACHE": "evil", "HF_TOKEN": "recipe-secret", "SAFE": "yes"},
+			Environment: map[string]string{"HF_CACHE": "evil", "HF_TOKEN": "recipe-secret", "VLLM_ALLOW_LONG_MAX_MODEL_LEN": "1"},
 		},
 		Health: localrecipes.Health{
 			Scheme: "http", Host: "127.0.0.1", Port: 8890, Path: "/health",
@@ -136,7 +136,7 @@ func TestManagedContainerRecipeSpecOwnsSecurityAndContract(t *testing.T) {
 		spec.Env["HOME"] != "/cache/huggingface" || spec.Env["FLASHINFER_WORKSPACE_DIR"] != "/cache/huggingface/flashinfer" ||
 		spec.Env["PIP_CACHE_DIR"] != "/cache/huggingface/.cloudless-runtime/pip" || spec.Env["UV_CACHE_DIR"] != "/cache/huggingface/.cloudless-runtime/uv" ||
 		spec.Env["TORCH_EXTENSIONS_DIR"] != "/cache/huggingface/.cloudless-runtime/torch-extensions" ||
-		spec.Env["HF_CACHE"] != "" || spec.Env["SAFE"] != "yes" {
+		spec.Env["HF_CACHE"] != "" || spec.Env["VLLM_ALLOW_LONG_MAX_MODEL_LEN"] != "1" {
 		t.Fatalf("credential/environment mediation failed: %#v", spec.Env)
 	}
 	if spec.SecretFiles["/var/lib/cloudless/huggingface-token"] != "/run/secrets/cloudless-huggingface-token" || len(spec.SecretFiles) != 1 {
@@ -154,6 +154,40 @@ func TestManagedContainerRecipeSpecOwnsSecurityAndContract(t *testing.T) {
 	}
 }
 
+func TestManagedSGLangRecipeSpecUsesSGLangContract(t *testing.T) {
+	t.Setenv("CLOUDLESS_MODEL_CACHE", t.TempDir())
+	recipe := managedContainerRecipeForTest()
+	recipe.Engine.Type = localrecipes.ManagedSGLangEngine
+	recipe.Engine.Image = "registry.example/sglang@sha256:" + strings.Repeat("d", 64)
+	recipe.Engine.Arguments = []string{"--allow-auto-truncate", "--enable-fp32-lm-head"}
+	recipe.Runtime.Environment = map[string]string{
+		"SGLANG_ALLOW_OVERWRITE_LONGER_CONTEXT_LEN": "1",
+		"SGLANG_ENABLE_SPEC_V2":                     "1",
+	}
+	spec, err := managedContainerRecipeSpec(recipe, "sha256:"+strings.Repeat("e", 64), "cloudless-sglang-test", "operation-sglang", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if spec.EntryPoint != "python3" || !spec.ReadOnly || spec.Network != "cloudless" {
+		t.Fatalf("managed SGLang scaffold = %#v", spec)
+	}
+	command := strings.Join(spec.Args, " ")
+	for _, expected := range []string{
+		"-m sglang.launch_server", "--model-path example/model",
+		"--revision " + strings.Repeat("b", 40), "--served-model-name cloudless",
+		"--host 0.0.0.0", "--port 8890", "--context-length 32768",
+		"--max-running-requests 2", "--mem-fraction-static 0.75",
+		"--tp-size 1", "--pp-size 1", "--allow-auto-truncate", "--enable-fp32-lm-head",
+	} {
+		if !strings.Contains(command, expected) {
+			t.Fatalf("managed SGLang command %q is missing %q", command, expected)
+		}
+	}
+	if spec.Env["SGLANG_ALLOW_OVERWRITE_LONGER_CONTEXT_LEN"] != "1" || spec.Env["SGLANG_ENABLE_SPEC_V2"] != "1" {
+		t.Fatalf("managed SGLang environment was not preserved: %#v", spec.Env)
+	}
+}
+
 func TestAdvancedContainerRecipeSpecPreservesDeclaredCommandAndPermissions(t *testing.T) {
 	t.Setenv("CLOUDLESS_MODEL_CACHE", t.TempDir())
 	recipe := managedContainerRecipeForTest()
@@ -165,14 +199,15 @@ func TestAdvancedContainerRecipeSpecPreservesDeclaredCommandAndPermissions(t *te
 	recipe.Runtime.Environment["CUTE_DSL_ARCH"] = "sm_121a"
 	recipe.Runtime.Container = localrecipes.ContainerRuntime{
 		User: "0", IPC: "host", ShmSize: "32g", Ulimits: []string{"memlock=-1:-1"},
-		CapAdd: []string{"IPC_LOCK"}, ModelCachePath: "/root/.cache/huggingface",
+		CapAdd: []string{"IPC_LOCK"}, ModelCachePath: "/root/.cache/huggingface", Memory: "100g", MemorySwap: "100g",
 	}
 	spec, err := managedContainerRecipeSpec(recipe, recipe.Engine.Image, "cloudless-recipe-advanced", "operation-advanced", "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if spec.EntryPoint != "/bin/bash" || !reflect.DeepEqual(spec.Args, recipe.Engine.Command) || spec.User != "0" || spec.ReadOnly || spec.IPC != "host" ||
-		!reflect.DeepEqual(spec.CapAdd, []string{"IPC_LOCK"}) || spec.Volumes[modelcache.Root()] != "/root/.cache/huggingface" || spec.Env["CUTE_DSL_ARCH"] != "sm_121a" {
+		!reflect.DeepEqual(spec.CapAdd, []string{"IPC_LOCK"}) || spec.Volumes[modelcache.Root()] != "/root/.cache/huggingface" ||
+		spec.Env["CUTE_DSL_ARCH"] != "sm_121a" || spec.Memory != "100g" || spec.MemorySwap != "100g" {
 		t.Fatalf("advanced runtime declaration was not preserved: %#v", spec)
 	}
 }

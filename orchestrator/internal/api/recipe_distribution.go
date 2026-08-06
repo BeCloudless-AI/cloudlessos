@@ -30,6 +30,7 @@ var recipePeerUsernamePattern = regexp.MustCompile(`^[a-z_][a-z0-9_-]{0,31}$`)
 // persistent Cloudless data filesystem instead of /run, which is commonly a
 // small tmpfs and can fill even when the machine has ample disk space.
 var recipeImageTransferRoot = "/var/lib/cloudless/image-transfers"
+var recipeImageExportProgressInterval = time.Second
 
 type recipePeer struct {
 	Alias    string
@@ -428,8 +429,7 @@ func distributeRecipeImage(ctx context.Context, runtime engine.Engine, job *jobs
 		_, _ = recipeCommandOutput(recipeSSHCommand(ctx, dir, env, peer, "docker", "image", "rm", "-f", transferReference))
 		label := fmt.Sprintf("Copying the inference runtime from %s to %s over the direct Spark fabric (%d/%d)", localRecipeNodeName(), peer.Name, index+1, len(peers))
 		if !exported {
-			job.Progress("exporting-image", "Preparing the verified inference runtime for transfer...", -1, -1)
-			if err := runtime.ExportImage(ctx, transferReference, archive); err != nil {
+			if err := exportRecipeImageWithProgress(ctx, runtime, job, transferReference, archive, imageSize); err != nil {
 				return err
 			}
 			exported = true
@@ -444,6 +444,38 @@ func distributeRecipeImage(ctx context.Context, runtime engine.Engine, job *jobs
 		}
 	}
 	return nil
+}
+
+func exportRecipeImageWithProgress(ctx context.Context, runtime engine.Engine, job *jobs.Job, image, archive string, expectedBytes int64) error {
+	message := "Preparing the verified inference runtime for transfer..."
+	job.ProgressBytes("exporting-image", message, 0, expectedBytes)
+	result := make(chan error, 1)
+	go func() { result <- runtime.ExportImage(ctx, image, archive) }()
+	ticker := time.NewTicker(recipeImageExportProgressInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case err := <-result:
+			if err == nil {
+				job.ProgressBytes("exporting-image", "Verified runtime archive is ready for transfer.", expectedBytes, expectedBytes)
+			}
+			return err
+		case <-ticker.C:
+			if info, err := os.Stat(archive + ".partial"); err == nil {
+				done := info.Size()
+				if expectedBytes > 0 && done > expectedBytes {
+					done = expectedBytes
+				}
+				message := "Packaging the verified runtime for transfer..."
+				if expectedBytes > 0 {
+					message = fmt.Sprintf("Packaging the verified runtime — %d%%", done*100/expectedBytes)
+				}
+				job.ProgressBytes("exporting-image", message, done, expectedBytes)
+			}
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
 }
 
 func recipeCacheVolume(recipe localrecipes.Recipe) (string, error) {

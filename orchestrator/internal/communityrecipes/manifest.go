@@ -12,7 +12,32 @@ var (
 	imageDigestPattern   = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/:@-]{0,430}@sha256:[0-9a-fA-F]{64}$`)
 	modelRevisionPattern = regexp.MustCompile(`^[0-9a-fA-F]{40}([0-9a-fA-F]{24})?$`)
 	licensePattern       = regexp.MustCompile(`^(Apache-2\.0|MIT|BSD-3-Clause|GPL-3\.0-only|GPL-3\.0-or-later|Proprietary)$`)
+	containerSizePattern = regexp.MustCompile(`^[1-9][0-9]*(?:[kKmMgG])?$`)
 )
+
+var managedArgumentsByEngine = map[string]map[string]struct{}{
+	"vllm": {
+		"--disable-log-requests": {}, "--disable-sliding-window": {}, "--enable-chunked-prefill": {},
+		"--enable-prefix-caching": {}, "--enforce-eager": {}, "--enable-reasoning": {},
+		"--disable-custom-all-reduce": {},
+	},
+	"sglang": {
+		"--disable-cuda-graph": {}, "--disable-radix-cache": {}, "--enable-metrics": {},
+		"--enable-torch-compile": {}, "--allow-auto-truncate": {}, "--enable-fp32-lm-head": {},
+		"--disable-shared-experts-fusion": {},
+	},
+}
+
+var managedEnvironmentByEngine = map[string]map[string]struct{}{
+	"vllm": {
+		"HF_HUB_DISABLE_XET": {}, "VLLM_ALLOW_LONG_MAX_MODEL_LEN": {},
+	},
+	"sglang": {
+		"HF_HUB_DISABLE_XET": {}, "SGLANG_ALLOW_OVERWRITE_LONGER_CONTEXT_LEN": {},
+		"SGLANG_JIT_DEEPGEMM_PRECOMPILE": {}, "SGLANG_ENABLE_SPEC_V2": {},
+		"FLASHINFER_DISABLE_VERSION_CHECK": {},
+	},
+}
 
 func mapField(parent map[string]any, key string) (map[string]any, error) {
 	value, ok := parent[key].(map[string]any)
@@ -136,6 +161,16 @@ func ValidateManagedManifest(manifest map[string]any) error {
 			return errors.New("distributed advanced containers require 2-8 nodes, matching tensor parallelism, NCCL, host IPC, and InfiniBand")
 		}
 	}
+	if adapter == "advanced-container-v1" {
+		container, _ := mapField(runtime, "container")
+		memory, memorySwap := textField(container, "memory"), textField(container, "memorySwap")
+		if memory != "" && !containerSizePattern.MatchString(memory) || memorySwap != "" && !containerSizePattern.MatchString(memorySwap) {
+			return errors.New("advanced container memory limits are invalid")
+		}
+		if memorySwap != "" && memory == "" {
+			return errors.New("advanced container memorySwap requires memory")
+		}
+	}
 	lifecycle, err := mapField(runtime, "lifecycle")
 	if err != nil {
 		return err
@@ -146,6 +181,11 @@ func ValidateManagedManifest(manifest map[string]any) error {
 		}
 	}
 	if adapter == "managed-container-v1" {
+		engineType := strings.ToLower(strings.TrimSpace(textField(engine, "type")))
+		allowedArguments, supported := managedArgumentsByEngine[engineType]
+		if !supported {
+			return errors.New("managed-container-v1 requires vLLM or SGLang")
+		}
 		if textField(engine, "entryPoint") != "" {
 			return errors.New("managed-container-v1 cannot override the container entry point")
 		}
@@ -153,6 +193,23 @@ func ValidateManagedManifest(manifest map[string]any) error {
 			items, ok := command.([]any)
 			if !ok || len(items) != 0 {
 				return errors.New("managed-container-v1 cannot override the container command")
+			}
+		}
+		if arguments, ok := engine["arguments"].([]any); ok {
+			for _, item := range arguments {
+				argument, ok := item.(string)
+				if !ok {
+					return errors.New("managed container arguments must be strings")
+				}
+				if _, ok := allowedArguments[argument]; !ok {
+					return fmt.Errorf("unsupported managed %s argument: %s", engineType, argument)
+				}
+			}
+		}
+		environment, _ := runtime["environment"].(map[string]any)
+		for name := range environment {
+			if _, ok := managedEnvironmentByEngine[engineType][name]; !ok {
+				return fmt.Errorf("unsupported managed %s environment variable: %s", engineType, name)
 			}
 		}
 	}

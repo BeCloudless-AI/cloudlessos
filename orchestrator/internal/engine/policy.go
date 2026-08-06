@@ -79,6 +79,15 @@ func ValidateRunSpec(spec RunSpec) error {
 	if spec.ShmSize != "" && !sizeValue.MatchString(strings.TrimSpace(spec.ShmSize)) {
 		return errors.New("shared-memory size is invalid")
 	}
+	if spec.Memory != "" && !sizeValue.MatchString(strings.TrimSpace(spec.Memory)) {
+		return errors.New("container memory limit is invalid")
+	}
+	if spec.MemorySwap != "" && !sizeValue.MatchString(strings.TrimSpace(spec.MemorySwap)) {
+		return errors.New("container memory-swap limit is invalid")
+	}
+	if spec.MemorySwap != "" && spec.Memory == "" {
+		return errors.New("container memory-swap limit requires a memory limit")
+	}
 	for _, tmpfs := range spec.Tmpfs {
 		target := strings.SplitN(strings.TrimSpace(tmpfs), ":", 2)[0]
 		if target != "/tmp" && target != "/run" {

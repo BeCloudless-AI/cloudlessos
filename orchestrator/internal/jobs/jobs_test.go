@@ -39,9 +39,9 @@ func TestChangingPhaseClearsStaleByteProgress(t *testing.T) {
 	job := NewManager().Create("recipe:test")
 	job.ProgressBytes("building", "Downloading runtime", 50, 100)
 	job.ProgressNodes("peer-downloading", "Workers downloading", []NodeProgress{{Node: "spark-2", Phase: "downloading"}}, 50, 100)
-	job.Progress("syncing-image", "Preparing transfer", 2, 8)
+	job.Progress("syncing-image", "Preparing transfer", 0, 0)
 	got := job.Snapshot()
-	if got.BytesDone != 0 || got.BytesTotal != 0 || got.Phase != "syncing-image" || len(got.Nodes) != 0 {
+	if got.BytesDone != 0 || got.BytesTotal != 0 || got.LayersDone != 0 || got.LayersTotal != 0 || got.Percent != 0 || got.Phase != "syncing-image" || len(got.Nodes) != 0 {
 		t.Fatalf("stale byte progress survived phase change: %#v", got)
 	}
 }

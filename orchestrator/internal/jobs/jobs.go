@@ -273,6 +273,8 @@ func (j *Job) Progress(phase, msg string, done, total int) {
 			u.BytesTotal = 0
 			u.BytesPerSec, u.StalledSecs, u.Components = 0, 0, nil
 			u.Nodes = nil
+			u.LayersDone, u.LayersTotal = 0, 0
+			u.Percent = 0
 			u.etaOverride = 0
 			u.ItemsDone, u.ItemsTotal, u.CurrentItem = 0, 0, ""
 		}

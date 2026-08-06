@@ -10,9 +10,13 @@ import (
 const ManagedContainerAdapter = "managed-container-v1"
 const AdvancedContainerAdapter = "advanced-container-v1"
 
+const ManagedVLLMEngine = "vllm"
+const ManagedSGLangEngine = "sglang"
+
 var (
 	immutableContainerImagePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/:@-]{0,430}@sha256:[0-9a-fA-F]{64}$`)
 	immutableModelRevisionPattern  = regexp.MustCompile(`^[0-9a-fA-F]{40}(?:[0-9a-fA-F]{24})?$`)
+	containerSizePattern           = regexp.MustCompile(`^[1-9][0-9]*(?:[kKmMgG])?$`)
 )
 
 var managedVLLMBooleanArguments = map[string]struct{}{
@@ -23,6 +27,43 @@ var managedVLLMBooleanArguments = map[string]struct{}{
 	"--enforce-eager":             {},
 	"--enable-reasoning":          {},
 	"--disable-custom-all-reduce": {},
+}
+
+var managedSGLangBooleanArguments = map[string]struct{}{
+	"--disable-cuda-graph":            {},
+	"--disable-radix-cache":           {},
+	"--enable-metrics":                {},
+	"--enable-torch-compile":          {},
+	"--allow-auto-truncate":           {},
+	"--enable-fp32-lm-head":           {},
+	"--disable-shared-experts-fusion": {},
+}
+
+var managedContainerEnvironment = map[string]map[string]struct{}{
+	ManagedVLLMEngine: {
+		"HF_HUB_DISABLE_XET":            {},
+		"VLLM_ALLOW_LONG_MAX_MODEL_LEN": {},
+	},
+	ManagedSGLangEngine: {
+		"HF_HUB_DISABLE_XET":                        {},
+		"SGLANG_ALLOW_OVERWRITE_LONGER_CONTEXT_LEN": {},
+		"SGLANG_JIT_DEEPGEMM_PRECOMPILE":            {},
+		"SGLANG_ENABLE_SPEC_V2":                     {},
+		"FLASHINFER_DISABLE_VERSION_CHECK":          {},
+	},
+}
+
+func managedContainerEngine(value string) (string, bool) {
+	engine := strings.ToLower(strings.TrimSpace(value))
+	_, ok := managedContainerEnvironment[engine]
+	return engine, ok
+}
+
+func managedBooleanArguments(engine string) map[string]struct{} {
+	if engine == ManagedSGLangEngine {
+		return managedSGLangBooleanArguments
+	}
+	return managedVLLMBooleanArguments
 }
 
 // ValidateManagedContainerRecipe proves that an editable recipe can be
@@ -45,7 +86,8 @@ func IsContainerAdapter(adapter string) bool {
 func containerRuntimeConfigured(value ContainerRuntime) bool {
 	return value.User != "" || value.ReadOnly || value.IPC != "" || value.ShmSize != "" ||
 		len(value.Ulimits) != 0 || len(value.CapAdd) != 0 || len(value.CapDrop) != 0 ||
-		len(value.Tmpfs) != 0 || value.PidsLimit != 0 || value.ModelCachePath != "" || value.Infiniband
+		len(value.Tmpfs) != 0 || value.PidsLimit != 0 || value.ModelCachePath != "" ||
+		value.Memory != "" || value.MemorySwap != "" || value.Infiniband
 }
 
 func validateManagedContainerDraft(d Draft) error {
@@ -59,8 +101,9 @@ func validateManagedContainerDraft(d Draft) error {
 	if !immutableContainerImagePattern.MatchString(strings.TrimSpace(d.Engine.Image)) {
 		return errors.New("managed container recipes require an image pinned as repository@sha256:<digest>")
 	}
-	if strings.TrimSpace(d.Engine.Type) == "" || adapter == ManagedContainerAdapter && strings.ToLower(strings.TrimSpace(d.Engine.Type)) != "vllm" {
-		return errors.New("managed-container-v1 requires vLLM; advanced-container-v1 may declare another OpenAI-compatible engine")
+	managedEngine, supportedManagedEngine := managedContainerEngine(d.Engine.Type)
+	if strings.TrimSpace(d.Engine.Type) == "" || adapter == ManagedContainerAdapter && !supportedManagedEngine {
+		return errors.New("managed-container-v1 requires vLLM or SGLang; advanced-container-v1 may declare another OpenAI-compatible engine")
 	}
 	if d.Engine.ServedModelName != CloudlessModelAlias || d.Engine.APIPath != "/v1" {
 		return errors.New("managed container recipes must preserve the Cloudless model and /v1 API contract")
@@ -112,8 +155,8 @@ func validateManagedContainerDraft(d Draft) error {
 			return errors.New("managed-container-v1 cannot override the container command or security profile; use advanced-container-v1")
 		}
 		for _, argument := range d.Engine.Arguments {
-			if _, ok := managedVLLMBooleanArguments[argument]; !ok {
-				return fmt.Errorf("vLLM argument %q is not available in the constrained recipe runtime", argument)
+			if _, ok := managedBooleanArguments(managedEngine)[argument]; !ok {
+				return fmt.Errorf("%s argument %q is not available in the constrained recipe runtime", managedEngine, argument)
 			}
 		}
 	} else {
@@ -126,6 +169,15 @@ func validateManagedContainerDraft(d Draft) error {
 		container := d.Runtime.Container
 		if container.ModelCachePath != "" && !strings.HasPrefix(container.ModelCachePath, "/") {
 			return errors.New("advanced container modelCachePath must be absolute")
+		}
+		if container.Memory != "" && !containerSizePattern.MatchString(strings.TrimSpace(container.Memory)) {
+			return errors.New("advanced container memory limit is invalid")
+		}
+		if container.MemorySwap != "" && !containerSizePattern.MatchString(strings.TrimSpace(container.MemorySwap)) {
+			return errors.New("advanced container memory-swap limit is invalid")
+		}
+		if container.MemorySwap != "" && container.Memory == "" {
+			return errors.New("advanced container memory-swap limit requires a memory limit")
 		}
 	}
 	if d.Health.Scheme != "http" || d.Health.Host != "127.0.0.1" || d.Health.Port != d.Engine.ContainerPort {

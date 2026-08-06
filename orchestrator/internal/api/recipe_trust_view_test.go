@@ -87,6 +87,23 @@ func TestRecipeTrustViewListsRemoteCodeAndClusterPermissions(t *testing.T) {
 	}
 }
 
+func TestRecipeTrustViewListsAdvancedMemoryCeiling(t *testing.T) {
+	recipe := managedContainerRecipeForTest()
+	recipe.Runtime.Adapter = localrecipes.AdvancedContainerAdapter
+	recipe.Engine.EntryPoint = "/bin/bash"
+	recipe.Engine.Command = []string{"-lc", "exec python3 -m sglang.launch_server"}
+	recipe.Engine.Arguments = nil
+	recipe.Runtime.Container = localrecipes.ContainerRuntime{Memory: "100g", MemorySwap: "100g"}
+	view := buildRecipeTrustView(recipe, nil)
+	want := "Limit container memory to 100g with memory+swap capped at 100g"
+	for _, permission := range view.HostPermissions {
+		if permission == want {
+			return
+		}
+	}
+	t.Fatalf("missing memory ceiling %q in %#v", want, view.HostPermissions)
+}
+
 func TestRecipeTrustViewRedactsSecretCommandArguments(t *testing.T) {
 	recipe := localrecipes.Recipe{ID: "local", Origin: "local", Trust: "local-custom"}
 	recipe.Runtime.Lifecycle.Start = localrecipes.Command{Program: "server", Args: []string{"--token", "secret-value", "--port", "8890"}}

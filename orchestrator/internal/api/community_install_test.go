@@ -112,7 +112,17 @@ func (f *communityInstallFixture) serve(t *testing.T, release communityrecipes.R
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/v1/recipes/managed-test/revisions/1.0.0":
-			_ = json.NewEncoder(w).Encode(map[string]any{"recipe": map[string]string{"slug": "managed-test"}, "release": release})
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"recipe": map[string]string{"slug": "managed-test"}, "release": release,
+				"validation": map[string]any{
+					"result": "passed", "checkedAt": "2026-08-06T00:00:00Z",
+					"image": map[string]any{
+						"admission": "moderator-override", "policy": "actionable-critical-v1", "scanner": "trivy",
+						"summary":          map[string]int{"total": 12, "high": 10, "critical": 2, "actionableCritical": 2, "fixableCritical": 2, "warnings": 10},
+						"blockingFindings": []map[string]string{{"id": "CVE-TEST", "package": "runtime", "severity": "CRITICAL", "fixed": "2.0.0"}},
+					},
+				},
+			})
 		case "/v1/recipes/trust/revocations":
 			_ = json.NewEncoder(w).Encode(map[string]any{"revocations": revocations})
 		default:
@@ -140,6 +150,9 @@ func TestCommunityRecipeInstallVerifiesAndPersistsExactRelease(t *testing.T) {
 	recipes, err := fixture.server.recipes.List()
 	if err != nil || len(recipes) != 1 || recipes[0].Community == nil || recipes[0].Community.RevisionID != "223e4567-e89b-12d3-a456-426614174000" {
 		t.Fatalf("exact verified provenance was not persisted: %#v %v", recipes, err)
+	}
+	if validation := recipes[0].Community.Validation; validation == nil || validation.Image == nil || validation.Image.Summary.Critical != 2 || validation.Image.Admission != "moderator-override" {
+		t.Fatalf("sanitized vulnerability evidence was not persisted: %#v", recipes[0].Community)
 	}
 }
 

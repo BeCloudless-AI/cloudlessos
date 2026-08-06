@@ -43,9 +43,11 @@ exactly matches one authenticated inside the signed CloudlessOS package. Any edi
 status and blocks both Check and Run before a process, image build or Docker operation begins.
 
 The `managed-container-v1` runner remains the command-free path for standard user-authored vLLM
-containers. `advanced-container-v1` supports immutable custom engine images that own their complete
+and SGLang containers. Cloudless synthesizes the engine-specific command while preserving the same
+private port, model alias, model revision, cache, and sandbox contract. `advanced-container-v1`
+supports immutable custom engine images that own their complete
 in-container command, architecture-specific environment, auxiliary pinned models, writable-root
-mode, IPC, ulimits, declared Linux capabilities, and bounded NCCL launch across enrolled DGX
+mode, IPC, ulimits, memory ceilings, declared Linux capabilities, and bounded NCCL launch across enrolled DGX
 Sparks. Distributed advanced containers receive per-node rank and fabric identity from Cloudless,
 while Cloudless distributes the pinned image and either copies or verifies the shared model cache
 before launch. Both adapters deny host commands, arbitrary

@@ -1,6 +1,9 @@
 package communityrecipes
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func safeManifest() map[string]any {
 	empty := func() map[string]any { return map[string]any{"program": "", "args": []any{}} }
@@ -27,6 +30,26 @@ func TestValidateManagedManifest(t *testing.T) {
 	manifest["recipe"].(map[string]any)["engine"].(map[string]any)["containerPort"] = 8000
 	if err := ValidateManagedManifest(manifest); err == nil {
 		t.Fatal("unsafe port was accepted")
+	}
+}
+
+func TestValidateManagedSGLangManifest(t *testing.T) {
+	manifest := safeManifest()
+	recipe := manifest["recipe"].(map[string]any)
+	engine := recipe["engine"].(map[string]any)
+	engine["type"] = "sglang"
+	engine["image"] = "docker.io/lmsysorg/sglang@sha256:" + strings.Repeat("a", 64)
+	engine["arguments"] = []any{"--allow-auto-truncate", "--enable-fp32-lm-head"}
+	recipe["runtime"].(map[string]any)["environment"] = map[string]any{
+		"SGLANG_ALLOW_OVERWRITE_LONGER_CONTEXT_LEN": "1",
+		"SGLANG_ENABLE_SPEC_V2":                     "1",
+	}
+	if err := ValidateManagedManifest(manifest); err != nil {
+		t.Fatal(err)
+	}
+	engine["arguments"] = []any{"--port", "9999"}
+	if err := ValidateManagedManifest(manifest); err == nil {
+		t.Fatal("managed SGLang contract override was accepted")
 	}
 }
 

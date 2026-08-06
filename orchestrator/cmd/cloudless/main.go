@@ -32,13 +32,13 @@ func usage() {
 
 Usage:
   cloudless recipes validate <manifest.yaml>
-  cloudless recipes publish <manifest.yaml> [--api-key KEY] [--api URL]
+  cloudless recipes publish <manifest.yaml> [--api-key KEY] [--api URL] [--force] [--force-reason REASON]
   cloudless recipes status <submission-id> [--api-key KEY] [--api URL]
 
-CLOUDLESS_API_KEY and CLOUDLESS_COMMUNITY_API can provide the two flags.`)
+CLOUDLESS_API_KEY and CLOUDLESS_COMMUNITY_API can provide the API key and URL.`)
 }
 
-func parseOptions(arguments []string) (positional []string, api, key string, err error) {
+func parseOptions(arguments []string) (positional []string, api, key string, force bool, forceReason string, err error) {
 	api = strings.TrimRight(os.Getenv("CLOUDLESS_COMMUNITY_API"), "/")
 	if api == "" {
 		api = defaultAPI
@@ -46,24 +46,28 @@ func parseOptions(arguments []string) (positional []string, api, key string, err
 	key = os.Getenv("CLOUDLESS_API_KEY")
 	for index := 0; index < len(arguments); index++ {
 		switch arguments[index] {
-		case "--api", "--api-key":
+		case "--api", "--api-key", "--force-reason":
 			if index+1 >= len(arguments) {
-				return nil, "", "", fmt.Errorf("%s requires a value", arguments[index])
+				return nil, "", "", false, "", fmt.Errorf("%s requires a value", arguments[index])
 			}
 			if arguments[index] == "--api" {
 				api = strings.TrimRight(arguments[index+1], "/")
-			} else {
+			} else if arguments[index] == "--api-key" {
 				key = arguments[index+1]
+			} else {
+				forceReason = strings.TrimSpace(arguments[index+1])
 			}
 			index++
+		case "--force":
+			force = true
 		default:
 			if strings.HasPrefix(arguments[index], "--") {
-				return nil, "", "", fmt.Errorf("unknown option %s", arguments[index])
+				return nil, "", "", false, "", fmt.Errorf("unknown option %s", arguments[index])
 			}
 			positional = append(positional, arguments[index])
 		}
 	}
-	return positional, api, key, nil
+	return positional, api, key, force, forceReason, nil
 }
 
 func readManifest(path string) (map[string]any, error) {
@@ -132,10 +136,28 @@ func (c *client) request(ctx context.Context, method, path string, body any, out
 		return response.StatusCode, err
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		var payload struct{ Error, Code string }
+		var payload struct {
+			Error, Code string
+			Details     []struct{ Field, Message string }
+		}
 		_ = json.Unmarshal(raw, &payload)
 		if payload.Error == "" {
 			payload.Error = strings.TrimSpace(string(raw))
+		}
+		if len(payload.Details) != 0 {
+			details := make([]string, 0, len(payload.Details))
+			for _, detail := range payload.Details {
+				message := strings.TrimSpace(detail.Message)
+				if field := strings.TrimSpace(detail.Field); field != "" {
+					message = field + ": " + message
+				}
+				if message != "" {
+					details = append(details, message)
+				}
+			}
+			if len(details) != 0 {
+				payload.Error += " (" + strings.Join(details, "; ") + ")"
+			}
 		}
 		return response.StatusCode, fmt.Errorf("community API: %s", payload.Error)
 	}
@@ -160,7 +182,7 @@ func stringValue(parent map[string]any, key string) string {
 	return value
 }
 
-func publish(ctx context.Context, c *client, path string) error {
+func publish(ctx context.Context, c *client, path string, force bool, forceReason string) error {
 	if !strings.HasPrefix(c.key, "cld_alpha_") {
 		return errors.New("set --api-key or CLOUDLESS_API_KEY to a cld_alpha_ publisher key")
 	}
@@ -196,20 +218,28 @@ func publish(ctx context.Context, c *client, path string) error {
 	var created struct {
 		Recipe struct{ ID, Slug string } `json:"recipe"`
 	}
+	var mine struct {
+		Recipes []struct {
+			ID, Slug    string
+			Submissions []struct{ ID, Version, Status string } `json:"submissions"`
+		} `json:"recipes"`
+	}
+	loadOwnedRecipes := func() error {
+		mine.Recipes = nil
+		_, err := c.request(ctx, http.MethodGet, "/me/recipes", nil, &mine, false)
+		return err
+	}
 	status, err := c.request(ctx, http.MethodPost, "", createBody, &created, true)
 	if err != nil && status != http.StatusConflict {
 		return err
 	}
 	if status == http.StatusConflict {
-		var mine struct {
-			Recipes []struct{ ID, Slug string } `json:"recipes"`
-		}
-		if _, err := c.request(ctx, http.MethodGet, "/me/recipes", nil, &mine, false); err != nil {
+		if err := loadOwnedRecipes(); err != nil {
 			return err
 		}
 		for _, recipe := range mine.Recipes {
 			if recipe.Slug == slug {
-				created.Recipe = recipe
+				created.Recipe.ID, created.Recipe.Slug = recipe.ID, recipe.Slug
 				break
 			}
 		}
@@ -221,16 +251,66 @@ func publish(ctx context.Context, c *client, path string) error {
 	var revision struct {
 		Revision struct{ ID string } `json:"revision"`
 	}
-	if _, err := c.request(ctx, http.MethodPost, "/"+created.Recipe.ID+"/revisions", map[string]any{"version": version, "changelog": "Published with the Cloudless CLI", "manifest": manifest}, &revision, true); err != nil {
-		return err
+	status, err = c.request(ctx, http.MethodPost, "/"+created.Recipe.ID+"/revisions", map[string]any{"version": version, "changelog": "Published with the Cloudless CLI", "manifest": manifest}, &revision, true)
+	if err != nil {
+		if !force || status != http.StatusConflict {
+			return err
+		}
+		if len(mine.Recipes) == 0 {
+			if loadErr := loadOwnedRecipes(); loadErr != nil {
+				return loadErr
+			}
+		}
+		for _, owned := range mine.Recipes {
+			if owned.ID != created.Recipe.ID {
+				continue
+			}
+			for _, submission := range owned.Submissions {
+				if submission.Version == version && (submission.Status == "draft" || submission.Status == "rejected") {
+					revision.Revision.ID = submission.ID
+					break
+				}
+			}
+		}
+		if revision.Revision.ID == "" {
+			return errors.New("the existing recipe version is not a rejected or draft submission that can be force-submitted")
+		}
+		var existing struct {
+			Revision struct {
+				Manifest       map[string]any `json:"manifest"`
+				ManifestDigest string         `json:"manifest_digest"`
+			} `json:"revision"`
+		}
+		if _, detailErr := c.request(ctx, http.MethodGet, "/me/recipes/"+created.Recipe.ID+"/revisions/"+revision.Revision.ID, nil, &existing, false); detailErr != nil {
+			return detailErr
+		}
+		localDigest, _, digestErr := communityrecipes.Digest(manifest)
+		if digestErr != nil {
+			return digestErr
+		}
+		if !strings.EqualFold(localDigest, existing.Revision.ManifestDigest) {
+			return errors.New("the rejected version has different immutable manifest content; bump metadata.version before publishing")
+		}
 	}
 	var submitted struct {
 		Revision struct{ ID, Status string } `json:"revision"`
 	}
-	if _, err := c.request(ctx, http.MethodPost, "/"+created.Recipe.ID+"/revisions/"+revision.Revision.ID+"/submit", map[string]any{}, &submitted, true); err != nil {
+	submitBody := map[string]any{}
+	if force {
+		if forceReason == "" {
+			forceReason = "Moderator override requested with cloudless recipes publish --force after reviewing the immutable image scan"
+		}
+		submitBody["force"] = true
+		submitBody["reason"] = forceReason
+	}
+	if _, err := c.request(ctx, http.MethodPost, "/"+created.Recipe.ID+"/revisions/"+revision.Revision.ID+"/submit", submitBody, &submitted, true); err != nil {
 		return err
 	}
-	fmt.Printf("Submitted %s %s for validation\nsubmission=%s\nstatus=%s\n", slug, version, submitted.Revision.ID, submitted.Revision.Status)
+	label := ""
+	if force {
+		label = " with an audited moderator vulnerability override"
+	}
+	fmt.Printf("Submitted %s %s for validation%s\nsubmission=%s\nstatus=%s\n", slug, version, label, submitted.Revision.ID, submitted.Revision.Status)
 	return nil
 }
 
@@ -239,11 +319,17 @@ func run() error {
 		usage()
 		return errors.New("expected a recipes command")
 	}
-	positional, api, key, err := parseOptions(os.Args[3:])
+	positional, api, key, force, forceReason, err := parseOptions(os.Args[3:])
 	if err != nil {
 		return err
 	}
 	command := os.Args[2]
+	if force && command != "publish" {
+		return errors.New("--force is available only with recipes publish")
+	}
+	if forceReason != "" && !force {
+		return errors.New("--force-reason requires --force")
+	}
 	if len(positional) != 1 {
 		return fmt.Errorf("%s requires exactly one file or submission ID", command)
 	}
@@ -263,7 +349,7 @@ func run() error {
 		fmt.Printf("Container recipe is structurally valid for submission.\nmanifestDigest=%s\n", digest)
 		return nil
 	case "publish":
-		return publish(ctx, c, positional[0])
+		return publish(ctx, c, positional[0], force, forceReason)
 	case "status":
 		if !strings.HasPrefix(c.key, "cld_alpha_") {
 			return errors.New("status requires a Cloudless API key")

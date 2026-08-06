@@ -1,0 +1,110 @@
+schema: cloudless.recipe/v2
+
+metadata:
+  name: DeepSeek V4 Flash 0731 SparkInfer DGX Spark
+  description: 0xSero's pinned one-DGX-Spark DeepSeek V4 Flash profile with EXL3/Trellis weights, SparkInfer sparse MLA, and fixed-K5 DSpark speculative decoding.
+  version: 1.0.0
+  author: 0xSero
+  category: language-model
+  license: Apache-2.0
+  tags: [vllm, deepseek-v4, sparkinfer, exl3, trellis, dspark, nvfp4, sm121, dgx-spark, coding, reasoning]
+  minimumAcceleratorMemoryGB: 128
+
+recipe:
+  name: DeepSeek V4 Flash 0731 SparkInfer DGX Spark
+  description: Runs 0xSero's immutable DeepSeek V4 Flash 0731 SparkInfer image and exact EXL3 model revision on one GB10/SM121 DGX Spark with a 262K context limit and the validated padded-FP8 sparse-MLA compatibility path.
+  platform: dgx-spark
+  source:
+    url: ""
+    revision: ""
+    files: {}
+  engine:
+    type: vllm
+    image: ghcr.io/0xsero/deepseek-v4-flash-0731-spark-sparkinfer@sha256:2e077489a83a0360952828051fe7f7a32c1801e5ce8436d85f7267583d614ff4
+    servedModelName: cloudless
+    containerPort: 8890
+    apiPath: /v1
+    proxyHost: host.docker.internal
+    restartPolicy: "no"
+    arguments: []
+    entryPoint: /bin/bash
+    command:
+      - -lc
+      - |-
+        set -euo pipefail
+        sed -i 's#http://127.0.0.1:8000/health#http://127.0.0.1:8890/health#' /opt/recipe/scripts/healthcheck.sh
+        grep -Fq 'http://127.0.0.1:8890/health' /opt/recipe/scripts/healthcheck.sh
+        exec /opt/recipe/scripts/entrypoint.sh
+  model:
+    id: 0xSero/deepseek-v4-flash-0731-spark
+    revision: "22f28d32b9b29b4352eaa380ff8c2c170b2847ab"
+    quantization: exl3
+    dtype: auto
+    kvCacheDtype: nvfp4_ds_mla
+    maxContext: 262144
+    maxSequences: 4
+    gpuMemoryUtilization: 0.9465
+    tensorParallel: 1
+    pipelineParallel: 1
+    trustRemoteCode: true
+    dependencies: []
+  distributed:
+    nodes: 1
+    backend: local
+    masterPort: 29500
+    interface: ""
+    hca: ""
+    ibGidIndex: 0
+    workerAlias: worker
+    selectedNodes: []
+  runtime:
+    adapter: advanced-container-v1
+    buildOnce: false
+    downloadOnce: false
+    workingDir: ""
+    timeoutMinutes: 360
+    prerequisites: []
+    environment:
+      MODEL_REPO: 0xSero/deepseek-v4-flash-0731-spark
+      MODEL_REVISION: "22f28d32b9b29b4352eaa380ff8c2c170b2847ab"
+      MODEL_SOURCE_DIR: /cache/models/source
+      MODEL_PATH: /cache/models/tp1
+      SPEC_MODEL_PATH: /cache/models/dspark-draft-k64
+      SERVED_MODEL_NAME: cloudless
+      PORT: "8890"
+      MAX_MODEL_LEN: "262144"
+      MAX_NUM_SEQS: "4"
+      MAX_NUM_BATCHED_TOKENS: "8224"
+      MODE: dspark
+      DSPARK_TOKENS: "5"
+      DSPARK_CAPACITY: "0"
+      DSPARK_DYNAMIC_DRAFT_DEPTH: "0"
+      DSPARK_DYNAMIC_DRAFT_DEPTH_WINDOW: "8"
+      DSPARK_DRAFT_EXPERTS: "64"
+      DSPARK_STRUCTURED_EXPERTS_PER_CATEGORY: "32"
+      VLLM_USE_B12X_WO_PROJECTION: "1"
+      GPU_MEMORY_UTILIZATION: "0.9465"
+      VERIFY_MODEL_CHECKSUMS: "1"
+    container:
+      user: "0"
+      readOnly: false
+      ipc: host
+      shmSize: 16g
+      ulimits: []
+      capAdd: []
+      capDrop: []
+      tmpfs: []
+      pidsLimit: 8192
+      modelCachePath: /cache
+    lifecycle:
+      build: {program: "", args: []}
+      download: {program: "", args: []}
+      start: {program: "", args: []}
+      stop: {program: "", args: []}
+  health:
+    scheme: http
+    host: 127.0.0.1
+    port: 8890
+    path: /health
+    timeoutSeconds: 7200
+    intervalSeconds: 5

@@ -1812,7 +1812,7 @@ func (s *Server) installOne(ctx context.Context, job *jobs.Job, app catalog.App,
 	} else {
 		job.ProgressOperation("pulling", "Contacting the image registry for "+app.Name, app.Name, operationPercent(item, total, 10), item, total)
 		layers := map[string]*dockerPullLayer{}
-		err := s.eng.PullStream(ctx, img, func(line string) {
+		err := pullImageStreamResilient(ctx, s.eng, img, func(line string) {
 			id, status, ok := splitStatus(line)
 			switch {
 			case ok && strings.HasPrefix(status, "Pulling fs layer"):
@@ -1836,6 +1836,9 @@ func (s *Server) installOne(ctx context.Context, job *jobs.Job, app catalog.App,
 				}
 			case strings.HasPrefix(line, "Status:"):
 				job.ProgressOperation("pulling", line, app.Name, operationPercent(item, total, 76), item, total)
+				return
+			case strings.HasPrefix(line, "Cloudless:"):
+				job.ProgressOperation("pulling", line, app.Name, operationPercent(item, total, 15), item, total)
 				return
 			default:
 				return

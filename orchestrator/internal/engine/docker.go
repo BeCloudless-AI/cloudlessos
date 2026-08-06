@@ -10,13 +10,18 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
+	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
+	"time"
 
 	"github.com/cloudless/orchestrator/internal/platform"
 )
@@ -259,13 +264,128 @@ func (d *Docker) Pull(ctx context.Context, image string) error {
 	return nil
 }
 
-// PullStream runs `docker pull` and calls onLine for each output line. In
-// non-TTY mode docker emits discrete per-layer status lines (e.g. "<id>: Pull
-// complete"), which the caller can parse for progress.
+// PullStream uses Docker's structured daemon stream so callers receive actual
+// per-layer byte progress. The CLI is retained as a compatibility fallback for
+// nonstandard Docker installations whose local API socket is unavailable.
 func (d *Docker) PullStream(ctx context.Context, image string, onLine func(string)) error {
 	if !imageReference.MatchString(strings.TrimSpace(image)) {
 		return errors.New("image reference is invalid")
 	}
+	if err := d.pullStreamAPI(ctx, image, onLine); err == nil {
+		return nil
+	} else {
+		var unavailable *dockerAPIUnavailableError
+		if !errors.As(err, &unavailable) {
+			return err
+		}
+	}
+	return d.pullStreamCLI(ctx, image, onLine)
+}
+
+type dockerAPIUnavailableError struct{ err error }
+
+func (e *dockerAPIUnavailableError) Error() string { return "Docker API unavailable: " + e.err.Error() }
+func (e *dockerAPIUnavailableError) Unwrap() error { return e.err }
+
+type dockerPullMessage struct {
+	Status      string `json:"status"`
+	Progress    string `json:"progress"`
+	ID          string `json:"id"`
+	Error       string `json:"error"`
+	ErrorDetail struct {
+		Message string `json:"message"`
+	} `json:"errorDetail"`
+	ProgressDetail struct {
+		Current int64 `json:"current"`
+		Total   int64 `json:"total"`
+	} `json:"progressDetail"`
+}
+
+func dockerSocketPath() string {
+	if host := strings.TrimSpace(os.Getenv("DOCKER_HOST")); strings.HasPrefix(host, "unix://") {
+		if path := strings.TrimPrefix(host, "unix://"); filepath.IsAbs(path) {
+			return path
+		}
+	}
+	return "/var/run/docker.sock"
+}
+
+func (d *Docker) pullStreamAPI(ctx context.Context, image string, onLine func(string)) error {
+	socket := dockerSocketPath()
+	transport := &http.Transport{
+		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+			return (&net.Dialer{}).DialContext(ctx, "unix", socket)
+		},
+	}
+	defer transport.CloseIdleConnections()
+	client := &http.Client{Transport: transport}
+	query := dockerPullQuery(image)
+	endpoint := "http://docker/images/create?" + query.Encode()
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, nil)
+	if err != nil {
+		return fmt.Errorf("prepare Docker image pull: %w", err)
+	}
+	// An empty registry-auth object is required by some Docker daemon versions
+	// and is sufficient for the public, immutable images admitted by Cloudless.
+	request.Header.Set("X-Registry-Auth", "e30=")
+	response, err := client.Do(request)
+	if err != nil {
+		return &dockerAPIUnavailableError{err: err}
+	}
+	defer response.Body.Close()
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		body, _ := io.ReadAll(io.LimitReader(response.Body, 64<<10))
+		return fmt.Errorf("pull %s: Docker API HTTP %d: %s", image, response.StatusCode, strings.TrimSpace(string(body)))
+	}
+
+	decoder := json.NewDecoder(response.Body)
+	for {
+		var message dockerPullMessage
+		if err := decoder.Decode(&message); err != nil {
+			if errors.Is(err, io.EOF) {
+				return nil
+			}
+			return fmt.Errorf("pull %s progress stream: %w", image, err)
+		}
+		if message.Error != "" || message.ErrorDetail.Message != "" {
+			detail := message.Error
+			if detail == "" {
+				detail = message.ErrorDetail.Message
+			}
+			return fmt.Errorf("pull %s: %s", image, detail)
+		}
+		line := strings.TrimSpace(message.Status)
+		progress := strings.TrimSpace(message.Progress)
+		if progress == "" && message.ProgressDetail.Total > 0 {
+			progress = fmt.Sprintf("%dB/%dB", message.ProgressDetail.Current, message.ProgressDetail.Total)
+		}
+		if progress != "" {
+			line = strings.TrimSpace(line + " " + progress)
+		}
+		if message.ID != "" {
+			line = message.ID + ": " + line
+		}
+		if line != "" && onLine != nil {
+			onLine(line)
+		}
+	}
+}
+
+func dockerPullQuery(image string) url.Values {
+	name, tag := image, ""
+	if at := strings.LastIndex(image, "@"); at > 0 {
+		name, tag = image[:at], image[at+1:]
+	} else if colon, slash := strings.LastIndex(image, ":"), strings.LastIndex(image, "/"); colon > slash {
+		name, tag = image[:colon], image[colon+1:]
+	}
+	values := url.Values{"fromImage": []string{name}}
+	if tag != "" {
+		values.Set("tag", tag)
+	}
+	return values
+}
+
+func (d *Docker) pullStreamCLI(ctx context.Context, image string, onLine func(string)) error {
 	cmd := exec.CommandContext(ctx, d.bin, "pull", image)
 	pr, pw := io.Pipe()
 	cmd.Stdout = pw
@@ -280,14 +400,51 @@ func (d *Docker) PullStream(ctx context.Context, image string, onLine func(strin
 		done <- err
 	}()
 
+	var emitMu sync.Mutex
+	emit := func(line string) {
+		if onLine == nil {
+			return
+		}
+		emitMu.Lock()
+		onLine(line)
+		emitMu.Unlock()
+	}
+	stopHeartbeat := make(chan struct{})
+	defer close(stopHeartbeat)
+	go func() {
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				emit("Cloudless: Docker is still working on the current image layer")
+			case <-stopHeartbeat:
+				return
+			}
+		}
+	}()
+
 	sc := bufio.NewScanner(pr)
 	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	recent := make([]string, 0, 12)
 	for sc.Scan() {
 		if line := strings.TrimSpace(sc.Text()); line != "" {
-			onLine(line)
+			if len(recent) == cap(recent) {
+				copy(recent, recent[1:])
+				recent = recent[:len(recent)-1]
+			}
+			recent = append(recent, line)
+			emit(line)
 		}
 	}
+	if scanErr := sc.Err(); scanErr != nil {
+		return fmt.Errorf("pull %s output: %w", image, scanErr)
+	}
 	if err := <-done; err != nil {
+		detail := strings.Join(recent, "; ")
+		if detail != "" {
+			return fmt.Errorf("pull %s: %w: %s", image, err, detail)
+		}
 		return fmt.Errorf("pull %s: %w", image, err)
 	}
 	return nil
@@ -405,11 +562,14 @@ func (d *Docker) ExportImage(ctx context.Context, image, destination string) err
 	if err := os.MkdirAll(filepath.Dir(destination), 0o2770); err != nil {
 		return fmt.Errorf("create image export directory: %w", err)
 	}
-	temporary, err := os.CreateTemp(filepath.Dir(destination), ".cloudless-image-*.tar")
+	// The deterministic sidecar name lets the unprivileged orchestrator report
+	// archive byte progress while this privileged broker writes the export.
+	temporaryName := destination + ".partial"
+	_ = os.Remove(temporaryName)
+	temporary, err := os.OpenFile(temporaryName, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
 		return fmt.Errorf("create image export: %w", err)
 	}
-	temporaryName := temporary.Name()
 	defer os.Remove(temporaryName)
 	command := exec.CommandContext(ctx, d.bin, "image", "save", image)
 	command.Stdout = temporary
@@ -546,6 +706,12 @@ func runArgs(spec RunSpec) []string {
 	}
 	if spec.IPC != "" {
 		args = append(args, "--ipc", spec.IPC)
+	}
+	if strings.TrimSpace(spec.Memory) != "" {
+		args = append(args, "--memory", strings.TrimSpace(spec.Memory))
+	}
+	if strings.TrimSpace(spec.MemorySwap) != "" {
+		args = append(args, "--memory-swap", strings.TrimSpace(spec.MemorySwap))
 	}
 	for _, limit := range spec.Ulimits {
 		if strings.TrimSpace(limit) != "" {

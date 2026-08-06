@@ -65,6 +65,27 @@ func TestEmbeddedWebRecipeActionsKeepDestructiveControlReadable(t *testing.T) {
 	}
 }
 
+func TestEmbeddedWebExplainsRecipeRuntimeImageProgress(t *testing.T) {
+	content, err := webFS.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	web := string(content)
+	for _, want := range []string{
+		"'pulling-image':'building'",
+		"'exporting-image':'syncing-image'",
+		"'pulling-image':'Downloading recipe runtime'",
+		"'exporting-image':'Packaging runtime for the cluster'",
+		"Container registry → primary Spark",
+		"Primary Spark local storage",
+		"job.phase==='downloading'||job.phase==='pulling-image'",
+	} {
+		if !strings.Contains(web, want) {
+			t.Fatalf("embedded recipe image progress is missing %q", want)
+		}
+	}
+}
+
 func TestEmbeddedWebAppSurfacesFollowRuntimeLifecycle(t *testing.T) {
 	content, err := webFS.ReadFile("web/index.html")
 	if err != nil {
@@ -329,5 +350,26 @@ func TestEmbeddedWebCommunityRecipesInstallAndShowDetailsInline(t *testing.T) {
 	}
 	if strings.Contains(web, `function openCommunityRecipeDetail(slug){keyDialogReturnFocus=`) {
 		t.Fatal("community recipe details must render inside the Model Manager, not in a nested dialog")
+	}
+}
+
+func TestEmbeddedWebExplainsAndConfirmsKnownRecipeVulnerabilities(t *testing.T) {
+	content, err := webFS.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	web := string(content)
+	for _, want := range []string{
+		`function recipeVulnerabilityBadgeHTML(`,
+		`function recipeVulnerabilityDetailsHTML(`,
+		`function hydrateCommunityRecipeValidation(`,
+		`Known vulnerabilities in this recipe`,
+		`Local-only use lowers risk; it does not make it zero.`,
+		`id="recipe-vulnerability-ack"`,
+		`confirm.disabled=!ack.checked`,
+	} {
+		if !strings.Contains(web, want) {
+			t.Fatalf("recipe vulnerability UX is missing %q", want)
+		}
 	}
 }

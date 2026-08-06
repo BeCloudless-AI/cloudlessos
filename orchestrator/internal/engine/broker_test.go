@@ -15,6 +15,7 @@ import (
 func testBroker(t *testing.T, authorize BrokerAuthorizer) (*BrokerClient, context.CancelFunc) {
 	t.Helper()
 	dir := t.TempDir()
+	t.Setenv("DOCKER_HOST", "unix://"+filepath.Join(dir, "missing-docker.sock"))
 	binary := filepath.Join(dir, "docker")
 	script := `#!/bin/sh
 if [ "$1" = pull ]; then

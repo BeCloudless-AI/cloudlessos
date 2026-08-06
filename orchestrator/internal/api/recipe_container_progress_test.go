@@ -79,6 +79,49 @@ func TestRecipeContainerProgressDistinguishesDFlashAndWarmup(t *testing.T) {
 	}
 }
 
+func TestRecipeContainerProgressExplainsDistributedPostLoadWait(t *testing.T) {
+	logs := strings.Join([]string{
+		"Model loading took 79.44 GiB and 243.949574 seconds",
+		"No available shared memory broadcast block found in 60 seconds. This typically happens during compilation or KV cache quantization.",
+	}, "\n")
+	progress, ok := parseRecipeContainerProgress(logs)
+	if !ok || progress.Phase != "compiling-kernels" || progress.OverallPercent != 78 || !strings.Contains(progress.Message, "KV-cache quantization") {
+		t.Fatalf("post-load progress = %#v, ok=%v", progress, ok)
+	}
+}
+
+func TestRecipeContainerProgressReportsFlashInferAutotuning(t *testing.T) {
+	progress, ok := parseRecipeContainerProgress("Autotuning FlashInfer SM120 sparse MLA DSv4 decode\nflashinfer.jit: [Autotuner]: Autotuning process starts")
+	if !ok || progress.Phase != "compiling-kernels" || progress.OverallPercent != 79 || !strings.Contains(progress.Message, "FlashInfer") {
+		t.Fatalf("autotuning progress = %#v, ok=%v", progress, ok)
+	}
+}
+
+func TestRecipeContainerProgressReportsDeepGEMMWarmup(t *testing.T) {
+	progress, ok := parseRecipeContainerProgress("DeepGEMM warmup:  72%|███████▏  | 2097/2932 [00:22<00:03, 212.29it/s]")
+	if !ok || progress.Phase != "warming-engine" || progress.ItemsDone != 2097 || progress.ItemsTotal != 2932 || !strings.Contains(progress.Message, "72%") {
+		t.Fatalf("DeepGEMM progress = %#v, ok=%v", progress, ok)
+	}
+}
+
+func TestRecipeContainerProgressRecognizesSGLangReadiness(t *testing.T) {
+	progress, ok := parseRecipeContainerProgressForEngine("[2026-08-06] The server is fired up and ready to roll!", "sglang")
+	if !ok || progress.Phase != "health" || progress.OverallPercent != 82 || progress.CurrentItem != "Health contract" {
+		t.Fatalf("SGLang readiness progress = %#v, ok=%v", progress, ok)
+	}
+}
+
+func TestRecipeContainerProgressReportsSGLangWeightAndMemoryPhases(t *testing.T) {
+	loading, ok := parseRecipeContainerProgressForEngine("Load weight begin. avail mem=52.3 GB", "sglang")
+	if !ok || loading.Phase != "loading-model" || loading.CurrentItem != "model weights" || !strings.Contains(loading.Message, "SGLang") {
+		t.Fatalf("SGLang loading progress = %#v, ok=%v", loading, ok)
+	}
+	warming, ok := parseRecipeContainerProgressForEngine("Memory pool end. avail mem=9.8 GB", "sglang")
+	if !ok || warming.Phase != "warming-engine" || warming.CurrentItem != "SGLang" || strings.Contains(warming.Message, "vLLM") {
+		t.Fatalf("SGLang memory progress = %#v, ok=%v", warming, ok)
+	}
+}
+
 type recipeProgressLogEngine struct {
 	engine.Engine
 	logs     string
@@ -98,7 +141,7 @@ func TestObserveDependencyPublishesStructuredComponents(t *testing.T) {
 	runtime := recipeProgressLogEngine{logs: "Downloading flashinfer_jit_cache-1.0.whl (100.0 MB)", received: 20_000_000}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	stop := observeRecipeContainerStartup(ctx, runtime, job, "cloudless-recipe-test", time.Millisecond)
+	stop := observeRecipeContainerStartup(ctx, runtime, job, "cloudless-recipe-test", "vllm", time.Millisecond)
 	defer stop()
 	deadline := time.Now().Add(time.Second)
 	for time.Now().Before(deadline) {
@@ -119,7 +162,7 @@ func TestObserveRecipeContainerStartupPublishesParsedProgress(t *testing.T) {
 	runtime := recipeProgressLogEngine{logs: "Starting to load model example/main...\nLoading safetensors checkpoint shards: 50% Completed | 4/8 [00:10<00:10, 2s/it]"}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	stop := observeRecipeContainerStartup(ctx, runtime, job, "cloudless-recipe-test", time.Millisecond)
+	stop := observeRecipeContainerStartup(ctx, runtime, job, "cloudless-recipe-test", "vllm", time.Millisecond)
 	defer stop()
 	deadline := time.Now().Add(time.Second)
 	for time.Now().Before(deadline) {

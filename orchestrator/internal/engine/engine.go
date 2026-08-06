@@ -31,6 +31,8 @@ type RunSpec struct {
 	Tmpfs         []string          // isolated writable tmpfs mounts
 	PidsLimit     int               // maximum number of container processes (0 = Docker default)
 	ShmSize       string            // private /dev/shm allocation (for example 16g)
+	Memory        string            // Docker memory ceiling (for example 100g)
+	MemorySwap    string            // combined memory+swap ceiling (for example 100g disables swap growth)
 	Devices       []string          // narrowly admitted host devices (currently only /dev/infiniband)
 }
 

@@ -31,17 +31,7 @@ func managedContainerCacheUser() string {
 	return strconv.Itoa(uid) + ":" + strconv.Itoa(gid)
 }
 
-// managedContainerRecipeSpec translates both the constrained and advanced
-// container adapters. Advanced recipes may own their in-container command and
-// permissions, but never gain host command execution or arbitrary host mounts.
-func managedContainerRecipeSpec(recipe localrecipes.Recipe, immutableImage, name, operationID, hfTokenPath string) (engine.RunSpec, error) {
-	if err := localrecipes.ValidateManagedContainerRecipe(recipe); err != nil {
-		return engine.RunSpec{}, err
-	}
-	immutableImage, name = strings.TrimSpace(immutableImage), strings.TrimSpace(name)
-	if immutableImage == "" || name == "" {
-		return engine.RunSpec{}, fmt.Errorf("managed recipe image and runtime name are required")
-	}
+func managedVLLMRecipeCommand(recipe localrecipes.Recipe) (string, []string) {
 	args := []string{
 		"serve", recipe.Model.ID,
 		"--revision", recipe.Model.Revision,
@@ -66,7 +56,57 @@ func managedContainerRecipeSpec(recipe localrecipes.Recipe, immutableImage, name
 	if recipe.Model.TrustRemoteCode {
 		args = append(args, "--trust-remote-code")
 	}
-	args = append(args, recipe.Engine.Arguments...)
+	return "vllm", append(args, recipe.Engine.Arguments...)
+}
+
+func managedSGLangRecipeCommand(recipe localrecipes.Recipe) (string, []string) {
+	args := []string{
+		"-m", "sglang.launch_server",
+		"--model-path", recipe.Model.ID,
+		"--revision", recipe.Model.Revision,
+		"--served-model-name", localrecipes.CloudlessModelAlias,
+		"--host", "0.0.0.0",
+		"--port", strconv.Itoa(recipe.Engine.ContainerPort),
+		"--context-length", strconv.Itoa(recipe.Model.MaxContext),
+		"--max-running-requests", strconv.Itoa(recipe.Model.MaxSequences),
+		"--mem-fraction-static", strconv.FormatFloat(recipe.Model.GPUMemoryUtilization, 'f', -1, 64),
+		"--tp-size", strconv.Itoa(recipe.Model.TensorParallel),
+		"--pp-size", strconv.Itoa(recipe.Model.PipelineParallel),
+	}
+	if value := strings.TrimSpace(recipe.Model.Quantization); value != "" && value != "none" && value != "auto" {
+		args = append(args, "--quantization", value)
+	}
+	if value := strings.TrimSpace(recipe.Model.DType); value != "" && value != "auto" {
+		args = append(args, "--dtype", value)
+	}
+	if value := strings.TrimSpace(recipe.Model.KVCacheDType); value != "" && value != "auto" {
+		args = append(args, "--kv-cache-dtype", value)
+	}
+	if recipe.Model.TrustRemoteCode {
+		args = append(args, "--trust-remote-code")
+	}
+	return "python3", append(args, recipe.Engine.Arguments...)
+}
+
+func managedRecipeCommand(recipe localrecipes.Recipe) (string, []string) {
+	if strings.EqualFold(strings.TrimSpace(recipe.Engine.Type), localrecipes.ManagedSGLangEngine) {
+		return managedSGLangRecipeCommand(recipe)
+	}
+	return managedVLLMRecipeCommand(recipe)
+}
+
+// managedContainerRecipeSpec translates both the constrained and advanced
+// container adapters. Advanced recipes may own their in-container command and
+// permissions, but never gain host command execution or arbitrary host mounts.
+func managedContainerRecipeSpec(recipe localrecipes.Recipe, immutableImage, name, operationID, hfTokenPath string) (engine.RunSpec, error) {
+	if err := localrecipes.ValidateManagedContainerRecipe(recipe); err != nil {
+		return engine.RunSpec{}, err
+	}
+	immutableImage, name = strings.TrimSpace(immutableImage), strings.TrimSpace(name)
+	if immutableImage == "" || name == "" {
+		return engine.RunSpec{}, fmt.Errorf("managed recipe image and runtime name are required")
+	}
+	entryPoint, args := managedRecipeCommand(recipe)
 	advanced := recipe.Runtime.Adapter == localrecipes.AdvancedContainerAdapter
 	if advanced && len(recipe.Engine.Command) != 0 {
 		args = append([]string(nil), recipe.Engine.Command...)
@@ -113,7 +153,7 @@ func managedContainerRecipeSpec(recipe localrecipes.Recipe, immutableImage, name
 		Volumes:    map[string]string{modelcache.Root(): containerCache},
 		GPUs:       "all",
 		Network:    "cloudless",
-		EntryPoint: "vllm",
+		EntryPoint: entryPoint,
 		// cloudlessd owns the private model cache. Matching its unprivileged
 		// identity lets the sandbox keep every Linux capability dropped.
 		User:     managedContainerCacheUser(),
@@ -143,6 +183,8 @@ func managedContainerRecipeSpec(recipe localrecipes.Recipe, immutableImage, name
 		spec.Tmpfs = append([]string(nil), container.Tmpfs...)
 		spec.PidsLimit = container.PidsLimit
 		spec.ShmSize = strings.TrimSpace(container.ShmSize)
+		spec.Memory = strings.TrimSpace(container.Memory)
+		spec.MemorySwap = strings.TrimSpace(container.MemorySwap)
 		if container.Infiniband {
 			spec.Devices = []string{"/dev/infiniband:/dev/infiniband"}
 		}

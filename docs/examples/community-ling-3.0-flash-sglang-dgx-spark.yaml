@@ -1,0 +1,120 @@
+schema: cloudless.recipe/v2
+
+metadata:
+  name: Ling 3.0 Flash INT4 SGLang DGX Spark
+  description: MiaAI-Lab's Ling 3.0 Flash INT4 SGLang profile for one DGX Spark, with a 256K context window, Ling reasoning and tool parsers, Mamba cache tuning, and NEXTN speculative decoding.
+  version: 1.0.2
+  author: MiaLabs
+  category: language-model
+  license: Proprietary
+  tags: [sglang, ling-3, inclusionai, int4, nextn, mamba, sm121, dgx-spark, tool-calling, reasoning]
+  minimumAcceleratorMemoryGB: 128
+
+recipe:
+  name: Ling 3.0 Flash INT4 SGLang DGX Spark
+  description: Runs the immutable inclusionAI Ling 3.0 Flash INT4 checkpoint in the ARM64 SGLang Ling runtime with MiaAI-Lab's validated single-Spark memory, context, concurrency, parser, Mamba-cache, and NEXTN settings.
+  platform: dgx-spark
+  source:
+    url: ""
+    revision: ""
+    files: {}
+  engine:
+    type: sglang
+    image: docker.io/lmsysorg/sglang@sha256:8d40603b22582df5252e83d0282ac93a4377db557f89f4f415a6192cf33262e0
+    servedModelName: cloudless
+    containerPort: 8890
+    apiPath: /v1
+    proxyHost: host.docker.internal
+    restartPolicy: "no"
+    arguments: []
+    entryPoint: /bin/bash
+    command:
+      - -lc
+      - |-
+        set -euo pipefail
+        exec python3 -m sglang.launch_server \
+          --model-path inclusionAI/Ling-3.0-flash-int4 \
+          --revision ca3ea63b0255d212c4fe6020db9e0a51ce136006 \
+          --served-model-name cloudless \
+          --host 0.0.0.0 \
+          --port 8890 \
+          --trust-remote-code \
+          --nnodes 1 \
+          --dist-init-addr 127.0.0.1:2345 \
+          --tp-size 1 \
+          --ep-size 1 \
+          --random-seed 308534008 \
+          --max-running-requests 6 \
+          --max-mamba-cache-size 16 \
+          --chunked-prefill-size 8192 \
+          --allow-auto-truncate \
+          --context-length 262144 \
+          --mem-fraction-static 0.70 \
+          --kv-cache-dtype fp8_e4m3 \
+          --tool-call-parser ling3 \
+          --reasoning-parser ling3 \
+          --enable-fp32-lm-head \
+          --disable-shared-experts-fusion \
+          --speculative-algorithm NEXTN
+  model:
+    id: inclusionAI/Ling-3.0-flash-int4
+    revision: "ca3ea63b0255d212c4fe6020db9e0a51ce136006"
+    quantization: compressed-tensors-int4
+    dtype: auto
+    kvCacheDtype: fp8_e4m3
+    maxContext: 262144
+    maxSequences: 6
+    gpuMemoryUtilization: 0.70
+    tensorParallel: 1
+    pipelineParallel: 1
+    trustRemoteCode: true
+    dependencies: []
+  distributed:
+    nodes: 1
+    backend: local
+    masterPort: 2345
+    interface: ""
+    hca: ""
+    ibGidIndex: 0
+    workerAlias: worker
+    selectedNodes: []
+  runtime:
+    adapter: advanced-container-v1
+    buildOnce: false
+    downloadOnce: false
+    workingDir: ""
+    timeoutMinutes: 480
+    prerequisites: []
+    environment:
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+      HF_HUB_DISABLE_XET: "1"
+      SGLANG_ALLOW_OVERWRITE_LONGER_CONTEXT_LEN: "1"
+      SGLANG_JIT_DEEPGEMM_PRECOMPILE: "1"
+      SGLANG_ENABLE_SPEC_V2: "1"
+      FLASHINFER_DISABLE_VERSION_CHECK: "1"
+    container:
+      user: "0"
+      readOnly: false
+      ipc: host
+      shmSize: 32g
+      ulimits: [memlock=-1:-1]
+      capAdd: [IPC_LOCK]
+      capDrop: []
+      tmpfs: []
+      pidsLimit: 8192
+      modelCachePath: /root/.cache/huggingface
+      memory: 100g
+      memorySwap: 100g
+    lifecycle:
+      build: {program: "", args: []}
+      download: {program: "", args: []}
+      start: {program: "", args: []}
+      stop: {program: "", args: []}
+  health:
+    scheme: http
+    host: 127.0.0.1
+    port: 8890
+    path: /v1/models
+    timeoutSeconds: 3600
+    intervalSeconds: 5

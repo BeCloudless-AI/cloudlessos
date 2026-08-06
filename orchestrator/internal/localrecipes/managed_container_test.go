@@ -41,6 +41,19 @@ func TestManagedContainerDraftIsAcceptedWithoutLifecycleCommands(t *testing.T) {
 	}
 }
 
+func TestManagedContainerDraftAcceptsSGLangWithoutCommandOverride(t *testing.T) {
+	draft := managedContainerTestDraft()
+	draft.Engine.Type = ManagedSGLangEngine
+	draft.Engine.Arguments = []string{"--allow-auto-truncate", "--enable-fp32-lm-head"}
+	draft.Runtime.Environment = map[string]string{
+		"SGLANG_ALLOW_OVERWRITE_LONGER_CONTEXT_LEN": "1",
+		"SGLANG_ENABLE_SPEC_V2":                     "1",
+	}
+	if _, err := validateDraft(draft); err != nil {
+		t.Fatalf("validate managed SGLang draft: %v", err)
+	}
+}
+
 func TestManagedContainerDraftRejectsMutableOrExecutableInputs(t *testing.T) {
 	tests := []struct {
 		name string
@@ -54,6 +67,7 @@ func TestManagedContainerDraftRejectsMutableOrExecutableInputs(t *testing.T) {
 		{"host prerequisite", func(d *Draft) { d.Runtime.Prerequisites = []string{"ssh"} }, "host prerequisites"},
 		{"multiple nodes", func(d *Draft) { d.Distributed.Nodes = 2 }, "one local node"},
 		{"contract override", func(d *Draft) { d.Engine.Arguments = []string{"--port"} }, "not available"},
+		{"unsupported engine", func(d *Draft) { d.Engine.Type = "unknown-engine" }, "vLLM or SGLang"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -79,10 +93,14 @@ func TestAdvancedContainerDraftAllowsPinnedAuxiliaryModelsAndContainerCommand(t 
 	draft.Runtime.Environment["CUTE_DSL_ARCH"] = "sm_121a"
 	draft.Runtime.Container = ContainerRuntime{
 		User: "0", IPC: "host", ShmSize: "32g", Ulimits: []string{"memlock=-1:-1"},
-		CapAdd: []string{"IPC_LOCK"}, ModelCachePath: "/root/.cache/huggingface",
+		CapAdd: []string{"IPC_LOCK"}, ModelCachePath: "/root/.cache/huggingface", Memory: "100g", MemorySwap: "100g",
 	}
 	if _, err := validateDraft(draft); err != nil {
 		t.Fatalf("validate advanced container draft: %v", err)
+	}
+	draft.Runtime.Container.MemorySwap, draft.Runtime.Container.Memory = "100g", ""
+	if _, err := validateDraft(draft); err == nil || !strings.Contains(err.Error(), "requires a memory limit") {
+		t.Fatalf("memory-swap without memory error = %v", err)
 	}
 }
 

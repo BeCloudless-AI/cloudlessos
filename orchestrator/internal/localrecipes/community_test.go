@@ -18,9 +18,13 @@ func TestInstallCommunityPersistsExactProvenanceAndRevocation(t *testing.T) {
 	if err != nil || len(updatedRecipe.CommunityRollback) != 1 {
 		t.Fatalf("update did not retain rollback: %#v %v", updatedRecipe, err)
 	}
+	second.Validation = &CommunityValidation{Result: "passed", Image: &CommunityImageValidation{Admission: "moderator-override", Summary: CommunityVulnerabilitySummary{Total: 3, Critical: 1, High: 2}}}
 	idempotent, err := store.InstallCommunity(managedContainerTestDraft(), second)
 	if err != nil || len(idempotent.CommunityRollback) != 1 {
 		t.Fatalf("idempotent reinstall changed rollback history: %#v %v", idempotent, err)
+	}
+	if idempotent.Community.Validation == nil || idempotent.Community.Validation.Image == nil || idempotent.Community.Validation.Image.Summary.Critical != 1 {
+		t.Fatalf("idempotent reinstall did not refresh vulnerability evidence: %#v", idempotent.Community)
 	}
 	if err := store.MarkCommunityRevoked(provenance.RevisionID, "test revocation"); err != nil {
 		t.Fatal(err)

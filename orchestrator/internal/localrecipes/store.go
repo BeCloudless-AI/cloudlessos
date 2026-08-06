@@ -128,6 +128,8 @@ type ContainerRuntime struct {
 	Tmpfs          []string `json:"tmpfs,omitempty" yaml:"tmpfs,omitempty"`
 	PidsLimit      int      `json:"pidsLimit,omitempty" yaml:"pidsLimit,omitempty"`
 	ModelCachePath string   `json:"modelCachePath,omitempty" yaml:"modelCachePath,omitempty"`
+	Memory         string   `json:"memory,omitempty" yaml:"memory,omitempty"`
+	MemorySwap     string   `json:"memorySwap,omitempty" yaml:"memorySwap,omitempty"`
 	// Infiniband grants only the fixed /dev/infiniband device tree. Distributed
 	// advanced containers use it for the enrolled Spark fabric; arbitrary
 	// device paths remain impossible to express in a recipe.
@@ -164,15 +166,52 @@ type Draft struct {
 // community revision that was verified before it entered the executable
 // recipe store. It is deliberately separate from the editable recipe fields.
 type CommunityProvenance struct {
-	RecipeID      string `json:"recipeId"`
-	RevisionID    string `json:"revisionId"`
-	Slug          string `json:"slug"`
-	Version       string `json:"version"`
-	Digest        string `json:"digest"`
-	SigningKeyID  string `json:"signingKeyId"`
-	InstalledAt   string `json:"installedAt"`
-	Revoked       bool   `json:"revoked,omitempty"`
-	RevokedReason string `json:"revokedReason,omitempty"`
+	RecipeID      string               `json:"recipeId"`
+	RevisionID    string               `json:"revisionId"`
+	Slug          string               `json:"slug"`
+	Version       string               `json:"version"`
+	Digest        string               `json:"digest"`
+	SigningKeyID  string               `json:"signingKeyId"`
+	InstalledAt   string               `json:"installedAt"`
+	Revoked       bool                 `json:"revoked,omitempty"`
+	RevokedReason string               `json:"revokedReason,omitempty"`
+	Validation    *CommunityValidation `json:"validation,omitempty"`
+}
+
+// CommunityValidation is supplemental, sanitized publication evidence from
+// the community service. The signed release remains the execution authority;
+// this evidence exists so Cloudless can explain known image risk before run.
+type CommunityValidation struct {
+	Result    string                    `json:"result,omitempty"`
+	CheckedAt string                    `json:"checkedAt,omitempty"`
+	Warnings  []string                  `json:"warnings,omitempty"`
+	Image     *CommunityImageValidation `json:"image,omitempty"`
+}
+
+type CommunityImageValidation struct {
+	Admission        string                          `json:"admission,omitempty"`
+	Policy           string                          `json:"policy,omitempty"`
+	Scanner          string                          `json:"scanner,omitempty"`
+	Summary          CommunityVulnerabilitySummary   `json:"summary"`
+	BlockingFindings []CommunityVulnerabilityFinding `json:"blockingFindings,omitempty"`
+}
+
+type CommunityVulnerabilitySummary struct {
+	Total              int `json:"total"`
+	High               int `json:"high"`
+	Critical           int `json:"critical"`
+	ActionableCritical int `json:"actionableCritical"`
+	FixableCritical    int `json:"fixableCritical"`
+	Warnings           int `json:"warnings"`
+}
+
+type CommunityVulnerabilityFinding struct {
+	ID        string `json:"id,omitempty"`
+	Package   string `json:"package,omitempty"`
+	Installed string `json:"installed,omitempty"`
+	Fixed     string `json:"fixed,omitempty"`
+	Severity  string `json:"severity,omitempty"`
+	Target    string `json:"target,omitempty"`
 }
 
 type CommunityRollback struct {
@@ -945,6 +984,17 @@ func (s *Store) InstallCommunity(draft Draft, provenance CommunityProvenance) (R
 		if doc.Recipes[index].Community != nil && doc.Recipes[index].Community.RecipeID == provenance.RecipeID {
 			previous := doc.Recipes[index]
 			if previous.Community.RevisionID == provenance.RevisionID && previous.Community.Digest == provenance.Digest {
+				// The signed recipe is unchanged, but publication evidence may have
+				// been added after an older Cloudless version installed it. Refresh
+				// that supplemental evidence without creating a false rollback entry.
+				if provenance.Validation != nil {
+					previous.Community.Validation = provenance.Validation
+					previous.UpdatedAt = now
+					doc.Recipes[index] = previous
+					if err := s.save(doc); err != nil {
+						return Recipe{}, err
+					}
+				}
 				return previous, nil
 			}
 			recipe.CommunityRollback = append(previous.CommunityRollback, CommunityRollback{Draft: DraftFromSnapshot(previous), Provenance: *previous.Community})

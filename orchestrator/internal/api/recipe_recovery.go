@@ -167,7 +167,11 @@ func (s *Server) recoverRecipeOperation(ctx context.Context, item interruptedRec
 		if job != nil {
 			job.Progress("resuming", "Resuming preparation from verified caches and staging data...", 0, 8)
 		}
-		s.runLocalRecipe(job, recipe, operation.ID)
+		if localrecipes.IsContainerAdapter(recipe.Runtime.Adapter) {
+			s.runManagedContainerRecipe(job, recipe, operation.ID)
+		} else {
+			s.runLocalRecipe(job, recipe, operation.ID)
+		}
 		return nil
 	}
 	// A previously active runtime may already be completely healthy. Preserve it

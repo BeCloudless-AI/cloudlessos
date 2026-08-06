@@ -22,6 +22,7 @@ var (
 	checkpointSizePattern        = regexp.MustCompile(`(?i)Checkpoint size:\s*([0-9.]+\s*[KMGT]i?B)`)
 	availableRAMPattern          = regexp.MustCompile(`(?i)Available RAM:\s*([0-9.]+\s*[KMGT]i?B)`)
 	checkpointShardPattern       = regexp.MustCompile(`(?i)Loading safetensors checkpoint shards:\s*([0-9]+)%\s+Completed\s*\|\s*([0-9]+)\s*/\s*([0-9]+)(?:\s*\[([^<\]]*)<([^,\]]*))?`)
+	deepGEMMWarmupPattern        = regexp.MustCompile(`(?i)DeepGEMM warmup:\s*([0-9]+)%.*\|\s*([0-9]+)\s*/\s*([0-9]+)`)
 )
 
 type recipeContainerProgress struct {
@@ -62,9 +63,28 @@ func dependencyNameFromWheel(filename string) string {
 	return strings.ReplaceAll(name, "_", "-")
 }
 
+func recipeContainerEngineName(engineType string) string {
+	switch strings.ToLower(strings.TrimSpace(engineType)) {
+	case "vllm":
+		return "vLLM"
+	case "sglang":
+		return "SGLang"
+	default:
+		if name := strings.TrimSpace(engineType); name != "" {
+			return name
+		}
+		return "model server"
+	}
+}
+
 func parseRecipeContainerProgress(logs string) (recipeContainerProgress, bool) {
+	return parseRecipeContainerProgressForEngine(logs, "vllm")
+}
+
+func parseRecipeContainerProgressForEngine(logs, engineType string) (recipeContainerProgress, bool) {
 	clean := containerANSISequencePattern.ReplaceAllString(logs, "")
 	clean = strings.ReplaceAll(clean, "\r", "\n")
+	engineName := recipeContainerEngineName(engineType)
 	currentModel, checkpointSize, availableRAM, currentDependency := "", "", "", ""
 	progress := recipeContainerProgress{}
 	prefetchDisabled := false
@@ -112,15 +132,19 @@ func parseRecipeContainerProgress(logs string) (recipeContainerProgress, bool) {
 			}
 		}
 		if strings.Contains(line, "Installing collected packages:") {
-			progress = recipeContainerProgress{Phase: "installing-runtime", Message: "Installing FlashInfer and DFlash startup dependencies…", CurrentItem: "FlashInfer / DFlash", OverallPercent: 53}
+			message, currentItem := "Installing startup runtime dependencies…", engineName
+			if strings.EqualFold(strings.TrimSpace(engineType), "vllm") {
+				message, currentItem = "Installing FlashInfer and DFlash startup dependencies…", "FlashInfer / DFlash"
+			}
+			progress = recipeContainerProgress{Phase: "installing-runtime", Message: message, CurrentItem: currentItem, OverallPercent: 53}
 			found = true
 		}
 		if strings.Contains(line, "Successfully installed") {
-			progress = recipeContainerProgress{Phase: "initializing-engine", Message: "Startup dependencies are installed. Initializing vLLM…", CurrentItem: "vLLM", OverallPercent: 54}
+			progress = recipeContainerProgress{Phase: "initializing-engine", Message: "Startup dependencies are installed. Initializing " + engineName + "…", CurrentItem: engineName, OverallPercent: 54}
 			found = true
 		}
 		if strings.Contains(line, "Initializing a V1 LLM engine") || strings.Contains(line, "Resolved architecture:") {
-			progress = recipeContainerProgress{Phase: "initializing-engine", Message: "vLLM is resolving the model architecture and execution plan…", CurrentItem: "vLLM", OverallPercent: 55}
+			progress = recipeContainerProgress{Phase: "initializing-engine", Message: engineName + " is resolving the model architecture and execution plan…", CurrentItem: engineName, OverallPercent: 55}
 			found = true
 		}
 		if match := modelLoadPattern.FindStringSubmatch(line); len(match) == 2 {
@@ -188,15 +212,52 @@ func parseRecipeContainerProgress(logs string) (recipeContainerProgress, bool) {
 			found = true
 		}
 		lower := strings.ToLower(line)
+		if strings.Contains(lower, "load weight begin") {
+			currentModel = "model weights"
+			progress = recipeContainerProgress{Phase: "loading-model", Message: "Loading model weights into " + engineName + "…", CurrentItem: currentModel, OverallPercent: 56}
+			found = true
+		}
+		if strings.Contains(lower, "load weight end") {
+			progress = recipeContainerProgress{Phase: "loading-model", Message: "Model weights are loaded. Preparing the " + engineName + " memory pool…", CurrentItem: engineName, OverallPercent: 72}
+			found = true
+		}
+		if strings.Contains(lower, "memory pool end") {
+			progress = recipeContainerProgress{Phase: "warming-engine", Message: engineName + " has allocated its model and KV-cache memory. Preparing optimized execution…", CurrentItem: engineName, OverallPercent: 77}
+			found = true
+		}
+		if strings.Contains(lower, "model loading took") || strings.Contains(lower, "loading weights took") {
+			progress = recipeContainerProgress{Phase: "warming-engine", Message: "Model weights are loaded. Finalizing distributed memory and execution state…", CurrentItem: engineName, OverallPercent: 76}
+			found = true
+		}
+		if strings.Contains(lower, "no available shared memory broadcast block") {
+			progress = recipeContainerProgress{Phase: "compiling-kernels", Message: "The Sparks are finishing compilation or KV-cache quantization…", CurrentItem: "GPU kernels / KV cache", OverallPercent: 78}
+			found = true
+		}
 		if strings.Contains(lower, "torch.compile") || strings.Contains(lower, "compiling model") {
 			progress = recipeContainerProgress{Phase: "compiling-kernels", Message: "Compiling optimized GPU kernels for this model and Spark…", CurrentItem: "GPU kernels", OverallPercent: 78}
+			found = true
+		}
+		if strings.Contains(lower, "autotuning process starts") || strings.Contains(lower, "autotuning flashinfer") {
+			progress = recipeContainerProgress{Phase: "compiling-kernels", Message: "Autotuning FlashInfer kernels for this model and Spark…", CurrentItem: "FlashInfer autotuning", OverallPercent: 79}
+			found = true
+		}
+		if match := deepGEMMWarmupPattern.FindStringSubmatch(line); len(match) == 4 {
+			percent, _ := strconv.Atoi(match[1])
+			done, _ := strconv.Atoi(match[2])
+			total, _ := strconv.Atoi(match[3])
+			progress = recipeContainerProgress{Phase: "warming-engine", Message: fmt.Sprintf("Warming DeepGEMM kernels — %d of %d (%d%%)", done, total, percent), CurrentItem: "DeepGEMM kernels", OverallPercent: 80, ItemsDone: done, ItemsTotal: total}
+			found = true
+		}
+		if strings.Contains(lower, "warmup finished") || strings.Contains(lower, "warming up deepseek") {
+			progress = recipeContainerProgress{Phase: "warming-engine", Message: "Warming specialized model kernels and attention paths…", CurrentItem: "Model warmup", OverallPercent: 80}
 			found = true
 		}
 		if strings.Contains(lower, "capturing cuda graph") || strings.Contains(lower, "graph capturing finished") || strings.Contains(lower, "warming up model") {
 			progress = recipeContainerProgress{Phase: "warming-engine", Message: "Warming the engine and capturing reusable CUDA graphs…", CurrentItem: "CUDA graphs", OverallPercent: 80}
 			found = true
 		}
-		if strings.Contains(lower, "application startup complete") || strings.Contains(lower, "uvicorn running on") || strings.Contains(lower, "starting vllm api server") {
+		if strings.Contains(lower, "application startup complete") || strings.Contains(lower, "uvicorn running on") ||
+			strings.Contains(lower, "starting vllm api server") || strings.Contains(lower, "server is fired up and ready to roll") {
 			progress = recipeContainerProgress{Phase: "health", Message: "The model server has started. Verifying its health and Cloudless model identity…", CurrentItem: "Health contract", OverallPercent: 82}
 			found = true
 		}
@@ -350,7 +411,7 @@ func (tracker *dependencyTransferTracker) update(now time.Time, item string, rec
 // entering or mutating the container. Docker health remains authoritative;
 // log parsing only explains the work occurring before the health contract is
 // ready.
-func observeRecipeContainerStartup(ctx context.Context, runtime engine.Engine, job *jobs.Job, containerName string, interval time.Duration) func() {
+func observeRecipeContainerStartup(ctx context.Context, runtime engine.Engine, job *jobs.Job, containerName, engineType string, interval time.Duration) func() {
 	if runtime == nil || job == nil || strings.TrimSpace(containerName) == "" {
 		return func() {}
 	}
@@ -371,7 +432,7 @@ func observeRecipeContainerStartup(ctx context.Context, runtime engine.Engine, j
 			if err != nil {
 				return
 			}
-			progress, ok := parseRecipeContainerProgress(logs)
+			progress, ok := parseRecipeContainerProgressForEngine(logs, engineType)
 			if !ok {
 				return
 			}

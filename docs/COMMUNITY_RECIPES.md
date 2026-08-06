@@ -28,11 +28,11 @@ detail and installation flow used by Model Manager.
 Community publication accepts two immutable-image container adapters:
 
 - `managed-container-v1` under `cloudless.recipe/v1` is the command-free safe default. Cloudless
-  synthesizes the vLLM command and keeps the container unprivileged and read-only.
+  synthesizes the vLLM or SGLang command and keeps the container unprivileged and read-only.
 - `advanced-container-v1` under `cloudless.recipe/v2` lets the signed recipe define its complete
   in-container entry point and command, arbitrary engine arguments and environment, additional
   pinned model revisions, writable-root behavior, container user, IPC, shared memory, ulimits,
-  tmpfs, process limit, Linux capabilities, and a bounded two-to-eight-Spark NCCL topology. It is intended for SM-specific kernels,
+  tmpfs, process and memory limits, Linux capabilities, and a bounded two-to-eight-Spark NCCL topology. It is intended for SM-specific kernels,
   speculative decoders such as DFlash, custom attention backends, and other engine-owned stacks.
 
 Both adapters retain the platform-level invariants needed by Cloudless:
@@ -50,7 +50,7 @@ Both adapters retain the platform-level invariants needed by Cloudless:
   accepted. Advanced permissions apply inside the pinned container and are shown before launch.
 
 This keeps host ownership with Cloudless without forcing every inference stack into one generic
-vLLM launch shape. Advanced recipes are not sandbox-equivalent to managed recipes: their complete
+launch shape. Advanced recipes are not sandbox-equivalent to managed recipes: their complete
 command and requested container permissions must be reviewed before launch.
 
 ## Publish with the Cloudless CLI
@@ -149,15 +149,17 @@ Another public Docker/OCI registry can be used instead. It must allow anonymous 
 referenced digest, and be reachable by both the Cloudless validation service and end-user systems.
 Private registry credentials are not currently distributed with community recipes.
 
-Automatic community publication currently accepts custom **vLLM** managed images. SGLang images
-can be registered and used locally, but the current community admission policy rejects them.
+Automatic community publication accepts immutable **vLLM** and **SGLang** images through the
+command-free managed adapter. Model-specific builds that need their own command, parsers, cache
+controls, IPC, or architecture tuning use the signed advanced adapter instead.
 
 ### 4. Create a manifest
 
 Copy [`examples/community-managed-container.yaml`](./examples/community-managed-container.yaml)
-for a standard vLLM model. For a custom optimized stack, use
+for a standard vLLM or SGLang model. For a custom optimized stack, use
 [`examples/community-laguna-s-2.1-dgx-spark.yaml`](./examples/community-laguna-s-2.1-dgx-spark.yaml)
-as the `cloudless.recipe/v2` advanced-container example. YAML and JSON are accepted up to 2 MiB.
+or [`examples/community-ling-3.0-flash-sglang-dgx-spark.yaml`](./examples/community-ling-3.0-flash-sglang-dgx-spark.yaml)
+as `cloudless.recipe/v2` advanced-container examples. YAML and JSON are accepted up to 2 MiB.
 
 Important distinctions:
 
@@ -191,12 +193,22 @@ is intentionally more precise than "any finding fails":
 - an exact image digest already curated and shipped by CloudlessOS may be admitted as a
   `curated-cloudless-runtime`; its findings remain visible warnings. This is a code-reviewed,
   digest-specific exception, not a registry-name or publisher bypass;
+- a moderator or administrator may explicitly admit an exact revision with fixable CRITICAL image
+  findings by publishing with `--force`. The override is revision-scoped and audited, and the scan
+  counts and blocking findings remain visible. It does not bypass manifest policy, secret checks,
+  immutable image/model requirements, scanner availability, or any non-image validation failure;
 - a missing, interrupted, or incomplete image scan always blocks publication and is retried. The
   service never treats a scanner outage as a clean image.
 
 The submission status includes the policy name, counts, warnings, and any blocking reason. A
 community signature means that this policy passed for the exact image digest; it does not mean the
 image contains zero known vulnerabilities.
+
+Discover and installed-recipe views display the retained HIGH and CRITICAL counts. When an image
+has known findings, Cloudless explains them in plain language before every interactive launch and
+requires an explicit acknowledgement. Local-only access substantially reduces practical exposure,
+but it does not erase risk from untrusted clients, files, prompts, plugins, or compromised devices
+on the same network.
 
 ### 6. Publish
 
@@ -220,6 +232,19 @@ with `--api URL` or `CLOUDLESS_COMMUNITY_API`.
 
 The command creates the recipe if necessary, creates an immutable revision, and submits it. It
 prints a submission ID. Save that ID.
+
+Moderators and administrators who have reviewed the image findings may explicitly override only
+the fixable-CRITICAL image gate:
+
+```bash
+cloudless recipes publish ./cloudless-recipe.yaml --force \
+  --force-reason "Temporary compatibility testing after reviewing the image scan"
+```
+
+When the same version was already rejected, `--force` reuses that immutable revision only when the
+local manifest digest exactly matches it. Otherwise, the CLI requires a version bump. The backend
+checks the API key owner's current role and records the reason; possessing or modifying the CLI is
+not enough to obtain the override.
 
 ### 7. Check the submission
 
@@ -286,7 +311,7 @@ the model, image, permissions, compatibility, author, and version details before
   required scope. Create a new publisher key from an enabled account.
 - **Slug already exists but is not owned by this account:** choose a different recipe title/slug.
 - **Version already exists:** published versions cannot be overwritten; bump the version.
-- **Recipe policy rejected:** use `managed-container-v1` for a command-free vLLM profile or
+- **Recipe policy rejected:** use `managed-container-v1` for a command-free vLLM/SGLang profile or
   `advanced-container-v1` with `cloudless.recipe/v2` for a custom in-container runtime. Host
   commands, arbitrary host mounts, mutable images/models, and distributed community containers
   remain invalid.

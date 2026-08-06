@@ -9,6 +9,7 @@
     "Display retained HIGH and CRITICAL image findings in Discover and installed-recipe views, explain practical exposure in plain language, and require explicit acknowledgement before launching an affected recipe.",
     "Add an audited moderator-only --force publication path for exact revisions whose fixable CRITICAL image findings were reviewed, without bypassing signatures, immutable inputs, scanner availability, manifest policy, or other validation failures.",
     "Support constrained command-free SGLang community containers alongside vLLM and add validated memory and memory-swap ceilings for signed advanced containers.",
-    "Add pinned Ling 3.0 Flash SGLang and DeepSeek V4 Flash SparkInfer community recipe examples and improve structured CLI validation errors."
+    "Add pinned Ling 3.0 Flash SGLang and DeepSeek V4 Flash SparkInfer community recipe examples and improve structured CLI validation errors.",
+    "Complete Google, GitHub, and X sign-in through the current Spark's private Tailscale HTTPS address while retaining exact callback and active-device checks."
   ]
 }

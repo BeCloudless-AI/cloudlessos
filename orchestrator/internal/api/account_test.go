@@ -5,8 +5,11 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
+
+	"github.com/cloudless/orchestrator/internal/remoteaccess"
 )
 
 func TestAccountLoginUsesSameOriginProxyWithoutPersistingCredentials(t *testing.T) {
@@ -67,6 +70,63 @@ func TestAccountOAuthRejectsNonLoopbackRedirect(t *testing.T) {
 	server.accountOAuth(response, request)
 	if response.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d: %s", response.Code, response.Body.String())
+	}
+}
+
+func TestAccountOAuthAcceptsOnlyTheActiveTailscaleServeCallback(t *testing.T) {
+	remote := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, `{"provider":"google","url":"https://kaftyfeclcciwwmykbms.supabase.co/auth/v1/authorize?provider=google"}`)
+	}))
+	defer remote.Close()
+
+	server := &Server{
+		accountBaseURL:    remote.URL,
+		accountHTTPClient: remote.Client(),
+		remoteAccess: &fakeRemoteAccess{status: remoteaccess.Status{
+			Connected: true, ServeEnabled: true, DNSName: "spark-3493.tail58a396.ts.net",
+		}},
+	}
+	redirectTo := "https://spark-3493.tail58a396.ts.net/auth/callback"
+	request := httptest.NewRequest(http.MethodGet, "/api/account/oauth/google?redirectTo="+url.QueryEscape(redirectTo), nil)
+	request.SetPathValue("provider", "google")
+	response := httptest.NewRecorder()
+	server.accountOAuth(response, request)
+	if response.Code != http.StatusOK {
+		t.Fatalf("active Tailscale callback rejected: %d %s", response.Code, response.Body.String())
+	}
+	var payload map[string]string
+	if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(payload["url"], "redirect_to=https%3A%2F%2Fspark-3493.tail58a396.ts.net%2Fauth%2Fcallback") {
+		t.Fatalf("Tailscale callback was not pinned to this CloudlessOS device: %s", payload["url"])
+	}
+}
+
+func TestAccountOAuthRejectsInactiveOrDifferentTailscaleCallbacks(t *testing.T) {
+	tests := []struct {
+		name   string
+		status remoteaccess.Status
+		url    string
+	}{
+		{"serve disabled", remoteaccess.Status{Connected: true, DNSName: "spark-3493.tail58a396.ts.net"}, "https://spark-3493.tail58a396.ts.net/auth/callback"},
+		{"disconnected", remoteaccess.Status{ServeEnabled: true, DNSName: "spark-3493.tail58a396.ts.net"}, "https://spark-3493.tail58a396.ts.net/auth/callback"},
+		{"different device", remoteaccess.Status{Connected: true, ServeEnabled: true, DNSName: "spark-3493.tail58a396.ts.net"}, "https://attacker.tail58a396.ts.net/auth/callback"},
+		{"tailscale IP", remoteaccess.Status{Connected: true, ServeEnabled: true, DNSName: "spark-3493.tail58a396.ts.net"}, "https://100.85.167.72/auth/callback"},
+		{"custom port", remoteaccess.Status{Connected: true, ServeEnabled: true, DNSName: "spark-3493.tail58a396.ts.net"}, "https://spark-3493.tail58a396.ts.net:8765/auth/callback"},
+		{"query injection", remoteaccess.Status{Connected: true, ServeEnabled: true, DNSName: "spark-3493.tail58a396.ts.net"}, "https://spark-3493.tail58a396.ts.net/auth/callback?next=attacker"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			server := &Server{remoteAccess: &fakeRemoteAccess{status: test.status}}
+			request := httptest.NewRequest(http.MethodGet, "/api/account/oauth/google?redirectTo="+url.QueryEscape(test.url), nil)
+			request.SetPathValue("provider", "google")
+			response := httptest.NewRecorder()
+			server.accountOAuth(response, request)
+			if response.Code != http.StatusBadRequest {
+				t.Fatalf("expected 400, got %d: %s", response.Code, response.Body.String())
+			}
+		})
 	}
 }
 

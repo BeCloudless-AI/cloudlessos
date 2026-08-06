@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -9,6 +10,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/cloudless/orchestrator/internal/remoteaccess"
 )
 
 const defaultCloudlessAccountAPI = "https://becloudless.ai/api"
@@ -30,14 +33,31 @@ func (s *Server) accountClient() *http.Client {
 	return &http.Client{Timeout: 20 * time.Second}
 }
 
-func accountOAuthRedirect(raw string) (string, error) {
+func accountOAuthRedirect(raw string, tailscale remoteaccess.Status) (string, error) {
 	parsed, err := url.Parse(strings.TrimSpace(raw))
-	if err != nil || parsed.Scheme != "http" || parsed.Host != "127.0.0.1:8765" || parsed.Path != "/auth/callback" {
-		return "", errors.New("OAuth must return to the local CloudlessOS callback")
+	if err != nil || parsed.Path != "/auth/callback" || parsed.RawQuery != "" || parsed.Fragment != "" || parsed.User != nil {
+		return "", errors.New("OAuth must return to this CloudlessOS device")
 	}
-	parsed.RawQuery = ""
-	parsed.Fragment = ""
-	return parsed.String(), nil
+	if parsed.Scheme == "http" && parsed.Host == "127.0.0.1:8765" {
+		return parsed.String(), nil
+	}
+	tailscaleDNS := strings.TrimSuffix(strings.ToLower(strings.TrimSpace(tailscale.DNSName)), ".")
+	if parsed.Scheme == "https" && parsed.Port() == "" &&
+		tailscale.Connected && tailscale.ServeEnabled && tailscaleDNS != "" &&
+		strings.EqualFold(parsed.Hostname(), tailscaleDNS) {
+		return parsed.String(), nil
+	}
+	return "", errors.New("OAuth must return to this CloudlessOS device over loopback or its active Tailscale HTTPS address")
+}
+
+func (s *Server) accountOAuthRedirect(ctx context.Context, raw string) (string, error) {
+	redirectTo, err := accountOAuthRedirect(raw, remoteaccess.Status{})
+	if err == nil || s.remoteAccess == nil {
+		return redirectTo, err
+	}
+	statusCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	return accountOAuthRedirect(raw, s.remoteAccess.Status(statusCtx))
 }
 
 func (s *Server) accountForward(w http.ResponseWriter, r *http.Request, remotePath string, maxBody int64) {
@@ -144,7 +164,7 @@ func (s *Server) accountOAuth(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unsupported OAuth provider"})
 		return
 	}
-	redirectTo, err := accountOAuthRedirect(r.URL.Query().Get("redirectTo"))
+	redirectTo, err := s.accountOAuthRedirect(r.Context(), r.URL.Query().Get("redirectTo"))
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return

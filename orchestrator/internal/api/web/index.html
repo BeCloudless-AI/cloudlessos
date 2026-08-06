@@ -11726,12 +11726,22 @@ async function refreshActiveModel() {
   } catch {}
 }
 
-function openRuntimeManager(runtime, details = false) {
+async function openRuntimeManager(runtime, details = false) {
   closeKeyDialog();
   if (runtime.kind === 'recipe') {
     mmTab = 'recipes'; mmDetail = null; mmHF = false; mmCommunityDetail = null;
-    mmRecipeView = { ...mmRecipeView, scope: 'local', library: 'supported', q: details ? runtime.name : '', source: 'all', sparks: 'all', status: 'all', page: 1 };
     document.getElementById('models').classList.remove('hidden');
+    if (details) {
+      const local = await localCommunityRecipeSnapshot().catch(() => null);
+      const installed = (local?.recipes || []).find(recipe => recipe.id === runtime.id);
+      if (installed?.community?.slug) {
+        mmRecipeView = { ...mmRecipeView, scope: 'discover', page: 1 };
+        mmCommunityDetail = installed.community.slug;
+        renderModelManager();
+        return;
+      }
+    }
+    mmRecipeView = { ...mmRecipeView, scope: 'local', library: 'supported', q: details ? runtime.name : '', source: 'all', sparks: 'all', status: 'all', page: 1 };
     renderModelManager();
     return;
   }

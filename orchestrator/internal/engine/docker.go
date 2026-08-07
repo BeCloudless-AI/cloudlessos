@@ -28,7 +28,8 @@ import (
 
 // Docker implements Engine by shelling out to the docker CLI.
 type Docker struct {
-	bin string
+	bin       string
+	networkMu sync.Mutex
 }
 
 // NewDocker returns a Docker engine that invokes the "docker" binary on PATH.
@@ -57,10 +58,18 @@ func (d *Docker) EnsureNetwork(ctx context.Context, name string) error {
 	if err := validateManagedName("network", name); err != nil {
 		return err
 	}
+	d.networkMu.Lock()
+	defer d.networkMu.Unlock()
 	if _, _, err := d.exec(ctx, "network", "inspect", name); err == nil {
 		return nil
 	}
 	if _, errs, err := d.exec(ctx, "network", "create", name); err != nil {
+		// Another Cloudless process may have created the network after our
+		// inspect. Treat that race as success only after Docker confirms the
+		// network now exists.
+		if _, _, inspectErr := d.exec(ctx, "network", "inspect", name); inspectErr == nil {
+			return nil
+		}
 		return fmt.Errorf("create network %s: %v: %s", name, err, strings.TrimSpace(errs))
 	}
 	return nil
@@ -818,7 +827,7 @@ func (d *Docker) Run(ctx context.Context, spec RunSpec) (string, error) {
 	if err := validateGPURequest(spec.GPUs); err != nil {
 		return "", fmt.Errorf("container policy: %w", err)
 	}
-	out, errs, err := d.exec(ctx, runArgs(spec)...)
+	out, errs, err := d.runWithNetworkRecovery(ctx, spec, runArgs(spec))
 	if err != nil {
 		return "", fmt.Errorf("run %s: %v: %s", spec.Image, err, strings.TrimSpace(errs))
 	}
@@ -839,11 +848,47 @@ func (d *Docker) RunTransient(ctx context.Context, spec RunSpec) (string, error)
 	if err := validateGPURequest(spec.GPUs); err != nil {
 		return "", fmt.Errorf("container policy: %w", err)
 	}
-	out, errs, err := d.exec(ctx, transientArgs(spec)...)
+	out, errs, err := d.runWithNetworkRecovery(ctx, spec, transientArgs(spec))
 	if err != nil {
 		return "", fmt.Errorf("run transient %s: %v: %s", spec.Image, err, strings.TrimSpace(errs))
 	}
 	return strings.TrimSpace(out), nil
+}
+
+func managedCustomNetwork(name string) bool {
+	switch strings.TrimSpace(name) {
+	case "", "host", "none", "bridge":
+		return false
+	default:
+		return true
+	}
+}
+
+func dockerNetworkMissing(stderr, name string) bool {
+	detail := strings.ToLower(stderr)
+	name = strings.ToLower(strings.TrimSpace(name))
+	return name != "" && strings.Contains(detail, "network "+name+" not found")
+}
+
+// runWithNetworkRecovery makes a managed Docker network a launch invariant,
+// rather than assuming background provisioning has already created it. This
+// closes first-boot races and self-heals after Docker state cleanup. A second
+// ensure-and-run handles the narrow case where the network disappears between
+// the preflight check and Docker consuming --network.
+func (d *Docker) runWithNetworkRecovery(ctx context.Context, spec RunSpec, args []string) (string, string, error) {
+	if managedCustomNetwork(spec.Network) {
+		if err := d.EnsureNetwork(ctx, spec.Network); err != nil {
+			return "", "", fmt.Errorf("ensure network %s: %w", spec.Network, err)
+		}
+	}
+	out, stderr, err := d.exec(ctx, args...)
+	if err == nil || !managedCustomNetwork(spec.Network) || !dockerNetworkMissing(stderr, spec.Network) {
+		return out, stderr, err
+	}
+	if ensureErr := d.EnsureNetwork(ctx, spec.Network); ensureErr != nil {
+		return out, stderr, fmt.Errorf("%w; recover network %s: %v", err, spec.Network, ensureErr)
+	}
+	return d.exec(ctx, args...)
 }
 
 // ShellJoin renders argv as a single space-separated line, quoting any token that

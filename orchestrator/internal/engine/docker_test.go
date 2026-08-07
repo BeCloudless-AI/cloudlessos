@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"net/http"
 	"os"
@@ -10,6 +11,131 @@ import (
 	"strings"
 	"testing"
 )
+
+func TestDockerRunCreatesManagedNetworkBeforeContainer(t *testing.T) {
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "commands")
+	networkPath := filepath.Join(dir, "network")
+	binary := filepath.Join(dir, "docker")
+	script := fmt.Sprintf(`#!/bin/sh
+printf '%%s\n' "$*" >> %q
+if [ "$1" = network ] && [ "$2" = inspect ]; then
+  test -f %q
+  exit $?
+fi
+if [ "$1" = network ] && [ "$2" = create ]; then
+  : > %q
+  printf 'cloudless\n'
+  exit 0
+fi
+if [ "$1" = run ]; then
+  if [ ! -f %q ]; then
+    printf 'network cloudless not found\n' >&2
+    exit 125
+  fi
+  printf 'container-id\n'
+  exit 0
+fi
+exit 1
+`, logPath, networkPath, networkPath, networkPath)
+	if err := os.WriteFile(binary, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	id, err := (&Docker{bin: binary}).Run(context.Background(), RunSpec{
+		Name: "cloudless-test", Image: "cloudless/runtime:test", Network: "cloudless",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id != "container-id" {
+		t.Fatalf("container id = %q", id)
+	}
+	commands, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(commands)), "\n")
+	if len(lines) != 3 || lines[0] != "network inspect cloudless" || lines[1] != "network create cloudless" || !strings.HasPrefix(lines[2], "run ") {
+		t.Fatalf("docker commands = %#v", lines)
+	}
+}
+
+func TestDockerRunRecoversWhenManagedNetworkDisappears(t *testing.T) {
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "commands")
+	networkPath := filepath.Join(dir, "network")
+	failedPath := filepath.Join(dir, "failed-once")
+	if err := os.WriteFile(networkPath, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	binary := filepath.Join(dir, "docker")
+	script := fmt.Sprintf(`#!/bin/sh
+printf '%%s\n' "$*" >> %q
+if [ "$1" = network ] && [ "$2" = inspect ]; then
+  test -f %q
+  exit $?
+fi
+if [ "$1" = network ] && [ "$2" = create ]; then
+  : > %q
+  exit 0
+fi
+if [ "$1" = run ]; then
+  if [ ! -f %q ]; then
+    : > %q
+    rm -f %q
+    printf 'docker: Error response from daemon: failed to set up container networking: network cloudless not found\n' >&2
+    exit 125
+  fi
+  test -f %q || exit 125
+  printf 'recovered-container-id\n'
+  exit 0
+fi
+exit 1
+`, logPath, networkPath, networkPath, failedPath, failedPath, networkPath, networkPath)
+	if err := os.WriteFile(binary, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	id, err := (&Docker{bin: binary}).Run(context.Background(), RunSpec{
+		Name: "cloudless-test", Image: "cloudless/runtime:test", Network: "cloudless",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id != "recovered-container-id" {
+		t.Fatalf("container id = %q", id)
+	}
+	commands, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Count(string(commands), "run "); got != 2 {
+		t.Fatalf("run attempts = %d, commands:\n%s", got, commands)
+	}
+}
+
+func TestEnsureNetworkAcceptsConcurrentCreator(t *testing.T) {
+	dir := t.TempDir()
+	networkPath := filepath.Join(dir, "network")
+	binary := filepath.Join(dir, "docker")
+	script := fmt.Sprintf(`#!/bin/sh
+if [ "$1" = network ] && [ "$2" = inspect ]; then
+  test -f %q
+  exit $?
+fi
+if [ "$1" = network ] && [ "$2" = create ]; then
+  : > %q
+  printf 'network already exists\n' >&2
+  exit 1
+fi
+exit 1
+`, networkPath, networkPath)
+	if err := os.WriteFile(binary, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := (&Docker{bin: binary}).EnsureNetwork(context.Background(), "cloudless"); err != nil {
+		t.Fatalf("concurrent network creation was not accepted: %v", err)
+	}
+}
 
 func TestPullStreamUsesStructuredDockerByteProgress(t *testing.T) {
 	socket := filepath.Join(t.TempDir(), "docker.sock")

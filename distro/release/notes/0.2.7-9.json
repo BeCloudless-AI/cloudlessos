@@ -3,6 +3,7 @@
   "summary": "CloudlessOS 0.2.7-9 prevents missing private Docker networks from breaking container starts, sends an empty local recipe library directly to Discover, and retires obsolete starter profiles.",
   "changes": [
     "Verify and self-heal Cloudless-owned Docker networks before every managed regular or transient container launch, tolerate concurrent first-boot creation, and retry safely if a network disappears immediately before Docker starts the container.",
+    "Allow bounded registry image inspection to survive slow networks and ARM systems without prematurely failing an otherwise healthy background recipe check.",
     "Open Discover automatically when no recipes are installed on this machine, including after the final local recipe is removed, while keeping genuine API failures distinct from an empty library.",
     "Retire the GPT-OSS 20B, Qwen 2.5 1.5B, and older DeepSeek V4 Flash DSpark v0.26 SM121 starter recipe examples from the supported publication set."
   ]

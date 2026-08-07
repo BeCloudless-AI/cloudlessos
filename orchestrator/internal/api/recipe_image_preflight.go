@@ -21,6 +21,8 @@ import (
 
 var recipeImageDigestPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
 
+const recipeRegistryInspectionTimeout = 2 * time.Minute
+
 type recipeImagePlatform struct {
 	OS           string `json:"os"`
 	Architecture string `json:"architecture"`
@@ -171,7 +173,7 @@ func recipeManifestCompressedBytes(manifest recipeRegistryManifest) int64 {
 
 func inspectRecipeRegistryImage(ctx context.Context, runtime engine.Engine, reference string) (recipeImagePreflight, error) {
 	architecture := hostplatform.Architecture()
-	inspectionCtx, cancel := context.WithTimeout(ctx, 45*time.Second)
+	inspectionCtx, cancel := context.WithTimeout(ctx, recipeRegistryInspectionTimeout)
 	defer cancel()
 	manifestJSON, err := runtime.RemoteImageManifest(inspectionCtx, reference)
 	if err != nil {
@@ -244,7 +246,7 @@ func inspectLocalRecipeImage(ctx context.Context, runtime engine.Engine, referen
 }
 
 func inspectPeerRecipeRegistryDigest(ctx context.Context, checkout string, env map[string]string, peer recipePeer, reference string) (string, error) {
-	inspectionCtx, cancel := context.WithTimeout(ctx, 45*time.Second)
+	inspectionCtx, cancel := context.WithTimeout(ctx, recipeRegistryInspectionTimeout)
 	defer cancel()
 	output, err := recipeCommandOutput(recipeSSHCommand(inspectionCtx, checkout, env, peer,
 		"docker", "buildx", "imagetools", "inspect", reference, "--format", "{{json .Manifest}}"))
@@ -259,7 +261,7 @@ func inspectPeerRecipeRegistryDigest(ctx context.Context, checkout string, env m
 }
 
 func inspectPeerRecipeLocalImageDigest(ctx context.Context, checkout string, env map[string]string, peer recipePeer, reference string) (string, error) {
-	inspectionCtx, cancel := context.WithTimeout(ctx, 45*time.Second)
+	inspectionCtx, cancel := context.WithTimeout(ctx, recipeRegistryInspectionTimeout)
 	defer cancel()
 	output, err := recipeCommandOutput(recipeSSHCommand(inspectionCtx, checkout, env, peer,
 		"docker", "image", "inspect", reference, "--format", "{{.Id}}"))

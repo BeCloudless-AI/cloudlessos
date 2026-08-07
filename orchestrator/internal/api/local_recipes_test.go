@@ -971,3 +971,22 @@ func TestRecipeManagerSeparatesLocalAndCommunityLibraries(t *testing.T) {
 		}
 	}
 }
+
+func TestRecipeManagerDefaultsToDiscoverWhenLocalLibraryIsEmpty(t *testing.T) {
+	content, err := webFS.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(content)
+	for _, want := range []string{
+		`function localRecipeLibraryEmpty(data)`,
+		`function openRecipeDiscoverIfLocalEmpty(c, data)`,
+		`mmRecipeView = { ...mmRecipeView, scope: 'discover', page: 1 }`,
+		`if (openRecipeDiscoverIfLocalEmpty(c, local)) return;`,
+		`if(openRecipeDiscoverIfLocalEmpty(document.getElementById('mm-tab-body'),data))return;`,
+	} {
+		if !strings.Contains(page, want) {
+			t.Fatalf("empty local recipe redirect is missing %q", want)
+		}
+	}
+}

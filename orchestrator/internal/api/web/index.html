@@ -9068,6 +9068,15 @@ async function renderImageModels(c) {
   if (!mmDetail && document.body.contains(c)) paintImageModels(c, d);
 }
 function paintImageModels(c, d) { paintModelList(c, d, 'diff'); }
+function localRecipeLibraryEmpty(data) {
+  return !!data && !data.error && Array.isArray(data.recipes) && data.recipes.length === 0;
+}
+function openRecipeDiscoverIfLocalEmpty(c, data) {
+  if (!localRecipeLibraryEmpty(data) || mmRecipeView.scope !== 'local' || mmCommunityDetail || myRecipesOpen()) return false;
+  mmRecipeView = { ...mmRecipeView, scope: 'discover', page: 1 };
+  renderCommunityRecipes(c, 'discover');
+  return true;
+}
 async function renderLocalRecipes(c) {
   if (mmCommunityDetail) {
     renderCommunityRecipeDetail(c, mmCommunityDetail);
@@ -9077,12 +9086,15 @@ async function renderLocalRecipes(c) {
     renderCommunityRecipes(c, mmRecipeView.scope);
     return;
   }
-  if (mmRecipes) paintLocalRecipes(c, mmRecipes);
+  if (mmRecipes && !localRecipeLibraryEmpty(mmRecipes)) paintLocalRecipes(c, mmRecipes);
   else c.innerHTML = '<div class="set-hint">Loading the Recipe Library...</div>';
   const local = await api('/api/recipes').catch(() => ({ error: 'Could not load installed recipes.' }));
   if (!local.error) { await hydrateCommunityRecipeValidation(local); mmRecipes = local; }
   if (!mmRecipes && local.error) mmRecipes = { error: local.error, recipes: [], defaults: null };
-  if (mmTab === 'recipes' && !mmDetail && document.body.contains(c)) paintLocalRecipes(c, mmRecipes);
+  if (mmTab === 'recipes' && !mmDetail && document.body.contains(c)) {
+    if (openRecipeDiscoverIfLocalEmpty(c, local)) return;
+    if (mmRecipeView.scope === 'local') paintLocalRecipes(c, mmRecipes);
+  }
 }
 function recipeJob(data, id) {
   const live=(data.jobs || []).find(job => !job.done && (job.appId === `recipe:${id}` || job.appId === `recipe:${id}:check` || job.appId === `recipe:${id}:stop` || job.appId === `recipe:${id}:recovery` || job.appId === `recipe:${id}:cleanup`));
@@ -9234,6 +9246,7 @@ async function refreshRecipeJobs(){
   const previous=mmRecipes,previousActive=JSON.stringify(recipeLiveJobs(previous||{}).map(job=>job.id));
   mmRecipes=data;renderHomeRecipeJobs(data);
   if(modelsOpen()&&mmTab==='recipes'&&!mmDetail&&mmRecipeView.scope==='local'&&!mmCommunityDetail){
+    if(openRecipeDiscoverIfLocalEmpty(document.getElementById('mm-tab-body'),data))return;
     const currentJobs=recipeLiveJobs(data),currentActive=JSON.stringify(currentJobs.map(job=>job.id));
     if(previousActive!==currentActive)paintLocalRecipes(document.getElementById('mm-tab-body'),data);else currentJobs.forEach(job=>{const id=recipeRunID(job);if(id)updateRecipeRunCard(id,job.id,job);});
   }

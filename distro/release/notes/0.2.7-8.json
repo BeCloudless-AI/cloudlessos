@@ -7,8 +7,6 @@
     "Replace the previous rating controls with an immediate five-star interaction beside the recipe title, retain the signed-in user's rating across detail views, and refresh aggregate rating text after a vote.",
     "Align block and report actions with the recipe title, remove duplicated community activity copy, and show a comment author's recipe rating beside their username when available.",
     "Present known container vulnerabilities in a collapsed disclosure with visible SVG status icons, complete available package findings, and a plain-language explanation that distinguishes container software from model weights and clarifies local-versus-public exposure.",
-    "Keep launch-time vulnerability acknowledgement and risk guidance explicit while ensuring older validation records with summary-only evidence are described accurately instead of inventing missing package details.",
-    "Retire the GPT-OSS 20B, Qwen 2.5 1.5B, and older DeepSeek V4 Flash DSpark v0.26 SM121 starter recipe examples from the supported publication set.",
-    "Self-heal Cloudless-owned Docker networks at every container launch, including concurrent first-boot creation and a network disappearing immediately before Docker starts the container."
+    "Keep launch-time vulnerability acknowledgement and risk guidance explicit while ensuring older validation records with summary-only evidence are described accurately instead of inventing missing package details."
   ]
 }

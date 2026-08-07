@@ -1,0 +1,10 @@
+{
+  "title": "Reliable Tailscale installation on fresh CloudlessOS systems",
+  "summary": "CloudlessOS 0.2.7-9a fixes Tailscale installation on fresh DGX Spark systems and keeps installation progress, failures, retries, and support evidence accurate.",
+  "changes": [
+    "Verify the official Tailscale repository key inside a private writable GPG workspace so the hardened installer works correctly when the root home directory is read-only.",
+    "Preserve the real verification failure instead of incorrectly reporting an internal GPG error as a repository fingerprint mismatch.",
+    "Keep Tailscale installation progress and actionable failures visible in Remote Access, allow explicit retries after systemd start limits, and include installer evidence in Cloudless support diagnostics.",
+    "Add fresh ARM64 installation regression coverage using a protected read-only home while preserving the permissions of Cloudless's privileged runtime directory."
+  ]
+}

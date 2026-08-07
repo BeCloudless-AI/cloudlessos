@@ -66,6 +66,29 @@ func TestExternalPagesStayInTheCloudlessWindowModel(t *testing.T) {
 	}
 }
 
+func TestTailscaleFreshInstallKeepsProgressAndFailureVisible(t *testing.T) {
+	content, err := webFS.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(content)
+	for _, want := range []string{
+		`status.installState==='installing'`,
+		`status.installState==='failed'`,
+		`status.installMessage`,
+		`INSTALL FAILED`,
+		`Try installation again`,
+		`setTimeout(()=>{if(c.isConnected&&settingsOpen()&&setPage==='remote-access')renderRemoteAccessPage(c);},2000)`,
+	} {
+		if !strings.Contains(page, want) {
+			t.Fatalf("Tailscale installation UI is missing %q", want)
+		}
+	}
+	if strings.Contains(page, `for (let attempt=0; attempt<90; attempt++)`) {
+		t.Fatal("Tailscale installation still silently abandons status polling after three minutes")
+	}
+}
+
 func TestSettingsActionButtonsKeepIconsAndLabelsAligned(t *testing.T) {
 	content, err := webFS.ReadFile("web/index.html")
 	if err != nil {

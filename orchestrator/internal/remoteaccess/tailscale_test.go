@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -73,6 +74,29 @@ func TestStatusHandlesMissingClient(t *testing.T) {
 	status := (&Client{commands: &fakeCommands{}}).Status(context.Background())
 	if status.Installed || status.Connected {
 		t.Fatalf("unexpected status: %#v", status)
+	}
+}
+
+func TestStatusReportsPersistentFreshInstallFailure(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "tailscale-install.json")
+	if err := os.WriteFile(path, []byte(`{"state":"failed","message":"Repository key verification failed."}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	status := (&Client{commands: &fakeCommands{}, installStatusPath: path}).Status(context.Background())
+	if status.Installed || status.InstallState != "failed" || status.InstallMessage != "Repository key verification failed." {
+		t.Fatalf("unexpected install status: %#v", status)
+	}
+}
+
+func TestInstalledClientOverridesStaleInstallFailure(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "tailscale-install.json")
+	if err := os.WriteFile(path, []byte(`{"state":"failed","message":"old failure"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	f := &fakeCommands{installed: true, status: `{}`}
+	status := (&Client{commands: f, installStatusPath: path}).Status(context.Background())
+	if !status.Installed || status.InstallState != "installed" || status.InstallMessage != "" {
+		t.Fatalf("stale failure survived installed client detection: %#v", status)
 	}
 }
 

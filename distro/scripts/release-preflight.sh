@@ -30,7 +30,7 @@ git_root="$(realpath -e "$(git -C "$ROOT" rev-parse --show-toplevel)")"
     fail "repository contains tracked or untracked source changes"
 
 cloudless_is_release_version "$VERSION" || \
-    fail "version must be X.Y.Z or Debian revision X.Y.Z-N (for example 0.2.7-1)"
+    fail "version must be X.Y.Z or Debian revision X.Y.Z-N with an optional hotfix letter (for example 0.2.7-9a)"
 case "$CHANNEL" in stable|beta) ;; *) fail "channel must be stable or beta" ;; esac
 [ "${CLOUDLESS_PROMOTION_MIN_AGE_SECONDS:-604800}" = 604800 ] || \
     fail "production beta-to-stable promotion requires the full seven-day soak"

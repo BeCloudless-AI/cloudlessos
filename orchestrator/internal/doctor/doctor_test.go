@@ -31,6 +31,12 @@ func TestRedactRemovesCredentialsAndIdentity(t *testing.T) {
 }
 
 func TestSupportBundleRedactsContainerLogs(t *testing.T) {
+	oldStatusPath := tailscaleInstallStatusPath
+	tailscaleInstallStatusPath = filepath.Join(t.TempDir(), "tailscale-install.json")
+	t.Cleanup(func() { tailscaleInstallStatusPath = oldStatusPath })
+	if err := os.WriteFile(tailscaleInstallStatusPath, []byte(`{"state":"failed","message":"Repository verification failed"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	store, err := state.Open(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -47,9 +53,10 @@ func TestSupportBundleRedactsContainerLogs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	foundAudit := false
+	foundAudit, foundTailscaleStatus := false, false
 	for _, file := range archive.File {
 		foundAudit = foundAudit || file.Name == "security-audit.json"
+		foundTailscaleStatus = foundTailscaleStatus || file.Name == "tailscale-install.json"
 		reader, openErr := file.Open()
 		if openErr != nil {
 			t.Fatal(openErr)
@@ -65,6 +72,9 @@ func TestSupportBundleRedactsContainerLogs(t *testing.T) {
 	}
 	if !foundAudit {
 		t.Fatal("support bundle omitted the unified security audit")
+	}
+	if !foundTailscaleStatus {
+		t.Fatal("support bundle omitted the Tailscale installer failure")
 	}
 }
 

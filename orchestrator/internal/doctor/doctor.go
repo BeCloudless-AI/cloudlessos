@@ -348,6 +348,8 @@ var secretPatterns = []struct {
 	{regexp.MustCompile(`(?i)("(?:hash|prefix)"\s*:\s*)"[^"]*"`), `${1}"[REDACTED]"`},
 }
 
+var tailscaleInstallStatusPath = "/run/cloudless/tailscale-install.json"
+
 // Redact removes common credentials and local identity/path fragments. It is
 // applied after serialization and independently to every collected log.
 func Redact(input string) string {
@@ -402,6 +404,14 @@ func BuildBundle(ctx context.Context, eng engine.Engine, st *state.Store, report
 	if events, err := securityaudit.New(st.Dir()).Latest(securityaudit.MaxEvents); err == nil {
 		if err := add("security-audit.json", events); err != nil {
 			return nil, err
+		}
+	}
+	if data, err := os.ReadFile(tailscaleInstallStatusPath); err == nil {
+		var installStatus map[string]any
+		if json.Unmarshal(data, &installStatus) == nil {
+			if err := add("tailscale-install.json", installStatus); err != nil {
+				return nil, err
+			}
 		}
 	}
 	containers, _ := eng.List(ctx)

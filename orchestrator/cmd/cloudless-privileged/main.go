@@ -115,6 +115,11 @@ func execute(ctx context.Context, action privileged.Action, value string) error 
 	case privileged.ActionNVIDIAUpdateApply:
 		args = []string{"start", "--no-block", "cloudless-nvidia-apply.service"}
 	case privileged.ActionTailscaleInstaller:
+		// A previous network or package failure may have exhausted systemd's
+		// start limit. An explicit user retry must always get a fresh attempt.
+		if err := exec.CommandContext(ctx, "/usr/bin/systemctl", "reset-failed", "cloudless-tailscale-install.service").Run(); err != nil {
+			return err
+		}
 		args = []string{"start", "--no-block", "cloudless-tailscale-install.service"}
 	case privileged.ActionTimezoneSet:
 		args = []string{"set-timezone", value}

@@ -34,7 +34,7 @@ func (s *Server) tailscaleInstall(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": err.Error()})
 		return
 	}
-	s.auditMutation(r, "remote-access", "tailscale-install", "tailscale", "succeeded", "", http.StatusAccepted)
+	s.auditMutation(r, "remote-access", "tailscale-install", "tailscale", "queued", "", http.StatusAccepted)
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "installing"})
 }
 

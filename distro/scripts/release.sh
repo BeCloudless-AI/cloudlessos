@@ -16,7 +16,7 @@ usage() {
 [ -n "$VERSION" ] || { usage; exit 2; }
 case "$CHANNEL" in stable|beta) ;; *) usage; exit 2 ;; esac
 cloudless_is_release_version "$VERSION" || {
-    echo "Release version must be X.Y.Z or X.Y.Z-N (for example 0.2.7-1)." >&2
+    echo "Release version must be X.Y.Z or X.Y.Z-N with an optional hotfix letter (for example 0.2.7-9a)." >&2
     exit 2
 }
 

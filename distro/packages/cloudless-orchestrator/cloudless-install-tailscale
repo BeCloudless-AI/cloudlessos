@@ -9,8 +9,36 @@ KEY_FINGERPRINT=2596A99EAAB33821893C0A79458CA832957F5868
 KEY_SUBKEY_FINGERPRINT=2F625B3A774B946822EDDBEEB1547A3DDAAF03C6
 KEY_URL=https://pkgs.tailscale.com/stable/ubuntu/noble.noarmor.gpg
 REPOSITORY_URL=https://pkgs.tailscale.com/stable/ubuntu
-KEYRING=/usr/share/keyrings/tailscale-archive-keyring.gpg
-SOURCE=/etc/apt/sources.list.d/tailscale.list
+KEYRING="${CLOUDLESS_TAILSCALE_KEYRING:-/usr/share/keyrings/tailscale-archive-keyring.gpg}"
+SOURCE="${CLOUDLESS_TAILSCALE_SOURCE:-/etc/apt/sources.list.d/tailscale.list}"
+STATUS_DIR="${CLOUDLESS_TAILSCALE_STATUS_DIR:-/run/cloudless}"
+STATUS_FILE="$STATUS_DIR/tailscale-install.json"
+failure_message="Tailscale installation did not complete. Open Cloudless support details and try again."
+work=
+
+write_status() {
+    state="$1"
+    message="$2"
+    # /run/cloudless is normally the broker's group-restricted runtime
+    # directory. Never relax its existing permissions just to add status.
+    [ -d "$STATUS_DIR" ] || install -d -m 0755 "$STATUS_DIR"
+    printf '{"state":"%s","message":"%s"}\n' "$state" "$message" > "$STATUS_FILE.tmp"
+    chmod 0644 "$STATUS_FILE.tmp"
+    mv -f "$STATUS_FILE.tmp" "$STATUS_FILE"
+}
+
+finish() {
+    result=$?
+    trap - EXIT
+    [ -z "$work" ] || rm -rf "$work"
+    if [ "$result" -ne 0 ]; then
+        write_status failed "$failure_message"
+    fi
+    exit "$result"
+}
+
+trap finish EXIT
+write_status installing "Preparing the secure Tailscale installation."
 
 configure_operator() {
     systemctl enable --now tailscaled.service
@@ -22,6 +50,7 @@ configure_operator() {
 
 if command -v tailscale >/dev/null 2>&1; then
     configure_operator
+    write_status installed "Tailscale is installed."
     exit 0
 fi
 
@@ -39,19 +68,24 @@ case "$architecture" in
 esac
 
 work="$(mktemp -d)"
-trap 'rm -rf "$work"' EXIT
+GNUPGHOME="$work/gnupg"
+export GNUPGHOME
+install -d -m 0700 "$GNUPGHOME"
+failure_message="Cloudless could not download Tailscale's signed repository key. Check the internet connection and try again."
+write_status installing "Downloading and verifying Tailscale's signed repository key."
 curl --proto '=https' --tlsv1.2 -fsSL "$KEY_URL" -o "$work/archive-keyring.gpg"
-fingerprints="$(
-    gpg --batch --quiet --show-keys --with-colons "$work/archive-keyring.gpg" |
-        awk -F: '$1 == "fpr" { print $10 }'
-)"
+failure_message="Cloudless could not verify Tailscale's signed repository key. No software was installed."
+gpg --homedir "$GNUPGHOME" --batch --quiet --show-keys --with-colons \
+    "$work/archive-keyring.gpg" > "$work/key-details"
+fingerprints="$(awk -F: '$1 == "fpr" { print $10 }' "$work/key-details")"
 expected_fingerprints="$(printf '%s\n%s' "$KEY_FINGERPRINT" "$KEY_SUBKEY_FINGERPRINT")"
 [ "$fingerprints" = "$expected_fingerprints" ] || {
+    failure_message="Cloudless refused an unexpected Tailscale repository signing key. No software was installed."
     echo "Refusing the Tailscale repository: signing-key fingerprint mismatch" >&2
     exit 1
 }
 
-install -d -m 0755 /usr/share/keyrings /etc/apt/sources.list.d
+install -d -m 0755 "$(dirname "$KEYRING")" "$(dirname "$SOURCE")"
 install -o root -g root -m 0644 "$work/archive-keyring.gpg" "$KEYRING"
 printf 'deb [arch=%s signed-by=%s] %s noble main\n' \
     "$architecture" "$KEYRING" "$REPOSITORY_URL" > "$SOURCE.tmp"
@@ -60,10 +94,17 @@ mv -f "$SOURCE.tmp" "$SOURCE"
 
 # Refresh only the newly authenticated source. An unrelated broken third-party
 # repository must not prevent the user from enabling Tailscale.
+failure_message="Cloudless could not refresh Tailscale's signed package list. Check the internet connection and try again."
+write_status installing "Refreshing Tailscale's signed package list."
 apt-get \
     -o "Dir::Etc::sourcelist=$SOURCE" \
     -o "Dir::Etc::sourceparts=-" \
     -o "APT::Get::List-Cleanup=0" \
     update
+failure_message="Cloudless could not install the Tailscale package. Check the support details and try again."
+write_status installing "Installing Tailscale."
 apt-get install -y --no-install-recommends tailscale
+failure_message="Tailscale was installed, but its service could not be started. Try again or open Cloudless support details."
+write_status installing "Starting Tailscale."
 configure_operator
+write_status installed "Tailscale is installed."

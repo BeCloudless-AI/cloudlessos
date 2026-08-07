@@ -108,6 +108,7 @@ grep -Fq '/run/cloudless-browser/requests' \
 sh -n "$DISTRO/packages/cloudless-shell/cloudless-browser-agent"
 sh -n "$DISTRO/packages/cloudless-shell/cloudless-wait-for-display"
 sh -n "$DISTRO/packages/cloudless-orchestrator/cloudless-install-tailscale"
+bash "$DISTRO/scripts/test-tailscale-installer.sh"
 bash -n "$DISTRO/packages/cloudless-orchestrator/cloudless-backup"
 tailscale_installer="$DISTRO/packages/cloudless-orchestrator/cloudless-install-tailscale"
 grep -Fq '2596A99EAAB33821893C0A79458CA832957F5868' "$tailscale_installer"
@@ -115,6 +116,7 @@ grep -Fq '2F625B3A774B946822EDDBEEB1547A3DDAAF03C6' "$tailscale_installer"
 grep -Fq 'https://pkgs.tailscale.com/stable/ubuntu/noble.noarmor.gpg' "$tailscale_installer"
 grep -Fq 'signed-by=' "$tailscale_installer"
 grep -Fq 'Dir::Etc::sourcelist=' "$tailscale_installer"
+grep -Fq -- '--homedir "$GNUPGHOME"' "$tailscale_installer"
 if grep -Eq 'tailscale\.com/install\.sh|(^|[[:space:]])sh[[:space:]]+["$]' "$tailscale_installer"; then
     echo "Tailscale installation must use its fingerprint-pinned APT repository, not a remote shell" >&2
     exit 1

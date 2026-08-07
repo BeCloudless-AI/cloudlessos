@@ -19,19 +19,26 @@ import (
 )
 
 type Status struct {
-	Installed    bool           `json:"installed"`
-	Connected    bool           `json:"connected"`
-	BackendState string         `json:"backendState,omitempty"`
-	Version      string         `json:"version,omitempty"`
-	DeviceName   string         `json:"deviceName,omitempty"`
-	DNSName      string         `json:"dnsName,omitempty"`
-	Tailnet      string         `json:"tailnet,omitempty"`
-	IPs          []string       `json:"ips,omitempty"`
-	ServeEnabled bool           `json:"serveEnabled"`
-	SSHEnabled   bool           `json:"sshEnabled"`
-	WebURL       string         `json:"webURL,omitempty"`
-	Error        string         `json:"error,omitempty"`
-	TCPForwards  map[int]string `json:"-"`
+	Installed      bool           `json:"installed"`
+	Connected      bool           `json:"connected"`
+	BackendState   string         `json:"backendState,omitempty"`
+	Version        string         `json:"version,omitempty"`
+	DeviceName     string         `json:"deviceName,omitempty"`
+	DNSName        string         `json:"dnsName,omitempty"`
+	Tailnet        string         `json:"tailnet,omitempty"`
+	IPs            []string       `json:"ips,omitempty"`
+	ServeEnabled   bool           `json:"serveEnabled"`
+	SSHEnabled     bool           `json:"sshEnabled"`
+	WebURL         string         `json:"webURL,omitempty"`
+	Error          string         `json:"error,omitempty"`
+	InstallState   string         `json:"installState,omitempty"`
+	InstallMessage string         `json:"installMessage,omitempty"`
+	TCPForwards    map[int]string `json:"-"`
+}
+
+type installStatus struct {
+	State   string `json:"state"`
+	Message string `json:"message"`
 }
 
 // ServesTCP reports whether Tailscale Serve owns a private tailnet listener on
@@ -88,16 +95,38 @@ func (execCommands) Run(ctx context.Context, name string, args ...string) ([]byt
 }
 
 type Client struct {
-	commands     commandRunner
-	broker       privileged.Client
-	serveTimeout time.Duration
+	commands          commandRunner
+	broker            privileged.Client
+	serveTimeout      time.Duration
+	installStatusPath string
 }
 
 func New() *Client {
-	return &Client{
-		commands: execCommands{},
-		broker:   privileged.Client{SocketPath: os.Getenv("CLOUDLESS_PRIVILEGED_SOCKET")},
+	statusPath := os.Getenv("CLOUDLESS_TAILSCALE_STATUS_FILE")
+	if statusPath == "" {
+		statusPath = "/run/cloudless/tailscale-install.json"
 	}
+	return &Client{
+		commands:          execCommands{},
+		broker:            privileged.Client{SocketPath: os.Getenv("CLOUDLESS_PRIVILEGED_SOCKET")},
+		installStatusPath: statusPath,
+	}
+}
+
+func (c *Client) readInstallStatus() installStatus {
+	path := c.installStatusPath
+	if path == "" {
+		path = "/run/cloudless/tailscale-install.json"
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return installStatus{}
+	}
+	var status installStatus
+	if json.Unmarshal(data, &status) != nil {
+		return installStatus{}
+	}
+	return status
 }
 
 type cliStatus struct {
@@ -115,10 +144,11 @@ type cliStatus struct {
 }
 
 func (c *Client) Status(ctx context.Context) Status {
+	installation := c.readInstallStatus()
 	if _, err := c.commands.LookPath("tailscale"); err != nil {
-		return Status{Installed: false}
+		return Status{Installed: false, InstallState: installation.State, InstallMessage: installation.Message}
 	}
-	result := Status{Installed: true, WebURL: "http://100.100.100.100"}
+	result := Status{Installed: true, WebURL: "http://100.100.100.100", InstallState: "installed"}
 	out, err := c.commands.Run(ctx, "tailscale", "status", "--json")
 	if err != nil {
 		result.Error = cleanError(err)

@@ -133,9 +133,10 @@ When the engine is not reporting metrics the scrape still succeeds with `cloudle
 and a comment explaining why, so a stopped engine is distinguishable from an unreachable host.
 Activity series are omitted in that state rather than reported as zero.
 
-Metrics reads are authenticated, rate-limited and written to the security audit log, but they are
-not counted as inference usage — a monitoring scraper does not distort the per-key request and
-token counters shown in **Settings -> API access**.
+Metrics reads are authenticated and rate-limited, but successful scrapes are neither written to the
+security audit log nor counted as inference usage. Authentication and rate-limit failures remain
+audited. This prevents a monitoring scraper from distorting per-key usage or displacing meaningful
+security events in **Settings -> API access**. Responses include `Cache-Control: no-store`.
 
 SGLang reports metrics only when started with `--enable-metrics`, which Cloudless applies on an
 engine restart. Until then `cloudless_engine_up` stays `0`.

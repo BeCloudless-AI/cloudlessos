@@ -1399,8 +1399,9 @@ to inferring it from `/v1/models` latency or to metering tokens in its own proxy
 - `GET /metrics` — Prometheus text exposition.
 - `GET /v1/metrics` — the same snapshot as JSON.
 
-Both require a `model`-scoped key and reuse the existing gateway authentication, source and
-per-key rate limiting, and security audit log.
+Both require a `model`-scoped key and reuse the existing gateway authentication plus source and
+per-key rate limiting. Authentication and rate-limit failures remain in the security audit log;
+successful monitoring polls do not displace higher-value security events.
 
 **Why not proxy the engine's `/metrics` directly.** Passthrough was the smaller change but breaks
 two standing invariants. The engine's exposition names the private served identity
@@ -1418,10 +1419,12 @@ carrying engine-specific bucket layouts through the normalization layer.
 - **Reuses the cached scrape.** `scrapeMetrics` is already single-flight with a 900 ms TTL (D42
   follow-up), so gateway scrapers add no load on the inference server beyond the dashboard poll
   that is already running.
-- **Reads are audited but not billed.** `serveGatewayProxy` records per-key request and token
-  usage; metrics reads deliberately bypass it. A monitoring scraper polling every 15 s would
-  otherwise contribute ~5,760 requests/day to the very counters it is reporting on. They still
-  emit a `gateway-metrics` audit event.
+- **Successful reads are neither audited nor billed.** `serveGatewayProxy` records per-key request
+  and token usage; metrics reads deliberately bypass it. A monitoring scraper polling every 15 s
+  would otherwise contribute ~5,760 requests/day to the very counters it is reporting on and the
+  same number of low-value security events. Authentication and rate-limit failures stay audited.
+- **Responses are not cacheable.** Both formats return `Cache-Control: no-store` so an authenticated
+  snapshot cannot be retained by a browser, intermediary, or shared client cache.
 - **`model` scope, not a new `metrics` scope.** A separate scope would touch state, key creation
   and the API access UI for a surface that reveals strictly less than `/v1` already does.
 - **Engine down is a successful scrape.** The response carries `cloudless_engine_up 0` plus a

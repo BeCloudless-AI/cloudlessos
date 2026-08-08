@@ -81,6 +81,24 @@ func TestGatewayMetricsRequireAModelScopedKey(t *testing.T) {
 		if strings.Contains(recorder.Body.String(), "vllm:") {
 			t.Errorf("%s: unauthenticated response leaked engine metrics", test.name)
 		}
+		if got := recorder.Header().Get("Cache-Control"); got != "no-store" {
+			t.Errorf("%s: Cache-Control = %q, want no-store", test.name, got)
+		}
+	}
+	_, audit := (&Server{state: st}).gatewaySecurity()
+	events, err := audit.Latest(10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	foundDenied := false
+	for _, event := range events {
+		if event.Outcome == "denied" && (event.Event == "gateway-auth" || event.Event == "gateway-rate-limit") {
+			foundDenied = true
+			break
+		}
+	}
+	if !foundDenied {
+		t.Fatalf("denied metrics access was not written to security audit: %#v", events)
 	}
 }
 
@@ -98,6 +116,9 @@ func TestGatewayMetricsServePrometheusTextAndJSON(t *testing.T) {
 	}
 	if ct := recorder.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/plain") {
 		t.Fatalf("content type = %q", ct)
+	}
+	if got := recorder.Header().Get("Cache-Control"); got != "no-store" {
+		t.Fatalf("text Cache-Control = %q, want no-store", got)
 	}
 	body := recorder.Body.String()
 	for _, want := range []string{
@@ -123,6 +144,9 @@ func TestGatewayMetricsServePrometheusTextAndJSON(t *testing.T) {
 	handler.ServeHTTP(recorder, request)
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("json status = %d", recorder.Code)
+	}
+	if got := recorder.Header().Get("Cache-Control"); got != "no-store" {
+		t.Fatalf("JSON Cache-Control = %q, want no-store", got)
 	}
 	json := recorder.Body.String()
 	for _, want := range []string{`"available":true`, `"running":3`, `"waiting":12`, `"promptTokens":1841022`} {
@@ -170,9 +194,10 @@ func TestGatewayMetricsReportEngineDownWithoutFakeZeroes(t *testing.T) {
 	}
 }
 
-// Metrics reads are authenticated traffic, but counting them as inference would
-// let a 15-second scraper dominate the per-key counters it is reporting on.
-func TestGatewayMetricsAreAuditedButNotBilledAsInference(t *testing.T) {
+// Successful monitoring scrapes are high-frequency operational traffic. They
+// must neither distort inference usage nor evict meaningful security events.
+// Authentication and rate-limit failures remain audited by authorizeGateway.
+func TestGatewayMetricsAreNotBilledOrWrittenToTheSecurityAudit(t *testing.T) {
 	stubScrape(t, vllmScrape, true)
 	st, err := state.Open(t.TempDir())
 	if err != nil {
@@ -194,8 +219,61 @@ func TestGatewayMetricsAreAuditedButNotBilledAsInference(t *testing.T) {
 	}
 	_, audit := server.gatewaySecurity()
 	events, err := audit.Latest(10)
-	if err != nil || len(events) == 0 || events[0].Event != "gateway-metrics" || events[0].KeyID != key.ID {
-		t.Fatalf("metrics audit = %#v, %v", events, err)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 0 {
+		t.Fatalf("successful metrics scrape polluted security audit: %#v", events)
+	}
+}
+
+// The gateway always reads the stable private inference port. Managed models
+// bind that port directly; recipes place their transparent TCP proxy there.
+// Runtime identity must not change the exported metrics contract.
+func TestGatewayMetricsWorkForManagedModelsAndRecipes(t *testing.T) {
+	stubScrape(t, vllmScrape, true)
+	for _, test := range []struct {
+		name    string
+		runtime state.InferenceRuntime
+	}{
+		{
+			name: "managed model",
+			runtime: state.InferenceRuntime{
+				Engine: "vllm", Model: "Qwen/example", ExecutionMode: "local",
+			},
+		},
+		{
+			name: "recipe through stable proxy",
+			runtime: state.InferenceRuntime{
+				Engine: "vllm", Model: "MiaLabs/example", ExecutionMode: "cluster", LocalRecipeID: "recipe-example",
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			st, err := state.Open(t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := st.CommitInferenceRuntime(test.runtime); err != nil {
+				t.Fatal(err)
+			}
+			secret, _, err := st.AddAPIKey("monitoring", state.APIKeyScopeModel)
+			if err != nil {
+				t.Fatal(err)
+			}
+			server := &Server{state: st}
+			request := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+			request.Header.Set("Authorization", "Bearer "+secret)
+			recorder := httptest.NewRecorder()
+			server.GatewayHandler().ServeHTTP(recorder, request)
+			if recorder.Code != http.StatusOK {
+				t.Fatalf("status = %d, body = %s", recorder.Code, recorder.Body.String())
+			}
+			body := recorder.Body.String()
+			if !strings.Contains(body, "cloudless_engine_up 1") || !strings.Contains(body, "cloudless_requests_running 3") {
+				t.Fatalf("normalized metrics missing for %s:\n%s", test.name, body)
+			}
+		})
 	}
 }
 

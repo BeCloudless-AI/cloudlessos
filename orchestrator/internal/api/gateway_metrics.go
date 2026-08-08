@@ -25,6 +25,7 @@ const metricsContentType = "text/plain; version=0.0.4; charset=utf-8"
 
 // gatewayMetricsText serves the Prometheus text exposition at GET /metrics.
 func (s *Server) gatewayMetricsText(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
 	snapshot, alias, ok := s.gatewayMetricsSnapshot(w, r)
 	if !ok {
 		return
@@ -37,6 +38,7 @@ func (s *Server) gatewayMetricsText(w http.ResponseWriter, r *http.Request) {
 // gatewayMetricsJSON serves the same snapshot as JSON at GET /v1/metrics, for
 // clients that would otherwise have to parse the text exposition themselves.
 func (s *Server) gatewayMetricsJSON(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
 	snapshot, alias, ok := s.gatewayMetricsSnapshot(w, r)
 	if !ok {
 		return
@@ -50,19 +52,13 @@ func (s *Server) gatewayMetricsJSON(w http.ResponseWriter, r *http.Request) {
 // NOT recorded as inference usage: a monitoring scraper polling every few seconds
 // would otherwise dominate the per-key request and token counters it is reading.
 func (s *Server) gatewayMetricsSnapshot(w http.ResponseWriter, r *http.Request) (engineMetrics, string, bool) {
-	started := time.Now()
-	id, ok := s.authorizeGateway(w, r, state.APIKeyScopeModel)
+	_, ok := s.authorizeGateway(w, r, state.APIKeyScopeModel)
 	if !ok {
 		return engineMetrics{}, "", false
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 4*time.Second)
 	defer cancel()
 	snapshot := s.engineMetricsSnapshot(ctx)
-	s.auditGateway(gatewayAuditEvent{
-		Event: "gateway-metrics", Outcome: "success", KeyID: id, Scope: state.APIKeyScopeModel,
-		Method: r.Method, Path: r.URL.Path, Source: gatewayRequestSource(r),
-		Status: http.StatusOK, DurationMS: time.Since(started).Milliseconds(),
-	})
 	return snapshot, s.inferenceContract().ModelAlias, true
 }
 

@@ -403,6 +403,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("POST /api/gateway/lan", s.gatewayLanSet)
 	mux.HandleFunc("POST /api/gateway/tailnet", s.gatewayTailnetSet)
 	mux.HandleFunc("POST /api/gateway/tunnel", s.gatewayTunnelSet)
+	mux.HandleFunc("POST /api/gateway/metrics", s.gatewayMetricsSet)
 	mux.HandleFunc("GET /api/gateway/audit", s.gatewayAuditGet)
 	mux.HandleFunc("GET /api/security/audit", s.securityAuditGet)
 	mux.HandleFunc("GET /api/apps/{id}/update", s.updateGet)

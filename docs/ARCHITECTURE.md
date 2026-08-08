@@ -103,9 +103,9 @@ The client port and alias may change, but the private port and identity cannot.
 
 The gateway rewrites client model requests to the private identity and presents the configured
 alias in OpenAI-compatible JSON and streaming responses. Port changes rebind the listener live and
-recreate enabled LAN or tunnel exposure. The gateway also re-exports normalized engine metrics as
-`cloudless_*` series at `/metrics` and `/v1/metrics`; the engine's own Prometheus surface stays
-private. See [INFERENCE_API.md](./INFERENCE_API.md).
+recreate enabled LAN or tunnel exposure. When the user enables **Expose metrics API**, the gateway
+also re-exports normalized engine metrics as `cloudless_*` series at `/metrics` and `/v1/metrics`;
+the engine's own Prometheus surface stays private. See [INFERENCE_API.md](./INFERENCE_API.md).
 
 Every engine contract defines:
 

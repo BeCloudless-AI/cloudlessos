@@ -1864,6 +1864,7 @@
   .api-access-icon .ui-icon { width: 15px; height: 15px; }
   .api-access-name { flex: 1; color: var(--ink); font-size: 12px; font-weight: 720; }
   .api-access-card .fld-help { margin-top: 9px; line-height: 1.5; }
+  .api-capability-card { grid-column: 1 / -1; }
   .api-warning { margin-top: 10px; display: flex; align-items: flex-start; gap: 9px; }
   .api-warning .ui-icon { width: 14px; height: 14px; margin-top: 2px; flex: none; }
 
@@ -7042,6 +7043,7 @@ function apiAuditRow(event) {
   const label = event.event === 'gateway-request' ? `${event.scope || 'API'} request`
     : event.event === 'gateway-rate-limit' ? 'Rate limit'
     : event.event === 'gateway-exposure' ? `${event.scope || 'Network'} access`
+    : event.event === 'gateway-capability' ? `${event.scope || 'API'} capability`
     : event.event === 'gateway-key' ? 'API key'
     : 'Authentication';
   const detail = [event.keyId ? `key ${event.keyId}` : '', event.source || '', event.status ? `HTTP ${event.status}` : '', event.detail || ''].filter(Boolean).join(' · ');
@@ -7770,6 +7772,8 @@ async function renderApiPage(c) {
   const distributed = engine.executionMode === 'cluster';
   const advanced = advancedInterfaceEnabled();
   const keys = g.keys || [];
+  const metrics = g.metrics || {};
+  const metricsUnavailable = keys.length === 0;
   const lanUnavailable = keys.length === 0;
   const tailnet = g.tailnet || {};
   const tailnetUnavailable = keys.length === 0 || !tailnet.connected;
@@ -7796,6 +7800,13 @@ async function renderApiPage(c) {
     <section class="api-section">
       <div class="api-section-head"><div><div class="api-section-title">API keys</div><div class="api-section-desc">Each key is limited to model access, agent access, or both.</div></div><button class="btn primary api-key-generate" id="key-gen" type="button">${uiIcon('key')}<span>Generate key</span></button></div>
       <div id="key-list">${keys.length ? keys.map(apiKeyRow).join('') : '<div class="api-keys-empty">No keys yet. Generate one when you are ready to connect a client.</div>'}</div>
+    </section>
+    <section class="api-section">
+      <div class="api-section-head"><div><div class="api-section-title">API capabilities</div><div class="api-section-desc">Choose which optional authenticated surfaces clients may use.</div></div></div>
+      <div class="api-access-grid">
+        <div class="api-access-card api-capability-card ${metricsUnavailable ? 'unavailable' : ''}" id="gw-metrics-card" ${metricsUnavailable ? 'role="button" tabindex="0" aria-label="Create an API key first" data-tooltip="Create an API key first"' : ''}><div class="api-access-top"><span class="api-access-icon">${uiIcon('metrics')}</span><span class="api-access-name">Expose metrics API</span><label class="switch"><input type="checkbox" id="gw-metrics" ${metrics.enabled ? 'checked' : ''} ${metricsUnavailable ? 'disabled aria-label="Create an API key first"' : ''}><span class="track2"></span></label></div>
+        <div class="fld-help">Allow authenticated monitoring clients to read normalized engine activity at <b>/metrics</b> and <b>/v1/metrics</b>. The desktop Activity view remains available when this is off.${metrics.enabled && metrics.url ? `<br><b>Prometheus:</b> ${escapeHtml(metrics.url)}<br><b>JSON:</b> ${escapeHtml(metrics.jsonURL || '')}` : ''}</div></div>
+      </div>
     </section>
     <section class="api-section">
       <div class="api-section-head"><div><div class="api-section-title">Network access</div><div class="api-section-desc">Choose where the API can be reached. Authentication is always required.</div></div></div>
@@ -7860,6 +7871,8 @@ async function renderApiPage(c) {
   };
   const lan = document.getElementById('gw-lan');
   const lanCard = document.getElementById('gw-lan-card');
+	const metricsToggle = document.getElementById('gw-metrics');
+	const metricsCard = document.getElementById('gw-metrics-card');
   const promptForAPIKey = async returnFocus => {
     const createKey = await openCloudlessDecision({
       title: 'Create an API key first',
@@ -7869,6 +7882,36 @@ async function renderApiPage(c) {
     });
     if (createKey) openKeyDialog();
   };
+	if (metricsUnavailable) {
+		metricsCard.onclick = () => promptForAPIKey(metricsCard);
+		metricsCard.onkeydown = event => {
+			if (event.key !== 'Enter' && event.key !== ' ') return;
+			event.preventDefault();
+			promptForAPIKey(metricsCard);
+		};
+	}
+	metricsToggle.onchange = async () => {
+		const enable = metricsToggle.checked; metricsToggle.disabled = true;
+		if (enable) {
+			const approved = await openCloudlessDecision({
+				title: 'Expose engine metrics through the API?',
+				message: 'Authenticated monitoring clients will be able to read request activity, token counts, latency and cache usage.',
+				detail: 'Prompts and responses are never included. This setting does not change the desktop Activity view, and a model-scoped Cloudless API key is always required.',
+				confirmLabel: 'Expose metrics API', icon: 'metrics', returnFocus: metricsToggle
+			});
+			if (!approved) { metricsToggle.checked = false; metricsToggle.disabled = false; return; }
+		}
+		try {
+			const result = await api('/api/gateway/metrics', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Cloudless-Action': 'gateway-metrics' }, body: JSON.stringify({ enable }) });
+			if (!result || result.error) throw new Error(result?.error || 'Cloudless could not change metrics API access.');
+			toast(enable ? 'Metrics API enabled' : 'Metrics API disabled');
+			await renderApiPage(c);
+		} catch (error) {
+			toast(error?.message || 'Could not change metrics API access', true);
+			metricsToggle.checked = !enable;
+			metricsToggle.disabled = false;
+		}
+	};
   if (lanUnavailable) {
     lanCard.onclick = () => promptForAPIKey(lanCard);
     lanCard.onkeydown = event => {

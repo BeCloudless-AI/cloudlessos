@@ -40,8 +40,9 @@ development.
 The primary listeners are:
 
 - `127.0.0.1:8765`: CloudlessOS UI and local control API.
-- `127.0.0.1:8766`: default key-authenticated OpenAI-compatible model and agent gateway, which
-  also serves normalized engine metrics at `/metrics` (Prometheus text) and `/v1/metrics` (JSON).
+- `127.0.0.1:8766`: default key-authenticated OpenAI-compatible model and agent gateway, which can
+  also serve normalized engine metrics at `/metrics` (Prometheus text) and `/v1/metrics` (JSON)
+  after the default-off **Expose metrics API** capability is enabled.
   Its client port and model alias are editable in **Settings -> API access**.
 - `127.0.0.1:7681`: authenticated ttyd terminal, proxied through `/terminal/`.
 - `/api/system/browser`: validates and queues HTTP(S) addresses for the unprivileged persistent

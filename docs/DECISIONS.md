@@ -1394,7 +1394,8 @@ Prometheus endpoint lives on the private port `8000`, which is deliberately not 
 external client had no way to tell whether the engine was working, queued or idle — and resorted
 to inferring it from `/v1/models` latency or to metering tokens in its own proxy.
 
-**Decision:** Expose engine metrics on the shareable authenticated gateway (`8766` by default):
+**Decision:** Offer an explicit, default-off **Expose metrics API** capability on the shareable
+authenticated gateway (`8766` by default):
 
 - `GET /metrics` — Prometheus text exposition.
 - `GET /v1/metrics` — the same snapshot as JSON.
@@ -1402,6 +1403,8 @@ to inferring it from `/v1/models` latency or to metering tokens in its own proxy
 Both require a `model`-scoped key and reuse the existing gateway authentication plus source and
 per-key rate limiting. Authentication and rate-limit failures remain in the security audit log;
 successful monitoring polls do not displace higher-value security events.
+The setting is persisted locally, requires an existing scoped key to enable, and returns `404` on
+both routes while disabled. It does not affect the existing loopback desktop Activity metrics.
 
 **Why not proxy the engine's `/metrics` directly.** Passthrough was the smaller change but breaks
 two standing invariants. The engine's exposition names the private served identity

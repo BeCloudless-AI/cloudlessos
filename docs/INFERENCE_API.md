@@ -87,9 +87,10 @@ private inference container.
 
 ## Engine metrics for API clients
 
-The engine's own Prometheus port is private and is never published to the network. The
-authenticated gateway instead re-exports a normalized snapshot on two routes, both requiring a
-`model`-scoped key:
+The engine's own Prometheus port is private and is never published to the network. Users can enable
+**Expose metrics API** in **Settings -> API access** to re-export a normalized snapshot on two
+authenticated gateway routes. The capability is disabled by default on fresh and upgraded
+installations, and both routes require a `model`-scoped key:
 
 | Route | Format | Use |
 |---|---|---|
@@ -137,6 +138,8 @@ Metrics reads are authenticated and rate-limited, but successful scrapes are nei
 security audit log nor counted as inference usage. Authentication and rate-limit failures remain
 audited. This prevents a monitoring scraper from distorting per-key usage or displacing meaningful
 security events in **Settings -> API access**. Responses include `Cache-Control: no-store`.
+Turning this API capability off returns `404` on both routes and does not disable the desktop
+Activity view or Cloudless's internal usage history.
 
 SGLang reports metrics only when started with `--enable-metrics`, which Cloudless applies on an
 engine restart. Until then `cloudless_engine_up` stays `0`.

@@ -464,6 +464,7 @@ func (s *Server) gatewayGet(w http.ResponseWriter, r *http.Request) {
 		tailDNS = tailStatus.DNSName
 	}
 	modelURL, agentURL := gatewayClientURLs(lanOn, ip, contract.Port)
+	metricsBaseURL := strings.TrimSuffix(modelURL, "/v1")
 	model := s.state.Get().Model
 	if model == "" {
 		model = catalog.DefaultModel()
@@ -478,6 +479,9 @@ func (s *Server) gatewayGet(w http.ResponseWriter, r *http.Request) {
 			"localURL": agentURL,
 		},
 		"keys": keys,
+		"metrics": map[string]any{
+			"enabled": s.state.GatewayMetricsEnabled(), "url": metricsBaseURL + "/metrics", "jsonURL": metricsBaseURL + "/v1/metrics",
+		},
 		"lan": map[string]any{
 			"enabled": lanOn, "ip": ip, "url": lanURL(lanOn, ip, contract.Port), "agentURL": agentLanURL(lanOn, ip, contract.Port),
 		},
@@ -687,6 +691,11 @@ func (s *Server) keyDelete(w http.ResponseWriter, r *http.Request) {
 	if err := s.state.DeleteAPIKey(id); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
+	}
+	// Do not let creating a future replacement key silently re-expose metrics
+	// that were enabled for a now-revoked final credential.
+	if len(s.state.APIKeys()) == 0 {
+		_ = s.state.SetGatewayMetricsEnabled(false)
 	}
 	s.auditGateway(gatewayAuditEvent{Event: "gateway-key", Outcome: "revoked", KeyID: id})
 	writeJSON(w, http.StatusOK, map[string]string{"status": "revoked"})

@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,10 +13,11 @@ import (
 	"github.com/cloudless/orchestrator/internal/state"
 )
 
-// Observability on the authenticated gateway. The dashboard listener already
+// Optional observability on the authenticated gateway. The dashboard listener already
 // serves normalized engine metrics, but it is loopback-only and unauthenticated,
 // so nothing off-box can read them. These two routes publish the SAME normalized
-// snapshot on the shareable gateway port, behind the same scoped bearer keys.
+// snapshot on the shareable gateway port, behind the same scoped bearer keys,
+// after the user explicitly enables the metrics API capability.
 //
 // The engine's own Prometheus surface is deliberately NOT proxied: it names the
 // private "cloudless" served identity and engine-specific series (vllm:*), both
@@ -52,6 +54,10 @@ func (s *Server) gatewayMetricsJSON(w http.ResponseWriter, r *http.Request) {
 // NOT recorded as inference usage: a monitoring scraper polling every few seconds
 // would otherwise dominate the per-key request and token counters it is reading.
 func (s *Server) gatewayMetricsSnapshot(w http.ResponseWriter, r *http.Request) (engineMetrics, string, bool) {
+	if !s.state.GatewayMetricsEnabled() {
+		writeOpenAIError(w, http.StatusNotFound, "The Cloudless metrics API is not enabled.")
+		return engineMetrics{}, "", false
+	}
 	_, ok := s.authorizeGateway(w, r, state.APIKeyScopeModel)
 	if !ok {
 		return engineMetrics{}, "", false
@@ -60,6 +66,36 @@ func (s *Server) gatewayMetricsSnapshot(w http.ResponseWriter, r *http.Request) 
 	defer cancel()
 	snapshot := s.engineMetricsSnapshot(ctx)
 	return snapshot, s.inferenceContract().ModelAlias, true
+}
+
+// gatewayMetricsSet changes only the authenticated API exposure. The desktop
+// Activity view continues using the loopback metrics endpoint either way.
+func (s *Server) gatewayMetricsSet(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("X-Cloudless-Action") != "gateway-metrics" {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "explicit metrics API confirmation required"})
+		return
+	}
+	var body struct {
+		Enable bool `json:"enable"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad request"})
+		return
+	}
+	if body.Enable && len(s.state.APIKeys()) == 0 {
+		writeJSON(w, http.StatusConflict, map[string]string{"error": "create a scoped API key before exposing metrics"})
+		return
+	}
+	if err := s.state.SetGatewayMetricsEnabled(body.Enable); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "could not save metrics API preference"})
+		return
+	}
+	outcome := "disabled"
+	if body.Enable {
+		outcome = "enabled"
+	}
+	s.auditGateway(gatewayAuditEvent{Event: "gateway-capability", Outcome: outcome, Scope: "metrics"})
+	writeJSON(w, http.StatusOK, map[string]bool{"enabled": body.Enable})
 }
 
 // renderGatewayMetrics writes the normalized snapshot as a Prometheus text

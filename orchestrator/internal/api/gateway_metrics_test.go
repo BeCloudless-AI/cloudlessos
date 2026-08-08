@@ -45,7 +45,32 @@ func gatewayMetricsServer(t *testing.T) (*Server, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if err := st.SetGatewayMetricsEnabled(true); err != nil {
+		t.Fatal(err)
+	}
 	return &Server{state: st}, secret
+}
+
+func TestGatewayMetricsAreDisabledByDefault(t *testing.T) {
+	stubScrape(t, vllmScrape, true)
+	st, err := state.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	secret, _, err := st.AddAPIKey("monitoring", state.APIKeyScopeModel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	request.Header.Set("Authorization", "Bearer "+secret)
+	recorder := httptest.NewRecorder()
+	(&Server{state: st}).GatewayHandler().ServeHTTP(recorder, request)
+	if recorder.Code != http.StatusNotFound {
+		t.Fatalf("disabled metrics status = %d, want 404", recorder.Code)
+	}
+	if !strings.Contains(recorder.Body.String(), "metrics API is not enabled") {
+		t.Fatalf("disabled metrics response = %s", recorder.Body.String())
+	}
 }
 
 func TestGatewayMetricsRequireAModelScopedKey(t *testing.T) {
@@ -56,6 +81,9 @@ func TestGatewayMetricsRequireAModelScopedKey(t *testing.T) {
 	}
 	agentSecret, _, err := st.AddAPIKey("agent only", state.APIKeyScopeAgent)
 	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetGatewayMetricsEnabled(true); err != nil {
 		t.Fatal(err)
 	}
 	handler := (&Server{state: st}).GatewayHandler()
@@ -261,6 +289,9 @@ func TestGatewayMetricsWorkForManagedModelsAndRecipes(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			if err := st.SetGatewayMetricsEnabled(true); err != nil {
+				t.Fatal(err)
+			}
 			server := &Server{state: st}
 			request := httptest.NewRequest(http.MethodGet, "/metrics", nil)
 			request.Header.Set("Authorization", "Bearer "+secret)
@@ -274,6 +305,64 @@ func TestGatewayMetricsWorkForManagedModelsAndRecipes(t *testing.T) {
 				t.Fatalf("normalized metrics missing for %s:\n%s", test.name, body)
 			}
 		})
+	}
+}
+
+func TestGatewayMetricsExposureRequiresConfirmationAndAKey(t *testing.T) {
+	st, err := state.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := &Server{state: st}
+	request := httptest.NewRequest(http.MethodPost, "/api/gateway/metrics", strings.NewReader(`{"enable":true}`))
+	recorder := httptest.NewRecorder()
+	server.gatewayMetricsSet(recorder, request)
+	if recorder.Code != http.StatusForbidden {
+		t.Fatalf("unconfirmed status = %d, want 403", recorder.Code)
+	}
+
+	request = httptest.NewRequest(http.MethodPost, "/api/gateway/metrics", strings.NewReader(`{"enable":true}`))
+	request.Header.Set("X-Cloudless-Action", "gateway-metrics")
+	recorder = httptest.NewRecorder()
+	server.gatewayMetricsSet(recorder, request)
+	if recorder.Code != http.StatusConflict {
+		t.Fatalf("keyless enable status = %d, want 409", recorder.Code)
+	}
+
+	_, key, err := st.AddAPIKey("monitoring", state.APIKeyScopeModel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request = httptest.NewRequest(http.MethodPost, "/api/gateway/metrics", strings.NewReader(`{"enable":true}`))
+	request.Header.Set("X-Cloudless-Action", "gateway-metrics")
+	recorder = httptest.NewRecorder()
+	server.gatewayMetricsSet(recorder, request)
+	if recorder.Code != http.StatusOK || !st.GatewayMetricsEnabled() {
+		t.Fatalf("confirmed enable = %d %s, persisted=%v", recorder.Code, recorder.Body.String(), st.GatewayMetricsEnabled())
+	}
+
+	deleteRequest := httptest.NewRequest(http.MethodDelete, "/api/keys/"+key.ID, nil)
+	deleteRequest.SetPathValue("id", key.ID)
+	deleteRequest.Header.Set("X-Cloudless-Action", "gateway-key-revoke")
+	deleteRecorder := httptest.NewRecorder()
+	server.keyDelete(deleteRecorder, deleteRequest)
+	if deleteRecorder.Code != http.StatusOK || st.GatewayMetricsEnabled() {
+		t.Fatalf("last-key revoke = %d %s, metrics persisted=%v", deleteRecorder.Code, deleteRecorder.Body.String(), st.GatewayMetricsEnabled())
+	}
+
+	if _, _, err := st.AddAPIKey("replacement", state.APIKeyScopeModel); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.SetGatewayMetricsEnabled(true); err != nil {
+		t.Fatal(err)
+	}
+
+	request = httptest.NewRequest(http.MethodPost, "/api/gateway/metrics", strings.NewReader(`{"enable":false}`))
+	request.Header.Set("X-Cloudless-Action", "gateway-metrics")
+	recorder = httptest.NewRecorder()
+	server.gatewayMetricsSet(recorder, request)
+	if recorder.Code != http.StatusOK || st.GatewayMetricsEnabled() {
+		t.Fatalf("disable = %d %s, persisted=%v", recorder.Code, recorder.Body.String(), st.GatewayMetricsEnabled())
 	}
 }
 

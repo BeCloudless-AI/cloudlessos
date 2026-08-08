@@ -68,7 +68,14 @@ type engineMetrics struct {
 func (s *Server) engineMetricsHandler(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 4*time.Second)
 	defer cancel()
+	writeJSON(w, http.StatusOK, s.engineMetricsSnapshot(ctx))
+}
 
+// engineMetricsSnapshot normalizes the active engine's live work into one struct,
+// falling back to an accurate "why there's nothing here" report when the engine
+// isn't exposing metrics. Shared by the dashboard endpoint and the authenticated
+// gateway surfaces so both describe the engine identically.
+func (s *Server) engineMetricsSnapshot(ctx context.Context) engineMetrics {
 	model := s.state.Get().Model
 	if model == "" {
 		model = catalog.DefaultModel()
@@ -82,8 +89,7 @@ func (s *Server) engineMetricsHandler(w http.ResponseWriter, r *http.Request) {
 		if m := parseEngineMetrics(body); m.Available {
 			m.Ready = true
 			m.Model = model
-			writeJSON(w, http.StatusOK, m)
-			return
+			return m
 		}
 	}
 
@@ -103,7 +109,7 @@ func (s *Server) engineMetricsHandler(w http.ResponseWriter, r *http.Request) {
 		res.Hint = name + " is running, but it isn't reporting live metrics yet. Turn them on to see activity here."
 		res.CanEnable = true
 	}
-	writeJSON(w, http.StatusOK, res)
+	return res
 }
 
 // engineDisplayName turns an engine id into its short display name ("vLLM", "SGLang").

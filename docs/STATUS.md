@@ -47,6 +47,10 @@ readiness still requires broader hardware, security, recovery and licensing vali
   narrowly scoped coordinator/worker orphan-runtime repair that preserves downloaded weights.
 - Stable pointer behavior in the kiosk; Ubuntu's idle cursor-hiding service is disabled because it
   produced apparent foreground-window blinking on noisy pointing devices.
+- Normalized engine metrics on the authenticated gateway at `/metrics` (Prometheus text) and
+  `/v1/metrics` (JSON), re-exported as engine-independent `cloudless_*` series so LAN, Tailnet and
+  tunnel clients can read live queue depth, KV-cache pressure and token counters without the
+  private engine port being published.
 
 The custom-engine developer path is documented in
 [`CUSTOM_ENGINES.md`](./CUSTOM_ENGINES.md).

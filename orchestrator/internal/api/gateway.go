@@ -91,6 +91,11 @@ func (s *Server) GatewayHandler() http.Handler {
 	}
 
 	mux := http.NewServeMux()
+	// Observability, authenticated with the same model-scoped keys. Registered
+	// ahead of the "/v1/" proxy pattern, which ServeMux resolves in favor of the
+	// more specific route, so /v1/metrics never reaches the engine.
+	mux.HandleFunc("GET /metrics", s.gatewayMetricsText)
+	mux.HandleFunc("GET /v1/metrics", s.gatewayMetricsJSON)
 	mux.HandleFunc("/v1/", func(w http.ResponseWriter, r *http.Request) {
 		if !gatewayRouteAllowed(r.Method, r.URL.Path, false) {
 			writeOpenAIError(w, http.StatusNotFound, "This route is not exposed by the Cloudless model gateway.")
@@ -128,7 +133,7 @@ func (s *Server) GatewayHandler() http.Handler {
 		}
 		writeJSON(w, http.StatusOK, map[string]string{
 			"service": "Cloudless Proxy",
-			"hint":    "Use /v1 for model inference or /agent/v1 for Hermes. Both require a scoped Cloudless key.",
+			"hint":    "Use /v1 for model inference or /agent/v1 for Hermes; /metrics reports live engine activity. All require a scoped Cloudless key.",
 		})
 	})
 	return mux

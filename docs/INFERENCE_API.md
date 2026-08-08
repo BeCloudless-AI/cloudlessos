@@ -21,6 +21,9 @@ and streaming responses.
 Hermes Agent is available through the same authenticated listener at `/agent/v1` and keeps the
 fixed public model name `hermes-agent`. The Hermes dashboard is not exposed through this API.
 
+Live engine activity is available on the same listener at `/metrics` and `/v1/metrics`. See
+[Engine metrics for API clients](#engine-metrics-for-api-clients).
+
 ## Change the client-facing identity
 
 Open **Settings -> API access -> API identity**. The user can change:
@@ -81,6 +84,61 @@ curl --fail-with-body http://127.0.0.1:8766/v1/chat/completions \
 Replace the URL and model with the values currently shown in Settings. API keys, scope controls,
 LAN sharing and public sharing all apply at the gateway; credentials are never forwarded to the
 private inference container.
+
+## Engine metrics for API clients
+
+The engine's own Prometheus port is private and is never published to the network. The
+authenticated gateway instead re-exports a normalized snapshot on two routes, both requiring a
+`model`-scoped key:
+
+| Route | Format | Use |
+|---|---|---|
+| `GET /metrics` | Prometheus text exposition | monitoring systems scraping Cloudless directly |
+| `GET /v1/metrics` | JSON | clients that would otherwise parse the text format |
+
+```bash
+curl --fail-with-body http://127.0.0.1:8766/metrics \
+  -H 'Authorization: Bearer <CLOUDLESS_API_KEY>'
+```
+
+Series are named `cloudless_*` rather than `vllm:*` or `sglang:*`, so a dashboard keeps working
+when the engine changes:
+
+| Series | Type | Meaning |
+|---|---|---|
+| `cloudless_engine_up` | gauge | `1` when the engine is reporting live metrics |
+| `cloudless_engine_ready` | gauge | `1` when the engine is up and serving |
+| `cloudless_engine_info{engine,model}` | gauge | active engine and the client-facing model alias |
+| `cloudless_requests_running` | gauge | requests decoding right now |
+| `cloudless_requests_waiting` | gauge | requests queued for a slot |
+| `cloudless_kv_cache_usage_ratio` | gauge | KV-cache utilization, `0..1` |
+| `cloudless_prompt_tokens_total` | counter | cumulative prefill tokens |
+| `cloudless_generation_tokens_total` | counter | cumulative decode tokens |
+| `cloudless_requests_total` | counter | cumulative requests served |
+| `cloudless_ttft_seconds_sum` / `_count` | summary | time to first token |
+| `cloudless_tpot_seconds_sum` / `_count` | summary | time per output token |
+| `cloudless_preemptions_total` | counter | requests preempted under memory pressure |
+| `cloudless_prefix_cache_hits_total` / `_queries_total` | counter | prefix-cache effectiveness |
+| `cloudless_generation_tokens_per_second` | gauge | present only when the engine reports a rate |
+
+Token counters are cumulative: snapshot them before and after a run and take the difference
+rather than metering requests in a proxy. Histogram buckets are not re-exported; the summary
+`_sum`/`_count` pairs give mean TTFT and TPOT, not percentiles.
+
+`GET /v1/metrics` returns the same values as `available`, `ready`, `engine`, `running`, `waiting`,
+`kvCache`, `promptTokens`, `genTokens`, `ttftSum`/`ttftCount`, `tpotSum`/`tpotCount` and
+`preemptions`. Its `model` field is the client-facing alias, matching `/v1/models`.
+
+When the engine is not reporting metrics the scrape still succeeds with `cloudless_engine_up 0`
+and a comment explaining why, so a stopped engine is distinguishable from an unreachable host.
+Activity series are omitted in that state rather than reported as zero.
+
+Metrics reads are authenticated, rate-limited and written to the security audit log, but they are
+not counted as inference usage — a monitoring scraper does not distort the per-key request and
+token counters shown in **Settings -> API access**.
+
+SGLang reports metrics only when started with `--enable-metrics`, which Cloudless applies on an
+engine restart. Until then `cloudless_engine_up` stays `0`.
 
 ## Guardrails for engines and recipes
 

@@ -1384,6 +1384,53 @@ components retain their respective licenses and notices.
 
 ---
 
+## D51 - Engine metrics on the authenticated gateway, re-exported as `cloudless_*`
+
+**Date:** 2026-08-08 · **Status:** Accepted and implemented
+
+**Problem:** Engine metrics existed only at `GET /api/engine/metrics` on the loopback,
+unauthenticated dashboard listener (`8765`). Nothing off-box could read them. The engine's own
+Prometheus endpoint lives on the private port `8000`, which is deliberately not published, so an
+external client had no way to tell whether the engine was working, queued or idle — and resorted
+to inferring it from `/v1/models` latency or to metering tokens in its own proxy.
+
+**Decision:** Expose engine metrics on the shareable authenticated gateway (`8766` by default):
+
+- `GET /metrics` — Prometheus text exposition.
+- `GET /v1/metrics` — the same snapshot as JSON.
+
+Both require a `model`-scoped key and reuse the existing gateway authentication, source and
+per-key rate limiting, and security audit log.
+
+**Why not proxy the engine's `/metrics` directly.** Passthrough was the smaller change but breaks
+two standing invariants. The engine's exposition names the private served identity
+(`model_name="cloudless"`) and engine-specific series (`vllm:*`), which the gateway exists to hide
+(D15); and any consumer built on `vllm:*` breaks the moment the install switches to SGLang or
+llama.cpp. The gateway instead renders `cloudless_*` series from the same normalized snapshot the
+dashboard already uses, so the client contract is engine-independent by construction.
+
+**Cost of that choice:** histogram buckets are not re-exported. Consumers get mean TTFT and TPOT
+from the `_sum`/`_count` summary pairs, not percentiles. Accepted — percentiles would require
+carrying engine-specific bucket layouts through the normalization layer.
+
+**Supporting decisions:**
+
+- **Reuses the cached scrape.** `scrapeMetrics` is already single-flight with a 900 ms TTL (D42
+  follow-up), so gateway scrapers add no load on the inference server beyond the dashboard poll
+  that is already running.
+- **Reads are audited but not billed.** `serveGatewayProxy` records per-key request and token
+  usage; metrics reads deliberately bypass it. A monitoring scraper polling every 15 s would
+  otherwise contribute ~5,760 requests/day to the very counters it is reporting on. They still
+  emit a `gateway-metrics` audit event.
+- **`model` scope, not a new `metrics` scope.** A separate scope would touch state, key creation
+  and the API access UI for a surface that reveals strictly less than `/v1` already does.
+- **Engine down is a successful scrape.** The response carries `cloudless_engine_up 0` plus a
+  comment with the reason, and omits activity series rather than emitting zeroes. An error status
+  or empty body would make a stopped engine indistinguishable from an unreachable host, and zeroed
+  gauges would read as genuine idle traffic on a dashboard.
+
+---
+
 ## Open questions (not yet decided)
 
 - **Orchestrator language:** Go vs Python vs Rust.

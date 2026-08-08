@@ -40,7 +40,9 @@ development.
 The primary listeners are:
 
 - `127.0.0.1:8765`: CloudlessOS UI and local control API.
-- `127.0.0.1:8766`: default key-authenticated OpenAI-compatible model and agent gateway.
+- `127.0.0.1:8766`: default key-authenticated OpenAI-compatible model and agent gateway, which can
+  also serve normalized engine metrics at `/metrics` (Prometheus text) and `/v1/metrics` (JSON)
+  after the default-off **Expose metrics API** capability is enabled.
   Its client port and model alias are editable in **Settings -> API access**.
 - `127.0.0.1:7681`: authenticated ttyd terminal, proxied through `/terminal/`.
 - `/api/system/browser`: validates and queues HTTP(S) addresses for the unprivileged persistent
@@ -156,7 +158,7 @@ The complete developer workflow is in
 | POST | `/api/engine/abort` | cancel an engine launch |
 | POST | `/api/engines/custom` | register a local vLLM/SGLang image |
 | DELETE | `/api/engines/custom/{id}` | remove an inactive registration |
-| GET | `/api/engine/metrics` | normalized engine metrics |
+| GET | `/api/engine/metrics` | normalized engine metrics (also re-exported on the gateway listener as `/metrics` and `/v1/metrics`) |
 | GET | `/api/gateway` | API keys and gateway exposure state |
 | POST | `/api/settings/inference-contract` | change the client API port and model alias |
 | GET | `/api/recipes` | local recipes, active jobs and inference contract |

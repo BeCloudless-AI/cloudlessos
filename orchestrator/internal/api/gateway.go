@@ -91,6 +91,11 @@ func (s *Server) GatewayHandler() http.Handler {
 	}
 
 	mux := http.NewServeMux()
+	// Observability, authenticated with the same model-scoped keys. Registered
+	// ahead of the "/v1/" proxy pattern, which ServeMux resolves in favor of the
+	// more specific route, so /v1/metrics never reaches the engine.
+	mux.HandleFunc("GET /metrics", s.gatewayMetricsText)
+	mux.HandleFunc("GET /v1/metrics", s.gatewayMetricsJSON)
 	mux.HandleFunc("/v1/", func(w http.ResponseWriter, r *http.Request) {
 		if !gatewayRouteAllowed(r.Method, r.URL.Path, false) {
 			writeOpenAIError(w, http.StatusNotFound, "This route is not exposed by the Cloudless model gateway.")
@@ -128,7 +133,7 @@ func (s *Server) GatewayHandler() http.Handler {
 		}
 		writeJSON(w, http.StatusOK, map[string]string{
 			"service": "Cloudless Proxy",
-			"hint":    "Use /v1 for model inference or /agent/v1 for Hermes. Both require a scoped Cloudless key.",
+			"hint":    "Use /v1 for model inference or /agent/v1 for Hermes; /metrics reports live engine activity. All require a scoped Cloudless key.",
 		})
 	})
 	return mux
@@ -459,6 +464,7 @@ func (s *Server) gatewayGet(w http.ResponseWriter, r *http.Request) {
 		tailDNS = tailStatus.DNSName
 	}
 	modelURL, agentURL := gatewayClientURLs(lanOn, ip, contract.Port)
+	metricsBaseURL := strings.TrimSuffix(modelURL, "/v1")
 	model := s.state.Get().Model
 	if model == "" {
 		model = catalog.DefaultModel()
@@ -473,6 +479,9 @@ func (s *Server) gatewayGet(w http.ResponseWriter, r *http.Request) {
 			"localURL": agentURL,
 		},
 		"keys": keys,
+		"metrics": map[string]any{
+			"enabled": s.state.GatewayMetricsEnabled(), "url": metricsBaseURL + "/metrics", "jsonURL": metricsBaseURL + "/v1/metrics",
+		},
 		"lan": map[string]any{
 			"enabled": lanOn, "ip": ip, "url": lanURL(lanOn, ip, contract.Port), "agentURL": agentLanURL(lanOn, ip, contract.Port),
 		},
@@ -682,6 +691,11 @@ func (s *Server) keyDelete(w http.ResponseWriter, r *http.Request) {
 	if err := s.state.DeleteAPIKey(id); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
+	}
+	// Do not let creating a future replacement key silently re-expose metrics
+	// that were enabled for a now-revoked final credential.
+	if len(s.state.APIKeys()) == 0 {
+		_ = s.state.SetGatewayMetricsEnabled(false)
 	}
 	s.auditGateway(gatewayAuditEvent{Event: "gateway-key", Outcome: "revoked", KeyID: id})
 	writeJSON(w, http.StatusOK, map[string]string{"status": "revoked"})

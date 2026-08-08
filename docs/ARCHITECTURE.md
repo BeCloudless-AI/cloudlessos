@@ -34,8 +34,8 @@ API clients -> configurable authenticated gateway (default :8766/v1)
 - The installed appliance uses Chromium, Openbox and LightDM to show the local interface.
 - The same interface can be opened from a normal browser during development.
 - The UI/API listens on `127.0.0.1:8765` by default.
-- The key-authenticated model and agent gateway listens on `127.0.0.1:8766` by default. Its
-  client-facing port and model alias are editable in **Settings -> API access**.
+- The key-authenticated model, agent and metrics gateway listens on `127.0.0.1:8766` by default.
+  Its client-facing port and model alias are editable in **Settings -> API access**.
 - The web terminal is a separate loopback-only ttyd service running `/bin/login`, proxied
   through the Cloudless origin at `/terminal/`.
 
@@ -103,7 +103,9 @@ The client port and alias may change, but the private port and identity cannot.
 
 The gateway rewrites client model requests to the private identity and presents the configured
 alias in OpenAI-compatible JSON and streaming responses. Port changes rebind the listener live and
-recreate enabled LAN or tunnel exposure. See [INFERENCE_API.md](./INFERENCE_API.md).
+recreate enabled LAN or tunnel exposure. When the user enables **Expose metrics API**, the gateway
+also re-exports normalized engine metrics as `cloudless_*` series at `/metrics` and `/v1/metrics`;
+the engine's own Prometheus surface stays private. See [INFERENCE_API.md](./INFERENCE_API.md).
 
 Every engine contract defines:
 

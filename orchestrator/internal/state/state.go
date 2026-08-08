@@ -222,6 +222,7 @@ type State struct {
 	LocalNetSet             bool                             `json:"localNetSet,omitempty"`             // user has chosen (else default ON)
 	Profile                 Profile                          `json:"profile"`                           // user-controlled profile
 	APIKeys                 []APIKey                         `json:"apiKeys,omitempty"`                 // Cloudless Proxy credentials
+	GatewayMetricsEnabled   bool                             `json:"gatewayMetricsEnabled,omitempty"`   // expose normalized metrics on the authenticated gateway
 	Display                 DisplayPreference                `json:"display,omitempty"`                 // preferred display output and mode
 	InferenceAPI            InferenceContract                `json:"inferenceApi,omitempty"`            // stable client-facing API port and model alias
 	CustomModels            map[string]models.Model          `json:"customModels,omitempty"`            // user-imported Hugging Face repositories
@@ -579,6 +580,24 @@ func (s *Store) SetInferenceContract(contract InferenceContract) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.st.InferenceAPI = contract.Normalized()
+	return s.save()
+}
+
+// GatewayMetricsEnabled reports whether the authenticated gateway may expose
+// normalized engine metrics. The zero value is intentionally disabled so fresh
+// and upgraded installations do not publish a new API surface without consent.
+func (s *Store) GatewayMetricsEnabled() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.st.GatewayMetricsEnabled
+}
+
+// SetGatewayMetricsEnabled persists the explicit API exposure preference. This
+// does not affect the loopback desktop Activity view or its internal sampling.
+func (s *Store) SetGatewayMetricsEnabled(enabled bool) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.st.GatewayMetricsEnabled = enabled
 	return s.save()
 }
 

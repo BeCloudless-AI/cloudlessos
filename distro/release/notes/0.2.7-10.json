@@ -7,6 +7,7 @@
     "Automatically revalidate a recipe when machine or network identity changes invalidate earlier launch evidence, instead of leaving users to discover the manual Validation workaround.",
     "Prevent validation of a different recipe while one is running, and hide removal controls for the active recipe so the interface matches the operations Cloudless can safely perform.",
     "Show each recipe's immutable version as a prominent badge on installed, Discover, and details views so users can immediately identify the revision they are inspecting or running.",
+    "Add an opt-in authenticated Metrics API for external monitoring while keeping metrics exposure disabled by default and protected by Cloudless API permissions.",
     "Place Activity time-range controls with the graph and remove duplicate aggregate GPU tiles while retaining per-device GPU telemetry, CPU, and system-memory information."
   ]
 }

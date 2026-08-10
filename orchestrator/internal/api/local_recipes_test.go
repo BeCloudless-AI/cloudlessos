@@ -41,6 +41,28 @@ func allowUnreviewedRecipeCommandsForTest(t *testing.T) {
 	t.Cleanup(func() { recipeExecutionPolicyEvaluator = previous })
 }
 
+func TestRecipeCheckBlockedByDifferentActiveRecipe(t *testing.T) {
+	tests := []struct {
+		name           string
+		activeRecipeID string
+		engineUnloaded bool
+		targetRecipeID string
+		wantBlocked    bool
+	}{
+		{name: "different active recipe", activeRecipeID: "local-aaaaaaaaaaaaaaaa", targetRecipeID: "local-bbbbbbbbbbbbbbbb", wantBlocked: true},
+		{name: "same active recipe", activeRecipeID: "local-aaaaaaaaaaaaaaaa", targetRecipeID: "local-aaaaaaaaaaaaaaaa"},
+		{name: "runtime unloaded", activeRecipeID: "local-aaaaaaaaaaaaaaaa", engineUnloaded: true, targetRecipeID: "local-bbbbbbbbbbbbbbbb"},
+		{name: "no active recipe", targetRecipeID: "local-bbbbbbbbbbbbbbbb"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := recipeCheckBlockedByActive(test.activeRecipeID, test.engineUnloaded, test.targetRecipeID); got != test.wantBlocked {
+				t.Fatalf("blocked = %t, want %t", got, test.wantBlocked)
+			}
+		})
+	}
+}
+
 func TestRecipeCheckCheckoutIsOperationScoped(t *testing.T) {
 	stateDir := t.TempDir()
 	operation := recipeops.Operation{
@@ -710,7 +732,13 @@ func TestRecipeUIUsesRecipesIconAndCloudlessSourceViewer(t *testing.T) {
 		`/api/recipes/import/preview`,
 		`<span>Import recipe</span>`,
 		`<span>Validate again</span>`,
-		`!validated ? '<button class="btn primary recipe-primary-action" type="button" data-recipe-check=`,
+		`anotherRecipeActive = !!data.active && !active`,
+		`Stop it before validating this recipe.`,
+		`!validated ? (anotherRecipeActive`,
+		`disabled title="' + escapeAttr(validationBlockedReason)`,
+		`const canCheck = canCheckWhenIdle && !anotherRecipeActive`,
+		`const removeAction = active ? '' : '<button class="btn recipe-remove"`,
+		`const secondaryActions = detailsAction + checkAction + rollbackAction + removeAction`,
 		`id="recipe-show-supported"`,
 		`id="recipe-show-drafts"`,
 		`trust.executionAllowed === true`,
@@ -732,6 +760,9 @@ func TestRecipeUIUsesRecipesIconAndCloudlessSourceViewer(t *testing.T) {
 		`waitForRecipeJobCompletion(check.jobId)`,
 		`/check', { method: 'POST' }`,
 		`async function requestRecipeRun(recipeId)`,
+		`failure.payload = payload`,
+		`failure.action = payload?.action || ''`,
+		`action:error?.action || error?.payload?.action || ''`,
 		`result.action !== 'check'`,
 		`trackLocalRecipeJob(result.jobId, 'run', recipeId)`,
 		`trackLocalRecipeJob(result.jobId,'run',id);`,

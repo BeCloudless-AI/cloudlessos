@@ -545,6 +545,12 @@ func (s *Server) localRecipeCheck(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	if st := s.state.Get(); recipeCheckBlockedByActive(st.LocalRecipeID, st.EngineUnloaded, recipe.ID) {
+		writeJSON(w, http.StatusConflict, map[string]string{
+			"error": "stop the active local recipe before validating another one", "action": "stop-active-recipe", "activeRecipeId": st.LocalRecipeID,
+		})
+		return
+	}
 	for _, snapshot := range s.jobs.List("recipe:") {
 		if !snapshot.Done {
 			writeJSON(w, http.StatusConflict, map[string]string{"error": "another recipe operation is already running", "jobId": snapshot.ID})
@@ -564,6 +570,10 @@ func (s *Server) localRecipeCheck(w http.ResponseWriter, r *http.Request) {
 		go s.checkLocalRecipe(job, operation.RecipeSnapshot, operation.ID)
 	}
 	writeJSON(w, http.StatusAccepted, map[string]string{"jobId": job.ID, "operationId": operation.ID, "recipe": recipe.ID})
+}
+
+func recipeCheckBlockedByActive(activeRecipeID string, engineUnloaded bool, targetRecipeID string) bool {
+	return activeRecipeID != "" && !engineUnloaded && activeRecipeID != targetRecipeID
 }
 
 func (s *Server) localRecipeAbort(w http.ResponseWriter, r *http.Request) {
@@ -2418,6 +2428,21 @@ func (s *Server) checkLocalRecipe(job *jobs.Job, recipe localrecipes.Recipe, ope
 	if err != nil {
 		s.failRecipeCheck(job, operationID, "image", "Prepared runtime image could not be measured", err)
 		return
+	}
+	if recipe.Runtime.SmokeTest != nil {
+		job.Progress("checking-image-contract", "Running the recipe's isolated image compatibility check...", 4, 10)
+		if err := runRecipeImageSmokeTest(ctx, s.eng, preparedCheckImage, recipe.Runtime.SmokeTest); err != nil {
+			s.failRecipeCheck(job, operationID, "image-contract", "The runtime image failed its declared compatibility check", err)
+			return
+		}
+		if err := s.recordRecipeCheck(operationID, "image-contract", recipeops.CheckPass,
+			"The exact runtime image passed its isolated compatibility check", "", map[string]string{
+				"program":        recipe.Runtime.SmokeTest.Program,
+				"timeoutSeconds": strconv.Itoa(recipe.Runtime.SmokeTest.TimeoutSeconds),
+			}); err != nil {
+			s.finishRecipeOperation(job, operationID, err)
+			return
+		}
 	}
 	if err := s.recordRecipeCheck(operationID, "runtime", recipeops.CheckPass, "Runtime environment and lifecycle commands render successfully", "", map[string]string{
 		"workingDirectory": workdir, "enginePort": strconv.Itoa(recipe.Engine.ContainerPort),

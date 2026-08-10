@@ -104,14 +104,24 @@ type Runtime struct {
 	// multi-node recipe. The runtime is built/downloaded on the coordinator,
 	// then copied over the configured Spark fabric instead of asking every
 	// node to repeat the same Internet transfer.
-	BuildOnce      bool              `json:"buildOnce,omitempty" yaml:"buildOnce,omitempty"`
-	DownloadOnce   bool              `json:"downloadOnce,omitempty" yaml:"downloadOnce,omitempty"`
-	WorkingDir     string            `json:"workingDir" yaml:"workingDir"`
-	TimeoutMinutes int               `json:"timeoutMinutes" yaml:"timeoutMinutes"`
-	Prerequisites  []string          `json:"prerequisites,omitempty" yaml:"prerequisites,omitempty"`
-	Environment    map[string]string `json:"environment,omitempty" yaml:"environment,omitempty"`
-	Lifecycle      Lifecycle         `json:"lifecycle" yaml:"lifecycle"`
-	Container      ContainerRuntime  `json:"container,omitempty" yaml:"container,omitempty"`
+	BuildOnce      bool                `json:"buildOnce,omitempty" yaml:"buildOnce,omitempty"`
+	DownloadOnce   bool                `json:"downloadOnce,omitempty" yaml:"downloadOnce,omitempty"`
+	WorkingDir     string              `json:"workingDir" yaml:"workingDir"`
+	TimeoutMinutes int                 `json:"timeoutMinutes" yaml:"timeoutMinutes"`
+	Prerequisites  []string            `json:"prerequisites,omitempty" yaml:"prerequisites,omitempty"`
+	Environment    map[string]string   `json:"environment,omitempty" yaml:"environment,omitempty"`
+	SmokeTest      *ContainerSmokeTest `json:"smokeTest,omitempty" yaml:"smokeTest,omitempty"`
+	Lifecycle      Lifecycle           `json:"lifecycle" yaml:"lifecycle"`
+	Container      ContainerRuntime    `json:"container,omitempty" yaml:"container,omitempty"`
+}
+
+// ContainerSmokeTest is an image-contained compatibility check. Cloudless runs
+// it without a GPU or network before model download, against the exact image ID
+// bound by recipe validation. It cannot execute host commands or mount host data.
+type ContainerSmokeTest struct {
+	Program        string   `json:"program" yaml:"program"`
+	Args           []string `json:"args" yaml:"args"`
+	TimeoutSeconds int      `json:"timeoutSeconds" yaml:"timeoutSeconds"`
 }
 
 // ContainerRuntime exposes container-contained execution controls for advanced
@@ -751,6 +761,23 @@ func validateDraft(d Draft) (Draft, error) {
 		if key == "" || len(key) > 128 || strings.ContainsAny(key, "=\x00\r\n") || len(value) > 8192 || strings.ContainsAny(value, "\x00\r\n") {
 			return Draft{}, fmt.Errorf("environment variable %q is invalid", key)
 		}
+	}
+	if d.Runtime.SmokeTest != nil {
+		smoke, commandErr := validateCommand("container smoke test", Command{
+			Program: d.Runtime.SmokeTest.Program,
+			Args:    d.Runtime.SmokeTest.Args,
+		})
+		if commandErr != nil || smoke.Program == "" {
+			if commandErr != nil {
+				return Draft{}, commandErr
+			}
+			return Draft{}, errors.New("container smoke test requires a program")
+		}
+		if d.Runtime.SmokeTest.TimeoutSeconds < 1 || d.Runtime.SmokeTest.TimeoutSeconds > 300 {
+			return Draft{}, errors.New("container smoke test timeout must be between 1 and 300 seconds")
+		}
+		d.Runtime.SmokeTest.Program = smoke.Program
+		d.Runtime.SmokeTest.Args = smoke.Args
 	}
 	for label, value := range map[string]*Command{"build": &d.Runtime.Lifecycle.Build, "download": &d.Runtime.Lifecycle.Download, "start": &d.Runtime.Lifecycle.Start, "stop": &d.Runtime.Lifecycle.Stop} {
 		validated, commandErr := validateCommand(label, *value)

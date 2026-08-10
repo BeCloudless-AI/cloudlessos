@@ -75,6 +75,12 @@ root filesystem mode, user, IPC, shared memory, ulimits, tmpfs, process limit, a
 capabilities plus memory and memory-swap ceilings inside the pinned container. Those permissions are signed and displayed as executable
 trust data. `source-scripts-v1` remains private/manual-review only.
 
+Either container adapter may additionally declare one bounded `runtime.smokeTest` program with up
+to 128 arguments and a 1-300 second timeout. CloudlessOS executes it against the exact prepared
+image ID during on-device validation with no network, GPU, host mounts, or added capabilities; the
+container is read-only and has fixed memory, process, and privilege ceilings. This is intended for
+dependency and import compatibility checks that should fail before large model downloads.
+
 Controls explicitly cover malicious manifests, mutable dependency replacement, stored XSS,
 publisher takeover, leaked keys, replayed mutations, spam and moderator abuse. Server validation
 ignores client ownership, digest, compatibility and trust claims; API keys are hashed, scoped,

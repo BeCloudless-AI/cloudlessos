@@ -77,6 +77,22 @@ func TestValidateAdvancedContainerManifest(t *testing.T) {
 	}
 }
 
+func TestValidateContainerSmokeTest(t *testing.T) {
+	manifest := safeManifest()
+	manifest["recipe"].(map[string]any)["engine"].(map[string]any)["image"] = "ghcr.io/cloudless/vllm@sha256:" + strings.Repeat("1", 64)
+	runtime := manifest["recipe"].(map[string]any)["runtime"].(map[string]any)
+	runtime["smokeTest"] = map[string]any{
+		"program": "/opt/venv/bin/python", "args": []any{"-c", "from xgrammar import normalize_tool_choice"}, "timeoutSeconds": 60,
+	}
+	if err := ValidateManagedManifest(manifest); err != nil {
+		t.Fatal(err)
+	}
+	runtime["smokeTest"].(map[string]any)["timeoutSeconds"] = 301
+	if err := ValidateManagedManifest(manifest); err == nil {
+		t.Fatal("unbounded container smoke test was accepted")
+	}
+}
+
 func TestValidateDistributedAdvancedContainerManifest(t *testing.T) {
 	manifest := safeManifest()
 	manifest["schema"] = AdvancedManifestSchema

@@ -145,6 +145,26 @@ func ValidateManagedManifest(manifest map[string]any) error {
 	if adapter == "advanced-container-v1" && manifestSchema != AdvancedManifestSchema {
 		return errors.New("advanced-container-v1 requires schema cloudless.recipe/v2")
 	}
+	if rawSmoke, declared := runtime["smokeTest"]; declared {
+		smoke, ok := rawSmoke.(map[string]any)
+		if !ok || strings.TrimSpace(textField(smoke, "program")) == "" || len(textField(smoke, "program")) > 256 {
+			return errors.New("container smoke test requires a short program")
+		}
+		arguments, ok := smoke["args"].([]any)
+		if !ok || len(arguments) > 128 {
+			return errors.New("container smoke test arguments are invalid")
+		}
+		for _, argument := range arguments {
+			value, ok := argument.(string)
+			if !ok || len(value) > 2048 || strings.ContainsRune(value, '\x00') {
+				return errors.New("container smoke test arguments are invalid")
+			}
+		}
+		timeout := numberField(smoke, "timeoutSeconds")
+		if timeout < 1 || timeout > 300 || timeout != float64(int64(timeout)) {
+			return errors.New("container smoke test timeout must be between 1 and 300 seconds")
+		}
+	}
 	distributed, err := mapField(recipe, "distributed")
 	if err != nil {
 		return err

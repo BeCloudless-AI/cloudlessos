@@ -3,7 +3,7 @@ schema: cloudless.recipe/v2
 metadata:
   name: DeepSeek V4 Flash 0731 SparkInfer DGX Spark
   description: 0xSero's pinned one-DGX-Spark DeepSeek V4 Flash profile with EXL3/Trellis weights, SparkInfer sparse MLA, and fixed-K5 DSpark speculative decoding.
-  version: 1.0.0
+  version: 1.0.1
   author: 0xSero
   category: language-model
   license: Apache-2.0
@@ -20,7 +20,7 @@ recipe:
     files: {}
   engine:
     type: vllm
-    image: ghcr.io/0xsero/deepseek-v4-flash-0731-spark-sparkinfer@sha256:2e077489a83a0360952828051fe7f7a32c1801e5ce8436d85f7267583d614ff4
+    image: ghcr.io/samuelcardillo/cloudless-deepseek-v4-flash-sparkinfer@sha256:98354f291002b8a5e94c11925f595f48bd3b31f358c1d619d17370aaaece9720
     servedModelName: cloudless
     containerPort: 8890
     apiPath: /v1
@@ -43,7 +43,7 @@ recipe:
     kvCacheDtype: nvfp4_ds_mla
     maxContext: 262144
     maxSequences: 4
-    gpuMemoryUtilization: 0.9465
+    gpuMemoryUtilization: 0.94
     tensorParallel: 1
     pipelineParallel: 1
     trustRemoteCode: true
@@ -83,8 +83,22 @@ recipe:
       DSPARK_DRAFT_EXPERTS: "64"
       DSPARK_STRUCTURED_EXPERTS_PER_CATEGORY: "32"
       VLLM_USE_B12X_WO_PROJECTION: "1"
-      GPU_MEMORY_UTILIZATION: "0.9465"
+      GPU_MEMORY_UTILIZATION: "0.94"
       VERIFY_MODEL_CHECKSUMS: "1"
+    smokeTest:
+      program: /opt/runtime-venv/bin/python
+      args:
+        - -c
+        - |-
+          import importlib.metadata as metadata
+          from xgrammar import normalize_tool_choice
+          from vllm.tool_parsers.structural_tag_registry import get_model_structural_tag
+          assert metadata.version("xgrammar") == "0.2.1"
+          assert callable(get_model_structural_tag)
+          tools = [{"type": "function", "function": {"name": "get_weather", "parameters": {"type": "object", "properties": {"city": {"type": "string"}}, "required": ["city"]}}}]
+          functions, builtins, choice = normalize_tool_choice(tools, "required")
+          assert len(functions) == 1 and not builtins and choice == "required"
+      timeoutSeconds: 60
     container:
       user: "0"
       readOnly: false

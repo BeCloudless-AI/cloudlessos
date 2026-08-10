@@ -41,6 +41,24 @@ func TestManagedContainerDraftIsAcceptedWithoutLifecycleCommands(t *testing.T) {
 	}
 }
 
+func TestContainerSmokeTestIsBounded(t *testing.T) {
+	draft := managedContainerTestDraft()
+	draft.Runtime.SmokeTest = &ContainerSmokeTest{
+		Program: "python", Args: []string{"-c", "from xgrammar import normalize_tool_choice"}, TimeoutSeconds: 60,
+	}
+	if _, err := validateDraft(draft); err != nil {
+		t.Fatalf("validate container smoke test: %v", err)
+	}
+	draft.Runtime.SmokeTest.TimeoutSeconds = 301
+	if _, err := validateDraft(draft); err == nil || !strings.Contains(err.Error(), "300 seconds") {
+		t.Fatalf("unbounded smoke timeout error = %v", err)
+	}
+	draft.Runtime.SmokeTest = &ContainerSmokeTest{TimeoutSeconds: 60}
+	if _, err := validateDraft(draft); err == nil || !strings.Contains(err.Error(), "requires a program") {
+		t.Fatalf("empty smoke command error = %v", err)
+	}
+}
+
 func TestManagedContainerDraftAcceptsSGLangWithoutCommandOverride(t *testing.T) {
 	draft := managedContainerTestDraft()
 	draft.Engine.Type = ManagedSGLangEngine

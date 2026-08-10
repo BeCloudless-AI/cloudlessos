@@ -760,7 +760,9 @@
     padding: 4px 12px; border-radius: 999px; cursor: pointer; transition: background .15s, color .15s; }
   .us-rbtn:hover { color: var(--ink); }
   .us-rbtn.on { background: var(--blue); color: #fff; }
-  .inf-actbar { display: flex; justify-content: flex-end; margin-bottom: 14px; }
+  .inf-chart-toolbar { display: flex; justify-content: flex-end; margin-bottom: 12px; overflow-x: auto; scrollbar-width: none; }
+  .inf-chart-toolbar::-webkit-scrollbar { display: none; }
+  .inf-chart-toolbar .us-range { margin-left: auto; }
   .us-chart { display: flex; align-items: flex-end; gap: 3px; height: 120px; }
   .us-axis { display: flex; gap: 3px; margin-top: 7px; }
   .us-axis span { flex: 1; min-width: 0; text-align: center; font-size: 9px; color: var(--faint); font-variant-numeric: tabular-nums;
@@ -1049,9 +1051,9 @@
   .engine-advanced-note .btn { flex: none; }
 
   /* Inference hub: engine selection and API access */
-  .inf-tabs { width: 100%; margin-bottom: 18px; overflow-x: auto; scrollbar-width: none; }
+  .mm-tabs.inf-tabs { width: 100%; margin-bottom: 18px; overflow-x: auto; scrollbar-width: none; }
   .inf-tabs::-webkit-scrollbar { display: none; }
-  .inf-tabs .mm-tab { flex: 1 0 auto; min-width: 104px; }
+  .inf-tabs .mm-tab { flex: 1 1 0; min-width: 104px; justify-content: center; }
   .inf-tabs .ui-icon { width: 14px; height: 14px; }
   .inf-page { display: flex; flex-direction: column; gap: 14px; }
   .custom-engine-panel { border: 1px solid var(--line-2); border-radius: 15px; background: var(--card); overflow: hidden; }
@@ -3207,8 +3209,10 @@
   .recipe-scope-tab .ui-icon { width: 14px; height: 14px; }
   .community-recipe-card { padding: 17px; display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 16px; align-items: center; border: 1px solid var(--hair); border-radius: 15px; background: var(--card); }
   .community-recipe-copy { min-width: 0; display: grid; gap: 6px; }
+  .community-recipe-title-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
   .community-recipe-meta { display: flex; flex-wrap: wrap; gap: 7px; color: var(--faint); font: 8px/1.3 'Roboto Mono',ui-monospace,monospace; text-transform: uppercase; }
   .community-recipe-copy h4 { margin: 0; color: var(--ink); font-size: 13px; }
+  .recipe-version-badge { width: fit-content; padding: 4px 8px; display: inline-flex; align-items: center; border: 1px solid color-mix(in srgb,var(--blue) 32%,var(--hair)); border-radius: 999px; color: var(--blue); background: var(--blue-soft); font: 9px/1.15 'Roboto Mono',ui-monospace,monospace; font-weight: 760; letter-spacing: .15px; white-space: nowrap; }
   .community-recipe-copy p { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.5; }
   .community-trust { width: fit-content; padding: 4px 7px; border-radius: 999px; color: #24985a; background: color-mix(in srgb,#2faa5b 12%,transparent); font: 8px/1.2 'Roboto Mono',ui-monospace,monospace; text-transform: uppercase; }
   .community-trust.draft { color: #a56b08; background: color-mix(in srgb,#f7b731 14%,transparent); }
@@ -3250,7 +3254,6 @@
   .community-detail-back { min-height: 30px; padding: 0 8px; display: inline-flex; align-items: center; gap: 6px; border-color: transparent; background: transparent; color: var(--muted); }
   .community-detail-back:hover { border-color: var(--hair); background: var(--panel-2); color: var(--ink); }
   .community-detail-back .ui-icon { width: 14px; height: 14px; }
-  .community-detail-version { color: var(--faint); font: 8.5px/1.3 'Roboto Mono',ui-monospace,monospace; }
   .community-detail-hero { padding: 20px; display: grid; grid-template-columns: auto minmax(0,1fr); gap: 15px; border: 1px solid var(--hair); border-radius: 16px; background: var(--card); }
   .community-detail-icon { width: 48px; height: 48px; display: grid; place-items: center; border: 1px solid color-mix(in srgb,var(--blue) 24%,var(--hair)); border-radius: 14px; color: var(--blue); background: var(--blue-soft); }
   .community-detail-icon .ui-icon { width: 22px; height: 22px; }
@@ -3258,6 +3261,7 @@
   .community-detail-copy .community-detail-nav { margin: -5px 0 6px; }
   .community-detail-meta { display: flex; flex-wrap: wrap; gap: 7px; color: var(--faint); font: 8px/1.3 'Roboto Mono',ui-monospace,monospace; text-transform: uppercase; }
   .community-detail-title { margin: 6px 0 5px; display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px; }
+  .community-detail-title .recipe-version-badge { padding: 5px 9px; font-size: 10px; }
   .community-detail-copy h2 { margin: 0; color: var(--ink); font-size: 20px; letter-spacing: -.35px; }
   .community-title-rating { display: inline-flex; align-items: center; gap: 8px; }
   .community-rating-stars { display: inline-flex; align-items: center; gap: 1px; }
@@ -3454,6 +3458,7 @@
   .recipe-actions { width: 100%; display: grid; gap: 8px; }
   .recipe-secondary-actions { display: grid; grid-template-columns: repeat(auto-fit,minmax(76px,1fr)); gap: 7px; }
   .recipe-actions .btn { width: 100%; min-width: 0; min-height: 38px; padding: 0 10px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; white-space: nowrap; line-height: 1; }
+  .recipe-actions .btn:disabled { opacity: .45; cursor: not-allowed; box-shadow: none; filter: none; }
   .recipe-actions .recipe-primary-action { grid-column: 1 / -1; min-height: 42px; }
   .recipe-actions .btn .ui-icon { width: 14px; height: 14px; flex: none; }
   .recipe-actions .btn span { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -4509,6 +4514,8 @@ const api = async (path, options) => {
   if (!response.ok) {
     const failure = new Error(payload?.error || `Cloudless request failed (${response.status})`);
     failure.status = response.status;
+    failure.payload = payload;
+    failure.action = payload?.action || '';
     throw failure;
   }
   return payload;
@@ -8275,7 +8282,7 @@ function waitForRecipeJobCompletion(jobId) {
 }
 async function requestRecipeRun(recipeId) {
   const endpoint = '/api/recipes/' + encodeURIComponent(recipeId);
-  let result = await api(endpoint + '/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(() => ({error:'Could not start this recipe.'}));
+  let result = await api(endpoint + '/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).catch(error => ({error:error?.message || 'Could not start this recipe.', action:error?.action || error?.payload?.action || ''}));
   if (!result.error || result.action !== 'check') return result;
   toast('This machine or Spark cluster changed. Checking the recipe again before launch...');
   const check = await api(endpoint + '/check', { method: 'POST' }).catch(() => ({error:'Could not refresh recipe validation.'}));
@@ -9602,13 +9609,17 @@ function recipePreflightHTML(recipe, data) {
 }
 function recipeCard(recipe, data) {
   const active = data.active === recipe.id, job = recipeJob(data, recipe.id), nodes = Number(recipe.distributed && recipe.distributed.nodes || 1);
+  const recipeVersion = recipe.community?.version || recipe.version || '';
+  const activeRecipe = (data.recipes || []).find(item => item.id === data.active), anotherRecipeActive = !!data.active && !active;
+  const validationBlockedReason = anotherRecipeActive ? ((activeRecipe && activeRecipe.name) || 'Another recipe') + ' is running. Stop it before validating this recipe.' : '';
   const tombstoned = !!recipe.tombstonedAt;
   const plan = data.plans && data.plans[recipe.id] || {};
   const cleanup = recipeCleanupIssue(recipe,data), cleaning = cleanup && cleanup.phase === 'recovering', failure = data.failures && data.failures[recipe.id];
   const trust = data.trust && data.trust[recipe.id] || {}, executionAllowed = trust.executionAllowed === true;
   const modelInstalled = recipeModelInstalled(recipe,data), validated = recipeValidated(recipe,data), topologyReady = recipeReady(recipe,data);
   const ready = !tombstoned && executionAllowed && modelInstalled && validated && topologyReady && !cleanup, connected = recipeConnectedSparks(data), needsMoreSparks = recipeNeedsMoreSparks(recipe, data);
-  const canCheck = !tombstoned && executionAllowed && modelInstalled && topologyReady && !cleanup && !active && !job;
+  const canCheckWhenIdle = !tombstoned && executionAllowed && modelInstalled && topologyReady && !cleanup && !active && !job;
+  const canCheck = canCheckWhenIdle && !anotherRecipeActive;
   const action = cleanup
     ? '<button class="btn ' + (cleaning ? '' : 'primary') + ' recipe-primary-action" type="button" data-cleanup-operation="' + escapeAttr(cleanup.id) + '"' + (cleaning ? ' disabled' : ' data-recipe-cleanup="' + escapeAttr(recipe.id) + '"') + '>' + (cleaning ? '<span class="key-dialog-spinner" aria-hidden="true"></span><span>Cleaning up</span>' : uiIcon('reload') + '<span>Retry cleanup</span>') + '</button>'
     : tombstoned
@@ -9619,18 +9630,23 @@ function recipeCard(recipe, data) {
     : !executionAllowed ? '<button class="btn recipe-primary-action" type="button" disabled>' + uiIcon('alert') + '<span>Review required</span></button>'
     : !modelInstalled ? '<button class="btn primary recipe-primary-action" type="button" data-recipe-install-model="' + escapeAttr(recipe.id) + '">' + uiIcon('download') + '<span>Install model</span></button>'
     : !topologyReady ? '<button class="btn recipe-primary-action" type="button" disabled>' + uiIcon('network') + '<span>Connect ' + nodes + ' Sparks</span></button>'
-    : !validated ? '<button class="btn primary recipe-primary-action" type="button" data-recipe-check="' + escapeAttr(recipe.id) + '">' + uiIcon('search') + '<span>Validate</span></button>'
+    : !validated ? (anotherRecipeActive
+      ? '<button class="btn primary recipe-primary-action" type="button" disabled title="' + escapeAttr(validationBlockedReason) + '">' + uiIcon('search') + '<span>Validate</span></button>'
+      : '<button class="btn primary recipe-primary-action" type="button" data-recipe-check="' + escapeAttr(recipe.id) + '">' + uiIcon('search') + '<span>Validate</span></button>')
     : '<button class="btn primary recipe-primary-action" type="button" data-recipe-run="' + escapeAttr(recipe.id) + '">' + uiIcon('rocket') + '<span>Run recipe</span></button>';
   const engine = recipe.engine || {}, model = recipe.model || {}, source = recipe.source || {};
-  const state = cleaning ? 'Cleaning' : cleanup ? 'Cleanup required' : tombstoned ? 'Removal pending' : active ? 'Running' : job ? 'Working' : !executionAllowed ? 'Draft only' : !modelInstalled ? 'Model not installed' : !topologyReady ? 'Needs ' + nodes + ' Sparks' : !validated ? 'Not validated' : failure ? 'Last run failed' : ready ? 'Ready' : 'Needs attention';
-  const checkAction = canCheck && validated ? '<button class="btn" type="button" data-recipe-check="' + escapeAttr(recipe.id) + '">' + uiIcon('search') + '<span>Validate again</span></button>' : '';
+  const state = cleaning ? 'Cleaning' : cleanup ? 'Cleanup required' : tombstoned ? 'Removal pending' : active ? 'Running' : job ? 'Working' : !executionAllowed ? 'Draft only' : !modelInstalled ? 'Model not installed' : !topologyReady ? 'Needs ' + nodes + ' Sparks' : anotherRecipeActive ? 'Another recipe is running' : !validated ? 'Not validated' : failure ? 'Last run failed' : ready ? 'Ready' : 'Needs attention';
+  const checkAction = validated && canCheckWhenIdle ? (canCheck
+    ? '<button class="btn" type="button" data-recipe-check="' + escapeAttr(recipe.id) + '">' + uiIcon('search') + '<span>Validate again</span></button>'
+    : '<button class="btn" type="button" disabled title="' + escapeAttr(validationBlockedReason) + '">' + uiIcon('search') + '<span>Validate again</span></button>') : '';
   const rollbackAction = recipe.communityRollback?.length ? '<button class="btn" type="button" data-community-rollback="' + escapeAttr(recipe.id) + '"' + (tombstoned || active || job || cleanup ? ' disabled' : '') + '>' + uiIcon('reload') + '<span>Roll back</span></button>' : '';
   const detailsAction = '<button class="btn" type="button" data-recipe-details="' + escapeAttr(recipe.id) + '">' + uiIcon('search') + '<span>Details</span></button>';
-  const secondaryActions = detailsAction + checkAction + rollbackAction + '<button class="btn recipe-remove" type="button" data-recipe-delete="' + escapeAttr(recipe.id) + '"' + (tombstoned || active || job || cleanup ? ' disabled' : '') + '>' + uiIcon('trash') + '<span>Remove</span></button>';
+  const removeAction = active ? '' : '<button class="btn recipe-remove" type="button" data-recipe-delete="' + escapeAttr(recipe.id) + '"' + (tombstoned || job || cleanup ? ' disabled' : '') + '>' + uiIcon('trash') + '<span>Remove</span></button>';
+  const secondaryActions = detailsAction + checkAction + rollbackAction + removeAction;
   const sourceLabel = recipe.origin === 'community' ? 'Community recipe' : recipe.origin === 'catalog' ? 'Imported recipe' : recipe.origin === 'github' ? 'GitHub import' : 'Local recipe';
   return '<article class="recipe-card' + (active || job ? ' is-active' : !ready ? ' needs-attention' : '') + (needsMoreSparks ? ' insufficient-cluster' : '') + '" data-recipe-id="' + escapeAttr(recipe.id) + '"><div class="recipe-main"><span class="recipe-icon">' + uiIcon('recipes') + '</span><div class="recipe-copy">' +
     '<div class="recipe-eyebrow"><span>' + sourceLabel + ' · ' + escapeHtml(trust.supportLevel || 'experimental') + '</span><span>' + escapeHtml(recipeUpdatedLabel(recipe)) + '</span></div>' +
-    '<div class="recipe-title-row"><span class="recipe-title">' + escapeHtml(recipe.name) + '</span>'+recipeVulnerabilityBadgeHTML(recipe)+'<span class="recipe-state ' + (active || job ? 'active' : ready ? 'ready' : 'attention') + '">' + state + '</span></div>' +
+    '<div class="recipe-title-row"><span class="recipe-title">' + escapeHtml(recipe.name) + '</span>'+recipeVersionBadgeHTML(recipeVersion)+recipeVulnerabilityBadgeHTML(recipe)+'<span class="recipe-state ' + (active || job ? 'active' : ready ? 'ready' : 'attention') + '">' + state + '</span></div>' +
     '<div class="recipe-desc">' + escapeHtml(recipe.description || 'No description has been added yet.') + '</div><div class="recipe-specs"><div><span>Model</span><b>' + escapeHtml(model.id || 'Not specified') + '</b></div><div><span>Runtime</span><b>' + escapeHtml(engine.type || 'Custom') + '</b></div><div><span>Topology</span><b>' + nodes + ' node' + (nodes === 1 ? '' : 's') + ' · TP ' + Number(model.tensorParallel || 1) + '</b></div><div><span>Context</span><b>' + Number(model.maxContext || 0).toLocaleString() + ' tokens</b></div></div>' +
     (source.url ? '<button class="lnk recipe-source" type="button" data-recipe-source="' + escapeAttr(source.url) + '">' + escapeHtml(source.url + ' @ ' + source.revision) + '</button>' : '<div class="recipe-source">Cloudless-native commands · no repository</div>') +
     recipeTrustHTML(recipe,data) +
@@ -9638,7 +9654,7 @@ function recipeCard(recipe, data) {
     recipeFailureHTML(recipe,data) +
     recipeCleanupHTML(cleanup) +
     recipePreflightHTML(recipe,data) +
-    (ready || cleanup || !executionAllowed ? '' : '<div class="recipe-warning">' + (tombstoned ? 'This recipe cannot start new work. Cloudless will remove its saved definition after all owned resources are verified absent.' : !modelInstalled ? 'Install the exact model revision first. Validate and Run stay locked until the download is complete.' : needsMoreSparks ? 'Requires ' + nodes + ' DGX Sparks. ' + connected + (connected === 1 ? ' is' : ' are') + ' connected.' : !validated ? 'Validate this exact recipe revision and machine before launch.' : 'This recipe needs ' + nodes + ' healthy DGX Spark' + (nodes === 1 ? '' : 's') + ' before it can run.') + '</div>') +
+    (ready || cleanup || !executionAllowed ? '' : '<div class="recipe-warning">' + (tombstoned ? 'This recipe cannot start new work. Cloudless will remove its saved definition after all owned resources are verified absent.' : !modelInstalled ? 'Install the exact model revision first. Validate and Run stay locked until the download is complete.' : needsMoreSparks ? 'Requires ' + nodes + ' DGX Sparks. ' + connected + (connected === 1 ? ' is' : ' are') + ' connected.' : anotherRecipeActive ? escapeHtml(validationBlockedReason) : !validated ? 'Validate this exact recipe revision and machine before launch.' : 'This recipe needs ' + nodes + ' healthy DGX Spark' + (nodes === 1 ? '' : 's') + ' before it can run.') + '</div>') +
     '</div><div class="recipe-side"><div class="recipe-actions">' + action + '<div class="recipe-secondary-actions">' + secondaryActions + '</div></div></div></div>' + recipeProgressHTML(job) + '</article>';
 }
 function recipeGitHubURL(value) {
@@ -9697,9 +9713,17 @@ async function installCommunityRecipe(slug,button,detailPayload=null){
 }
 function communityRecipeCard(recipe,scope,local){
   const profile=Array.isArray(recipe.community_profiles)?recipe.community_profiles[0]:recipe.community_profiles;
-  const published=recipe.status==='published',owner=profile?.username||profile?.display_name||'Cloudless member',installed=installedCommunityRecipe(recipe,local);
+  const published=recipe.status==='published',owner=profile?.username||profile?.display_name||'Cloudless member',installed=installedCommunityRecipe(recipe,local),version=communityRecipeVersion(recipe);
   const primary=published?(installed?'<button class="btn primary" type="button" data-community-open-installed="'+escapeAttr(installed.id)+'">'+uiIcon('arrow-right')+'<span>Open recipe</span></button>':'<button class="btn primary" type="button" data-community-install="'+escapeAttr(recipe.slug)+'">'+uiIcon('download')+'<span>Install</span></button>'):'';
-  return '<article class="community-recipe-card"><div class="community-recipe-copy"><div class="community-recipe-meta"><span>'+escapeHtml(recipe.category||'recipe')+'</span><span>by '+escapeHtml(owner)+'</span><span>'+escapeHtml(recipe.updated_at?new Date(recipe.updated_at).toLocaleDateString():'')+'</span></div><h4>'+escapeHtml(recipe.title)+'</h4><p>'+escapeHtml(recipe.summary)+'</p><div class="community-recipe-meta"><span class="community-trust'+(published?'':' draft')+'">'+(published?(installed?'Installed · community signed':'Community signed'):escapeHtml(recipe.status||'draft'))+'</span>'+recipeVulnerabilityBadgeHTML(recipe)+'</div></div><div class="community-recipe-actions">'+(published?'<button class="btn" type="button" data-community-detail="'+escapeAttr(recipe.slug)+'">Details</button>':'')+primary+(scope==='mine'&&!published?'<button class="btn" type="button" data-community-status="'+escapeAttr(recipe.id)+'">View status</button>':'')+'</div></article>';
+  return '<article class="community-recipe-card"><div class="community-recipe-copy"><div class="community-recipe-meta"><span>'+escapeHtml(recipe.category||'recipe')+'</span><span>by '+escapeHtml(owner)+'</span><span>'+escapeHtml(recipe.updated_at?new Date(recipe.updated_at).toLocaleDateString():'')+'</span></div><div class="community-recipe-title-row"><h4>'+escapeHtml(recipe.title)+'</h4>'+recipeVersionBadgeHTML(version)+'</div><p>'+escapeHtml(recipe.summary)+'</p><div class="community-recipe-meta"><span class="community-trust'+(published?'':' draft')+'">'+(published?(installed?'Installed · community signed':'Community signed'):escapeHtml(recipe.status||'draft'))+'</span>'+recipeVulnerabilityBadgeHTML(recipe)+'</div></div><div class="community-recipe-actions">'+(published?'<button class="btn" type="button" data-community-detail="'+escapeAttr(recipe.slug)+'">Details</button>':'')+primary+(scope==='mine'&&!published?'<button class="btn" type="button" data-community-status="'+escapeAttr(recipe.id)+'">View status</button>':'')+'</div></article>';
+}
+function communityRecipeVersion(recipe){
+  const submissions=Array.isArray(recipe?.submissions)?recipe.submissions:[],current=submissions.find(item=>item.id===(recipe.currentRevisionId||recipe.current_revision_id));
+  return String(recipe?.version||current?.version||submissions[0]?.version||'').trim();
+}
+function recipeVersionBadgeHTML(version){
+  const normalized=String(version||'').trim();
+  return normalized?'<span class="recipe-version-badge" title="Recipe version '+escapeAttr(normalized)+'">v'+escapeHtml(normalized.replace(/^v/i,''))+'</span>':'';
 }
 function communityHeaderActionsHTML() {
   return '<span class="community-social-actions"><button class="btn" id="community-block" type="button">' + uiIcon('close') + '<span>Block author</span></button><button class="btn" id="community-report-toggle" type="button">' + uiIcon('alert') + '<span>Report</span></button></span>';
@@ -9770,7 +9794,7 @@ async function renderCommunityRecipeDetail(c,slug){
     const commentsHTML=communityCommentsHTML(comments);
     const action=installed?'<button class="btn primary" id="community-open-installed" type="button">'+uiIcon('arrow-right')+'<span>Open installed recipe</span></button>':'<button class="btn primary" id="community-install" type="button">'+uiIcon('download')+'<span>Verify and install</span></button>';
     const vulnerabilityHTML=recipeVulnerabilityDetailsHTML(payload);
-    c.innerHTML=recipeScopeTabs()+'<article class="community-detail"><header class="community-detail-hero"><span class="community-detail-icon">'+uiIcon('recipes')+'</span><div class="community-detail-copy"><div class="community-detail-nav"><button class="btn community-detail-back" id="community-detail-back" type="button">'+uiIcon('arrow-left')+'<span>'+backLabel+'</span></button><span class="community-detail-version">VERSION '+escapeHtml(version)+'</span></div><div class="community-detail-meta"><span>'+escapeHtml(recipe.category||'recipe')+'</span><span>by '+escapeHtml(owner)+'</span><span>Community signed</span></div><div class="community-detail-title"><h2>'+escapeHtml(recipe.title||slug)+'</h2>'+communityRatingHTML(activity)+'</div><p>'+escapeHtml(recipe.description||recipe.summary||'')+'</p></div></header><section class="community-detail-section"><div class="community-detail-section-head"><div><h3>What this recipe runs</h3><p>Cloudless verifies this exact signed revision again before it is installed.</p></div><span class="community-trust">Community signed</span></div><div class="recipe-preview-grid"><div class="recipe-preview-fact"><span>Model</span><b>'+escapeHtml(model.id||revision.model_id||'Not specified')+'</b></div><div class="recipe-preview-fact"><span>Engine</span><b>'+escapeHtml(engine.type||revision.adapter||'Unknown')+'</b></div><div class="recipe-preview-fact"><span>Platform</span><b>'+escapeHtml(revision.platform||native.platform||'Generic')+'</b></div><div class="recipe-preview-fact"><span>Nodes</span><b>'+Number(revision.node_count||native.distributed?.nodes||1)+'</b></div></div><div class="recipe-publish-review"><div class="recipe-publish-fact"><span>Image</span><b>'+escapeHtml(revision.image_digest||engine.image||'')+'</b></div><div class="recipe-publish-fact"><span>Model revision</span><b>'+escapeHtml(revision.model_revision||model.revision||'')+'</b></div><div class="recipe-publish-fact"><span>Host commands</span><b>'+(permissions.hostCommands?'Requested':'None')+'</b></div><div class="recipe-publish-fact"><span>Changelog</span><b>'+escapeHtml(revision.changelog||'No changelog supplied')+'</b></div></div>'+vulnerabilityHTML+'</section><section class="community-detail-section community-detail-comments">'+communitySocialHTML(activity,commentsHTML)+'</section><div class="community-detail-actions"><span class="community-detail-action-copy"><b>'+(installed?'This recipe is installed on this machine':'Ready to add to CloudlessOS')+'</b><span>'+(installed?'Open it to install weights, validate requirements, or run it.':'Installation verifies the signature and revocation status. Then Cloudless guides model download, validation, and launch.')+'</span></span><span class="community-detail-action-buttons">'+action+'</span></div></article>';
+    c.innerHTML=recipeScopeTabs()+'<article class="community-detail"><header class="community-detail-hero"><span class="community-detail-icon">'+uiIcon('recipes')+'</span><div class="community-detail-copy"><div class="community-detail-nav"><button class="btn community-detail-back" id="community-detail-back" type="button">'+uiIcon('arrow-left')+'<span>'+backLabel+'</span></button></div><div class="community-detail-meta"><span>'+escapeHtml(recipe.category||'recipe')+'</span><span>by '+escapeHtml(owner)+'</span><span>Community signed</span></div><div class="community-detail-title"><h2>'+escapeHtml(recipe.title||slug)+'</h2>'+recipeVersionBadgeHTML(version)+communityRatingHTML(activity)+'</div><p>'+escapeHtml(recipe.description||recipe.summary||'')+'</p></div></header><section class="community-detail-section"><div class="community-detail-section-head"><div><h3>What this recipe runs</h3><p>Cloudless verifies this exact signed revision again before it is installed.</p></div><span class="community-trust">Community signed</span></div><div class="recipe-preview-grid"><div class="recipe-preview-fact"><span>Model</span><b>'+escapeHtml(model.id||revision.model_id||'Not specified')+'</b></div><div class="recipe-preview-fact"><span>Engine</span><b>'+escapeHtml(engine.type||revision.adapter||'Unknown')+'</b></div><div class="recipe-preview-fact"><span>Platform</span><b>'+escapeHtml(revision.platform||native.platform||'Generic')+'</b></div><div class="recipe-preview-fact"><span>Nodes</span><b>'+Number(revision.node_count||native.distributed?.nodes||1)+'</b></div></div><div class="recipe-publish-review"><div class="recipe-publish-fact"><span>Image</span><b>'+escapeHtml(revision.image_digest||engine.image||'')+'</b></div><div class="recipe-publish-fact"><span>Model revision</span><b>'+escapeHtml(revision.model_revision||model.revision||'')+'</b></div><div class="recipe-publish-fact"><span>Host commands</span><b>'+(permissions.hostCommands?'Requested':'None')+'</b></div><div class="recipe-publish-fact"><span>Changelog</span><b>'+escapeHtml(revision.changelog||'No changelog supplied')+'</b></div></div>'+vulnerabilityHTML+'</section><section class="community-detail-section community-detail-comments">'+communitySocialHTML(activity,commentsHTML)+'</section><div class="community-detail-actions"><span class="community-detail-action-copy"><b>'+(installed?'This recipe is installed on this machine':'Ready to add to CloudlessOS')+'</b><span>'+(installed?'Open it to install weights, validate requirements, or run it.':'Installation verifies the signature and revocation status. Then Cloudless guides model download, validation, and launch.')+'</span></span><span class="community-detail-action-buttons">'+action+'</span></div></article>';
     wireRecipeScopeTabs(c);const back=()=>{mmCommunityDetail=null;renderLocalRecipes(c);};document.getElementById('community-detail-back').onclick=back;c.querySelector('.recipe-vulnerability-explain')?.addEventListener('click',event=>openRecipeVulnerabilityInfo(event.currentTarget));
     const signedAction=async(fn)=>{if(!authUser()){openAuthDialog('signin');throw new Error('Sign in to join the community.');}return fn();};wireCommunityRating(c,recipe,signedAction);document.getElementById('community-block').onclick=()=>signedAction(()=>communityRequest('/authors/'+recipe.owner_id+'/block',{method:'PUT',headers:{'Idempotency-Key':token()}},true)).then(()=>toast('Author blocked. Their replies can no longer reach you.')).catch(error=>toast(error.message,true));document.getElementById('community-comment-send').onclick=()=>{const textarea=document.getElementById('community-comment'),body=textarea.value.trim();if(!body)return;signedAction(()=>communityRequest('/'+recipe.id+'/comments',{method:'POST',headers:{'Idempotency-Key':token()},body:JSON.stringify({body,revisionId:revision.id})},true)).then(()=>{toast('Comment posted');renderCommunityRecipeDetail(c,slug);}).catch(error=>toast(error.message,true));};document.getElementById('community-report-toggle').onclick=()=>document.getElementById('community-report').classList.toggle('hidden');document.getElementById('community-report-send').onclick=()=>{const explanation=document.getElementById('community-report-detail').value.trim(),category=document.getElementById('community-report-category').value;signedAction(()=>communityRequest('/'+recipe.id+'/report',{method:'POST',headers:{'Idempotency-Key':token()},body:JSON.stringify({revisionId:revision.id,category,explanation})},true)).then(()=>{toast('Report sent to moderators');document.getElementById('community-report').classList.add('hidden');}).catch(error=>toast(error.message,true));};
     if(installed)document.getElementById('community-open-installed').onclick=showInstalledCommunityRecipe;else document.getElementById('community-install').onclick=event=>installCommunityRecipe(slug,event.currentTarget,payload);
@@ -11337,7 +11361,7 @@ function infHeadSet(engineId, model, ready) {
   h.className = 'inf-head' + (ready ? ' on' : '');
   h.innerHTML = `<span class="inf-live"></span><b>${escapeHtml(engDisplay(engineId))}</b>${engineExecutionMode === 'cluster' ? `<span class="sep">·</span>${uiIcon('network')} ${sparkCount(connectedSpark)} Sparks` : ''}${infModel ? `<span class="sep">·</span>${escapeHtml(infModel)}` : ''}<span class="ih-state">${ready ? 'live' : 'loading…'}</span>`;
 }
-function infReset() { infPrev = null; infPeak = 0; infBuf = { pTok: [], gTok: [], run: [], wait: [], kv: [], ttft: [], tpot: [], gutil: [], gpow: [], cpu: [] }; }
+function infReset() { infPrev = null; infPeak = 0; infBuf = { pTok: [], gTok: [], run: [], wait: [], kv: [], ttft: [], tpot: [], cpu: [] }; }
 function infStopPoll() {
   if (infTimer) { clearInterval(infTimer); infTimer = null; }
   if (infHwTimer) { clearInterval(infHwTimer); infHwTimer = null; }
@@ -11351,6 +11375,14 @@ function openInference() {
 function closeInference() {
   document.getElementById('inference').classList.add('hidden'); infOpen = false; infStopPoll();
 }
+function infActivityRangeControl() {
+  const button = (range, label) => `<button class="us-rbtn ${infActRange === range ? 'on' : ''}" data-arange="${range}">${label}</button>`;
+  return `<div class="us-range">${button('live', 'Live')}${button('hour', 'Hour')}${button('day', 'Day')}${button('month', 'Month')}${button('year', 'Year')}</div>`;
+}
+function bindInfActivityRange(root) {
+  if (!root) return;
+  root.querySelectorAll('[data-arange]').forEach(button => button.onclick = () => infSetActRange(button.dataset.arange));
+}
 // The Inference hub: live Activity, plus Engine choice and API access in one place.
 function renderInference() {
   const body = document.getElementById('inf-body'); if (!body) return;
@@ -11361,9 +11393,7 @@ function renderInference() {
   infStopPoll();
   if (infTab !== 'activity') api('/api/engine').then(e => { setActiveEngine(e); infHeadSet(e.active, '', e.ready); }).catch(() => {});
   if (infTab === 'activity') {
-    const rbtn = (r, lbl) => `<button class="us-rbtn ${infActRange === r ? 'on' : ''}" data-arange="${r}">${lbl}</button>`;
-    panel.innerHTML = `<div class="inf-actbar"><div class="us-range">${rbtn('live', 'Live')}${rbtn('hour', 'Hour')}${rbtn('day', 'Day')}${rbtn('month', 'Month')}${rbtn('year', 'Year')}</div></div><div id="inf-act"></div>`;
-    panel.querySelectorAll('.us-rbtn').forEach(b => b.onclick = () => infSetActRange(b.dataset.arange));
+    panel.innerHTML = `<div id="inf-act"></div>`;
     infActivity();
   } else if (infTab === 'usage') {
     renderUsage(panel); // full width — the daily chart wants room
@@ -11410,7 +11440,7 @@ async function infHistory(range) {
     const peakVal = peak.v > 0 ? `${infNum(peak.v)} <span style="font-size:12px;font-weight:600;color:var(--muted)">${escapeHtml(peak.label)}</span>` : '—';
     host.innerHTML = `
       <div class="us-chartwrap">
-        <div class="us-head"><div><span class="us-htitle">output tokens / ${range}</span> <span class="us-time">${meta.sub}</span></div></div>
+        <div class="us-head"><div><span class="us-htitle">output tokens / ${range}</span> <span class="us-time">${meta.sub}</span></div>${infActivityRangeControl()}</div>
         <div class="us-chart" id="inf-act-chart">${bars}</div>
         ${axis}
       </div>
@@ -11421,6 +11451,7 @@ async function infHistory(range) {
         ${tile('Busiest ' + range, peakVal, 'output tokens')}
       </div>
       <div class="fld-help" style="margin-top:16px"><b>Live</b> streams real-time throughput; the ranges show output tokens the engine generated per ${range}. Same data as the Usage tab, viewed as the engine's work over time.</div>`;
+    bindInfActivityRange(host);
     const chart = document.getElementById('inf-act-chart');
     if (chart) chart.querySelectorAll('.us-bar').forEach(b => {
       b.onmousemove = e => infShowTip(e, `<b>${infNum(+b.dataset.tok)} tokens</b><span>${b.dataset.label}</span>`);
@@ -11684,7 +11715,8 @@ async function infPoll() {
     const eng = document.getElementById('inf-eng');
     if (eng && !document.getElementById('inf-eng-banner')) {
       const btn = m.canEnable ? '<button class="btn primary" id="inf-enable" style="margin-top:14px">Turn on live metrics (restarts the engine)</button>' : '';
-      eng.innerHTML = `<div class="inf-engnote" id="inf-eng-banner"><div class="inf-engnote-msg">${escapeHtml(m.hint || 'No model is serving right now.')}</div><div class="inf-engnote-sub">Throughput, latency and KV-cache metrics appear here once a model is loaded and serving. Hardware metrics below are live.</div>${btn}</div>`;
+      eng.innerHTML = `<div class="inf-engnote" id="inf-eng-banner"><div class="inf-chart-toolbar">${infActivityRangeControl()}</div><div class="inf-engnote-msg">${escapeHtml(m.hint || 'No model is serving right now.')}</div><div class="inf-engnote-sub">Throughput, latency and KV-cache metrics appear here once a model is loaded and serving. Hardware metrics below are live.</div>${btn}</div>`;
+      bindInfActivityRange(eng);
       const eb = document.getElementById('inf-enable');
       if (eb) eb.onclick = () => {
         eb.disabled = true; eb.textContent = 'Restarting engine…';
@@ -11712,6 +11744,7 @@ const infRate = v => v >= 1000 ? (v / 1000).toFixed(1) + 'k' : String(Math.round
 function infSkeleton() {
   return `
     <div class="inf-hero">
+      <div class="inf-chart-toolbar">${infActivityRangeControl()}</div>
       <div class="inf-hero-head">
         <div><div class="inf-hero-val"><span id="h-gen">0</span><small>tokens / sec</small></div><div class="inf-hero-cap">output generation speed</div></div>
         <div class="inf-hero-aux"><div id="h-peak">peak —</div><div id="h-pre">prompt — tok/s</div></div>
@@ -11730,7 +11763,7 @@ function infRender(m, r) {
   // Build the engine skeleton only when it isn't already present (e.g. returning from
   // the no-metrics banner). Rebuilding every poll would recreate the canvases and wipe
   // the hover crosshair — guard on the hero canvas, which only the skeleton creates.
-  if (!document.getElementById('c-tput')) { const eng = document.getElementById('inf-eng'); if (eng) eng.innerHTML = infSkeleton(); }
+  if (!document.getElementById('c-tput')) { const eng = document.getElementById('inf-eng'); if (eng) { eng.innerHTML = infSkeleton(); bindInfActivityRange(eng); } }
   infHeadSet(m.engine, m.model, true);
   if (r.gRate > infPeak) infPeak = r.gRate;
   setText('h-gen', infRate(r.gRate));
@@ -11748,7 +11781,7 @@ function infRender(m, r) {
   infChart('c-tpot', [{ rgb: muted, data: infBuf.tpot }], 0, { label: 'per output token', fmt: v => Math.round(v) + ' ms' });
   infGauge('c-kv', kv, kv >= 90 ? cssRgb('--err') : kv >= 70 ? accent : blue);
 }
-// Hardware metrics — GPU (util / memory / power / temp) + CPU + RAM. These come from
+// Hardware metrics — per-GPU/node cards + CPU + RAM. These come from
 // nvidia-smi and the OS, so they're live whether or not an inference engine is running.
 // Polled on its own slower timer; renders into #inf-hw, untouched by the engine region.
 function infHwSkeleton() {
@@ -11756,9 +11789,6 @@ function infHwSkeleton() {
     <div class="inf-hwhead">Hardware <span id="inf-hwscope">live · this machine</span></div>
     <div class="inf-node-grid" id="inf-node-gpus"></div>
     <div class="inf-grid">
-      <div class="inf-metric"><div class="im-label">GPU · utilization</div><div class="im-ringwrap"><svg class="im-ring" id="c-gutil" viewBox="0 0 110 110" aria-hidden="true"></svg><span class="im-ringval" id="m-gutil">—</span></div><div class="im-sub im-c" id="m-gutilsub">&nbsp;</div></div>
-      <div class="inf-metric"><div class="im-label">GPU · memory</div><div class="im-ringwrap"><svg class="im-ring" id="c-gmem" viewBox="0 0 110 110" aria-hidden="true"></svg><span class="im-ringval" id="m-gmem">—</span></div><div class="im-sub im-c" id="m-gmemsub">— / — GB</div></div>
-      <div class="inf-metric"><div class="im-label">GPU · power</div><div class="im-val"><span id="m-gpow">—</span><small>W</small></div><div class="im-sub" id="m-gpowsub">—</div><svg class="im-spark" id="c-gpow" viewBox="0 0 100 34" preserveAspectRatio="none" aria-hidden="true"></svg></div>
       <div class="inf-metric"><div class="im-label">CPU</div><div class="im-val"><span id="m-cpu">—</span><small>%</small></div><div class="im-sub" id="m-cpuname">processor</div><svg class="im-spark" id="c-cpu" viewBox="0 0 100 34" preserveAspectRatio="none" aria-hidden="true"></svg></div>
       <div class="inf-metric"><div class="im-label">System memory</div><div class="im-ringwrap"><svg class="im-ring" id="c-ram" viewBox="0 0 110 110" aria-hidden="true"></svg><span class="im-ringval" id="m-ram">—</span></div><div class="im-sub im-c" id="m-ramsub">— / — GB</div></div>
     </div>`;
@@ -11769,39 +11799,20 @@ async function infHwPoll() {
   try { [gpu, sys] = await Promise.all([api('/api/gpu'), api('/api/sysload').catch(() => null)]); } catch { return; }
   if (!infOpen || infTab !== 'activity' || infActRange !== 'live') return; // tab/range changed while awaiting
   const host = document.getElementById('inf-hw'); if (!host) return;
-  if (!document.getElementById('c-gutil')) host.innerHTML = infHwSkeleton();
+  if (!document.getElementById('m-cpu')) host.innerHTML = infHwSkeleton();
   const blue = cssRgb('--blue'), accent = cssRgb('--accent'), err = cssRgb('--err');
   const ringColor = pct => pct >= 90 ? err : pct >= 70 ? accent : blue;
-  // GPU — aggregate across all cards (avg utilization, summed memory + power, hottest temp).
+  // Each accelerator stays visible in its node card. Avoid repeating the same GPU
+  // values in aggregate tiles below the cards; CPU and system RAM remain distinct.
   const gpus = (gpu && gpu.gpus) || [];
-  const n = gpus.length;
   const nodes = new Set(gpus.map(g => g.node || (g.remote ? 'Connected Spark' : 'This Spark')));
   setText('inf-hwscope', nodes.size > 1 ? `live · ${nodes.size} connected Sparks` : 'live · this machine');
   const nodeHost = document.getElementById('inf-node-gpus');
-  if (nodeHost) nodeHost.innerHTML = gpus.map(g => {
+  const nodeCards = gpus.map(g => {
     const memoryPct = g.memTotalMB > 0 ? Math.round(Math.max(0, g.memUsedMB) / g.memTotalMB * 100) : 0;
     return `<div class="inf-node-gpu ${g.remote ? 'peer' : ''}"><div class="inf-node-head">${uiIcon(g.remote ? 'network' : 'machine')}<b>${escapeHtml(g.node || (g.remote ? 'Connected Spark' : 'This Spark'))}</b><span>${g.remote ? 'Connected Spark' : 'This Spark'} · ${escapeHtml(g.name)}</span></div><div class="inf-node-stats"><span class="inf-node-stat"><small>Utilization</small><strong>${Math.max(0, g.utilPct)}%</strong></span><span class="inf-node-stat"><small>Memory</small><strong>${memoryPct}%</strong></span><span class="inf-node-stat"><small>Temperature</small><strong>${g.tempC >= 0 ? g.tempC + '°C' : '—'}</strong></span><span class="inf-node-stat"><small>Power</small><strong>${g.powerW >= 0 ? Math.round(g.powerW) + ' W' : '—'}</strong></span></div></div>`;
   }).join('') + (gpu.peers || (gpu.peer ? [gpu.peer] : [])).filter(peer => peer.connected && !peer.reachable).map(peer => `<div class="inf-node-gpu peer"><div class="inf-node-head">${uiIcon('alert')}<b>${escapeHtml(peer.name || 'Connected Spark')}</b><span>Telemetry unavailable</span></div><div class="im-sub">CloudlessOS will retry automatically.</div></div>`).join('');
-  if (n) {
-    const util = Math.round(gpus.reduce((a, g) => a + Math.max(0, g.utilPct), 0) / n);
-    const memUsed = gpus.reduce((a, g) => a + Math.max(0, g.memUsedMB), 0);
-    const memTot = gpus.reduce((a, g) => a + Math.max(0, g.memTotalMB), 0);
-    const memPct = memTot ? Math.round(memUsed / memTot * 100) : 0;
-    const pow = gpus.reduce((a, g) => a + (g.powerW > 0 ? g.powerW : 0), 0);
-    const powLim = gpus.reduce((a, g) => a + (g.powerLimitW > 0 ? g.powerLimitW : 0), 0);
-    const temp = gpus.reduce((a, g) => Math.max(a, g.tempC), 0);
-    infPush(infBuf.gutil, util); infPush(infBuf.gpow, pow);
-    setText('m-gutil', util + '%'); infGauge('c-gutil', util, ringColor(util));
-    setText('m-gutilsub', n > 1 ? `avg of ${n} GPUs` : ' ');
-    setText('m-gmem', memPct + '%'); infGauge('c-gmem', memPct, ringColor(memPct));
-    setText('m-gmemsub', `${gb(memUsed)} / ${gb(memTot)} GB`);
-    setText('m-gpow', Math.round(pow));
-    setHTML('m-gpowsub', `${temp}°C${powLim > 0 ? ` · ${Math.round(powLim)} W cap` : ''}`);
-    infChart('c-gpow', [{ rgb: accent, data: infBuf.gpow }], 0, { glow: true, label: 'GPU power', fmt: v => Math.round(v) + ' W' });
-  } else {
-    setText('m-gutil', '—'); setText('m-gutilsub', 'no GPU detected');
-    setText('m-gmem', '—'); setText('m-gmemsub', '—'); setText('m-gpow', '—'); setText('m-gpowsub', 'no GPU detected');
-  }
+  if (nodeHost) nodeHost.innerHTML = nodeCards || `<div class="inf-node-gpu"><div class="inf-node-head">${uiIcon('machine')}<b>No NVIDIA GPU detected</b><span>Telemetry unavailable</span></div></div>`;
   // CPU + RAM.
   if (sys) {
     const cpuPct = Math.max(0, Math.min(100, sys.cpuPct || 0));

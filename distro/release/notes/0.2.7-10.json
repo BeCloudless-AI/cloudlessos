@@ -1,0 +1,12 @@
+{
+  "title": "Safer recipe validation and more reliable runtime recovery",
+  "summary": "CloudlessOS 0.2.7-10 strengthens recipe compatibility checks, restores DeepSeek tool calling, and makes recipe and Metrics behavior clearer during everyday operation.",
+  "changes": [
+    "Run recipe-declared compatibility checks inside the exact pinned container image before downloading large model weights, with no network, GPU, host mounts, or elevated privileges.",
+    "Update the one-Spark DeepSeek V4 Flash SparkInfer recipe to a verified ARM64 runtime whose XGrammar dependency supports structured output and tool calling while preserving its 262K-token context target.",
+    "Automatically revalidate a recipe when machine or network identity changes invalidate earlier launch evidence, instead of leaving users to discover the manual Validation workaround.",
+    "Prevent validation of a different recipe while one is running, and hide removal controls for the active recipe so the interface matches the operations Cloudless can safely perform.",
+    "Show each recipe's immutable version as a prominent badge on installed, Discover, and details views so users can immediately identify the revision they are inspecting or running.",
+    "Place Activity time-range controls with the graph and remove duplicate aggregate GPU tiles while retaining per-device GPU telemetry, CPU, and system-memory information."
+  ]
+}

@@ -7,6 +7,7 @@
 - [Using CloudlessOS](./USER_GUIDE.md)
 - [Architecture](./ARCHITECTURE.md)
 - [Roadmap](./ROADMAP.md)
+- [Cloudless Desktop portability roadmap](./CLOUDLESS_DESKTOP_ROADMAP.md)
 
 ## Developer guides
 
@@ -28,6 +29,7 @@
 - [Hermes Agent integration](./HERMES_INTEGRATION.md)
 - [Decision log](./DECISIONS.md)
 - [Community recipes execution roadmap](./COMMUNITY_RECIPES_ROADMAP.md)
+- [Windows/Linux Cloudless Desktop execution roadmap](./CLOUDLESS_DESKTOP_ROADMAP.md)
 - [Community recipe trust and API contract](./COMMUNITY_RECIPE_CONTRACT.md)
 - [Design references](./ODS-INSPIRED.md)
 

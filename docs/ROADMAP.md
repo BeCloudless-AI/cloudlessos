@@ -20,6 +20,10 @@ production-ready distribution rather than proving that a local web control plane
 
 ## Next — extensibility without fragility
 
+- Deliver Cloudless alongside existing operating systems through the phased
+  [Cloudless Desktop portability roadmap](./CLOUDLESS_DESKTOP_ROADMAP.md): a signed Linux host
+  bridge and portable control plane first, followed by a managed Windows/WSL2 edition, while
+  retaining CloudlessOS as the dedicated appliance option.
 - Signed native recipe publishing and a unified Cloudless community identity service.
 - Recipe ownership, ratings, comments, moderation and reproducible revision pins.
 - More inference compatibility bases where they add real value.

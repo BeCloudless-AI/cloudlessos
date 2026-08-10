@@ -135,7 +135,7 @@ func TestEmbeddedWebMetricsAvoidGPUBackedCanvas(t *testing.T) {
 	web := string(content)
 	for _, want := range []string{
 		`<svg class="inf-hero-canvas" id="c-tput"`,
-		`<svg class="im-ring" id="c-gmem"`,
+		`<svg class="im-ring" id="c-ram"`,
 		`function infGauge(id, pct, rgb)`,
 		`svg.innerHTML = markup.join('')`,
 	} {
@@ -145,6 +145,72 @@ func TestEmbeddedWebMetricsAvoidGPUBackedCanvas(t *testing.T) {
 	}
 	if strings.Contains(web, `<canvas class="inf-`) || strings.Contains(web, `<canvas class="im-`) {
 		t.Fatal("metrics view must not allocate GPU-backed canvas surfaces")
+	}
+}
+
+func TestEmbeddedWebMetricsActivityAvoidsDuplicateGPUSummaries(t *testing.T) {
+	content, err := webFS.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	web := string(content)
+	for _, want := range []string{
+		`<small>Utilization</small><strong>`,
+		`<small>Memory</small><strong>`,
+		`<small>Temperature</small><strong>`,
+		`<small>Power</small><strong>`,
+		`<div class="im-label">CPU</div>`,
+		`<div class="im-label">System memory</div>`,
+	} {
+		if !strings.Contains(web, want) {
+			t.Fatalf("embedded Metrics Activity is missing retained hardware value %q", want)
+		}
+	}
+	for _, duplicate := range []string{
+		`<div class="im-label">GPU · utilization</div>`,
+		`<div class="im-label">GPU · memory</div>`,
+		`<div class="im-label">GPU · power</div>`,
+	} {
+		if strings.Contains(web, duplicate) {
+			t.Fatalf("embedded Metrics Activity still contains duplicate GPU summary %q", duplicate)
+		}
+	}
+}
+
+func TestEmbeddedWebMetricsActivityRangeLivesInsideGraph(t *testing.T) {
+	content, err := webFS.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	web := string(content)
+	for _, want := range []string{
+		`function infActivityRangeControl()`,
+		`<div class="inf-chart-toolbar">${infActivityRangeControl()}</div>`,
+		`<div class="us-head"><div><span class="us-htitle">output tokens / ${range}</span> <span class="us-time">${meta.sub}</span></div>${infActivityRangeControl()}</div>`,
+		`bindInfActivityRange(host);`,
+	} {
+		if !strings.Contains(web, want) {
+			t.Fatalf("embedded Metrics Activity is missing graph-contained range control %q", want)
+		}
+	}
+	if strings.Contains(web, `class="inf-actbar"`) {
+		t.Fatal("embedded Metrics Activity still renders its range control outside the graph card")
+	}
+}
+
+func TestEmbeddedWebMetricsNavigationUsesFullWidth(t *testing.T) {
+	content, err := webFS.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	web := string(content)
+	for _, want := range []string{
+		`.mm-tabs.inf-tabs { width: 100%;`,
+		`.inf-tabs .mm-tab { flex: 1 1 0; min-width: 104px; justify-content: center; }`,
+	} {
+		if !strings.Contains(web, want) {
+			t.Fatalf("embedded Metrics navigation is missing full-width layout contract %q", want)
+		}
 	}
 }
 
@@ -351,6 +417,11 @@ func TestEmbeddedWebCommunityRecipesInstallAndShowDetailsInline(t *testing.T) {
 		`Expanded local recipe configuration and validation details`,
 		`class="community-detail"`,
 		`class="community-detail-title"`,
+		`class="recipe-version-badge"`,
+		`function communityRecipeVersion(`,
+		`function recipeVersionBadgeHTML(`,
+		`recipeVersionBadgeHTML(version)`,
+		`recipeVersionBadgeHTML(recipeVersion)`,
 		`function communityRatingHTML(`,
 		`function wireCommunityRating(`,
 		`function communityMutationKey(`,
@@ -385,6 +456,9 @@ func TestEmbeddedWebCommunityRecipesInstallAndShowDetailsInline(t *testing.T) {
 	}
 	if strings.Contains(web, `<div class="community-activity"`) {
 		t.Fatal("community activity must be summarized in the recipe header, not repeated in its own card")
+	}
+	if strings.Contains(web, `class="community-detail-version"`) {
+		t.Fatal("recipe versions must be prominent beside the title, not faint navigation metadata")
 	}
 	if strings.Contains(web, `Ratings, testing notes, comments, and reporting stay with this published recipe.`) {
 		t.Fatal("community comments must not repeat a redundant section heading and description")

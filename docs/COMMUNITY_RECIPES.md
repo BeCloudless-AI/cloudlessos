@@ -168,6 +168,11 @@ Important distinctions:
 - `recipe.engine.image` must contain `@sha256:<64 hexadecimal characters>`, not a mutable tag.
 - Published versions are immutable. To change anything later, bump the semantic version and
   publish a new revision.
+- Optimized images may declare `recipe.runtime.smokeTest`. Cloudless runs that program inside the
+  exact pulled image during on-device validation, before model download. The helper has no GPU or
+  network, receives no host mounts, runs read-only with all capabilities dropped, and is limited
+  to 4 GiB, 256 processes, and 300 seconds. Use it for fast imports and dependency/API assertions;
+  live generation belongs in the recipe's retained hardware qualification.
 
 ### 5. Validate locally
 
@@ -177,8 +182,9 @@ cloudless recipes validate ./cloudless-recipe.yaml
 
 A successful result prints `Container recipe is structurally valid for submission` and a manifest
 digest. This is a fast offline structure/policy check. It does not prove that the image starts or
-that the model fits every machine; the service performs the authoritative validation after
-submission.
+that the model fits every machine. If the manifest declares `runtime.smokeTest`, each CloudlessOS
+machine also executes that isolated compatibility check against the immutable image as part of
+the normal Validate operation, before it downloads weights or permits Run.
 
 The authoritative service also scans the pinned container image with Trivy. The admission policy
 is intentionally more precise than "any finding fails":

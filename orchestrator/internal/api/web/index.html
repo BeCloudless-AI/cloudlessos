@@ -374,12 +374,17 @@
   .code-box { margin-top: 12px; background: var(--panel-2); border: 1px solid var(--hair); border-radius: 10px; overflow-x: auto; }
   .code-box pre { margin: 0; padding: 13px 15px; font-family: 'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
     font-size: 12px; line-height: 1.55; color: var(--ink-2); white-space: pre; }
-  .key-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--hair); }
+  .key-row { display: flex; align-items: flex-start; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--hair); }
   .key-row:last-child { border-bottom: none; }
   .key-main { display: flex; align-items: center; gap: 9px; min-width: 0; }
+  .key-copy { min-width: 0; flex: 1; }
   .key-name { font-weight: 600; font-size: 13.5px; color: var(--ink); }
   .key-prefix { font-family: 'Roboto Mono', ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; color: var(--muted); }
-  .key-meta { margin-left: auto; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .key-meta { margin-top: 5px; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .key-limit-summary { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 5px; }
+  .key-limit-chip { padding: 4px 7px; border: 1px solid var(--hair); border-radius: 7px; color: var(--muted); background: var(--panel-2); font-size: 9px; font-weight: 650; }
+  .key-limit-chip b { color: var(--ink-2); font-weight: 760; }
+  .key-actions { margin-left: auto; display: flex; align-items: center; gap: 7px; flex: none; }
   .key-scope { padding: 3px 7px; border-radius: 99px; color: var(--blue); background: var(--blue-soft); font-size: 9px; font-weight: 760; text-transform: uppercase; letter-spacing: .35px; }
   .app-head a { margin-left: auto; }
   /* share-online (Cloudflare quick tunnel) result */
@@ -1560,6 +1565,12 @@
   .key-dialog-help { margin-top: 7px; color: var(--faint); font-size: 10.5px; }
   .key-dialog-error { min-height: 18px; margin-top: 7px; color: var(--err); font-size: 11px; }
   .key-dialog.nfs-storage-dialog { width: min(680px, 100%); }
+  .key-dialog.api-key-limits-dialog { width: min(650px, 100%); }
+  .api-key-limits-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 12px; }
+  .api-key-limit-field { min-width: 0; }
+  .api-key-limit-field.wide { grid-column: 1 / -1; }
+  .api-key-limit-note { margin-bottom: 16px; padding: 11px 12px; display: flex; align-items: flex-start; gap: 8px; border: 1px solid var(--hair); border-radius: 11px; color: var(--muted); background: var(--panel-2); font-size: 10.5px; line-height: 1.5; }
+  .api-key-limit-note .ui-icon { width: 14px; height: 14px; margin-top: 1px; flex: none; color: var(--blue); }
   .nfs-storage-dialog #key-dialog-content, .nfs-storage-dialog .key-dialog-body,
   .nfs-storage-dialog .cluster-storage-custom { min-width: 0; max-width: 100%; }
   .nfs-storage-dialog .key-dialog-head { padding: 22px 22px 0; }
@@ -1790,6 +1801,8 @@
     .key-dialog-head, .key-dialog-body { padding-left: 16px; padding-right: 16px; }
     .key-dialog-actions { flex-direction: column-reverse; }
     .key-dialog-actions .btn { width: 100%; }
+    .api-key-limits-grid { grid-template-columns: 1fr; }
+    .api-key-limit-field.wide { grid-column: auto; }
   }
   .api-endpoints { overflow: hidden; border: 1px solid var(--hair); border-radius: 11px; background: var(--panel-2); }
   .api-service-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -3954,6 +3967,9 @@
     .theme-grid { grid-template-columns: 1fr; }
     .api-section-head { align-items: stretch; flex-direction: column; }
     .api-section-head .btn { width: 100%; justify-content: center; }
+    .key-row { flex-direction: column; }
+    .key-actions { width: 100%; margin-left: 0; }
+    .key-actions .btn { flex: 1; justify-content: center; }
     .api-endpoint { grid-template-columns: 1fr 30px; gap: 5px 8px; }
     .api-endpoint-label { grid-column: 1 / -1; }
     .machine-facts, .machine-place-grid { grid-template-columns: 1fr; }
@@ -7039,10 +7055,19 @@ function apiKeyRow(k) {
   const used = k.lastUsed ? 'last used ' + new Date(k.lastUsed).toLocaleDateString() : 'never used';
   const scope = k.scope === 'both' ? 'Model + agent' : (k.scope === 'agent' ? 'Agent' : 'Model');
   const split = k.scope === 'both' ? ` · ${k.modelRequests || 0} model / ${k.agentRequests || 0} agent` : '';
+  const limits = k.limits || {};
+  const showLimit = value => Number(value) > 0 ? Number(value).toLocaleString() : 'Unlimited';
   return `<div class="key-row">
-      <div class="key-main"><span class="key-name">${escapeHtml(k.name)}</span><span class="key-scope">${scope}</span><code class="key-prefix">${escapeHtml(k.prefix)}…</code></div>
+      <div class="key-copy"><div class="key-main"><span class="key-name">${escapeHtml(k.name)}</span><span class="key-scope">${scope}</span><code class="key-prefix">${escapeHtml(k.prefix)}…</code></div>
       <div class="key-meta">${k.requests} request${k.requests === 1 ? '' : 's'}${split} · ${used}</div>
-      <button class="btn danger" data-revoke="${escapeAttr(k.id)}">Revoke</button>
+      <div class="key-limit-summary" aria-label="Configured rate limits">
+        <span class="key-limit-chip">TPM <b>${showLimit(limits.tokensPerMinute)}</b></span>
+        <span class="key-limit-chip">RPM <b>${showLimit(limits.requestsPerMinute)}</b></span>
+        <span class="key-limit-chip">Parallel <b>${showLimit(limits.maxParallelRequests)}</b></span>
+        <span class="key-limit-chip">Model TPM <b>${showLimit(limits.modelTokensPerMinute)}</b></span>
+        <span class="key-limit-chip">Model RPM <b>${showLimit(limits.modelRequestsPerMinute)}</b></span>
+      </div></div>
+      <div class="key-actions"><button class="btn" data-key-limits="${escapeAttr(k.id)}">${uiIcon('settings')}<span>Limits</span></button><button class="btn danger" data-revoke="${escapeAttr(k.id)}">Revoke</button></div>
     </div>`;
 }
 function apiAuditRow(event) {
@@ -7056,7 +7081,12 @@ function apiAuditRow(event) {
   const detail = [event.keyId ? `key ${event.keyId}` : '', event.source || '', event.status ? `HTTP ${event.status}` : '', event.detail || ''].filter(Boolean).join(' · ');
   return `<div class="key-row"><div class="key-main"><span class="key-name">${escapeHtml(label)}</span><span class="key-scope">${escapeHtml(event.outcome || '')}</span></div><div class="key-meta">${escapeHtml(detail || 'Local policy change')} · ${escapeHtml(when)}</div></div>`;
 }
-function apiWireRevokes(container) {
+function apiWireRevokes(container, keys = []) {
+  const byID = new Map(keys.map(key => [String(key.id), key]));
+  container.querySelectorAll('[data-key-limits]').forEach(button => button.onclick = () => {
+    const key = byID.get(String(button.dataset.keyLimits));
+    if (key) openAPIKeyLimitsDialog(key, button);
+  });
   container.querySelectorAll('[data-revoke]').forEach(b => b.onclick = async () => {
     const approved = await openCloudlessDecision({
       title: 'Revoke this API key?',
@@ -7072,6 +7102,72 @@ function apiWireRevokes(container) {
     catch { toast('Failed', true); }
   });
 }
+function openAPIKeyLimitsDialog(key, returnFocus) {
+  keyDialogBusy = false;
+  keyDialogReturnFocus = returnFocus || document.activeElement;
+  keyDialogReturnFocusID = keyDialogReturnFocus?.id || '';
+  const limits = key.limits || {};
+  const value = name => Number(limits[name]) > 0 ? String(limits[name]) : '';
+  const layer = document.getElementById('key-dialog-layer');
+  const dialog = document.getElementById('key-dialog');
+  const content = document.getElementById('key-dialog-content');
+  dialog.classList.add('api-key-limits-dialog');
+  content.innerHTML = `<div class="key-dialog-head">
+      <span class="key-dialog-icon">${uiIcon('settings')}</span>
+      <div class="key-dialog-heading"><div class="key-dialog-title" id="key-dialog-title">Rate limits for ${escapeHtml(key.name || 'API key')}</div><div class="key-dialog-sub">These settings apply only to this key. Leave a field empty or enter 0 for unlimited.</div></div>
+      <button class="key-dialog-close" id="key-dialog-close" type="button" aria-label="Close rate limits">${uiIcon('close')}</button>
+    </div>
+    <form class="key-dialog-body" id="api-key-limits-form" novalidate>
+      <div class="api-key-limit-note">${uiIcon('key')}<span><b>Total limits</b> include model and agent traffic. <b>Model limits</b> apply only to raw model inference through <code>/v1</code>. Token limits use the usage reported by the active engine.</span></div>
+      <div class="api-key-limits-grid">
+        <label class="api-key-limit-field"><span class="key-dialog-label">TPM</span><input class="key-dialog-input" id="key-limit-tpm" type="number" min="0" max="1000000000" step="1" placeholder="Unlimited" value="${escapeAttr(value('tokensPerMinute'))}"><span class="key-dialog-help">Total tokens per minute.</span></label>
+        <label class="api-key-limit-field"><span class="key-dialog-label">RPM</span><input class="key-dialog-input" id="key-limit-rpm" type="number" min="0" max="1000000" step="1" placeholder="Unlimited" value="${escapeAttr(value('requestsPerMinute'))}"><span class="key-dialog-help">Total requests per minute.</span></label>
+        <label class="api-key-limit-field wide"><span class="key-dialog-label">Max parallel requests</span><input class="key-dialog-input" id="key-limit-parallel" type="number" min="0" max="10000" step="1" placeholder="Unlimited" value="${escapeAttr(value('maxParallelRequests'))}"><span class="key-dialog-help">Requests allowed to run simultaneously across model and agent APIs.</span></label>
+        <label class="api-key-limit-field"><span class="key-dialog-label">Model TPM limit</span><input class="key-dialog-input" id="key-limit-model-tpm" type="number" min="0" max="1000000000" step="1" placeholder="Unlimited" value="${escapeAttr(value('modelTokensPerMinute'))}"><span class="key-dialog-help">Tokens per minute for model inference only.</span></label>
+        <label class="api-key-limit-field"><span class="key-dialog-label">Model RPM limit</span><input class="key-dialog-input" id="key-limit-model-rpm" type="number" min="0" max="1000000" step="1" placeholder="Unlimited" value="${escapeAttr(value('modelRequestsPerMinute'))}"><span class="key-dialog-help">Requests per minute for model inference only.</span></label>
+      </div>
+      <div class="key-dialog-error" id="api-key-limits-error" role="alert"></div>
+      <div class="key-dialog-actions"><button class="btn" id="api-key-limits-cancel" type="button">Cancel</button><button class="btn primary" id="api-key-limits-save" type="submit">${uiIcon('check')}<span>Save limits</span></button></div>
+    </form>`;
+  layer.classList.remove('hidden');
+  document.getElementById('key-dialog-close').onclick = closeKeyDialog;
+  document.getElementById('api-key-limits-cancel').onclick = closeKeyDialog;
+  const form = document.getElementById('api-key-limits-form');
+  const error = document.getElementById('api-key-limits-error');
+  const save = document.getElementById('api-key-limits-save');
+  const readLimit = id => {
+    const input = document.getElementById(id);
+    const raw = input.value.trim();
+    if (!raw) return 0;
+    const parsed = Number(raw);
+    if (!Number.isSafeInteger(parsed) || parsed < 0 || (input.max && parsed > Number(input.max))) return null;
+    return parsed;
+  };
+  form.onsubmit = async event => {
+    event.preventDefault();
+    const next = {
+      tokensPerMinute: readLimit('key-limit-tpm'),
+      requestsPerMinute: readLimit('key-limit-rpm'),
+      maxParallelRequests: readLimit('key-limit-parallel'),
+      modelTokensPerMinute: readLimit('key-limit-model-tpm'),
+      modelRequestsPerMinute: readLimit('key-limit-model-rpm'),
+    };
+    if (Object.values(next).some(item => item === null)) {
+      error.textContent = 'Enter whole positive numbers, or leave fields empty for unlimited.';
+      return;
+    }
+    keyDialogBusy = true; save.disabled = true;
+    save.innerHTML = '<span class="key-dialog-spinner" aria-hidden="true"></span><span>Saving…</span>';
+    try {
+      await api('/api/keys/' + encodeURIComponent(key.id), {method:'PATCH', headers:{'Content-Type':'application/json','X-Cloudless-Action':'gateway-key-update'}, body:JSON.stringify({limits: next})});
+      keyDialogBusy = false; closeKeyDialog(); toast('API key limits saved'); await apiRefreshKeys();
+    } catch (failure) {
+      keyDialogBusy = false; save.disabled = false; save.innerHTML = `${uiIcon('check')}<span>Save limits</span>`;
+      error.textContent = failure?.message || 'CloudlessOS could not save these limits.';
+    }
+  };
+  document.getElementById('key-limit-tpm').focus();
+}
 async function apiRefreshKeys() {
   const currentList = document.getElementById('key-list');
   const page = currentList?.closest('.settings-page-mount') || currentList?.closest('#inf-panel');
@@ -7080,7 +7176,7 @@ async function apiRefreshKeys() {
   const list = document.getElementById('key-list'); if (!list) return;
   const keys = g.keys || [];
   list.innerHTML = keys.length ? keys.map(apiKeyRow).join('') : '<div class="set-hint">No keys yet. Generate one to start serving your AI as an API.</div>';
-  apiWireRevokes(list);
+  apiWireRevokes(list, keys);
 }
 function apiTunRender(out, tunnel) {
   out.classList.remove('hidden');
@@ -7098,7 +7194,7 @@ function closeKeyDialog() {
   layer.classList.add('hidden');
   document.getElementById('auth-control')?.setAttribute('aria-expanded', 'false');
   document.getElementById('key-dialog-content').innerHTML = '';
-  document.getElementById('key-dialog').classList.remove('recipe-import-dialog', 'recipe-launch-dialog', 'auth-dialog', 'nfs-storage-dialog', 'recipe-vulnerability-info-dialog');
+  document.getElementById('key-dialog').classList.remove('recipe-import-dialog', 'recipe-launch-dialog', 'auth-dialog', 'nfs-storage-dialog', 'api-key-limits-dialog', 'recipe-vulnerability-info-dialog');
   let focusTarget = keyDialogReturnFocus;
   if ((!focusTarget || !document.contains(focusTarget)) && keyDialogReturnFocusID) focusTarget = document.getElementById(keyDialogReturnFocusID);
   if (focusTarget && document.contains(focusTarget)) focusTarget.focus();
@@ -7805,7 +7901,7 @@ async function renderApiPage(c) {
       <div class="api-section-head" style="margin-top:14px"><div></div><button class="btn primary control-action" id="api-contract-save" type="button">${uiIcon('check')}<span>Save API identity</span></button></div>
     </section>` : ''}
     <section class="api-section">
-      <div class="api-section-head"><div><div class="api-section-title">API keys</div><div class="api-section-desc">Each key is limited to model access, agent access, or both.</div></div><button class="btn primary api-key-generate" id="key-gen" type="button">${uiIcon('key')}<span>Generate key</span></button></div>
+      <div class="api-section-head"><div><div class="api-section-title">API keys</div><div class="api-section-desc">Each key has its own permissions, token limits, request limits, and parallel-request cap.</div></div><button class="btn primary api-key-generate" id="key-gen" type="button">${uiIcon('key')}<span>Generate key</span></button></div>
       <div id="key-list">${keys.length ? keys.map(apiKeyRow).join('') : '<div class="api-keys-empty">No keys yet. Generate one when you are ready to connect a client.</div>'}</div>
     </section>
     <section class="api-section">
@@ -7847,7 +7943,7 @@ async function renderApiPage(c) {
     <details class="api-section api-collapsible" id="api-security-section">
       <summary><span class="api-collapsible-icon">${uiIcon('shield')}</span><span class="api-collapsible-copy"><span class="api-section-title">Security activity</span><span class="api-section-desc">Authentication failures, rate limits, API requests and network exposure changes recorded locally.</span></span><span class="api-collapsible-chevron">${uiIcon('arrow-right')}</span></summary>
       <div class="api-collapsible-body">
-        <div class="machine-driver-note">${uiIcon('shield')}<span>Per-key limit: ${g.policy?.requestsPerMinute || 60} requests per minute, with a short burst of ${g.policy?.burst || 15}. Hermes administration and its dashboard are never exposed through this gateway.</span></div>
+        <div class="machine-driver-note">${uiIcon('shield')}<span>Every API key has independent limits. Empty limits are unlimited; invalid authentication floods remain separately rate-limited. Hermes administration and its dashboard are never exposed through this gateway.</span></div>
         <div id="gateway-audit">${auditEvents.length ? auditEvents.slice(0, 20).map(apiAuditRow).join('') : '<div class="api-keys-empty">No gateway activity recorded yet.</div>'}</div>
         <div class="fld-help">Prompts, responses and key secrets are never logged.</div>
       </div>
@@ -7857,7 +7953,7 @@ async function renderApiPage(c) {
     const value = b.dataset.copyTarget ? (document.getElementById(b.dataset.copyTarget)?.textContent || '') : b.dataset.copy;
     try { navigator.clipboard.writeText(value); toast('Copied'); } catch { toast('Select and copy it'); }
   });
-  apiWireRevokes(document.getElementById('key-list'));
+  apiWireRevokes(document.getElementById('key-list'), keys);
   const tout = document.getElementById('gw-tun-out');
   if (g.tunnel && g.tunnel.enabled && g.tunnel.url) apiTunRender(tout, g.tunnel);
 

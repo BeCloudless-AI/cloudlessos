@@ -1,6 +1,9 @@
 package state
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 func TestRecordAPIUsageTracksPerKeyMetrics(t *testing.T) {
 	s, err := Open(t.TempDir())
@@ -84,5 +87,61 @@ func TestAPIKeyScopesAndRouteMetrics(t *testing.T) {
 	}
 	if got := byID[bothKey.ID]; got.AgentRequests != 1 || got.Failures != 1 {
 		t.Fatalf("combined-key metrics = %+v", got)
+	}
+}
+
+func TestAPIKeyLimitsUpdateAndPersistIndependently(t *testing.T) {
+	dir := t.TempDir()
+	store, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, first, err := store.AddAPIKey("limited", APIKeyScopeBoth)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, second, err := store.AddAPIKey("unlimited", APIKeyScopeModel)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := APIKeyLimits{
+		TokensPerMinute: 12000, RequestsPerMinute: 30, MaxParallelRequests: 2,
+		ModelTokensPerMinute: 8000, ModelRequestsPerMinute: 20,
+	}
+	updated, err := store.UpdateAPIKeyLimits(first.ID, want)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(updated.Limits, want) {
+		t.Fatalf("updated limits = %+v, want %+v", updated.Limits, want)
+	}
+	reopened, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	limits, ok := reopened.APIKeyLimitsFor(first.ID)
+	if !ok || !reflect.DeepEqual(limits, want) {
+		t.Fatalf("persisted limits = %+v, %v", limits, ok)
+	}
+	secondLimits, ok := reopened.APIKeyLimitsFor(second.ID)
+	if !ok || secondLimits != (APIKeyLimits{}) {
+		t.Fatalf("second key limits changed = %+v, %v", secondLimits, ok)
+	}
+}
+
+func TestAPIKeyLimitsValidation(t *testing.T) {
+	store, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, key, err := store.AddAPIKey("client")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.UpdateAPIKeyLimits(key.ID, APIKeyLimits{RequestsPerMinute: -1}); err == nil {
+		t.Fatal("negative limit was accepted")
+	}
+	if _, err := store.UpdateAPIKeyLimits("missing", APIKeyLimits{}); err == nil {
+		t.Fatal("missing key update was accepted")
 	}
 }

@@ -65,6 +65,7 @@ type Server struct {
 	gatewaySecurityMu    sync.Mutex
 	gatewayLimiter       *gatewayRateLimiter
 	gatewaySourceLimiter *gatewayRateLimiter
+	gatewayQuota         *gatewayKeyQuota
 	gatewayAudit         *gatewayAuditLog
 	virtualKey           func(context.Context, string, string) error
 	virtualKeyMu         sync.Mutex
@@ -156,6 +157,7 @@ func NewServer(eng engine.Engine, st *state.Store, mf *manifest.Store, mfModels 
 		recipes: localrecipes.New(st.Dir()), remoteAccess: remoteaccess.New(),
 		recipeOps: recipeOps, recipeOpsErr: recipeOpsErr,
 		gatewayLimiter: newGatewayRateLimiter(), gatewaySourceLimiter: newGatewayRateLimiterWith(120, 30),
+		gatewayQuota: newGatewayKeyQuota(),
 		gatewayAudit: newGatewayAuditLog(st.Dir()), runtimeInstanceID: runtimeInstanceID,
 	}
 	if err := prepareRuntimeRestartOffer(st, runtimeInstanceID); err != nil {
@@ -399,6 +401,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("GET /api/network/status", s.networkStatus)
 	mux.HandleFunc("GET /api/gateway", s.gatewayGet)
 	mux.HandleFunc("POST /api/keys", s.keyCreate)
+	mux.HandleFunc("PATCH /api/keys/{id}", s.keyUpdate)
 	mux.HandleFunc("DELETE /api/keys/{id}", s.keyDelete)
 	mux.HandleFunc("POST /api/gateway/lan", s.gatewayLanSet)
 	mux.HandleFunc("POST /api/gateway/tailnet", s.gatewayTailnetSet)

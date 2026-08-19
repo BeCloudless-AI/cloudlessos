@@ -1,7 +1,11 @@
 package api
 
 import (
+	"encoding/json"
+	"io"
+	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -35,5 +39,22 @@ func TestStatusRecBoundsUsageCapture(t *testing.T) {
 	prompt, completion := responseUsage(r.capture)
 	if prompt != 31 || completion != 12 {
 		t.Fatalf("tail usage = (%d, %d), want (31, 12)", prompt, completion)
+	}
+}
+
+func TestRewriteModelRequestsStreamingUsage(t *testing.T) {
+	request := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(`{"model":"client-alias","stream":true,"stream_options":{"include_usage":false}}`))
+	rewriteModel(request, servedModelName)
+	body, err := io.ReadAll(request.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(body, &payload); err != nil {
+		t.Fatal(err)
+	}
+	options, _ := payload["stream_options"].(map[string]any)
+	if payload["model"] != servedModelName || options["include_usage"] != true {
+		t.Fatalf("rewritten payload = %s", body)
 	}
 }

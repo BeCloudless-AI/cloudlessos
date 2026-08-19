@@ -10,6 +10,7 @@ import (
 
 	"github.com/cloudless/orchestrator/internal/jobs"
 	"github.com/cloudless/orchestrator/internal/securityaudit"
+	"github.com/cloudless/orchestrator/internal/state"
 )
 
 const (
@@ -28,6 +29,91 @@ type gatewayRateLimiter struct {
 	now     func() time.Time
 	rate    float64
 	burst   float64
+}
+
+type gatewayKeyWindow struct {
+	minute        time.Time
+	requests      int
+	modelRequests int
+	tokens        int64
+	modelTokens   int64
+	active        int
+}
+
+// gatewayKeyQuota enforces user-configured limits without persisting transient
+// minute windows. The configuration itself lives with the API key in state.
+type gatewayKeyQuota struct {
+	mu      sync.Mutex
+	windows map[string]gatewayKeyWindow
+	now     func() time.Time
+}
+
+func newGatewayKeyQuota() *gatewayKeyQuota {
+	return &gatewayKeyQuota{windows: map[string]gatewayKeyWindow{}, now: time.Now}
+}
+
+func (q *gatewayKeyQuota) current(key string) (gatewayKeyWindow, time.Time) {
+	now := q.now()
+	minute := now.Truncate(time.Minute)
+	window := q.windows[key]
+	if window.minute.IsZero() || !window.minute.Equal(minute) {
+		active := window.active
+		window = gatewayKeyWindow{minute: minute, active: active}
+	}
+	return window, now
+}
+
+func quotaRetryAfter(now, minute time.Time) int {
+	return max(1, int(math.Ceil(minute.Add(time.Minute).Sub(now).Seconds())))
+}
+
+// begin reserves one request and one parallel slot. A zero limit is unlimited.
+func (q *gatewayKeyQuota) begin(key, kind string, limits state.APIKeyLimits) (allowed bool, retryAfter int, detail string) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	window, now := q.current(key)
+	retry := quotaRetryAfter(now, window.minute)
+	if limits.MaxParallelRequests > 0 && window.active >= limits.MaxParallelRequests {
+		return false, 1, "parallel request limit exceeded"
+	}
+	if limits.RequestsPerMinute > 0 && window.requests >= limits.RequestsPerMinute {
+		return false, retry, "requests per minute limit exceeded"
+	}
+	if limits.TokensPerMinute > 0 && window.tokens >= limits.TokensPerMinute {
+		return false, retry, "tokens per minute limit exceeded"
+	}
+	model := state.NormalizeAPIKeyScope(kind) == state.APIKeyScopeModel
+	if model && limits.ModelRequestsPerMinute > 0 && window.modelRequests >= limits.ModelRequestsPerMinute {
+		return false, retry, "model requests per minute limit exceeded"
+	}
+	if model && limits.ModelTokensPerMinute > 0 && window.modelTokens >= limits.ModelTokensPerMinute {
+		return false, retry, "model tokens per minute limit exceeded"
+	}
+	window.requests++
+	window.active++
+	if model {
+		window.modelRequests++
+	}
+	q.windows[key] = window
+	return true, 0, ""
+}
+
+// complete releases the parallel slot and accounts for actual tokens reported
+// by the OpenAI-compatible response. A request that crosses a token threshold
+// finishes normally; subsequent requests wait for the next minute window.
+func (q *gatewayKeyQuota) complete(key, kind string, promptTokens, completionTokens int64) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	window, _ := q.current(key)
+	if window.active > 0 {
+		window.active--
+	}
+	tokens := max(int64(0), promptTokens) + max(int64(0), completionTokens)
+	window.tokens += tokens
+	if state.NormalizeAPIKeyScope(kind) == state.APIKeyScopeModel {
+		window.modelTokens += tokens
+	}
+	q.windows[key] = window
 }
 
 func newGatewayRateLimiter() *gatewayRateLimiter {
@@ -110,6 +196,15 @@ func (s *Server) gatewaySourceRateLimiter() *gatewayRateLimiter {
 		s.gatewaySourceLimiter = newGatewayRateLimiterWith(120, 30)
 	}
 	return s.gatewaySourceLimiter
+}
+
+func (s *Server) gatewayKeyQuotaManager() *gatewayKeyQuota {
+	s.gatewaySecurityMu.Lock()
+	defer s.gatewaySecurityMu.Unlock()
+	if s.gatewayQuota == nil {
+		s.gatewayQuota = newGatewayKeyQuota()
+	}
+	return s.gatewayQuota
 }
 
 func (s *Server) auditGateway(event gatewayAuditEvent) {

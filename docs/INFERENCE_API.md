@@ -85,6 +85,13 @@ Replace the URL and model with the values currently shown in Settings. API keys,
 LAN sharing and public sharing all apply at the gateway; credentials are never forwarded to the
 private inference container.
 
+Each key can also have independent TPM, RPM, maximum-parallel-request, model TPM and model RPM
+limits in **Settings -> API access -> Limits**. A blank value or `0` means unlimited. Total limits
+include model and agent traffic; model limits apply only to raw model requests under `/v1`. Token
+usage is taken from the active engine's OpenAI-compatible usage response. A request that crosses a
+token threshold is allowed to finish, then later requests are rejected with HTTP `429` until the
+minute window resets.
+
 ## Engine metrics for API clients
 
 The engine's own Prometheus port is private and is never published to the network. Users can enable

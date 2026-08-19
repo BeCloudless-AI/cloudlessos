@@ -1,0 +1,117 @@
+schema: cloudless.recipe/v2
+
+metadata:
+  name: Qwen3.8 27B NVFP4 DGX Spark
+  description: MiaAI-Lab's single-DGX-Spark Qwen3.8 27B NVFP4 profile with 1M-token YaRN context, FP8 KV cache, MTP speculative decoding, reasoning, tool calling, and multimodal input.
+  version: 1.0.0
+  author: MiaLabs
+  category: language-model
+  license: Apache-2.0
+  tags: [vllm, qwen38, unsloth, nvfp4, fp8-kv, mtp, yarn, sm121, dgx-spark, tool-calling, reasoning, multimodal]
+  minimumAcceleratorMemoryGB: 128
+
+recipe:
+  name: Qwen3.8 27B NVFP4 DGX Spark
+  description: Runs MiaAI-Lab's pinned single-Spark profile for unsloth/Qwen3.8-27B-NVFP4 with compressed-tensors NVFP4, checkpoint-calibrated FP8 KV cache, 1M-token YaRN context, four concurrent sequences, and two-token MTP speculative decoding.
+  platform: dgx-spark
+  source:
+    url: ""
+    revision: ""
+    files: {}
+  engine:
+    type: vllm
+    image: docker.io/vllm/vllm-openai@sha256:677afd5bf3b4bb9881f91e107af7098f8410726b4c05b25cb4a815900b398204
+    servedModelName: cloudless
+    containerPort: 8890
+    apiPath: /v1
+    proxyHost: host.docker.internal
+    restartPolicy: "no"
+    arguments: []
+    entryPoint: /bin/bash
+    command:
+      - -lc
+      - |-
+        set -euo pipefail
+        exec vllm serve unsloth/Qwen3.8-27B-NVFP4 \
+          --revision 60e813d4dbbdc5d64cf3f5a8caf2897bedf03679 \
+          --served-model-name cloudless \
+          --host 0.0.0.0 \
+          --port 8890 \
+          --tensor-parallel-size 1 \
+          --trust-remote-code \
+          --quantization compressed-tensors \
+          --attention-backend triton_attn \
+          --gpu-memory-utilization 0.84 \
+          --max-model-len 1000000 \
+          --hf-overrides '{"text_config":{"rope_parameters":{"mrope_interleaved":true,"mrope_section":[11,11,10],"rope_type":"yarn","rope_theta":10000000,"partial_rotary_factor":0.25,"factor":4.0,"original_max_position_embeddings":262144}}}' \
+          --max-num-seqs 4 \
+          --max-num-batched-tokens 8192 \
+          --enable-chunked-prefill \
+          --enable-prefix-caching \
+          --skip-mm-profiling \
+          --reasoning-parser qwen3 \
+          --tool-call-parser qwen3_coder \
+          --enable-auto-tool-choice \
+          --media-io-kwargs '{"video":{"num_frames":-1}}' \
+          --speculative-config '{"method":"mtp","num_speculative_tokens":2}'
+  model:
+    id: unsloth/Qwen3.8-27B-NVFP4
+    revision: "60e813d4dbbdc5d64cf3f5a8caf2897bedf03679"
+    quantization: compressed-tensors-nvfp4
+    dtype: auto
+    kvCacheDtype: auto
+    maxContext: 1000000
+    maxSequences: 4
+    gpuMemoryUtilization: 0.84
+    tensorParallel: 1
+    pipelineParallel: 1
+    trustRemoteCode: true
+    dependencies: []
+  distributed:
+    nodes: 1
+    backend: local
+    masterPort: 29500
+    interface: ""
+    hca: ""
+    ibGidIndex: 0
+    workerAlias: worker
+    selectedNodes: []
+  runtime:
+    adapter: advanced-container-v1
+    buildOnce: false
+    downloadOnce: false
+    workingDir: ""
+    timeoutMinutes: 180
+    prerequisites: []
+    environment:
+      VLLM_TARGET_DEVICE: cuda
+      VLLM_FLOAT32_MATMUL_PRECISION: high
+      CUTE_DSL_ARCH: sm_121a
+      VLLM_ALLOW_LONG_MAX_MODEL_LEN: "1"
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+    container:
+      user: "0"
+      readOnly: false
+      ipc: host
+      shmSize: 32g
+      ulimits: [memlock=-1:-1]
+      capAdd: [IPC_LOCK]
+      capDrop: []
+      tmpfs: []
+      pidsLimit: 8192
+      modelCachePath: /root/.cache/huggingface
+      memory: 116g
+      memorySwap: 116g
+    lifecycle:
+      build: {program: "", args: []}
+      download: {program: "", args: []}
+      start: {program: "", args: []}
+      stop: {program: "", args: []}
+  health:
+    scheme: http
+    host: 127.0.0.1
+    port: 8890
+    path: /v1/models
+    timeoutSeconds: 3600
+    intervalSeconds: 5

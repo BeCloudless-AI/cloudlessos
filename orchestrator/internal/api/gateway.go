@@ -187,19 +187,19 @@ func (b *gatewayAliasBody) Close() error { return b.src.Close() }
 
 func (s *Server) authorizeGateway(w http.ResponseWriter, r *http.Request, scope string) (string, bool) {
 	source := gatewayRequestSource(r)
-	if allowed, retryAfter := s.gatewaySourceRateLimiter().allow(source); !allowed {
-		w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
-		s.auditGateway(gatewayAuditEvent{
-			Event: "gateway-rate-limit", Outcome: "denied", Scope: scope,
-			Method: r.Method, Path: r.URL.Path, Source: source,
-			Status: http.StatusTooManyRequests, Detail: "source request limit exceeded",
-		})
-		writeOpenAIError(w, http.StatusTooManyRequests, "This client is sending requests too quickly. Retry after the indicated delay.")
-		return "", false
-	}
 	token := bearerToken(r)
 	id, authenticated := s.state.ValidateAPIKey(token)
 	if !authenticated {
+		if allowed, retryAfter := s.gatewaySourceRateLimiter().allow(source); !allowed {
+			w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
+			s.auditGateway(gatewayAuditEvent{
+				Event: "gateway-rate-limit", Outcome: "denied", Scope: scope,
+				Method: r.Method, Path: r.URL.Path, Source: source,
+				Status: http.StatusTooManyRequests, Detail: "unauthenticated source request limit exceeded",
+			})
+			writeOpenAIError(w, http.StatusTooManyRequests, "This client is sending invalid authentication attempts too quickly. Retry after the indicated delay.")
+			return "", false
+		}
 		s.auditGateway(gatewayAuditEvent{
 			Event: "gateway-auth", Outcome: "denied", Scope: scope,
 			Method: r.Method, Path: r.URL.Path, Source: gatewayRequestSource(r),
@@ -218,26 +218,32 @@ func (s *Server) authorizeGateway(w http.ResponseWriter, r *http.Request, scope 
 		writeOpenAIError(w, http.StatusForbidden, "This API key does not have permission to use the requested Cloudless service.")
 		return "", false
 	}
-	limiter, _ := s.gatewaySecurity()
-	if allowed, retryAfter := limiter.allow(id); !allowed {
-		w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
-		s.auditGateway(gatewayAuditEvent{
-			Event: "gateway-rate-limit", Outcome: "denied", KeyID: id, Scope: scope,
-			Method: r.Method, Path: r.URL.Path, Source: gatewayRequestSource(r),
-			Status: http.StatusTooManyRequests, Detail: "per-key request limit exceeded",
-		})
-		writeOpenAIError(w, http.StatusTooManyRequests, "This API key is sending requests too quickly. Retry after the indicated delay.")
-		return "", false
-	}
 	return id, true
 }
 
 func (s *Server) serveGatewayProxy(w http.ResponseWriter, r *http.Request, id, kind string, proxy http.Handler) {
+	limits, found := s.state.APIKeyLimitsFor(id)
+	if !found {
+		writeOpenAIError(w, http.StatusUnauthorized, "This API key is no longer active.")
+		return
+	}
+	quota := s.gatewayKeyQuotaManager()
+	if allowed, retryAfter, detail := quota.begin(id, kind, limits); !allowed {
+		w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
+		s.auditGateway(gatewayAuditEvent{
+			Event: "gateway-rate-limit", Outcome: "denied", KeyID: id, Scope: kind,
+			Method: r.Method, Path: r.URL.Path, Source: gatewayRequestSource(r),
+			Status: http.StatusTooManyRequests, Detail: detail,
+		})
+		writeOpenAIError(w, http.StatusTooManyRequests, "This API key has reached its configured rate limit. Retry after the indicated delay.")
+		return
+	}
 	started := time.Now()
 	rec := &statusRec{ResponseWriter: w, status: http.StatusOK}
 	proxy.ServeHTTP(rec, r)
 	success := rec.status < 400
 	promptTokens, completionTokens := responseUsage(rec.capture)
+	quota.complete(id, kind, promptTokens, completionTokens)
 	s.state.RecordAPIUsageKind(id, kind, success, promptTokens, completionTokens)
 	if s.usage != nil {
 		s.usage.RecordAPI(success)
@@ -388,6 +394,16 @@ func rewriteModel(r *http.Request, activeModel string) {
 	if json.Unmarshal(body, &m) == nil {
 		if _, has := m["model"]; has {
 			m["model"] = activeModel
+			// Token-per-minute enforcement needs the final usage event. OpenAI-
+			// compatible streaming engines emit it when include_usage is enabled.
+			if streaming, _ := m["stream"].(bool); streaming {
+				options, _ := m["stream_options"].(map[string]any)
+				if options == nil {
+					options = map[string]any{}
+				}
+				options["include_usage"] = true
+				m["stream_options"] = options
+			}
 			if nb, err := json.Marshal(m); err == nil {
 				body = nb
 			}
@@ -411,20 +427,32 @@ func writeOpenAIError(w http.ResponseWriter, code int, msg string) {
 
 // keyView is an API key without its secret hash (safe to send to the UI).
 type keyView struct {
-	ID               string `json:"id"`
-	Name             string `json:"name"`
-	Prefix           string `json:"prefix"`
-	Created          string `json:"created"`
-	LastUsed         string `json:"lastUsed,omitempty"`
-	Requests         int64  `json:"requests"`
-	Successes        int64  `json:"successes"`
-	Failures         int64  `json:"failures"`
-	PromptTokens     int64  `json:"promptTokens"`
-	CompletionTokens int64  `json:"completionTokens"`
-	TotalTokens      int64  `json:"totalTokens"`
-	Scope            string `json:"scope"`
-	ModelRequests    int64  `json:"modelRequests"`
-	AgentRequests    int64  `json:"agentRequests"`
+	ID               string             `json:"id"`
+	Name             string             `json:"name"`
+	Prefix           string             `json:"prefix"`
+	Created          string             `json:"created"`
+	LastUsed         string             `json:"lastUsed,omitempty"`
+	Requests         int64              `json:"requests"`
+	Successes        int64              `json:"successes"`
+	Failures         int64              `json:"failures"`
+	PromptTokens     int64              `json:"promptTokens"`
+	CompletionTokens int64              `json:"completionTokens"`
+	TotalTokens      int64              `json:"totalTokens"`
+	Scope            string             `json:"scope"`
+	ModelRequests    int64              `json:"modelRequests"`
+	AgentRequests    int64              `json:"agentRequests"`
+	Limits           state.APIKeyLimits `json:"limits"`
+}
+
+func apiKeyView(k state.APIKey) keyView {
+	return keyView{
+		ID: k.ID, Name: k.Name, Prefix: k.Prefix, Created: k.Created, LastUsed: k.LastUsed,
+		Requests: k.Requests, Successes: k.Successes, Failures: k.Failures,
+		PromptTokens: k.PromptTokens, CompletionTokens: k.CompletionTokens,
+		TotalTokens: k.PromptTokens + k.CompletionTokens,
+		Scope:       state.NormalizeAPIKeyScope(k.Scope), ModelRequests: k.ModelRequests, AgentRequests: k.AgentRequests,
+		Limits: k.Limits,
+	}
 }
 
 func (s *Server) gatewayGet(w http.ResponseWriter, r *http.Request) {
@@ -433,13 +461,7 @@ func (s *Server) gatewayGet(w http.ResponseWriter, r *http.Request) {
 
 	keys := []keyView{}
 	for _, k := range s.state.APIKeys() {
-		keys = append(keys, keyView{
-			ID: k.ID, Name: k.Name, Prefix: k.Prefix, Created: k.Created, LastUsed: k.LastUsed,
-			Requests: k.Requests, Successes: k.Successes, Failures: k.Failures,
-			PromptTokens: k.PromptTokens, CompletionTokens: k.CompletionTokens,
-			TotalTokens: k.PromptTokens + k.CompletionTokens,
-			Scope:       state.NormalizeAPIKeyScope(k.Scope), ModelRequests: k.ModelRequests, AgentRequests: k.AgentRequests,
-		})
+		keys = append(keys, apiKeyView(k))
 	}
 
 	// Exposure status (reuses the same socat/cloudflared sidecars as apps).
@@ -495,8 +517,9 @@ func (s *Server) gatewayGet(w http.ResponseWriter, r *http.Request) {
 		"policy": map[string]any{
 			"authenticationRequired": true,
 			"scopedKeys":             true,
-			"requestsPerMinute":      gatewayRequestsPerMinute,
-			"burst":                  gatewayBurst,
+			"configurableKeyLimits":  true,
+			"defaultLimits":          state.APIKeyLimits{},
+			"invalidAuthRPM":         120,
 			"auditEnabled":           true,
 		},
 	})
@@ -680,6 +703,36 @@ func (s *Server) keyCreate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"id": k.ID, "name": k.Name, "prefix": k.Prefix, "created": k.Created, "scope": k.Scope, "key": secret,
 	})
+}
+
+func (s *Server) keyUpdate(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("X-Cloudless-Action") != "gateway-key-update" {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "explicit API key update confirmation required"})
+		return
+	}
+	var body struct {
+		Limits state.APIKeyLimits `json:"limits"`
+	}
+	decoder := json.NewDecoder(io.LimitReader(r.Body, 32<<10))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid API key settings"})
+		return
+	}
+	key, err := s.state.UpdateAPIKeyLimits(r.PathValue("id"), body.Limits)
+	if err != nil {
+		status := http.StatusBadRequest
+		if strings.Contains(err.Error(), "not found") {
+			status = http.StatusNotFound
+		}
+		writeJSON(w, status, map[string]string{"error": err.Error()})
+		return
+	}
+	s.auditGateway(gatewayAuditEvent{
+		Event: "gateway-key", Outcome: "updated", KeyID: key.ID, Scope: state.NormalizeAPIKeyScope(key.Scope),
+		Detail: "per-key rate limits updated",
+	})
+	writeJSON(w, http.StatusOK, apiKeyView(key))
 }
 
 func (s *Server) keyDelete(w http.ResponseWriter, r *http.Request) {

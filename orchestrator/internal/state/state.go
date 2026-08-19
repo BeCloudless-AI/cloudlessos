@@ -171,20 +171,58 @@ type ManagedEngineArtifact struct {
 // APIKey is a user-generated credential for the Cloudless Proxy (the OpenAI-compatible
 // gateway). The full key is shown ONCE at creation; only its SHA-256 hash is stored.
 type APIKey struct {
-	ID               string `json:"id"`      // short opaque id (for revoke)
-	Name             string `json:"name"`    // user label, e.g. "My website"
-	Prefix           string `json:"prefix"`  // first chars, shown to identify the key (e.g. "sk-cloudless-ab12cd")
-	Hash             string `json:"hash"`    // sha256(fullKey) hex — the secret is never stored
-	Created          string `json:"created"` // RFC3339
-	LastUsed         string `json:"lastUsed,omitempty"`
-	Requests         int64  `json:"requests"`         // lifetime request count through the gateway
-	Successes        int64  `json:"successes"`        // successful (< 400) gateway responses
-	Failures         int64  `json:"failures"`         // failed (>= 400) gateway responses
-	PromptTokens     int64  `json:"promptTokens"`     // input tokens reported by the engine
-	CompletionTokens int64  `json:"completionTokens"` // output tokens reported by the engine
-	Scope            string `json:"scope,omitempty"`  // model | agent | both; empty legacy keys are model-only
-	ModelRequests    int64  `json:"modelRequests,omitempty"`
-	AgentRequests    int64  `json:"agentRequests,omitempty"`
+	ID               string       `json:"id"`      // short opaque id (for revoke)
+	Name             string       `json:"name"`    // user label, e.g. "My website"
+	Prefix           string       `json:"prefix"`  // first chars, shown to identify the key (e.g. "sk-cloudless-ab12cd")
+	Hash             string       `json:"hash"`    // sha256(fullKey) hex — the secret is never stored
+	Created          string       `json:"created"` // RFC3339
+	LastUsed         string       `json:"lastUsed,omitempty"`
+	Requests         int64        `json:"requests"`         // lifetime request count through the gateway
+	Successes        int64        `json:"successes"`        // successful (< 400) gateway responses
+	Failures         int64        `json:"failures"`         // failed (>= 400) gateway responses
+	PromptTokens     int64        `json:"promptTokens"`     // input tokens reported by the engine
+	CompletionTokens int64        `json:"completionTokens"` // output tokens reported by the engine
+	Scope            string       `json:"scope,omitempty"`  // model | agent | both; empty legacy keys are model-only
+	ModelRequests    int64        `json:"modelRequests,omitempty"`
+	AgentRequests    int64        `json:"agentRequests,omitempty"`
+	Limits           APIKeyLimits `json:"limits,omitempty"`
+}
+
+// APIKeyLimits controls one gateway credential independently. Zero means
+// unlimited for every field so legacy keys retain their previous shape without
+// needing a state migration. Model limits apply only to the raw /v1 model
+// surface; total limits include both model and agent traffic.
+type APIKeyLimits struct {
+	TokensPerMinute        int64 `json:"tokensPerMinute,omitempty"`
+	RequestsPerMinute      int   `json:"requestsPerMinute,omitempty"`
+	MaxParallelRequests    int   `json:"maxParallelRequests,omitempty"`
+	ModelTokensPerMinute   int64 `json:"modelTokensPerMinute,omitempty"`
+	ModelRequestsPerMinute int   `json:"modelRequestsPerMinute,omitempty"`
+}
+
+const (
+	maxAPIKeyTokensPerMinute   int64 = 1_000_000_000
+	maxAPIKeyRequestsPerMinute       = 1_000_000
+	maxAPIKeyParallelRequests        = 10_000
+)
+
+// ValidateAPIKeyLimits rejects negative and implausibly large values while
+// reserving zero as the explicit unlimited setting.
+func ValidateAPIKeyLimits(limits APIKeyLimits) error {
+	if limits.TokensPerMinute < 0 || limits.ModelTokensPerMinute < 0 ||
+		limits.RequestsPerMinute < 0 || limits.ModelRequestsPerMinute < 0 || limits.MaxParallelRequests < 0 {
+		return fmt.Errorf("API key limits cannot be negative")
+	}
+	if limits.TokensPerMinute > maxAPIKeyTokensPerMinute || limits.ModelTokensPerMinute > maxAPIKeyTokensPerMinute {
+		return fmt.Errorf("token limits cannot exceed %d per minute", maxAPIKeyTokensPerMinute)
+	}
+	if limits.RequestsPerMinute > maxAPIKeyRequestsPerMinute || limits.ModelRequestsPerMinute > maxAPIKeyRequestsPerMinute {
+		return fmt.Errorf("request limits cannot exceed %d per minute", maxAPIKeyRequestsPerMinute)
+	}
+	if limits.MaxParallelRequests > maxAPIKeyParallelRequests {
+		return fmt.Errorf("parallel request limit cannot exceed %d", maxAPIKeyParallelRequests)
+	}
+	return nil
 }
 
 const (
@@ -960,6 +998,36 @@ func (s *Store) DeleteAPIKey(id string) error {
 	}
 	s.st.APIKeys = out
 	return s.save()
+}
+
+// UpdateAPIKeyLimits replaces the independently configurable limits for one
+// key. The credential secret, scope, identity and lifetime usage are unchanged.
+func (s *Store) UpdateAPIKeyLimits(id string, limits APIKeyLimits) (APIKey, error) {
+	if err := ValidateAPIKeyLimits(limits); err != nil {
+		return APIKey{}, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range s.st.APIKeys {
+		if s.st.APIKeys[i].ID != id {
+			continue
+		}
+		s.st.APIKeys[i].Limits = limits
+		return s.st.APIKeys[i], s.save()
+	}
+	return APIKey{}, fmt.Errorf("API key not found")
+}
+
+// APIKeyLimitsFor returns the current limits for a stored key id.
+func (s *Store) APIKeyLimitsFor(id string) (APIKeyLimits, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, key := range s.st.APIKeys {
+		if key.ID == id {
+			return key.Limits, true
+		}
+	}
+	return APIKeyLimits{}, false
 }
 
 // ValidateAPIKey reports whether `secret` matches a stored key (by hash compare),

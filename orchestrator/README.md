@@ -160,6 +160,9 @@ The complete developer workflow is in
 | DELETE | `/api/engines/custom/{id}` | remove an inactive registration |
 | GET | `/api/engine/metrics` | normalized engine metrics (also re-exported on the gateway listener as `/metrics` and `/v1/metrics`) |
 | GET | `/api/gateway` | API keys and gateway exposure state |
+| POST | `/api/keys` | create a scoped API key |
+| PATCH | `/api/keys/{id}` | replace one API key's independent rate limits |
+| DELETE | `/api/keys/{id}` | revoke an API key |
 | POST | `/api/settings/inference-contract` | change the client API port and model alias |
 | GET | `/api/recipes` | local recipes, active jobs and inference contract |
 | POST | `/api/recipes/{id}/check` | validate an executable, installed recipe on the current topology |

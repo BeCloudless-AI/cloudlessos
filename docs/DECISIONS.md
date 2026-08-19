@@ -993,8 +993,10 @@ auth + key management in front of one endpoint (~a few hundred lines of stdlib G
 - **UI:** Settings → **API access** — base URL + served model + a copy-paste `curl`, key
   list (name / prefix / request count / last used / revoke), one-time key reveal, and the
   LAN + "public link" toggles with a security warning (anyone with a key can use your GPU).
-- **Deliberately out of v1** (noted for later): per-key rate limits, budgets, token metering,
-  multi-model routing, and a stable bring-your-own-domain tunnel. Easy to layer on the key store.
+- **Added after v1:** every key now has independently editable TPM, RPM, maximum-parallel,
+  model-TPM and model-RPM limits. Zero remains unlimited for backward compatibility; transient
+  minute counters stay in memory while the configuration is persisted with the hashed key.
+  Budgets, multi-model routing and a stable bring-your-own-domain tunnel remain future work.
 - **Verified end-to-end:** no key → 401, bad key → 401, valid key → proxied to the engine
   → 200, request count incremented, revoke → 401 immediately; build/vet/`node --check` clean;
   API-access page rendered via `scripts/api-harness.ps1`.

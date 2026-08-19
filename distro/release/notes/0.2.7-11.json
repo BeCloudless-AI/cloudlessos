@@ -1,0 +1,10 @@
+{
+  "title": "Independent API limits and refreshed DGX Spark recipes",
+  "summary": "CloudlessOS 0.2.7-11 adds individually configurable API-key limits and refreshes ready-to-use DGX Spark recipes for current optimized model runtimes.",
+  "changes": [
+    "Configure TPM, RPM, maximum parallel requests, model TPM, and model RPM independently for every API key from Settings, with existing keys remaining unlimited by default.",
+    "Enforce total and model-only API limits at the authenticated gateway, report HTTP 429 with Retry-After, and account for token usage from both regular and streaming inference responses.",
+    "Update MiaLabs' two-Spark DeepSeek V4 Flash recipe to its current pinned compatibility and performance hotfix image, serving profile, and image smoke checks.",
+    "Add the MiaLabs Qwen 3.8 27B NVFP4 ready-to-use recipe for a single DGX Spark."
+  ]
+}

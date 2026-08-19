@@ -2,8 +2,8 @@ schema: cloudless.recipe/v2
 
 metadata:
   name: DeepSeek V4 Flash 0731 DSpark 2x DGX Spark
-  description: MiaAI-Lab's pinned two-DGX-Spark DeepSeek V4 Flash 0731 profile with DSpark, NVFP4 DS-MLA KV cache, FlashInfer b12x MoE, and a one-million-token context window.
-  version: 1.0.1
+  description: MiaAI-Lab's current pinned two-DGX-Spark DeepSeek V4 Flash 0731 profile with DSpark, NVFP4 DS-MLA KV cache, FlashInfer b12x MoE, one-million-token context, and the upstream compatibility and performance hotfix set.
+  version: 1.0.3
   author: MiaLabs
   category: language-model
   license: MIT
@@ -12,7 +12,7 @@ metadata:
 
 recipe:
   name: DeepSeek V4 Flash 0731 DSpark 2x DGX Spark
-  description: Runs the exact DeepSeek V4 Flash 0731 checkpoint and Anemll DSpark vLLM image across two enrolled DGX Sparks with TP=2 and MiaAI-Lab's validated 1M NVFP4 DS-MLA serving parameters.
+  description: Runs the exact DeepSeek V4 Flash 0731 checkpoint across two enrolled DGX Sparks with TP=2 and MiaAI-Lab's validated 1M NVFP4 DS-MLA profile at upstream revision 3c9576c52ab71d89e22fe4621e0d32300a59039a.
   platform: dgx-spark
   source:
     url: ""
@@ -20,7 +20,7 @@ recipe:
     files: {}
   engine:
     type: vllm
-    image: ghcr.io/anemll/dspark-vllm-gx10@sha256:a83948492cf13df455170fb42885f5ef4db54fefe0feff0f841ecbff464ac9d8
+    image: ghcr.io/samuelcardillo/cloudless-deepseek-v4-flash-dspark-2x@sha256:d58f6509077cf90db047675e7f18e9ca3f8342b478695924bb0e48172e057212
     servedModelName: cloudless
     containerPort: 8890
     apiPath: /v1
@@ -61,9 +61,16 @@ recipe:
             raise SystemExit("DeepSeek V4 reasoning-effort compatibility patch did not apply")
         path.write_text(source)
         PY
+        python3 /opt/cloudless-hotfix-encoding-dsv4-issue21.py
 
-        SPECULATIVE_CONFIG='{"method":"dspark","num_speculative_tokens":5,"draft_sample_method":"probabilistic"}'
-        DEFAULT_CHAT_TEMPLATE_KWARGS='{"thinking":true,"reasoning_effort":"low"}'
+        SPECULATIVE_CONFIG="{\"method\":\"dspark\",\"num_speculative_tokens\":${MTP_NUM_TOKENS:-5},\"draft_sample_method\":\"probabilistic\"}"
+        case "${DEFAULT_THINKING:-max}" in
+          off) DEFAULT_CHAT_TEMPLATE_KWARGS='{"thinking":false}' ;;
+          low) DEFAULT_CHAT_TEMPLATE_KWARGS='{"thinking":true,"reasoning_effort":"low"}' ;;
+          high) DEFAULT_CHAT_TEMPLATE_KWARGS='{"thinking":true,"reasoning_effort":"high"}' ;;
+          max) DEFAULT_CHAT_TEMPLATE_KWARGS='{"thinking":true,"reasoning_effort":"max"}' ;;
+          *) echo "DEFAULT_THINKING must be one of: off, low, high, max" >&2; exit 2 ;;
+        esac
         exec /usr/local/bin/vllm serve deepseek-ai/DeepSeek-V4-Flash-0731 \
           --revision 9e165c30e2704aec5d9d593cce3eebd58bbef1cb \
           --served-model-name cloudless \
@@ -77,8 +84,9 @@ recipe:
           --max-model-len 1048576 \
           --max-num-seqs 6 \
           --max-num-batched-tokens 8192 \
+          --long-prefill-token-threshold 1024 \
           --max-cudagraph-capture-size 36 \
-          --gpu-memory-utilization 0.80 \
+          --gpu-memory-utilization 0.835 \
           --enable-prefix-caching \
           --enable-prompt-tokens-details \
           --async-scheduling \
@@ -107,7 +115,7 @@ recipe:
     kvCacheDtype: nvfp4_ds_mla
     maxContext: 1048576
     maxSequences: 6
-    gpuMemoryUtilization: 0.80
+    gpuMemoryUtilization: 0.835
     tensorParallel: 2
     pipelineParallel: 1
     trustRemoteCode: true
@@ -135,6 +143,8 @@ recipe:
       VLLM_ALLOW_LONG_MAX_MODEL_LEN: "1"
       VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: "256"
       VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS: "0"
+      VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "4096"
+      DSPARK_SUPPRESS_STOPS_IN_REASONING: "1"
       VLLM_USE_FLASHINFER_SAMPLER: "1"
       VLLM_USE_BREAKABLE_CUDAGRAPH: "0"
       VLLM_USE_B12X_MOE: "1"
@@ -159,7 +169,25 @@ recipe:
       NCCL_DEBUG: WARN
       NCCL_NVLS_ENABLE: "0"
       MTP_NUM_TOKENS: "5"
-      DEFAULT_THINKING: low
+      DEFAULT_THINKING: max
+    smokeTest:
+      program: /bin/bash
+      args:
+        - -lc
+        - |-
+          set -euo pipefail
+          test -x /opt/cloudless-hotfix-encoding-dsv4-issue21.py
+          test ! -e /usr/local/lib/python3.12/dist-packages/vllm/v1/worker/gpu/sample/thinking_budget.py
+          grep -q 'thinking_token_budget is not yet supported by the V2' /usr/local/lib/python3.12/dist-packages/vllm/v1/engine/input_processor.py
+          grep -q '\[issue27-hotfix\] enforce max_num_partial_prefills' /usr/local/lib/python3.12/dist-packages/vllm/v1/core/sched/scheduler.py
+          grep -q '\[issue26-hotfix-v2\] SWA may shrink the common hit' /usr/local/lib/python3.12/dist-packages/vllm/v1/core/kv_cache_coordinator.py
+          grep -q '\[suppress-stops-in-reasoning\]' /usr/local/lib/python3.12/dist-packages/vllm/v1/engine/detokenizer.py
+          grep -q 'use_fp8_cache = self.kv_cache_dtype in ("fp8_ds_mla", "nvfp4_ds_mla")' /usr/local/lib/python3.12/dist-packages/vllm/v1/attention/backends/mla/flashmla_sparse.py
+          python3 -m py_compile \
+            /usr/local/lib/python3.12/dist-packages/vllm/v1/core/sched/scheduler.py \
+            /usr/local/lib/python3.12/dist-packages/vllm/v1/core/kv_cache_coordinator.py \
+            /usr/local/lib/python3.12/dist-packages/vllm/v1/engine/detokenizer.py
+      timeoutSeconds: 60
     container:
       user: "0"
       readOnly: false

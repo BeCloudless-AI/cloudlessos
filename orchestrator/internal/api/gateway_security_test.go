@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -12,6 +13,36 @@ import (
 
 	"github.com/cloudless/orchestrator/internal/state"
 )
+
+func TestAPIKeyLimitsCanBeUpdatedIndependently(t *testing.T) {
+	st, err := state.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, key, err := st.AddAPIKey("client", state.APIKeyScopeBoth)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodPatch, "/api/keys/"+key.ID, strings.NewReader(`{"limits":{"tokensPerMinute":12000,"requestsPerMinute":30,"maxParallelRequests":2,"modelTokensPerMinute":8000,"modelRequestsPerMinute":20}}`))
+	request.SetPathValue("id", key.ID)
+	request.Header.Set("X-Cloudless-Action", "gateway-key-update")
+	recorder := httptest.NewRecorder()
+	(&Server{state: st}).keyUpdate(recorder, request)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("update status = %d body=%s", recorder.Code, recorder.Body.String())
+	}
+	var view keyView
+	if err := json.Unmarshal(recorder.Body.Bytes(), &view); err != nil {
+		t.Fatal(err)
+	}
+	if view.Limits.RequestsPerMinute != 30 || view.Limits.ModelTokensPerMinute != 8000 || view.Scope != state.APIKeyScopeBoth {
+		t.Fatalf("updated view = %+v", view)
+	}
+	limits, ok := st.APIKeyLimitsFor(key.ID)
+	if !ok || limits.MaxParallelRequests != 2 || limits.ModelRequestsPerMinute != 20 {
+		t.Fatalf("stored limits = %+v, %v", limits, ok)
+	}
+}
 
 func TestGatewayRateLimitIsPerKeyAndRefills(t *testing.T) {
 	limiter := newGatewayRateLimiter()
@@ -93,19 +124,30 @@ func TestGatewayAuthorizationRateLimitsAndAudits(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if _, err := st.UpdateAPIKeyLimits(key.ID, state.APIKeyLimits{RequestsPerMinute: 2}); err != nil {
+		t.Fatal(err)
+	}
 	server := &Server{state: st}
-	for index := 0; index < gatewayBurst; index++ {
+	proxy := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+	for index := 0; index < 2; index++ {
 		request := httptest.NewRequest(http.MethodPost, "/agent/v1/chat/completions", nil)
 		request.Header.Set("Authorization", "Bearer "+secret)
-		if _, ok := server.authorizeGateway(httptest.NewRecorder(), request, state.APIKeyScopeAgent); !ok {
+		recorder := httptest.NewRecorder()
+		id, ok := server.authorizeGateway(recorder, request, state.APIKeyScopeAgent)
+		if !ok {
 			t.Fatalf("request %d unexpectedly denied", index)
 		}
+		server.serveGatewayProxy(recorder, request, id, state.APIKeyScopeAgent, proxy)
 	}
 	request := httptest.NewRequest(http.MethodPost, "/agent/v1/chat/completions", nil)
 	request.Header.Set("Authorization", "Bearer "+secret)
 	recorder := httptest.NewRecorder()
-	if _, ok := server.authorizeGateway(recorder, request, state.APIKeyScopeAgent); ok ||
-		recorder.Code != http.StatusTooManyRequests || recorder.Header().Get("Retry-After") == "" {
+	id, ok := server.authorizeGateway(recorder, request, state.APIKeyScopeAgent)
+	if !ok {
+		t.Fatal("configured rate limit incorrectly failed authentication")
+	}
+	server.serveGatewayProxy(recorder, request, id, state.APIKeyScopeAgent, proxy)
+	if recorder.Code != http.StatusTooManyRequests || recorder.Header().Get("Retry-After") == "" {
 		t.Fatalf("rate limit response = %d, retry=%q", recorder.Code, recorder.Header().Get("Retry-After"))
 	}
 	_, audit := server.gatewaySecurity()
@@ -113,6 +155,77 @@ func TestGatewayAuthorizationRateLimitsAndAudits(t *testing.T) {
 	if err != nil || len(events) == 0 || events[0].Event != "gateway-rate-limit" || events[0].KeyID != key.ID {
 		t.Fatalf("rate-limit audit = %#v, %v", events, err)
 	}
+}
+
+func TestGatewayKeyQuotaEnforcesIndependentLimits(t *testing.T) {
+	now := time.Unix(1200, 0)
+	newQuota := func() *gatewayKeyQuota {
+		quota := newGatewayKeyQuota()
+		quota.now = func() time.Time { return now }
+		return quota
+	}
+	t.Run("total requests", func(t *testing.T) {
+		quota := newQuota()
+		limits := state.APIKeyLimits{RequestsPerMinute: 1}
+		if allowed, _, _ := quota.begin("key", state.APIKeyScopeAgent, limits); !allowed {
+			t.Fatal("first request denied")
+		}
+		quota.complete("key", state.APIKeyScopeAgent, 0, 0)
+		if allowed, retry, detail := quota.begin("key", state.APIKeyScopeModel, limits); allowed || retry < 1 || detail != "requests per minute limit exceeded" {
+			t.Fatalf("second request = allowed %v retry %d detail %q", allowed, retry, detail)
+		}
+	})
+	t.Run("model requests", func(t *testing.T) {
+		quota := newQuota()
+		limits := state.APIKeyLimits{ModelRequestsPerMinute: 1}
+		if allowed, _, _ := quota.begin("key", state.APIKeyScopeModel, limits); !allowed {
+			t.Fatal("first model request denied")
+		}
+		quota.complete("key", state.APIKeyScopeModel, 0, 0)
+		if allowed, _, _ := quota.begin("key", state.APIKeyScopeAgent, limits); !allowed {
+			t.Fatal("agent request consumed model RPM")
+		}
+		quota.complete("key", state.APIKeyScopeAgent, 0, 0)
+		if allowed, _, detail := quota.begin("key", state.APIKeyScopeModel, limits); allowed || detail != "model requests per minute limit exceeded" {
+			t.Fatalf("second model request allowed=%v detail=%q", allowed, detail)
+		}
+	})
+	t.Run("parallel", func(t *testing.T) {
+		quota := newQuota()
+		limits := state.APIKeyLimits{MaxParallelRequests: 1}
+		if allowed, _, _ := quota.begin("key", state.APIKeyScopeModel, limits); !allowed {
+			t.Fatal("first parallel request denied")
+		}
+		if allowed, _, detail := quota.begin("key", state.APIKeyScopeAgent, limits); allowed || detail != "parallel request limit exceeded" {
+			t.Fatalf("parallel cap allowed=%v detail=%q", allowed, detail)
+		}
+		quota.complete("key", state.APIKeyScopeModel, 0, 0)
+		if allowed, _, _ := quota.begin("key", state.APIKeyScopeAgent, limits); !allowed {
+			t.Fatal("parallel slot was not released")
+		}
+	})
+	t.Run("total and model tokens", func(t *testing.T) {
+		quota := newQuota()
+		limits := state.APIKeyLimits{TokensPerMinute: 20, ModelTokensPerMinute: 10}
+		if allowed, _, _ := quota.begin("key", state.APIKeyScopeModel, limits); !allowed {
+			t.Fatal("first token request denied")
+		}
+		quota.complete("key", state.APIKeyScopeModel, 6, 4)
+		if allowed, _, detail := quota.begin("key", state.APIKeyScopeModel, limits); allowed || detail != "model tokens per minute limit exceeded" {
+			t.Fatalf("model TPM allowed=%v detail=%q", allowed, detail)
+		}
+		if allowed, _, _ := quota.begin("key", state.APIKeyScopeAgent, limits); !allowed {
+			t.Fatal("model TPM incorrectly blocked agent traffic")
+		}
+		quota.complete("key", state.APIKeyScopeAgent, 5, 5)
+		if allowed, _, detail := quota.begin("key", state.APIKeyScopeAgent, limits); allowed || detail != "tokens per minute limit exceeded" {
+			t.Fatalf("total TPM allowed=%v detail=%q", allowed, detail)
+		}
+		now = now.Add(time.Minute)
+		if allowed, _, _ := quota.begin("key", state.APIKeyScopeModel, limits); !allowed {
+			t.Fatal("minute rollover did not reset token windows")
+		}
+	})
 }
 
 func TestInvalidCredentialsAreRateLimitedBySource(t *testing.T) {
@@ -150,6 +263,7 @@ func TestGatewayExposureRequiresExplicitConfirmation(t *testing.T) {
 		"Tailnet exposure": {http.MethodPost, "/api/gateway/tailnet", (&Server{}).gatewayTailnetSet},
 		"public exposure":  {http.MethodPost, "/api/gateway/tunnel", (&Server{}).gatewayTunnelSet},
 		"key creation":     {http.MethodPost, "/api/keys", (&Server{}).keyCreate},
+		"key update":       {http.MethodPatch, "/api/keys/example", (&Server{}).keyUpdate},
 		"key revocation":   {http.MethodDelete, "/api/keys/example", (&Server{}).keyDelete},
 		"API identity":     {http.MethodPost, "/api/settings/inference-contract", (&Server{}).inferenceContractSet},
 	} {

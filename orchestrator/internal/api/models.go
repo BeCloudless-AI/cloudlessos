@@ -21,6 +21,7 @@ import (
 	"github.com/cloudless/orchestrator/internal/jobs"
 	"github.com/cloudless/orchestrator/internal/modelcache"
 	"github.com/cloudless/orchestrator/internal/modelfit"
+	"github.com/cloudless/orchestrator/internal/modelrecommend"
 	"github.com/cloudless/orchestrator/internal/models"
 	"github.com/cloudless/orchestrator/internal/modelstorage"
 	"github.com/cloudless/orchestrator/internal/places"
@@ -455,14 +456,65 @@ func (s *Server) modelDownloads(w http.ResponseWriter, _ *http.Request) {
 
 type modelView struct {
 	models.Model
-	Fit             string             `json:"fit"` // fits | tight | over | unknown
-	FitEstimate     modelfit.Estimate  `json:"fitEstimate"`
-	ClusterFit      string             `json:"clusterFit,omitempty"`
-	ClusterEstimate *modelfit.Estimate `json:"clusterEstimate,omitempty"`
-	Active          bool               `json:"active"`                // currently the served model
-	Downloaded      bool               `json:"downloaded"`            // present in the HF cache
-	Recommended     bool               `json:"recommended,omitempty"` // recommended for the machine's region
-	RecommendBy     string             `json:"recommendBy,omitempty"` // why, e.g. "Recommended in France"
+	Fit                             string             `json:"fit"` // fits | tight | over | unknown
+	FitEstimate                     modelfit.Estimate  `json:"fitEstimate"`
+	ClusterFit                      string             `json:"clusterFit,omitempty"`
+	ClusterEstimate                 *modelfit.Estimate `json:"clusterEstimate,omitempty"`
+	Active                          bool               `json:"active"`                // currently the served model
+	Downloaded                      bool               `json:"downloaded"`            // present in the HF cache
+	Recommended                     bool               `json:"recommended,omitempty"` // recommended for the machine's region
+	RecommendBy                     string             `json:"recommendBy,omitempty"` // why, e.g. "Recommended in France"
+	HardwareRecommended             bool               `json:"hardwareRecommended,omitempty"`
+	HardwareRecommendation          string             `json:"hardwareRecommendation,omitempty"`
+	HardwareRecommendationReason    string             `json:"hardwareRecommendationReason,omitempty"`
+	HardwareRecommendationScore     float64            `json:"hardwareRecommendationScore,omitempty"`
+	HardwareRecommendationExecution string             `json:"hardwareRecommendationExecution,omitempty"`
+}
+
+func applyHardwareModelRecommendations(yours, picks []modelView) []modelrecommend.Recommendation {
+	candidates := make([]modelrecommend.Candidate, 0, len(yours)+len(picks))
+	appendCandidate := func(item modelView) {
+		estimate, execution := item.FitEstimate, "local"
+		if estimate.Status != "fits" && estimate.Status != "tight" && item.ClusterEstimate != nil &&
+			(item.ClusterEstimate.Status == "fits" || item.ClusterEstimate.Status == "tight") {
+			estimate, execution = *item.ClusterEstimate, "cluster"
+		}
+		candidates = append(candidates, modelrecommend.Candidate{
+			ID: item.ID, Estimate: estimate, ContextK: estimate.ContextK,
+			QualityScore: item.QualityScore, QualityEvidence: item.QualityEvidence,
+			FidelityScore: item.FidelityScore,
+			Execution:     execution,
+		})
+	}
+	for _, item := range yours {
+		appendCandidate(item)
+	}
+	for _, item := range picks {
+		appendCandidate(item)
+	}
+	recommendations := modelrecommend.Rank(candidates)
+	var balanced modelrecommend.Recommendation
+	for _, recommendation := range recommendations {
+		if recommendation.Intent == "balanced" {
+			balanced = recommendation
+			break
+		}
+	}
+	annotate := func(items []modelView) {
+		for index := range items {
+			if items[index].ID != balanced.ModelID {
+				continue
+			}
+			items[index].HardwareRecommended = true
+			items[index].HardwareRecommendation = "Best fit for this machine"
+			items[index].HardwareRecommendationScore = balanced.Score
+			items[index].HardwareRecommendationExecution = balanced.Execution
+			items[index].HardwareRecommendationReason = strings.Join(balanced.Reasons, "; ")
+		}
+	}
+	annotate(yours)
+	annotate(picks)
+	return recommendations
 }
 
 // modelsList returns two views: "yours" (models present on disk) and the curated
@@ -586,6 +638,18 @@ func (s *Server) modelsList(w http.ResponseWriter, r *http.Request) {
 		return false
 	})
 
+	// Hardware recommendation is a second, independent layer above admission.
+	// It considers only exact reviewed profiles that fit. Unknown imported
+	// models and oversized profiles are intentionally excluded rather than
+	// receiving a parameter-count guess.
+	recommendations := applyHardwareModelRecommendations(yours, picks)
+	sort.SliceStable(picks, func(i, j int) bool {
+		if picks[i].HardwareRecommended != picks[j].HardwareRecommended {
+			return picks[i].HardwareRecommended
+		}
+		return false
+	})
+
 	writeJSON(w, http.StatusOK, map[string]any{
 		"gpuVRAMGB":  gpuGB,
 		"memoryType": memoryType,
@@ -597,11 +661,12 @@ func (s *Server) modelsList(w http.ResponseWriter, r *http.Request) {
 			}
 			return "local"
 		}(),
-		"custom":     !inCatalog,
-		"yours":      yours,
-		"highlights": picks,
-		"downloads":  s.activeModelDownloads(),
-		"cluster":    cluster,
+		"custom":          !inCatalog,
+		"yours":           yours,
+		"highlights":      picks,
+		"downloads":       s.activeModelDownloads(),
+		"recommendations": recommendations,
+		"cluster":         cluster,
 		"region": map[string]any{
 			"country":     country,
 			"countryName": countryName,

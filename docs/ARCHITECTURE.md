@@ -68,6 +68,14 @@ Tailscale SSH, but Tailscale remains the authority for identity, encryption and 
 - OS update, driver, display, power and diagnostic integrations;
 - durable install state under `/var/lib/cloudless`.
 
+Model recommendation is downstream of runtime admission. The orchestrator first requires a
+matching reviewed fit profile for the exact engine, architecture, memory type and topology. Only
+`fits` or `tight` candidates enter the deterministic recommendation policy; unknown and oversized
+models remain visible but cannot be labeled best for the machine. The balanced choice combines
+reviewed memory headroom and context, then incorporates optional catalog quality, fidelity and
+throughput evidence when present. Evidence-specific choices such as fastest or highest quality are
+omitted when the catalog has no evidence for that claim.
+
 Long operations use daemon-owned job IDs rather than blocking requests. App installs, resets and
 uninstalls continue after the initiating HTTP request or browser view disappears. The interface
 reconstructs their current state from `GET /api/jobs` and may use Server-Sent Events for low-latency

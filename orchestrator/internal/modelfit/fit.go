@@ -22,27 +22,29 @@ type Envelope struct {
 }
 
 type Estimate struct {
-	Status                  string  `json:"status"` // fits | tight | over | unknown
-	MemoryType              string  `json:"memoryType"`
-	Nodes                   int     `json:"nodes"`
-	Sharded                 bool    `json:"sharded"`
-	Engine                  string  `json:"engine,omitempty"`
-	Architecture            string  `json:"architecture,omitempty"`
-	Platform                string  `json:"platform,omitempty"`
-	ProfileID               string  `json:"profileId,omitempty"`
-	Evidence                string  `json:"evidence"` // measured | reviewed-estimate | missing
-	EvidenceSource          string  `json:"evidenceSource,omitempty"`
-	ContextK                int     `json:"contextK,omitempty"`
-	RequiredGB              float64 `json:"requiredGB,omitempty"`
-	RequiredPerNodeGB       float64 `json:"requiredPerNodeGB,omitempty"`
-	TotalPerNodeGB          float64 `json:"totalPerNodeGB,omitempty"`
-	ReservedPerNodeGB       float64 `json:"reservedPerNodeGB,omitempty"`
-	UsablePerNodeGB         float64 `json:"usablePerNodeGB,omitempty"`
-	HeadroomPerNodeGB       float64 `json:"headroomPerNodeGB,omitempty"`
-	AvailablePerNodeGB      float64 `json:"availablePerNodeGB,omitempty"`
-	LaunchHeadroomPerNodeGB float64 `json:"launchHeadroomPerNodeGB,omitempty"`
-	Confidence              string  `json:"confidence"` // measured | reviewed | unknown
-	Reason                  string  `json:"reason"`
+	Status                   string  `json:"status"` // fits | tight | over | unknown
+	MemoryType               string  `json:"memoryType"`
+	Nodes                    int     `json:"nodes"`
+	Sharded                  bool    `json:"sharded"`
+	Engine                   string  `json:"engine,omitempty"`
+	Architecture             string  `json:"architecture,omitempty"`
+	Platform                 string  `json:"platform,omitempty"`
+	ProfileID                string  `json:"profileId,omitempty"`
+	Evidence                 string  `json:"evidence"` // measured | reviewed-estimate | missing
+	EvidenceSource           string  `json:"evidenceSource,omitempty"`
+	ContextK                 int     `json:"contextK,omitempty"`
+	RequiredGB               float64 `json:"requiredGB,omitempty"`
+	RequiredPerNodeGB        float64 `json:"requiredPerNodeGB,omitempty"`
+	TotalPerNodeGB           float64 `json:"totalPerNodeGB,omitempty"`
+	ReservedPerNodeGB        float64 `json:"reservedPerNodeGB,omitempty"`
+	UsablePerNodeGB          float64 `json:"usablePerNodeGB,omitempty"`
+	HeadroomPerNodeGB        float64 `json:"headroomPerNodeGB,omitempty"`
+	AvailablePerNodeGB       float64 `json:"availablePerNodeGB,omitempty"`
+	LaunchHeadroomPerNodeGB  float64 `json:"launchHeadroomPerNodeGB,omitempty"`
+	EstimatedTokensPerSecond float64 `json:"estimatedTokensPerSecond,omitempty"`
+	PerformanceEvidence      string  `json:"performanceEvidence,omitempty"`
+	Confidence               string  `json:"confidence"` // measured | reviewed | unknown
+	Reason                   string  `json:"reason"`
 }
 
 func defaultReserve(total float64, kind string) float64 {
@@ -128,6 +130,8 @@ func EstimateModel(model models.Model, env Envelope) Estimate {
 	base.ContextK = profile.ContextK
 	base.RequiredPerNodeGB = round1(profile.RequiredPerNodeGB)
 	base.RequiredGB = round1(profile.RequiredPerNodeGB * float64(nodes))
+	base.EstimatedTokensPerSecond = round1(profile.EstimatedTokensPerSecond)
+	base.PerformanceEvidence = profile.PerformanceEvidence
 	if profile.Evidence == "measured" {
 		base.Confidence = "measured"
 	} else {

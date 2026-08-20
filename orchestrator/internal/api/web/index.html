@@ -602,6 +602,7 @@
   .mdl-cap { font-size: 10px; font-weight: 700; color: var(--blue); background: var(--blue-soft); border: 1px solid color-mix(in srgb, var(--blue) 35%, transparent); border-radius: 5px; padding: 1px 6px; }
   .mdl-cap.vis { color: #8a4dff; background: color-mix(in srgb, #8a4dff 12%, transparent); border-color: color-mix(in srgb, #8a4dff 35%, transparent); }
   .mdl-cap.rec { color: var(--accent); background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 38%, transparent); }
+  .mdl-cap.hardware { color: #579000; background: color-mix(in srgb, #76b900 12%, transparent); border-color: color-mix(in srgb, #76b900 42%, transparent); }
   .mdl-cap.gated { color: var(--muted); background: var(--panel-2); border-color: var(--hair); }
   .mdl { text-align: left; display: flex; flex-direction: column; gap: 4px; padding: 13px 14px; border-radius: 12px;
     background: var(--card); border: 1px solid var(--line-2); cursor: pointer; transition: border-color .15s, transform .18s cubic-bezier(.34,1.56,.64,1), box-shadow .18s; }
@@ -8736,6 +8737,7 @@ function modelSort(list) {
     if (mmSort === 'name') return (a.name || a.id || '').localeCompare(b.name || b.id || '');
     if (mmSort === 'memory-low') return (a.minVramGB || 9999) - (b.minVramGB || 9999);
     if (mmSort === 'memory-high') return (b.minVramGB || -1) - (a.minVramGB || -1);
+    if (!!a.hardwareRecommended !== !!b.hardwareRecommended) return a.hardwareRecommended ? -1 : 1;
     if (!!a.recommended !== !!b.recommended) return a.recommended ? -1 : 1;
     const fit = (fitRank[a.fit] ?? 2) - (fitRank[b.fit] ?? 2);
     if (fit) return fit;
@@ -8750,14 +8752,15 @@ function applyModel(id) { // advanced custom-id apply (explicit; no warning)
 function modelCard(m) {
   const downloading = modelDownloads.get(m.id);
   const clusterNodes = sparkCount((mmLM || {}).cluster);
-  const caps = (m.recommended ? '<span class="mdl-cap rec">Recommended</span>' : '')
+  const caps = (m.hardwareRecommended ? '<span class="mdl-cap hardware" title="'+escapeAttr(m.hardwareRecommendationReason||'Matched to reviewed runtime evidence for this machine')+'">Best for this machine</span>' : '')
+    + (m.recommended ? '<span class="mdl-cap rec">Recommended in your region</span>' : '')
     + (m.vision ? '<span class="mdl-cap vis">Vision</span>' : '') + (m.toolCalling ? '<span class="mdl-cap">Tools</span>' : '')
     + (m.gated ? '<span class="mdl-cap gated">Gated</span>' : '') + (m.source === 'huggingface' ? '<span class="mdl-cap">Hugging Face</span>' : '')
     + (m.clusterFit && m.fit === 'over' && m.clusterFit !== 'over' ? `<span class="mdl-cap cluster">${clusterNodes}-Spark model</span>` : '');
   const tags = (m.tags || []).filter(t => !['vision', 'tools'].includes(String(t).toLowerCase())).slice(0, 2)
     .map(t => `<span class="mdl-t">${escapeHtml(t)}</span>`).join('');
   const status = downloading ? '<span class="mdl-status active"><i></i>Downloading</span>' : (m.active ? '<span class="mdl-status active"><i></i>Loaded</span>' : (m.downloaded ? '<span class="mdl-status">Installed</span>' : ''));
-  return `<button class="mdl ${m.active ? 'on' : ''}${m.recommended ? ' rec' : ''}${downloading ? ' downloading' : ''} fit-${m.fit}" data-mid="${escapeAttr(m.id)}">
+  return `<button class="mdl ${m.active ? 'on' : ''}${m.recommended || m.hardwareRecommended ? ' rec' : ''}${downloading ? ' downloading' : ''} fit-${m.fit}" data-mid="${escapeAttr(m.id)}">
       <div class="mdl-top">
         <span class="mdl-icon">${uiIcon('models')}</span>
         <span class="mdl-title"><span class="mdl-name">${escapeHtml(m.name)}</span><span class="mdl-meta">${escapeHtml(m.params || '')}${m.quant ? ' · ' + escapeHtml(m.quant) : ''}${m.contextK ? ' · ' + m.contextK + 'K ctx' : ''}</span></span>
@@ -10204,14 +10207,17 @@ function paintModelList(c, data, kind) {
       return;
     }
     let sections = modelSection(lm ? 'Installed on this machine' : 'Installed image models', fy, cardFn);
-    const rec = fh.filter(m => m.recommended);
+    const hardware = fh.filter(m => m.hardwareRecommended);
+    const rec = fh.filter(m => m.recommended && !m.hardwareRecommended);
+    if (lm && hardware.length) sections += modelSection('Best fit for this machine', hardware, cardFn);
+    const remaining = fh.filter(m => !m.hardwareRecommended);
     if (lm && rec.length) {
       const rg = data.region || {};
       const label = 'Recommended in ' + (rg.countryName || 'your region') + (rg.inFrance ? ' 🇫🇷' : '');
       sections += modelSection(label, rec, cardFn);
-      sections += modelSection(lm ? 'Explore models' : 'Explore image models', fh.filter(m => !m.recommended), cardFn);
+      sections += modelSection(lm ? 'Explore models' : 'Explore image models', remaining.filter(m => !m.recommended), cardFn);
     } else {
-      sections += modelSection(lm ? 'Explore models' : 'Explore image models', fh, cardFn);
+      sections += modelSection(lm ? 'Explore models' : 'Explore image models', remaining, cardFn);
     }
     list.innerHTML = sections;
     list.querySelectorAll('.mdl[data-mid], .mdl[data-did]').forEach(b => b.onclick = () => openModelDetail(kind, b.dataset.mid || b.dataset.did));
@@ -10379,7 +10385,8 @@ function renderModelDetail(c) {
   const downloading = lm ? modelDownloads.get(m.id) : diffusionDownloads.get(m.id);
   const modelData = (lm ? mmLM : mmDiff) || {};
   const gpu = modelData.gpuVRAMGB || 0, memoryType = modelData.memoryType || 'dedicated';
-  const caps = (m.recommended ? '<span class="mdl-cap rec">Recommended</span>' : '')
+  const caps = (m.hardwareRecommended ? '<span class="mdl-cap hardware">Best for this machine</span>' : '')
+    + (m.recommended ? '<span class="mdl-cap rec">Recommended in your region</span>' : '')
     + (lm ? ((m.vision ? '<span class="mdl-cap vis">Vision</span>' : '') + (m.toolCalling ? '<span class="mdl-cap">Tool calling</span>' : '') + (m.gated ? '<span class="mdl-cap gated">Gated</span>' : ''))
     : (m.base ? `<span class="mdl-cap">${escapeHtml(m.base)}</span>` : ''))
     + (m.source === 'huggingface' ? '<span class="mdl-cap">Hugging Face</span>' : '');
@@ -10432,6 +10439,7 @@ function renderModelDetail(c) {
       ${clusterEstimate.usablePerNodeGB ? `<span class="mdl-meter" aria-hidden="true"><i style="--meter:${Math.max(4, Math.min(100, Math.round((clusterEstimate.requiredPerNodeGB / clusterEstimate.usablePerNodeGB) * 100)))}%"></i></span>` : ''}
       ${clusterEstimate.evidenceSource ? `<div class="md-compat-copy">Evidence: ${escapeHtml(clusterEstimate.evidenceSource)}</div>` : ''}
     </div>` : '';
+  const hardwareNote = m.hardwareRecommended ? `<div class="md-banner rec"><b>${escapeHtml(m.hardwareRecommendation || 'Best fit for this machine')}</b><br>${escapeHtml(m.hardwareRecommendationReason || 'Selected from reviewed runtime evidence for this hardware.')}${m.hardwareRecommendationExecution === 'cluster' ? ' Uses the connected Spark cluster.' : ''}</div>` : '';
   const recNote = m.recommended ? `<div class="md-banner rec">${escapeHtml(m.recommendBy || 'Recommended for your region')}.</div>` : '';
   const gatedNote = (lm && m.gated && !m.downloaded) ? `<div class="md-banner note">This Hugging Face repository is gated. Accept its terms and provide your Hugging Face token before downloading.</div>` : '';
   const sourceNote = (lm && m.source === 'huggingface') ? `<div class="md-banner note hf-source-note"><span class="hf-mark">HF</span><span><b>Imported from Hugging Face</b><br>${escapeHtml(m.runtimeNote || 'This community repository will be validated by the active engine when it launches.')}</span></div>` : '';
@@ -10450,6 +10458,7 @@ function renderModelDetail(c) {
         </div>
         ${actions ? `<div class="md-hero-actions">${actions}</div>` : ''}
       </div>
+      ${hardwareNote}
       ${recNote}
       ${gatedNote}
       ${sourceNote}

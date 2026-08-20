@@ -190,7 +190,7 @@ func modelManifestServer(t *testing.T, version int) *httptest.Server {
 			_, _ = w.Write([]byte("signature"))
 			return
 		}
-		fmt.Fprintf(w, `{"manifestVersion":%d,"highlights":[{"id":"example/model","name":"Example","fitProfiles":[{"id":"profile","evidence":"measured","source":"lab","engine":"vllm","architectures":["amd64"],"memoryTypes":["dedicated"],"minNodes":1,"maxNodes":1,"contextK":32,"requiredPerNodeGB":12}]}]}`, version)
+		fmt.Fprintf(w, `{"manifestVersion":%d,"highlights":[{"id":"example/model","name":"Example","qualityScore":82,"qualityEvidence":"benchmark-v1","fidelityScore":90,"fitProfiles":[{"id":"profile","evidence":"measured","source":"lab","engine":"vllm","architectures":["amd64"],"memoryTypes":["dedicated"],"minNodes":1,"maxNodes":1,"contextK":32,"requiredPerNodeGB":12,"estimatedTokensPerSecond":48,"performanceEvidence":"lab-v1"}]}]}`, version)
 	}))
 }
 
@@ -198,7 +198,8 @@ func TestUnsignedModelManifestCannotSupplyFitProfiles(t *testing.T) {
 	server := modelManifestServer(t, 2)
 	defer server.Close()
 	highlights := NewModels(server.URL + "/cloudless-models.json").Highlights(context.Background())
-	if len(highlights) != 1 || len(highlights[0].FitProfiles) != 0 {
+	if len(highlights) != 1 || len(highlights[0].FitProfiles) != 0 ||
+		highlights[0].QualityScore != 0 || highlights[0].FidelityScore != 0 {
 		t.Fatalf("unsigned model manifest supplied launch evidence: %#v", highlights)
 	}
 }
@@ -212,7 +213,9 @@ func TestSignedV2ModelManifestCanSupplyFitProfiles(t *testing.T) {
 	verifyManifestSignature = func(document, signature []byte, keyring string) error { return nil }
 	highlights := NewModels(server.URL + "/cloudless-models.json").Highlights(context.Background())
 	if len(highlights) != 1 || len(highlights[0].FitProfiles) != 1 ||
-		highlights[0].FitProfiles[0].Evidence != "measured" {
+		highlights[0].FitProfiles[0].Evidence != "measured" ||
+		highlights[0].FitProfiles[0].EstimatedTokensPerSecond != 48 ||
+		highlights[0].QualityScore != 82 || highlights[0].FidelityScore != 90 {
 		t.Fatalf("verified model fit profile was not preserved: %#v", highlights)
 	}
 }

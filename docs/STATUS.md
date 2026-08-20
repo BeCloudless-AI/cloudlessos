@@ -17,8 +17,8 @@ readiness still requires broader hardware, security, recovery and licensing vali
 - Unified capability system for generic NVIDIA and DGX Spark product differences.
 - Managed vLLM, SGLang and llama.cpp engine contracts with a locked private endpoint and a stable,
   user-configurable authenticated client identity.
-- Model Manager, Hugging Face account connection, downloads, fit guidance and advanced launch
-  arguments.
+- Model Manager, Hugging Face account connection, downloads, reviewed fit guidance, deterministic
+  hardware-fit recommendations and advanced launch arguments.
 - Hermes Agent-powered Cloudless Assistant and scoped model/agent API keys.
 - Optional application catalog, machine-local native recipes, daemon-owned background execution,
   progress/ETA, abort and persistent app state.

@@ -489,12 +489,15 @@ func decodeModelsManifest(body []byte, trustedProfiles bool) (*ModelsDoc, error)
 	if d.ManifestVersion < 1 || d.ManifestVersion > 2 {
 		return nil, fmt.Errorf("unsupported model manifest version %d", d.ManifestVersion)
 	}
-	// Fit profiles affect launch decisions. Only schema v2+ manifests whose
-	// detached signature was verified may supply them. Unsigned mirrors remain
-	// useful for display metadata.
+	// Fit and recommendation evidence affect machine-specific product claims.
+	// Only schema v2+ manifests whose detached signature was verified may supply
+	// them. Unsigned mirrors remain useful for display metadata.
 	if d.ManifestVersion < 2 || !trustedProfiles {
 		for i := range d.Highlights {
 			d.Highlights[i].FitProfiles = nil
+			d.Highlights[i].QualityScore = 0
+			d.Highlights[i].QualityEvidence = ""
+			d.Highlights[i].FidelityScore = 0
 		}
 	}
 	return &d, nil

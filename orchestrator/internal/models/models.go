@@ -23,6 +23,11 @@ type FitProfile struct {
 	Sharded           bool     `json:"sharded,omitempty"`
 	ContextK          int      `json:"contextK"`
 	RequiredPerNodeGB float64  `json:"requiredPerNodeGB"`
+	// EstimatedTokensPerSecond is optional reviewed performance evidence for
+	// this exact runtime/topology profile. A missing value is never inferred
+	// from model size or quantization.
+	EstimatedTokensPerSecond float64 `json:"estimatedTokensPerSecond,omitempty"`
+	PerformanceEvidence      string  `json:"performanceEvidence,omitempty"`
 }
 
 // Model is a curated, servable LLM with display + capability metadata.
@@ -55,6 +60,12 @@ type Model struct {
 	RuntimeCommand  []string     `json:"runtimeCommand,omitempty"`  // reviewed command replacing the engine default
 	SingleNodeOnly  bool         `json:"singleNodeOnly,omitempty"`  // distributed Spark launch is not reviewed
 	FitProfiles     []FitProfile `json:"fitProfiles,omitempty"`     // reviewed artifact/runtime/topology envelopes
+	// QualityScore and FidelityScore are optional reviewed catalog evidence on
+	// a 0-100 scale. Recommendation code treats zero as missing evidence rather
+	// than manufacturing a score from parameter count or marketing labels.
+	QualityScore    float64 `json:"qualityScore,omitempty"`
+	QualityEvidence string  `json:"qualityEvidence,omitempty"`
+	FidelityScore   float64 `json:"fidelityScore,omitempty"`
 }
 
 func normalized(m Model) Model {

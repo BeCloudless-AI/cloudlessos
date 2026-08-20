@@ -1439,6 +1439,27 @@ carrying engine-specific bucket layouts through the normalization layer.
 
 ---
 
+## D52 - Rank models only after exact runtime admission
+
+**Date:** 2026-08-20 · **Status:** Accepted and implemented
+
+**Decision:** Hardware recommendation is a policy layer after the existing exact runtime-fit
+verdict, not a replacement for it. Only models with a matching reviewed profile and a `fits` or
+`tight` verdict may be recommended. Unknown imported models and profiles that exceed usable
+capacity remain discoverable but cannot receive **Best for this machine**.
+
+The balanced policy scores reviewed memory headroom and context. Optional signed-catalog quality,
+quantization-fidelity and per-profile throughput evidence can refine that score. Cloudless omits
+evidence-specific recommendations such as fastest or highest quality when the corresponding
+evidence is absent; it never substitutes parameter count, repository size or a quantization label.
+Ties are deterministic and prefer memory safety before model ID.
+
+For a connected cluster, a reviewed distributed profile is considered only when the local profile
+does not fit, avoiding unnecessary sharding. The API returns the selected execution mode and the
+evidence-based explanation so the browser remains a presentation layer.
+
+---
+
 ## Open questions (not yet decided)
 
 - **Orchestrator language:** Go vs Python vs Rust.

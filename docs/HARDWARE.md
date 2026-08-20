@@ -15,8 +15,14 @@ The appliance installer targets Ubuntu 24.04 on `amd64`. A supported machine nee
 - network access for initial package, image and model downloads.
 
 Cloudless detects NVIDIA accelerators with NVML/`nvidia-smi`, reports per-device memory and load,
-and uses the detected capacity for Model Manager fit guidance. Memory estimates are advisory: the
-engine, quantization, context length, concurrency and kernel choice can change actual consumption.
+and uses the detected capacity for Model Manager fit guidance. Model Manager separately ranks the
+admitted catalog entries and marks one balanced **Best for this machine** choice. That ranking uses
+only a matching reviewed runtime envelope: memory headroom and the context covered by that exact
+profile are always
+available, while quality and throughput affect the result only when the signed catalog supplies
+their provenance. Models with unknown compatibility or an over-capacity verdict cannot win.
+Memory estimates are advisory: the engine, quantization, context length, concurrency and kernel
+choice can change actual consumption.
 
 Multi-GPU generic computers remain a qualification target. Cloudless preserves the one-active-
 engine invariant and passes the selected topology to engines that support tensor parallelism; it

@@ -66,3 +66,22 @@ func TestModelManagerExplainsUnifiedMemoryAccounting(t *testing.T) {
 		}
 	}
 }
+
+func TestModelManagerSurfacesHardwareRecommendationEvidence(t *testing.T) {
+	content, err := webFS.ReadFile("web/index.html")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page := string(content)
+	for _, want := range []string{
+		`m.hardwareRecommended`,
+		`Best for this machine`,
+		`Best fit for this machine`,
+		`m.hardwareRecommendationReason`,
+		`m.hardwareRecommendationExecution === 'cluster'`,
+	} {
+		if !strings.Contains(page, want) {
+			t.Fatalf("hardware recommendation UX is missing %q", want)
+		}
+	}
+}

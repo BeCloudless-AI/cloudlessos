@@ -8898,10 +8898,30 @@ function repaintModelDownloadSurfaces(modelType = 'lm') {
   else if (mmTab === 'language' && mmLM) paintLanguageModels(document.getElementById('mm-tab-body'), mmLM);
   else if (mmTab === 'image' && mmDiff) paintImageModels(document.getElementById('mm-tab-body'), mmDiff);
 }
+// A download failure already carries the daemon's reason. Container failures
+// arrive as a full Python traceback whose final exception line is the only
+// operator-facing part, so collapse it to one line instead of discarding it and
+// leaving the operator with nothing to act on.
+function modelDownloadFailureReason(raw) {
+  const lines = String(raw || '').split('\n').map(line => line.trim()).filter(Boolean);
+  if (!lines.length) return '';
+  const significant = /(error|not found|no revision|denied|refused|unauthorized|timed out|timeout|invalid|no space|quota)/i;
+  let reason = '';
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (significant.test(lines[i])) { reason = lines[i]; break; }
+  }
+  if (!reason) reason = lines[lines.length - 1];
+  reason = reason.replace(/^[A-Za-z0-9_.]+Error:\s*/, '');
+  return reason.length > 180 ? reason.slice(0, 177) + '…' : reason;
+}
+function modelDownloadFailureMessage(name, raw) {
+  const reason = modelDownloadFailureReason(raw);
+  return reason ? name + ' download failed: ' + reason : name + ' download failed';
+}
 function trackModelDownload(jobId, m) {
   const es = new EventSource(`/api/jobs/${jobId}/events`);
   let ended = false;
-  const finish = async status => {
+  const finish = async (status, reason) => {
     if (ended) return;
     ended = true;
     es.close();
@@ -8909,7 +8929,8 @@ function trackModelDownload(jobId, m) {
     modelDownloads.delete(m.id);
     renderHomeModelDownloads();
     if (status === 'canceled') toast(m.name + ' download canceled');
-    else toast(m.name + (status === 'done' ? ' downloaded to Models' : ' download failed'), status === 'failed');
+    else if (status === 'done') toast(m.name + ' downloaded to Models');
+    else toast(modelDownloadFailureMessage(m.name, reason || completed.error), true);
     mmLM = null; mmRecipes = null;
     if (modelsOpen()) renderModelManager();
     refreshActiveModel();
@@ -8921,12 +8942,12 @@ function trackModelDownload(jobId, m) {
     modelDownloads.set(m.id, { ...(modelDownloads.get(m.id) || {}), ...u, jobId, modelId: m.id, modelType: 'lm' });
     repaintModelDownloadSurfaces();
     if (u.phase === 'canceled') return finish('canceled');
-    if (u.phase === 'error') return finish('failed');
+    if (u.phase === 'error') return finish('failed', u.error);
     if (u.done) finish('done');
   };
   es.onerror = async () => {
     const update = await api(`/api/jobs/${jobId}`).catch(() => null);
-    if (update && update.done) finish(update.phase === 'error' ? 'failed' : update.phase === 'canceled' ? 'canceled' : 'done');
+    if (update && update.done) finish(update.phase === 'error' ? 'failed' : update.phase === 'canceled' ? 'canceled' : 'done', update.error);
     else refreshModelDownloads();
   };
 }
@@ -8949,14 +8970,16 @@ function downloadDiffusion(m) {
 function trackDiffusionDownload(jobId, m) {
   const es = new EventSource(`/api/jobs/${jobId}/events`);
   let ended = false;
-  const finish = status => {
+  const finish = (status, reason) => {
     if (ended) return;
     ended = true;
     es.close();
+    const completed = diffusionDownloads.get(m.id) || {};
     diffusionDownloads.delete(m.id);
     renderHomeModelDownloads();
     if (status === 'canceled') toast(m.name + ' download canceled');
-    else toast(m.name + (status === 'done' ? ' downloaded for ComfyUI' : ' download failed'), status === 'failed');
+    else if (status === 'done') toast(m.name + ' downloaded for ComfyUI');
+    else toast(modelDownloadFailureMessage(m.name, reason || completed.error), true);
     mmDiff = null;
     if (modelsOpen()) renderModelManager();
   };
@@ -8965,7 +8988,7 @@ function trackDiffusionDownload(jobId, m) {
     diffusionDownloads.set(m.id, { ...u, jobId, modelId: m.id, modelType: 'diff' });
     repaintModelDownloadSurfaces('diff');
     if (u.phase === 'canceled') return finish('canceled');
-    if (u.phase === 'error') return finish('failed');
+    if (u.phase === 'error') return finish('failed', u.error);
     if (u.done) finish('done');
   };
   es.onerror = () => {

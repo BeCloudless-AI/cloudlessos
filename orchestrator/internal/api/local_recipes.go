@@ -1646,12 +1646,24 @@ func waitRecipeHealthWithoutUpdates(ctx context.Context, job *jobs.Job, recipe l
 }
 
 func waitRecipeHealthWithUpdates(ctx context.Context, job *jobs.Job, recipe localrecipes.Recipe, reportWaiting bool) error {
+	return waitRecipeHealthWatching(ctx, job, recipe, reportWaiting, nil)
+}
+
+// waitRecipeHealthWatching polls the recipe's health endpoint and, when a
+// liveness probe is supplied, stops as soon as the container behind that
+// endpoint exits rather than waiting out the recipe's health timeout.
+func waitRecipeHealthWatching(ctx context.Context, job *jobs.Job, recipe localrecipes.Recipe, reportWaiting bool, liveness containerLivenessFunc) error {
 	address := fmt.Sprintf("%s://%s:%d%s", recipe.Health.Scheme, recipe.Health.Host, recipe.Health.Port, recipe.Health.Path)
 	deadline := time.Now().Add(time.Duration(recipe.Health.TimeoutSeconds) * time.Second)
 	client := &http.Client{Timeout: 5 * time.Second, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}
 	for {
 		if err := probeRecipeHealth(ctx, client, address); err == nil {
 			return nil
+		}
+		if liveness != nil {
+			if err := liveness(ctx); err != nil {
+				return err
+			}
 		}
 		if time.Now().After(deadline) {
 			return fmt.Errorf("engine health check did not become ready at %s", address)
@@ -1684,6 +1696,13 @@ func probeRecipeHealth(ctx context.Context, client *http.Client, address string)
 }
 
 func waitRecipePrivateContract(ctx context.Context, job *jobs.Job, recipe localrecipes.Recipe) error {
+	return waitRecipePrivateContractWatching(ctx, job, recipe, nil)
+}
+
+// waitRecipePrivateContractWatching applies the same container-exit guard as
+// waitRecipeHealthWatching: an engine that dies after passing its own health
+// check must not be reported as still promoting.
+func waitRecipePrivateContractWatching(ctx context.Context, job *jobs.Job, recipe localrecipes.Recipe, liveness containerLivenessFunc) error {
 	base := strings.TrimSuffix(recipe.Engine.APIPath, "/")
 	if base == "" {
 		base = "/v1"
@@ -1696,6 +1715,11 @@ func waitRecipePrivateContract(ctx context.Context, job *jobs.Job, recipe localr
 		lastErr = probeRecipePrivateContract(ctx, client, address)
 		if lastErr == nil {
 			return nil
+		}
+		if liveness != nil {
+			if err := liveness(ctx); err != nil {
+				return err
+			}
 		}
 		if time.Now().After(deadline) {
 			return fmt.Errorf("private OpenAI contract did not become ready at %s: %w", address, lastErr)

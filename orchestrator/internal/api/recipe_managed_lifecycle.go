@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -67,6 +68,21 @@ func (s *Server) checkManagedContainerRecipe(job *jobs.Job, recipe localrecipes.
 		boundaryValues["entryPoint"] = recipe.Engine.EntryPoint
 	}
 	if err := s.recordRecipeCheck(operationID, "sandbox", recipeops.CheckPass, boundarySummary, "", boundaryValues); err != nil {
+		s.finishRecipeOperation(job, operationID, err)
+		return
+	}
+
+	// Cloudless installs and measures Model.Revision, but an advanced container
+	// resolves whatever its own command pins. Reject a disagreement here: every
+	// later check would pass and the engine would then fail at startup, because
+	// the recipe runtime is offline and cannot fetch the revision it was given.
+	revisionValues, err := recipeRevisionAgreement(recipe)
+	if err != nil {
+		fail("model-revision", "The recipe's model revision and container command disagree", err)
+		return
+	}
+	if err := s.recordRecipeCheck(operationID, "model-revision", recipeops.CheckPass,
+		"The container command requests the revision Cloudless installs", "", revisionValues); err != nil {
 		s.finishRecipeOperation(job, operationID, err)
 		return
 	}
@@ -489,13 +505,14 @@ func (s *Server) runManagedContainerRecipe(job *jobs.Job, recipe localrecipes.Re
 	engineName := recipeContainerEngineName(recipe.Engine.Type)
 	job.ProgressOperation("initializing-engine", "The container is running. Reading its startup progress while the model becomes ready…", engineName, 50, 0, 0)
 	stopStartupProgress := observeRecipeContainerStartup(ctx, s.eng, job, runtimeName, recipe.Engine.Type, 3*time.Second)
-	healthErr := waitRecipeHealthWithoutUpdates(ctx, job, recipe)
+	liveness := recipeContainerLiveness(s.eng, runtimeName)
+	healthErr := waitRecipeHealthWatching(ctx, job, recipe, false, liveness)
 	stopStartupProgress()
 	if healthErr != nil {
 		rollback(healthErr)
 		return
 	}
-	if err := waitRecipePrivateContract(ctx, job, recipe); err != nil {
+	if err := waitRecipePrivateContractWatching(ctx, job, recipe, liveness); err != nil {
 		rollback(err)
 		return
 	}
@@ -596,4 +613,54 @@ func (s *Server) stopManagedContainerRecipe(job *jobs.Job, recipe localrecipes.R
 	job.Progress("stopped", "Recipe stopped. The model cache remains available.", 1, 1)
 	job.Succeed("")
 	s.pruneRecipeOperations()
+}
+
+// recipeCommandRevisionPattern finds every revision an advanced recipe pins
+// inside its own container command.
+var recipeCommandRevisionPattern = regexp.MustCompile(`--revision[=\s]+([A-Za-z0-9._/-]+)`)
+
+// recipeCommandRevisions returns the revisions pinned by the recipe's command.
+// An advanced-container recipe owns that command, so its --revision is what the
+// engine actually resolves — independent of Model.Revision, which is the value
+// Cloudless downloads and validates.
+func recipeCommandRevisions(recipe localrecipes.Recipe) []string {
+	seen := map[string]bool{}
+	out := []string{}
+	for _, part := range recipe.Engine.Command {
+		for _, match := range recipeCommandRevisionPattern.FindAllStringSubmatch(part, -1) {
+			revision := strings.TrimSpace(match[1])
+			if revision == "" || seen[revision] {
+				continue
+			}
+			seen[revision] = true
+			out = append(out, revision)
+		}
+	}
+	return out
+}
+
+// recipeRevisionAgreement verifies that the revision Cloudless installs and
+// validates is the revision the container will ask for. When they disagree the
+// preflight otherwise passes and the engine dies at startup, because the recipe
+// runtime sets HF_HUB_OFFLINE and cannot fetch the revision it was given.
+func recipeRevisionAgreement(recipe localrecipes.Recipe) (map[string]string, error) {
+	declared := strings.TrimSpace(recipe.Model.Revision)
+	commandRevisions := recipeCommandRevisions(recipe)
+	values := map[string]string{
+		"modelRevision":    declared,
+		"commandRevisions": strings.Join(commandRevisions, ","),
+	}
+	if len(commandRevisions) == 0 {
+		values["commandRevisions"] = "none"
+		return values, nil
+	}
+	for _, revision := range commandRevisions {
+		if !strings.EqualFold(revision, declared) {
+			if declared == "" {
+				return values, fmt.Errorf("the container command pins revision %s but the recipe declares no model revision, so Cloudless cannot install what the engine will request", revision)
+			}
+			return values, fmt.Errorf("the container command pins revision %s but the recipe's model revision is %s; update both to the same commit", revision, declared)
+		}
+	}
+	return values, nil
 }

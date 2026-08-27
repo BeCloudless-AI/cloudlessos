@@ -1460,6 +1460,44 @@ evidence-based explanation so the browser remains a presentation layer.
 
 ---
 
+## D53 - Fail a model download on definitively missing Hugging Face content, and always show the reason
+
+**Date:** 2026-08-27 · **Status:** Accepted and implemented
+
+**Problem:** A recipe that pins a revision Hugging Face no longer serves failed in the most
+expensive and least informative way available. `runModelDownload` already fetched the revision
+inventory and discarded its error, then pulled and ran the multi-gigabyte engine image so
+`huggingface_hub` could rediscover the same `404` and fail with a Python traceback. The interface
+then dropped that traceback: `activeModelDownloads` omits finished jobs, so a failed download
+disappears from `GET /api/models/downloads`, and the toast rendered only
+`<name> download failed`. The reason survived solely at `GET /api/jobs/{id}`, which no download
+path reads. An operator saw a red toast, retried, and got the same red toast, with the actionable
+detail — an invalid pinned commit — visible nowhere in the product.
+
+**Decision:** Treat a definitive Hugging Face `404` as terminal before starting a container, and
+carry every download failure's reason into the interface.
+
+- **Only `404` shortcuts a download.** `huggingFaceStatusError` retains the status code and
+  `huggingFaceContentMissing` matches `404` alone. The download helper resolves the same revision
+  endpoint with the same credentials, so a `404` can never become a successful
+  `snapshot_download`.
+- **Transient and gated responses still reach the helper.** A transport failure, `429`, `401` or
+  `403` proceeds exactly as before. Metadata access and helper access are not always equivalent,
+  and an outage must not be reported to an operator as content that does not exist.
+- **The failure names the field to correct.** A missing pinned revision reports the repository,
+  the revision and the two available remedies: update the pin, or clear it to track the head. A
+  `404` with no pin reports the repository instead, because no revision was ever requested.
+- **The interface reports the reason, not just the status.** Both the language-model and diffusion
+  trackers pass the job error into the toast. A container traceback is collapsed to its final
+  exception line, since intermediate Python frames are noise to an operator.
+- **`activeModelDownloads` keeps its active-only contract.** `POST /api/models/download` uses that
+  list to detect an in-flight download and returns the existing job when one matches. Admitting
+  finished jobs would make a retry return the previously failed job instead of starting a new one.
+  Surfacing terminal failures through the list therefore needs a separate field, not a relaxed
+  filter, and is left for that change.
+
+---
+
 ## Open questions (not yet decided)
 
 - **Orchestrator language:** Go vs Python vs Rust.

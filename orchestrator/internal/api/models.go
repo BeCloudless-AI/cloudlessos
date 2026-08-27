@@ -861,6 +861,38 @@ type huggingFaceRevisionFile struct {
 	BlobID string
 }
 
+// huggingFaceStatusError reports a non-OK status from the Hugging Face metadata
+// API. Callers keep the code so they can separate content that permanently does
+// not exist from a transient outage a retry still resolves.
+type huggingFaceStatusError struct {
+	StatusCode int
+	Repo       string
+	Revision   string
+}
+
+func (e *huggingFaceStatusError) Error() string {
+	return fmt.Sprintf("Hugging Face model metadata returned HTTP %d", e.StatusCode)
+}
+
+// huggingFaceContentMissing reports whether Hugging Face answered definitively
+// that the repository or revision does not exist. Transport failures, rate
+// limits and gated-repository rejections are deliberately excluded: the download
+// helper runs with the same credentials and may still succeed.
+func huggingFaceContentMissing(err error) bool {
+	var status *huggingFaceStatusError
+	return errors.As(err, &status) && status.StatusCode == http.StatusNotFound
+}
+
+// missingHuggingFaceContentError phrases the failure so an operator knows which
+// field to correct. A pinned revision that no longer exists is the common case:
+// repositories are rewritten after a recipe is published.
+func missingHuggingFaceContentError(repo, revision string) error {
+	if strings.TrimSpace(revision) == "" {
+		return fmt.Errorf("Hugging Face repository %s does not exist or is not readable", repo)
+	}
+	return fmt.Errorf("%s has no revision %s on Hugging Face; update the pinned revision or clear it to track the repository head", repo, revision)
+}
+
 func huggingFaceModelRevisionInventory(ctx context.Context, repo, revision, token string) (map[string]huggingFaceRevisionFile, error) {
 	endpoint := "https://huggingface.co/api/models/" + repo
 	if revision = strings.TrimSpace(revision); revision != "" {
@@ -879,7 +911,7 @@ func huggingFaceModelRevisionInventory(ctx context.Context, repo, revision, toke
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("Hugging Face model metadata returned HTTP %d", resp.StatusCode)
+		return nil, &huggingFaceStatusError{StatusCode: resp.StatusCode, Repo: repo, Revision: revision}
 	}
 	var info struct {
 		Siblings []struct {
@@ -1037,8 +1069,16 @@ func (s *Server) runModelDownload(ctx context.Context, cancel context.CancelFunc
 		}
 	}
 	metadataCtx, metadataCancel := context.WithTimeout(ctx, 12*time.Second)
-	inventory, _ := huggingFaceModelRevisionInventory(metadataCtx, repo, revision, token)
+	inventory, inventoryErr := huggingFaceModelRevisionInventory(metadataCtx, repo, revision, token)
 	metadataCancel()
+	// The helper container resolves the same revision endpoint through
+	// huggingface_hub, so a definitive 404 here can never become a successful
+	// snapshot_download. Report the reason now instead of pulling and running a
+	// multi-gigabyte engine image that rediscovers it as a Python traceback.
+	if huggingFaceContentMissing(inventoryErr) {
+		job.Fail(missingHuggingFaceContentError(repo, revision))
+		return
+	}
 	var total int64
 	for _, file := range inventory {
 		total += file.Size

@@ -1460,6 +1460,51 @@ evidence-based explanation so the browser remains a presentation layer.
 
 ---
 
+## D54 - A launch fails when its container exits, and preflight verifies the revision the engine will request
+
+**Date:** 2026-08-27 · **Status:** Accepted and implemented
+
+**Problem:** Two independent gaps turned one recipe misconfiguration into a silent multi-hour hang
+on DGX Spark hardware.
+
+`waitRecipeHealthWithUpdates` and `waitRecipePrivateContract` poll an address until the recipe's
+own `Health.TimeoutSeconds` expires and never ask whether the container behind it still exists. An
+advanced-container recipe whose engine exited with status 1 after 90 seconds continued to report
+`initializing-engine` and "The container is running" for the remainder of that timeout, with the
+container's actual traceback reachable only through `docker logs`.
+
+Separately, `checkManagedContainerRecipe` validates and measures `Model.Revision`, while an
+`advanced-container-v1` recipe resolves whatever its own `Engine.Command` pins with `--revision`.
+Those two values can disagree with nothing detecting it. A recipe whose `model.revision` was
+corrected but whose command still pinned a withdrawn commit passed every check and reported
+`launchable: true`, then failed at startup with `LocalEntryNotFoundError`, because the recipe
+runtime sets `HF_HUB_OFFLINE=1` and cannot fetch the revision it was handed.
+
+**Decision:** Make a container exit terminate the launch, and make preflight compare both pins.
+
+- **An observed terminal container state ends the wait.** `recipeContainerLiveness` reports
+  `exited` or `dead` with the container status and the final meaningful log line, so the failure
+  names itself instead of surfacing as a timeout.
+- **Only an observed exit ends it.** A failed inspect, a missing container or an unnamed runtime
+  returns `nil`, so a transient Docker error never aborts a launch that is still progressing.
+- **Stack frames are not the reason.** The reported line skips `Traceback`, `File "…"` and caret
+  markers, because a Python runtime's final exception is the operator-facing part.
+- **The guard is opt-in per call site.** The wait helpers keep their existing signatures and pass
+  no liveness probe; only the managed-container launch supplies one. Boot recovery and the
+  ordinary local-recipe path are unchanged.
+- **Preflight rejects disagreeing revisions before doing expensive work.** The `model-revision`
+  check runs immediately after `sandbox`, ahead of image inspection and capacity measurement, and
+  records both values as evidence when they agree.
+- **An unpinned command still passes.** Only a command that pins `--revision` is constrained; a
+  command with no pin resolves the revision Cloudless installed, which is already validated.
+
+**Not addressed:** recipe containers use `restart=no` deliberately, so that
+`restartActiveRecipeAfterBoot` can verify topology before any node allocates model memory. A
+container that dies while `cloudlessd` keeps running is still only noticed by the next probe; a
+periodic runtime watchdog is a separate change.
+
+---
+
 ## Open questions (not yet decided)
 
 - **Orchestrator language:** Go vs Python vs Rust.

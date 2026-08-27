@@ -494,3 +494,63 @@ func observeRecipeContainerStartup(ctx context.Context, runtime engine.Engine, j
 		wait.Wait()
 	}
 }
+
+// containerLivenessFunc reports a terminal container exit. It returns nil while
+// the container is still a plausible candidate for becoming ready.
+type containerLivenessFunc func(context.Context) error
+
+// recipeContainerLiveness ends a launch wait as soon as the recipe's container
+// exits. Without it the health and private-contract probes keep polling a dead
+// endpoint until the recipe's own health timeout expires, so a container that
+// dies in seconds is reported as "the container is running" for as long as that
+// timeout allows.
+func recipeContainerLiveness(runtime engine.Engine, name string) containerLivenessFunc {
+	return func(ctx context.Context) error {
+		if runtime == nil || strings.TrimSpace(name) == "" {
+			return nil
+		}
+		container, err := runtime.Find(ctx, name)
+		// A transient inspect failure must never abort a launch that is still
+		// progressing. Only an observed terminal state ends the wait.
+		if err != nil || container == nil {
+			return nil
+		}
+		switch container.State {
+		case "exited", "dead":
+		default:
+			return nil
+		}
+		detail := strings.TrimSpace(container.Status)
+		if tail, logErr := runtime.LogsTail(ctx, name, 20); logErr == nil {
+			if line := recipeContainerFailureLine(tail); line != "" {
+				if detail != "" {
+					detail += ": "
+				}
+				detail += line
+			}
+		}
+		if detail == "" {
+			detail = "no container output"
+		}
+		return fmt.Errorf("the recipe container stopped before it became ready (%s)", detail)
+	}
+}
+
+// recipeContainerFailureLine reduces a log tail to the one line an operator can
+// act on. A Python runtime ends with the exception; the frames above it are
+// noise, and the exception is what names the misconfiguration.
+func recipeContainerFailureLine(tail string) string {
+	lines := strings.Split(containerANSISequencePattern.ReplaceAllString(tail, ""), "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := strings.TrimSpace(lines[i])
+		if line == "" || strings.HasPrefix(line, "Traceback") ||
+			strings.HasPrefix(line, "File \"") || strings.HasPrefix(line, "^") {
+			continue
+		}
+		if len(line) > 300 {
+			line = line[:297] + "…"
+		}
+		return line
+	}
+	return ""
+}
